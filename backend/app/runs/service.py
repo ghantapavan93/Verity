@@ -19,6 +19,7 @@ from ..config import settings
 from ..hashing import sha256_text
 from ..models import RUN_STAGES, TERMINAL_STAGES, EvidenceSpan, Finding, Run, RunReasonName, RunStage, RunStageName, Section, as_utc, utcnow
 from ..providers.base import ModelProvider, ProviderError
+from ..retrieval.hybrid import HybridIndex
 from ..retrieval.lexical import LexicalIndex
 from ..verify.spans import Located, locate
 from .events import StageEvent, bus
@@ -116,7 +117,8 @@ def verify_evidence(quote: str, cited_label: str, by_label: Mapping[str, Section
 
 
 def _retrieve(sections: list[Section], question: str, guidance: str | None, k: int) -> list[Section]:
-    index = LexicalIndex([(s.heading, s.text) for s in sections])
+    pairs = [(s.heading, s.text) for s in sections]
+    index: LexicalIndex | HybridIndex = HybridIndex(pairs) if settings.retrieval == "hybrid" else LexicalIndex(pairs)
     query = question if not guidance else f"{question} {guidance}"
     candidates = index.search(query, k)
     if not candidates and sections:

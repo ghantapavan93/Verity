@@ -37,13 +37,18 @@ class StartedRun:
 
 def run_options(model: str | None = None) -> RunOptions:
     """The settings that shape an answer and therefore belong to a run's identity, the model among them."""
-    return {
+    options: RunOptions = {
         "model": model or settings.model,
         "temperature": settings.temperature,
         "seed": settings.seed,
         "num_ctx": settings.num_ctx,
         "retrieval_k": settings.retrieval_k,
     }
+    if settings.retrieval != "bm25":
+        # Only a non-default retriever enters the identity, so runs recorded under BM25 keep theirs.
+        options["retrieval"] = settings.retrieval
+        options["embed_model"] = settings.embed_model
+    return options
 
 
 def router() -> ModelRouter:

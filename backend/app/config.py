@@ -25,6 +25,8 @@ class Settings(BaseModel):
     # Sections handed to the model per run. Six covers a clause, its neighbours and one or two
     # cross-referenced sections without crowding an 8B model's context.
     retrieval_k: int = 6
+    retrieval: str = os.environ.get("WORKBENCH_RETRIEVAL", "bm25")  # bm25 | hybrid (docs/RETRIEVAL.md)
+    embed_model: str = os.environ.get("WORKBENCH_EMBED_MODEL", "nomic-embed-text")
     prompt_version: str = os.environ.get("WORKBENCH_PROMPT_VERSION", "answer-v2")
     # task → model overrides, each justified by a measurement in docs/ROUTING.md; empty means the default model for every task.
     routing_policy: dict[str, str] = json.loads(os.environ.get("WORKBENCH_ROUTING_POLICY", "{}"))
