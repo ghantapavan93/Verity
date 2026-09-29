@@ -71,3 +71,17 @@ def test_a_pack_whose_document_bytes_changed_fails_on_the_document_hash(client: 
     tampered = run_verify(folder)
     assert tampered.returncode == 1
     assert "FAIL document bytes" in tampered.stdout and "PASS canonical sections" in tampered.stdout
+
+
+def test_the_pack_checks_the_sections_against_the_hash_the_run_recorded(client: TestClient, tmp_path: Path) -> None:
+    result = upload_and_ask(client, "How much notice is required to terminate for convenience?", with_guidance=False)
+    pack = client.get(f"/api/runs/{result['run_id']}/evidence-pack")
+    folder = tmp_path / "pack-recorded"
+    with zipfile.ZipFile(io.BytesIO(pack.content)) as archive:
+        archive.extractall(folder)
+    record = json.loads((folder / "run.json").read_text(encoding="utf-8"))
+    detail = client.get(f"/api/runs/{result['run_id']}/detail").json()
+    reading = next(s for s in detail["stages"] if s["stage"] == "reading")
+    assert record["sections_text_sha256_recorded"] == reading["outputHash"]
+    verified = run_verify(folder)
+    assert verified.returncode == 0 and "PASS sections are what the run read" in verified.stdout

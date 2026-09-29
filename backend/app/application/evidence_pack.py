@@ -100,6 +100,9 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
             "file": f"document/{document.name}" if original_bytes is not None else None,
         },
         "sections_sha256": sha256_bytes(sections_json.encode("utf-8")),
+        # What the run itself recorded when it read the document (the reading stage's output hash), so the pack
+        # can be checked against the record and not only against itself.
+        "sections_text_sha256_recorded": next((s.output_hash for s in run.stages if s.stage == "reading"), None),
         "guidance_sha256": run.guidance_sha256,
         "provider": run.provider,
         "model": run.model,
@@ -109,7 +112,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         "created_at": iso(run.created_at),
         "finished_at": iso(run.finished_at),
         "packed_at": iso(utcnow()),
-        "verifier": {"ladder": ["exact", "normalized", "casefold", "alnum"], "label_stripping": True},
+        "verifier": {"ladder": ["exact", "normalized", "casefold", "alnum"], "label_stripping": True, "boundary": "no edge splits a run of letters and digits"},
         "workbench_link": f"{settings.app_url}/?document={document.id}&run={run.id}",
     }
     verify_py = VERIFY_PY.replace("__QUOTE_MAP__", json.dumps(json.dumps(QUOTE_MAP, ensure_ascii=True)))

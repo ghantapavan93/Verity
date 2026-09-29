@@ -78,6 +78,12 @@ def main():
     else:
         print("NOTE the original document bytes are not in this pack; the sections hash below still ties the record to what was read")
     report(sha256(HERE / "sections.json") == run["sections_sha256"], f"canonical sections: sha256 {run['sections_sha256'][:16]}...")
+    recorded = run.get("sections_text_sha256_recorded")
+    if recorded:
+        joined = chr(31).join(s["text"] for s in sorted(sections.values(), key=lambda s: s["ordinal"]))
+        report(hashlib.sha256(joined.encode("utf-8")).hexdigest() == recorded, f"sections are what the run read: recorded {recorded[:16]}...")
+    else:
+        print("NOTE the run recorded no reading hash (older record); the sections hash above ties the pack to itself only")
 
     checked = withheld = 0
     for finding in findings:

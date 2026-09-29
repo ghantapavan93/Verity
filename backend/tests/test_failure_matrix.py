@@ -232,3 +232,13 @@ def test_a_two_megabyte_paragraph_ingests_quickly_and_is_cut_for_the_prompt() ->
     assert len(parsed.sections) == 1 and len(parsed.sections[0].text) > 2_000_000
     message = build_user_message("What must the Provider deliver?", None, "wall.txt", [SectionForPrompt("sec_0", "", "", parsed.sections[0].text)])
     assert len(message) < MAX_SECTION_CHARS_IN_PROMPT + 400
+
+
+def test_section_text_a_finished_run_cited_cannot_be_changed_in_the_database(client: TestClient) -> None:
+    """Found by the independent review of 2026-09-29: the record's citations point into section text, which had no trigger."""
+    run = upload_and_ask(client, "How much notice is required to terminate for convenience?", with_guidance=False)
+    document_id = client.get(f"/api/runs/{run['run_id']}/detail").json()["documentId"]
+    with pytest.raises(IntegrityError, match="immutable"), db_module.engine.begin() as connection:
+        connection.execute(text("UPDATE sections SET text = 'rewritten' WHERE document_id = :d"), {"d": document_id})
+    with pytest.raises(IntegrityError, match="immutable"), db_module.engine.begin() as connection:
+        connection.execute(text("DELETE FROM documents WHERE id = :d"), {"d": document_id})

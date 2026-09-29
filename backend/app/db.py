@@ -82,12 +82,18 @@ def ensure_immutability(target_engine: Engine) -> None:
         "findings": "(SELECT stage FROM runs WHERE id = OLD.run_id)",
         "evidence_spans": "(SELECT r.stage FROM runs r JOIN findings f ON f.run_id = r.id WHERE f.id = OLD.finding_id)",
     }
+    # A finished run's citations point into stored section text; that text and its document cannot change either.
+    read_by_finished_run = {
+        "sections": f"EXISTS (SELECT 1 FROM runs WHERE runs.document_id = OLD.document_id AND runs.stage IN {finished})",
+        "documents": f"EXISTS (SELECT 1 FROM runs WHERE runs.document_id = OLD.id AND runs.stage IN {finished})",
+    }
+    conditions = {table: f"{stage_of} IN {finished}" for table, stage_of in run_of_row.items()} | read_by_finished_run
     with target_engine.begin() as connection:
-        for table, stage_of in run_of_row.items():
+        for table, condition in conditions.items():
             for action in ("UPDATE", "DELETE"):
                 connection.exec_driver_sql(
                     f"CREATE TRIGGER IF NOT EXISTS trg_{table}_no_{action.lower()}_when_finished "
-                    f"BEFORE {action} ON {table} WHEN {stage_of} IN {finished} "
+                    f"BEFORE {action} ON {table} WHEN {condition} "
                     f"BEGIN SELECT RAISE(ABORT, 'a finished run is immutable ({table})'); END"
                 )
 
