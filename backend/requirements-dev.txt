@@ -4,3 +4,5 @@ ruff==0.16.9
 mypy==2.3.1
 lxml-stubs==0.5.1
 hypothesis==6.168.3
+import-linter==2.15
+schemathesis==4.28.0

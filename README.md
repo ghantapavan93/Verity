@@ -52,6 +52,7 @@ cannot drift from the backend.
 cd backend
 .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check .   # style and lint, pyproject.toml
 .venv/Scripts/python -m mypy                                                            # strict, app + scripts + tests
+.venv/Scripts/lint-imports                                                              # the three import contracts: verifier pure, providers blind, layers downward (.importlinter)
 .venv/Scripts/python -m pytest -q                                                       # 113 tests, no model needed; six are Hypothesis properties of the verifier
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier

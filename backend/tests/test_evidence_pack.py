@@ -57,3 +57,17 @@ def test_a_withheld_span_is_reported_not_checked(client: TestClient, tmp_path: P
     assert verified.returncode == 0
     assert "WITHHELD finding 1 span 1" in verified.stdout and "0 located span(s) checked, 1 withheld" in verified.stdout
     assert client.get("/api/runs/nope/evidence-pack").status_code == 404
+
+
+def test_a_pack_whose_document_bytes_changed_fails_on_the_document_hash(client: TestClient, tmp_path: Path) -> None:
+    result = upload_and_ask(client, "How much notice is required to terminate for convenience?", with_guidance=False)
+    pack = client.get(f"/api/runs/{result['run_id']}/evidence-pack")
+    assert pack.status_code == 200
+    folder = tmp_path / "pack-doc"
+    with zipfile.ZipFile(io.BytesIO(pack.content)) as archive:
+        archive.extractall(folder)
+    document = next(folder.glob("document/*"))
+    document.write_bytes(document.read_bytes() + b" ")  # one appended byte: sections untouched, bytes changed
+    tampered = run_verify(folder)
+    assert tampered.returncode == 1
+    assert "FAIL document bytes" in tampered.stdout and "PASS canonical sections" in tampered.stdout

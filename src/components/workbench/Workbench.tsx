@@ -132,6 +132,7 @@ export function Workbench() {
   const loadSample = useCallback(async () => {
     setUploadError(null);
     try {
+      // eslint-disable-next-line no-restricted-globals -- the bundled sample is a static file of this origin, not the API
       const response = await fetch(SAMPLE_PATH);
       if (!response.ok) throw new Error("The sample agreement is missing from this build.");
       const blob = await response.blob();

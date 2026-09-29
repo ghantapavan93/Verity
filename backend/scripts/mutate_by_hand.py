@@ -23,6 +23,9 @@ BACKEND = Path(__file__).resolve().parents[1]
 SERVICE = BACKEND / "app" / "runs" / "service.py"
 SPANS = BACKEND / "app" / "verify" / "spans.py"
 DB = BACKEND / "app" / "db.py"
+MODELS = BACKEND / "app" / "models.py"
+START_RUN = BACKEND / "app" / "application" / "start_run.py"
+VERIFY_TEMPLATE = BACKEND / "app" / "application" / "verify_template.txt"
 SUITE_TIMEOUT_S = 300
 
 
@@ -32,6 +35,7 @@ class Mutant:
     path: Path
     old: str
     new: str
+    also: tuple[Path, str, str] | None = None  # a second edit, when two layers enforce the same invariant
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -49,6 +53,20 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("M7 digits ignored by the letters-and-digits tier", SPANS, "if ch.isalnum():", "if ch.isalpha():"),
     Mutant("M8 label-strip tier loses its name", SPANS, 'f"unprefixed:{found.method}"', 'f"{found.method}"'),
     Mutant("M9 immutability trigger never fires", DB, "WHEN {stage_of} IN {finished} ", "WHEN 0 "),
+    Mutant(
+        "M10 duplicate request creates a second run (lookup and unique index both off)",
+        START_RUN,
+        "    existing = active_run(session, key)\n    if existing is not None:\n        return StartedRun(existing, created=False)",
+        "    existing = None\n    if existing is not None:\n        return StartedRun(existing, created=False)",
+        also=(MODELS, 'Index("ux_runs_fingerprint_active", "fingerprint", unique=True,', 'Index("ux_runs_fingerprint_active", "fingerprint", unique=False,'),
+    ),
+    Mutant(
+        "M11 provider failure leaves the run complete",
+        SERVICE,
+        '_finish(session, run, "failed", error=str(error), reason="provider_error")',
+        '_finish(session, run, "complete", error=str(error), reason="provider_error")',
+    ),
+    Mutant("M12 evidence pack skips the document hash", VERIFY_TEMPLATE, 'report(sha256(HERE / document["file"]) == document["sha256"],', "report(True,"),
 )
 
 
@@ -76,15 +94,29 @@ def first_failure(output: str) -> str:
     return match.group(1) if match else "(no FAILED line in the output)"
 
 
-def apply(mutant: Mutant, original: bytes) -> Outcome:
+def _edit(path: Path, original: bytes, old: str, new: str) -> str | None:
+    """Write the mutated file; return a reason when the anchor is not exactly once in it."""
     text = original.decode("utf-8")
-    if text.count(mutant.old) != 1:
-        return Outcome(mutant, "skipped", f"anchor occurs {text.count(mutant.old)} times; the code moved")
-    mutant.path.write_bytes(text.replace(mutant.old, mutant.new).encode("utf-8"))
+    newline = "\r\n" if "\r\n" in text else "\n"
+    old, new = old.replace("\n", newline), new.replace("\n", newline)
+    if text.count(old) != 1:
+        return f"anchor occurs {text.count(old)} times in {path.name}; the code moved"
+    path.write_bytes(text.replace(old, new).encode("utf-8"))
+    return None
+
+
+def apply(mutant: Mutant, originals: dict[Path, bytes]) -> Outcome:
+    touched = [mutant.path] + ([mutant.also[0]] if mutant.also else [])
     try:
+        problem = _edit(mutant.path, originals[mutant.path], mutant.old, mutant.new)
+        if problem is None and mutant.also is not None:
+            problem = _edit(mutant.also[0], originals[mutant.also[0]], mutant.also[1], mutant.also[2])
+        if problem is not None:
+            return Outcome(mutant, "skipped", problem)
         code, output = run_suite()
     finally:
-        mutant.path.write_bytes(original)
+        for path in touched:
+            path.write_bytes(originals[path])
     if code != 0:
         return Outcome(mutant, "killed", first_failure(output))
     return Outcome(mutant, "SURVIVED", "every test passed with the boundary broken")
@@ -92,12 +124,13 @@ def apply(mutant: Mutant, original: bytes) -> Outcome:
 
 def main(argv: list[str]) -> int:
     wanted = [m for m in MUTANTS if not argv or any(m.name.startswith(prefix) for prefix in argv)]
-    originals = {path: path.read_bytes() for path in {m.path for m in wanted}}
+    paths = {m.path for m in wanted} | {m.also[0] for m in wanted if m.also}
+    originals = {path: path.read_bytes() for path in paths}
     digests = {path: hashlib.sha256(data).hexdigest() for path, data in originals.items()}
     outcomes: list[Outcome] = []
     try:
         for mutant in wanted:
-            outcomes.append(apply(mutant, originals[mutant.path]))
+            outcomes.append(apply(mutant, originals))
     finally:
         for path, data in originals.items():
             path.write_bytes(data)
