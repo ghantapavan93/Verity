@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -159,3 +160,75 @@ def test_large_responses_are_compressed_and_the_event_stream_is_not(client: Test
         assert events.status_code == 200
         assert events.headers["content-type"].startswith("text/event-stream")
         assert "content-encoding" not in events.headers
+
+
+def test_an_encrypted_pdf_is_refused_with_the_reason(client: TestClient) -> None:
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    writer.encrypt("secret")
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    response = client.post("/api/documents", files={"file": ("locked.pdf", buffer.getvalue(), "application/pdf")})
+    assert response.status_code == 422
+    assert "encrypted" in response.text
+
+
+def test_a_macro_enabled_document_is_not_a_supported_type(client: TestClient) -> None:
+    response = client.post("/api/documents", files={"file": ("macros.docm", b"PKwhatever", "application/vnd.ms-word.document.macroEnabled.12")})
+    assert response.status_code == 422
+    assert "unsupported file type .docm" in response.text
+
+
+def test_reading_a_docx_with_an_external_relationship_makes_no_network_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    import socket
+
+    from docx import Document as DocxDocument
+    from docx.opc.constants import RELATIONSHIP_TYPE
+
+    from app.ingest import ingest
+
+    document = DocxDocument()
+    document.add_paragraph("1. Term")
+    document.add_paragraph("This Agreement runs for two years from the Effective Date.")
+    document.part.relate_to("http://example.invalid/terms", RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
+    buffer = io.BytesIO()
+    document.save(buffer)
+
+    def refuse(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("the reader tried to open a network connection")
+
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    monkeypatch.setattr(socket, "getaddrinfo", refuse)
+    parsed = ingest("template-linked.docx", buffer.getvalue())
+    assert any("two years" in s.text for s in parsed.sections)
+
+
+def test_a_docx_member_named_to_escape_the_archive_is_never_written_anywhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.ingest import UnsupportedFile, ingest
+
+    monkeypatch.chdir(tmp_path)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("../../escaped.txt", "should never land on disk")
+        archive.writestr("word/document.xml", "<w:document/>")
+    with pytest.raises(UnsupportedFile):
+        ingest("slip.docx", buffer.getvalue())
+    assert not (tmp_path.parent / "escaped.txt").exists() and not list(tmp_path.iterdir())
+
+
+def test_a_two_megabyte_paragraph_ingests_quickly_and_is_cut_for_the_prompt() -> None:
+    import time
+
+    from app.analysis.service import MAX_SECTION_CHARS_IN_PROMPT, SectionForPrompt, build_user_message
+    from app.ingest import ingest
+
+    data = ("The Provider shall deliver the services under this Agreement and any Order Form. " * 25_000).encode("utf-8")
+    started = time.perf_counter()
+    parsed = ingest("wall.txt", data)
+    assert time.perf_counter() - started < 2.0
+    assert len(parsed.sections) == 1 and len(parsed.sections[0].text) > 2_000_000
+    message = build_user_message("What must the Provider deliver?", None, "wall.txt", [SectionForPrompt("sec_0", "", "", parsed.sections[0].text)])
+    assert len(message) < MAX_SECTION_CHARS_IN_PROMPT + 400

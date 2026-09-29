@@ -192,7 +192,8 @@ def read_docx(data: bytes) -> ReadResult:
         raise TooLargeToRead(f"the .docx unpacks to {unpacked // (1024 * 1024)} MB; the limit is {MAX_DOCX_UNPACKED_BYTES // (1024 * 1024)} MB")
     try:
         document = DocxDocument(io.BytesIO(data))
-    except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError) as error:
+    except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError, AttributeError, TypeError, etree.XMLSyntaxError) as error:
+        # A valid zip with a broken or hostile package inside: python-docx fails in many shapes, all of them a 422 here.
         raise UnsupportedFile("the file is not a readable .docx package") from error
     body = document.element.body
     walk = _Walk()
@@ -251,9 +252,12 @@ def read_docx(data: bytes) -> ReadResult:
 def read_pdf(data: bytes) -> ReadResult:
     try:
         reader = PdfReader(io.BytesIO(data))
-        page_count = len(reader.pages)
+        encrypted = bool(reader.is_encrypted)
+        page_count = 0 if encrypted else len(reader.pages)
     except (PyPdfError, ValueError, KeyError) as error:
         raise UnsupportedFile("the file is not a readable PDF") from error
+    if encrypted:
+        raise UnsupportedFile("the PDF is encrypted; remove the password and upload it again")
     if page_count > MAX_PDF_PAGES:
         raise TooLargeToRead(f"the PDF has {page_count} pages; the limit is {MAX_PDF_PAGES}")
     try:
