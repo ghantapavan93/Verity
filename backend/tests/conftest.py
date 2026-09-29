@@ -1,0 +1,27 @@
+import sys
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app import db as db_module
+from app.main import create_app
+from tests.support import FakeProvider
+
+
+@pytest.fixture
+def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    engine = db_module.make_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
+    monkeypatch.setattr(db_module, "engine", engine)
+    db_module.SessionLocal.configure(bind=engine)
+    from app import config
+
+    monkeypatch.setattr(config.settings, "data_dir", tmp_path)
+    provider = FakeProvider()
+    app = create_app(provider=provider)
+    with TestClient(app) as test_client:
+        test_client.provider = provider
+        yield test_client
