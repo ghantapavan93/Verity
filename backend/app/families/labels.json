@@ -1,0 +1,48 @@
+{
+  "note": "Hand labels for the public corpus in ivo-experiments (B1 and pilot). Documents are identified by the first sixteen hex digits of their sha256, so the same bytes under another file name still count (the bundled sample is CP01). Two label sets: 'suite' is strict (the same contract suite: core terms with their schedules, an instrument with its addendum, sibling model contracts from one drafting exercise); 'template' adds the eight Common Paper agreements as one family, because they are built on one standard template set. Everything not listed in a family is its own family.",
+  "sets": {
+    "suite": {
+      "description": "the same contract suite",
+      "families": [
+        ["UK01.docx", "UK02.docx"],
+        ["UK03.docx", "UK05.docx"],
+        ["UK04.docx", "UK06.docx"],
+        ["X01.docx", "X02.docx"],
+        ["X04.docx", "X05.docx"]
+      ]
+    },
+    "template": {
+      "description": "the same suite, or the same publisher's standard template set",
+      "families": [
+        ["UK01.docx", "UK02.docx"],
+        ["UK03.docx", "UK05.docx"],
+        ["UK04.docx", "UK06.docx"],
+        ["X01.docx", "X02.docx"],
+        ["X04.docx", "X05.docx"],
+        ["CP01.docx", "CP02.docx", "CP03.docx", "CP04.docx", "CP05.docx", "CP06.docx", "CP07.docx", "CP08.docx"]
+      ]
+    }
+  },
+  "documents": {
+    "CP01.docx": "cb72dad74b3af676",
+    "CP02.docx": "d8cc13f589096d1b",
+    "CP03.docx": "18e07001c3ebfc74",
+    "CP04.docx": "cb35f3cc70cb6d24",
+    "CP05.docx": "c711cef731218c16",
+    "CP06.docx": "ae3023105755ecd9",
+    "CP07.docx": "2b85bb4cd1a105da",
+    "CP08.docx": "0a073e0e20878117",
+    "UK01.docx": "43c7e8b70daf2177",
+    "UK02.docx": "49f6edd53f0d7987",
+    "UK03.docx": "c3d056e64cac0fe1",
+    "UK04.docx": "88c177fe3a74dec5",
+    "UK05.docx": "918e9959d5fa4a0f",
+    "UK06.docx": "3a55ae9241564f0e",
+    "UK07.docx": "63fb4ff02ea47e9d",
+    "UK08.docx": "a2af977adec01597",
+    "X01.docx": "ce3477f51ea03809",
+    "X02.docx": "81fa7eb166eba183",
+    "X04.docx": "67758746efdd50fa",
+    "X05.docx": "d5eddaaddd083569"
+  }
+}
