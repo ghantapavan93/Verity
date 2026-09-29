@@ -8,7 +8,7 @@ from __future__ import annotations
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from app.verify.spans import alnum_with_map, locate, strip_label
+from app.verify.spans import alnum_with_map, bounded, locate, strip_label
 
 TEXT_ALPHABET = st.characters(
     whitelist_categories=("Lu", "Ll", "Lo", "Nd", "Pc", "Pd", "Ps", "Pe", "Po", "Zs"),
@@ -16,6 +16,15 @@ TEXT_ALPHABET = st.characters(
 )
 texts = st.text(alphabet=TEXT_ALPHABET, min_size=1, max_size=240)
 words = st.text(alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd")), min_size=1, max_size=12)
+
+
+def has_bounded_occurrence(text: str, needle: str) -> bool:
+    at = text.find(needle)
+    while at >= 0:
+        if bounded(text, at, at + len(needle)):
+            return True
+        at = text.find(needle, at + 1)
+    return False
 
 
 def letters_and_digits(value: str) -> str:
@@ -53,11 +62,22 @@ def text_with_numbered_quote(draw: st.DrawFn) -> tuple[str, str, int]:
 def test_a_verbatim_substring_is_found_exactly_and_the_offsets_return_it(pair: tuple[str, str]) -> None:
     text, quote = pair
     assume(quote.strip())
+    start = text.index(quote)
+    assume(bounded(text, start, start + len(quote)))  # a substring cut inside a word or a number is refused on purpose
     found = locate(quote, text)
     assert found is not None
     assert 0 <= found.start < found.end <= len(text)
     assert text[found.start : found.end] == quote
     assert found.method == "exact"
+
+
+@settings(max_examples=300, deadline=None)
+@given(text_and_substring())
+def test_whatever_is_located_is_bounded_by_non_letters_and_non_digits(pair: tuple[str, str]) -> None:
+    text, quote = pair
+    found = locate(quote, text)
+    if found is not None:
+        assert bounded(text, found.start, found.end)
 
 
 @settings(max_examples=400, deadline=None)
@@ -107,6 +127,7 @@ def test_an_empty_or_blank_quote_is_never_located(blank: str, text: str) -> None
 def test_a_section_label_copied_in_front_of_a_real_quote_is_stripped_and_the_body_located(number: int, heading: str, pair: tuple[str, str]) -> None:
     text, body = pair
     assume(body.strip() and letters_and_digits(body))
+    assume(has_bounded_occurrence(text, body.strip()))  # a body cut inside a word or a number is refused on purpose
     label = f"{number} {heading}"
     quote = f"{label} {body.strip()}"
     assume(letters_and_digits(quote) not in letters_and_digits(text))

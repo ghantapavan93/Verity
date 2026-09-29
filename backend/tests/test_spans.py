@@ -87,3 +87,34 @@ def test_a_heading_copied_without_its_number_is_stripped_too() -> None:
     assert text[found.start : found.end] == text
     assert locate("12.11 There are no third-party beneficiaries of this Agreement.", text, label="12.11 No Third-Party Beneficiary") is not None
     assert locate(quote, text, label="12.11 Assignment") is None, "a different heading is not a label to strip"
+
+
+def test_a_quote_is_never_found_inside_a_longer_number_or_word() -> None:
+    """Found by the independent review of 2026-09-29: substring matches without a boundary."""
+    assert locate("5 days", "Customer may cure within fifteen (15) days of notice.") is None
+    assert locate("$1,500", "The fee is $11,500 per year.") is None
+    assert locate("30 days", "Payment is due within 130 days.") is None
+    assert locate("able to terminate", "The Provider is unable to terminate for convenience.") is None
+    found = locate("15) days", "Customer may cure within fifteen (15) days of notice.")
+    assert found is not None and found.method == "exact"
+
+
+def test_a_quote_ending_on_punctuation_stays_exact_when_a_letter_follows_it() -> None:
+    # From the record (run d9aaaa4683054be8, §9.4): the quote ends with "(" and the text continues "(a) nor (b)".
+    text = "Provider may: (a) obtain the right for Customer to continue using the Product; or (c) if neither (a) nor (b) are available, terminate."
+    found = locate("or (c) if neither (", text)
+    assert found is not None and found.method == "exact"
+    assert text[found.start : found.end] == "or (c) if neither ("
+
+
+def test_a_bounded_occurrence_later_in_the_text_is_preferred_over_an_unbounded_first_one() -> None:
+    text = "The 130 days mentioned above are not the 30 days of the cure period."
+    found = locate("30 days", text)
+    assert found is not None
+    assert text[found.start : found.end] == "30 days" and found.start == text.index("the 30 days") + 4
+
+
+def test_a_verbatim_quote_with_a_boundary_is_still_found_even_when_it_drops_context() -> None:
+    # "less than 30 days" is a verbatim quote of "not less than 30 days"; the highlight shows the "not".
+    found = locate("less than 30 days", "Notice of not less than 30 days is required.")
+    assert found is not None and found.method == "exact"
