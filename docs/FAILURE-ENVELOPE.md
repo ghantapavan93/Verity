@@ -18,17 +18,19 @@ and the test or record that holds it. "Open" means measured or reasoned about, n
 | False premise in the question | not asserted | **asserted as a pass with an unrelated verified quote (g44)** | `docs/GOLDENS.md`; fix is a prompt experiment, not run |
 | Instruction inside the contract text | not followed | not yet measured; needs a second golden document | open |
 | Instruction inside the guidance | the guidance is the reviewer's own instruction; the verifier still bounds every quote | reasoned, not tested | by design |
-| Provider unavailable | run failed, reason `provider_error`, retryable | as expected | `test_failure_matrix` |
+| Provider unavailable | run failed, reason `provider_error`, retryable; the interface shows the reason and offers the composer again, never a verdict | as expected, in the API and in the browser | `test_failure_matrix`; `e2e/reliability.spec.ts` provider outage |
 | Transport failure | one retry after 2 s | as expected | `test_failure_matrix` |
 | Provider timeout (600 s) or a process restart mid-run | run failed by staleness at timeout + 60 s, on the next read; the interface shows the reason | as expected | `test_failure_matrix` stale run |
-| Model returns something that is not the schema | one corrected retry, then failed `invalid_output`, never a verdict | as expected | `test_failure_matrix` |
+| Model returns something that is not the schema | one corrected retry, then failed `invalid_output`, never a verdict; the interface says the model did not return a valid result | as expected, in the API and in the browser | `test_failure_matrix`; `e2e/reliability.spec.ts` non-schema output |
 | Quote not in the document | finding withheld, raw output kept, the run says so | as expected | `test_api_flow` paraphrase |
 | A digit changed inside a quote | refused; no similarity tier | refused | `test_spans`, Hypothesis properties |
-| Same request sent twice, or a response lost after success | the same run comes back (`reused: true`) | as expected | `test_failure_matrix` |
-| Stream connection lost | the stored stage events are sent again on connect; the client also polls | as expected | `useRunFollower` tests, `test_api_flow` events |
+| Same request sent twice, or a response lost after success | the same run comes back (`reused: true`) | as expected, in the API and observed on the wire from the browser | `test_failure_matrix`; `e2e/reliability.spec.ts` twice |
+| Stream connection lost | the stored stage events are sent again on connect; the client also polls | as expected; with every event stream aborted in the browser, the run still finishes on screen through polling | `useRunFollower` tests, `test_api_flow` events, `e2e/reliability.spec.ts` dropped stream |
 | Finished run updated or deleted | the database refuses | as expected | `test_failure_matrix` immutability |
 | Evidence pack with one byte changed | `verify.py` fails | as expected | `test_evidence_pack` |
 | Two writers at once on SQLite | WAL mode; batch measured at concurrency 1 only | unmeasured above 1 | open (`docs/BATCH.md`) |
 | Provider ten times slower | runs finish; the 600 s timeout, then staleness | reasoned from the timeout; not measured | open |
+| Window too narrow for the split | a plain note; Documents, Findings and Runs still work | as expected at 600 px | `e2e/reliability.spec.ts` narrow window |
+| Keyboard and assistive technology | Escape closes the drawer; no serious or critical WCAG 2.1 AA violation | **before 2026-09-29: the document scroll region was not keyboard-focusable (axe `scrollable-region-focusable`)**; fixed, then clean on the landing, the workspace and the open drawer | `e2e/reliability.spec.ts` accessibility |
 
 The two rows in bold with "before" are what writing this table found on the day it was written.

@@ -56,7 +56,7 @@ cd backend
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
 npm test                                                    # Vitest: the run follower and the URL state, 7 tests
-npm run e2e                                                 # Playwright: seven browser flows, real API, the model's recorded answers replayed
+npm run e2e                                                 # Playwright: seventeen browser flows, real API, the model's recorded answers replayed, faults by marker
 ```
 
 The browser flows run the production build against the API, each on its own port and data
@@ -150,8 +150,8 @@ repository and appear under this product's Runs surface as records.
 | Failure envelope | one table of cases, expected, observed and the test that holds each; writing it found two 422s that were a 500 and a wrong reason (`docs/FAILURE-ENVELOPE.md`) |
 | Scale | what was measured and what each next step would have to earn; nothing says millions (`docs/SCALE.md`) |
 | Domain review | ten verified findings packed for a practising lawyer with five questions and room for disagreement (`docs/DOMAIN-REVIEW.md`); not yet reviewed |
-| Browser flows | seven Playwright flows against the production build and the real API: landing, sample to sections, question to a verified citation whose highlight is the quote's own text, the withheld question, reload from the URL, Findings and Runs with the evidence pack, the memo; the model's answers recorded once and replayed; traces kept on failure; a CI job |
-| Checks | backend 113 tests (six Hypothesis properties), ruff, mypy strict; interface 7 unit tests and 7 browser flows, tsc, eslint, prettier, production build; results page 23; CI runs all of it and fails on generated-type drift |
+| Browser flows | seventeen Playwright flows against the production build and the real API: the seven happy paths (landing, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; traces kept on failure; a CI job |
+| Checks | backend 113 tests (six Hypothesis properties), ruff, mypy strict; interface 7 unit tests and 17 browser flows, tsc, eslint, prettier, production build; results page 23; CI runs all of it and fails on generated-type drift |
 
 ## What is deliberately not here yet
 

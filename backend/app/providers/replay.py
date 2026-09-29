@@ -23,6 +23,10 @@ from .base import Generation, ModelProvider, ProviderError
 SEPARATOR = "\n␞\n"  # keeps "system + user" from colliding with a different split of the same text
 
 
+FAULT_PROVIDER = "[[fault:provider]]"
+FAULT_GARBAGE = "[[fault:garbage]]"
+
+
 class RecordedAnswer(TypedDict):
     model: str
     text: str
@@ -67,6 +71,12 @@ class ReplayProvider:
         return True, f"replaying {len(self.answers)} recorded answers from {self.path.name}"
 
     def generate_json(self, system: str, user: str, schema: dict[str, Any]) -> Generation:
+        # Fault markers, for the browser tests only: a question carrying one makes this provider behave like a
+        # broken one, so the interface's failure states are exercised against the real API.
+        if FAULT_PROVIDER in user:
+            raise ProviderError("simulated outage: the model endpoint refused the connection")
+        if FAULT_GARBAGE in user:
+            return Generation(text="this is not the JSON you asked for", input_tokens=None, output_tokens=None, latency_ms=1.0, model=self.model)
         key = request_key(system, user)
         answer = self.answers.get(key)
         if answer is None:

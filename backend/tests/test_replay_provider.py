@@ -70,3 +70,12 @@ def test_the_factory_keeps_ollama_as_the_default_and_knows_the_two_test_provider
     assert make_provider("record").name == "record"
     with pytest.raises(ProviderError, match="unknown provider"):
         make_provider("openai")
+
+
+def test_fault_markers_make_the_replay_provider_fail_the_way_a_broken_one_would(tmp_path: Path) -> None:
+    from app.providers.replay import FAULT_GARBAGE, FAULT_PROVIDER
+
+    replay = ReplayProvider(tmp_path / "replay.json")
+    with pytest.raises(ProviderError, match="simulated outage"):
+        replay.generate_json("s", f"QUESTION: anything {FAULT_PROVIDER}", SCHEMA)
+    assert replay.generate_json("s", f"QUESTION: anything {FAULT_GARBAGE}", SCHEMA).text.startswith("this is not the JSON")

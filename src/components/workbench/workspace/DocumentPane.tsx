@@ -43,6 +43,8 @@ export function DocumentPane({
   return (
     <motion.div
       className={styles.docPane}
+      tabIndex={0}
+      aria-label="Contract text"
       ref={paneRef}
       initial={{ opacity: 0, x: reduceMotion ? 0 : -12 }}
       animate={{ opacity: 1, x: 0 }}
