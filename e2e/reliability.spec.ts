@@ -24,6 +24,9 @@ async function ask(page: Page, question: string): Promise<void> {
 const finding = (page: Page) => page.getByText(/Evidence · \d+ verified passage/);
 
 test.describe("failure states", () => {
+  // The fault markers are an affordance of the replay provider; a recording run asks the real model.
+  test.skip(process.env.E2E_PROVIDER === "record", "faults are injected by the replay provider only");
+
   test("a provider outage ends as a failed run with a retry, never a verdict", async ({ page }) => {
     await openSample(page);
     await ask(page, "What is the cap on liability? [[fault:provider]]");

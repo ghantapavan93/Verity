@@ -1,11 +1,20 @@
 {
+ "4499cb9999e8801d5fec6c4fbd6bc37046693ad4b9cbd54c45c90e9ee1818e3d": {
+  "model": "qwen3:8b",
+  "text": "{\n  \"findings\": [\n    {\n      \"topic\": \"Liability Cap\",\n      \"conclusion\": \"The liability cap is not explicitly stated in the contract sections reviewed. The General Cap Amount is referenced but not quantified in the sections provided.\",\n      \"status_hint\": \"missing\",\n      \"evidence\": [\n        {\n          \"section_id\": \"sec_49\",\n          \"quote\": \"Except as provided in Section 8.4 (Exceptions), each party’s total cumulative liability for all claims arising out of or relating to this Agreement will not be more than the General Cap Amount.\"\n        },\n        {\n          \"section_id\": \"sec_50\",\n          \"quote\": \"If there are Increased Claims, each party’s total cumulative liability for all Increased Claims arising out of or relating to this Agreement will not be more than the Increased Cap Amount.\"\n        }\n      ],\n      \"guidance_reference\": \"Our standard: the liability cap must be at least twelve months of fees; anything lower needs review.\",\n      \"observed\": \"Not quantified\",\n      \"required\": \"At least twelve months of fees\",\n      \"suggested_position\": \"Quantify the General Cap Amount as at least twelve months of fees.\"\n    }\n  ],\n  \"insufficient_evidence\": false,\n  \"note\": \"\"\n}",
+  "input_tokens": 3727,
+  "output_tokens": 271,
+  "latency_ms": 51811.56639999972,
+  "recorded_at": "2026-09-29T09:15:51+00:00",
+  "user_head": "QUESTION: Review against instructions"
+ },
  "689f94233d953b8762fbee861df5a9fe7d23a750d96b34b4fba170f3bd682114": {
   "model": "qwen3:8b",
   "text": "{\n  \"findings\": [\n    {\n      \"topic\": \"Limitation of Liability\",\n      \"conclusion\": \"The limitation of liability is defined in Section 8.1 and 8.4. The General Cap Amount limits liability for all claims except those specified in Section 8.4. The Increased Cap Amount applies to Increased Claims. The liability cap does not apply to Unlimited Claims or breaches of Section 10 (Confidentiality).\",\n      \"status_hint\": \"pass\",\n      \"evidence\": [\n        {\n          \"section_id\": \"sec_49\",\n          \"quote\": \"Except as provided in Section 8.4 (Exceptions), each party’s total cumulative liability for all claims arising out of or relating to this Agreement will not be more than the General Cap Amount.\"\n        },\n        {\n          \"section_id\": \"sec_50\",\n          \"quote\": \"If there are Increased Claims, each party’s total cumulative liability for all Increased Claims arising out of or relating to this Agreement will not be more than the Increased Cap Amount.\"\n        },\n        {\n          \"section_id\": \"sec_53\",\n          \"quote\": \"The liability cap in Section 8.1(a) does not apply to any Increased Claims. Section 8.1 (Liability Caps) does not apply to any Unlimited Claims. Section 8.2 (Damages Waiver) does not apply to any Increased Claims or a breach of Section 10 (Confidentiality).\"\n        }\n      ],\n      \"guidance_reference\": \"\",\n      \"observed\": \"General Cap Amount and Increased Cap Amount\",\n      \"required\": \"\",\n      \"suggested_position\": \"\"\n    }\n  ],\n  \"insufficient_evidence\": false,\n  \"note\": \"\"\n}",
   "input_tokens": 1081,
   "output_tokens": 364,
-  "latency_ms": 78393.71249999931,
-  "recorded_at": "2026-09-29T00:01:28+00:00",
+  "latency_ms": 64336.99360000173,
+  "recorded_at": "2026-09-29T08:51:29+00:00",
   "user_head": "QUESTION: What is the limitation of liability?"
  },
  "a4c829b1819c289d3970f1fd5dcb0b4a0fce484cdf5c00581c8ccb0703ee329c": {
@@ -13,8 +22,8 @@
   "text": "{\n  \"findings\": [\n    {\n      \"topic\": \"Most Favored Nation Clause\",\n      \"conclusion\": \"No most favored nation clause was found in the sections reviewed.\",\n      \"status_hint\": \"missing\",\n      \"evidence\": [\n        {\n          \"section_id\": \"sec_1\",\n          \"quote\": \"Professional Services | [Drafting note: If providing professional services, use the first option to incorporate an existing SOW or professional services agreement or the second option to describe the professional services on this order form.] [    ] Provider will provide professional services according to the [attached SOW or reference PSA]. [    ] Provider will provide the following professional services: [description of professional services, including any fees that may be assessed.] [Drafting note: If there are fees associated with the professional services, specify how and when Customer will pay those fees.] [    ] Payment Process for these services: [describe how services fees will be billed, for example \\\"Invoices for these services will be sent monthly.\\\"] Customer will reasonably cooperate with Provider to allow the performance of the services described above, including providing Customer Content as needed. Provider is not responsible for any inability to perform these services if Customer does not cooperate as reasonably requested.\"\n        },\n        {\n          \"section_id\": \"sec_50\",\n          \"quote\": \"8.1.2 Liability Caps If there are Increased Claims, each party’s total cumulative liability for all Increased Claims arising out of or relating to this Agreement will not be more than the Increased Cap Amount.\"\n        },\n        {\n          \"section_id\": \"sec_81\",\n          \"quote\": \"12.11 No Third-Party Beneficiary There are no third-party beneficiaries of this Agreement.\"\n        }\n      ],\n      \"guidance_reference\": \"\",\n      \"observed\": \"\",\n      \"required\": \"\",\n      \"suggested_position\": \"\"\n    }\n  ],\n  \"insufficient_evidence\": false,\n  \"note\": \"\"\n}",
   "input_tokens": 3019,
   "output_tokens": 405,
-  "latency_ms": 73443.84899999932,
-  "recorded_at": "2026-09-29T00:02:45+00:00",
+  "latency_ms": 80991.03630000172,
+  "recorded_at": "2026-09-29T09:13:38+00:00",
   "user_head": "QUESTION: Is there a most favoured nation clause?"
  }
 }
