@@ -341,57 +341,52 @@ reloads after the run has finished, because the run id reaches the URL only then
 
 ## O. One-page system truth
 
-**What goes in.** One .docx, .pdf or .txt under 25 MB, a question, and optionally a pasted piece
-of lawyer guidance. The bundled sample is a Common Paper agreement, CC BY 4.0, unmodified.
+**What goes in.** One .docx, .pdf or .txt under 25 MB, a question, and optional pasted lawyer
+guidance.
 
 **What happens to it.** The bytes are hashed and stored once. Reader v4 turns the body into
-numbered sections: for DOCX the accepted view of tracked changes, hidden runs removed and counted,
-tables flattened, headers, footers, footnotes and comments not read; for PDF text only; for TXT
-lines. Sections are stored and, once a finished run has read them, cannot change. A run is
-identified by document, guidance, question, prompt hash and options; the same question returns the
-same run. BM25 over the sections, weighted toward headings, picks six; they go to a local Qwen3 8B
-through Ollama with the question, the guidance and a JSON schema.
+numbered sections: DOCX as the accepted view of tracked changes, tables flattened, headers, footers,
+footnotes and comments unread; PDF as text; TXT as lines. Sections are stored and, once a finished
+run has read them, cannot change. A run is identified by document, guidance, question, prompt hash
+and options; the same question returns the same run. BM25 over the sections, weighted toward
+headings, picks six; they go to a local Qwen3 8B with the question, the guidance and a JSON schema.
 
 **What the model does.** In one call (at most four with retries) it proposes up to five findings:
-a topic, a conclusion, a status hint, and one to three quotes with the id of the section each came
-from. It sees only the six sections, each cut at 5,000 characters, never the whole contract. No
-tools, no memory, no second step.
+topic, conclusion, status hint, and one to three quotes with section ids. It sees only those six
+sections, each cut at 5,000 characters, never the whole contract. No tools, no memory, no second
+step.
 
 **What code does.** Everything else. It validates the JSON, locates every quote in the stored text
 through a fixed ladder (exact; unified punctuation and whitespace; case; letters and digits only),
-refuses matches that split a word or a number, strips a copied section label and searches the other
+refuses matches that split a word or a number, strips a copied section label, searches the other
 handed sections, and stores the offsets. A finding is shown only if all its quotes were found;
 otherwise it is withheld and shown as withheld. The status is computed from day counts when guidance
-and the model's observed and required phrases carry them; otherwise it is the model's hint, labelled
-as such; a pass naming a section the document lacks is lowered to needs review. Code records every
-stage with hashes, retries once on transport failure and once on invalid output, fails runs that
-stop progressing, and refuses any change to a finished run.
+and the model's observed and required phrases carry them; otherwise it is the model's hint,
+labelled as such; a pass naming a section the document lacks is lowered to needs review. It records
+every stage, retries once per failure kind, fails stalled runs, and never alters a finished run.
 
 **What comes out.** Findings with highlighted evidence and the verification tier; withheld quotes;
-a status with its source; a memo as HTML and .docx linking each citation to its run; an evidence
-pack whose `verify.py` re-checks every span offline; a CSV for batches. No redlines, no edits to
-the contract.
+a status with its source; a memo (HTML and .docx) linking citations to the run; an evidence pack
+whose `verify.py` re-checks every span offline; a CSV for batches. No redlines, no edits.
 
 **What is persisted.** Documents, sections, guidance, runs, stage rows, findings, spans, reviews,
-memos, batches: one SQLite file in WAL mode, one process.
+memos, batches: one SQLite file, one process.
 
 **What can fail.** Unreadable, encrypted, oversized or empty files are refused with the reason. A
 model that is offline, times out or returns invalid JSON gives a failed run with the reason, never
 a verdict. A quote not in the text is withheld. A restart mid-run fails the run by staleness.
 Silently: dropped parts of a DOCX; observed and required phrases the code trusts; a "Within
-guidance" label with no guidance; two holes in the verifier's label stripping and letters-and-digits
-tier.
+guidance" label with no guidance; two holes in the verifier (label stripping, number punctuation).
 
 **What it deliberately does not do.** Edit contracts, search across documents, reason over more
 than one model call, use a queue, a vector database, Postgres or an agent framework, fall back to
 fake data, or claim unmeasured scale.
 
-**What has been measured.** Retrieval (Recall@6 0.85 on 164 expert-labelled CUAD cases, 0.92 on
-38 goldens), the golden set (37 of 44 under BM25, 40 under hybrid), a 20-contract batch (47 of 60
-values with a verified citation), 611 recorded spans replayed after every verifier change, sixteen
-hand mutants, a fuzz pass at twenty times the budget, the concurrency envelope to twenty, a
-2,001-section document on screen, an independent adversarial review. Not measured: any real user,
-any lawyer's judgment, CI, more than one process.
+**What has been measured.** Retrieval (Recall@6 0.85 on CUAD, 0.92 on the goldens); the golden
+set (37 of 44 under BM25, 40 under hybrid); a 20-contract batch (47 of 60 values verified); 611
+recorded spans replayed after every verifier change; sixteen hand mutants; a deep fuzz pass; the
+concurrency envelope to twenty; a 2,001-section document on screen; an independent adversarial
+review. Not measured: real users, a lawyer's judgment, CI, more than one process.
 
 **Where it overlaps Ivo.** Upload, contract Q&A with citations, guidance, field extraction and
 clustering exist on both sides. Ivo's redlining, Word editing, repository search, composites,
