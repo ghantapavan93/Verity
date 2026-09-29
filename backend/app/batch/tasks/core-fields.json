@@ -1,0 +1,9 @@
+{
+  "name": "core-fields",
+  "description": "Three facts a repository review asks of every contract. Each is an ordinary question run; the value is the first finding whose citation verified.",
+  "fields": [
+    {"key": "governing_law", "label": "Governing law and forum", "question": "What law governs this agreement and where must disputes be brought?"},
+    {"key": "termination", "label": "Termination", "question": "On what grounds and with how much notice may a party terminate this agreement?"},
+    {"key": "liability_cap", "label": "Liability cap", "question": "What is the cap on each party's liability?"}
+  ]
+}
