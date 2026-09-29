@@ -1,1 +1,35 @@
 @AGENTS.md
+
+# Working in this repository
+
+`ENGINEERING_CONSTITUTION.md` is binding. Read it before changing anything, and answer its five
+questions before every meaningful change. The rule under everything: a finding may come from the
+model; a claim that its evidence is verified may only come from deterministic code. The second
+rule: every sophisticated component must earn its existence with either a measured failure it
+fixes or an explicit requirement from the product.
+
+Fixed decisions, not open for re-litigation in a session:
+
+- The visual system is frozen (shell C in `src/app/globals.css`). No theme switching, no extra
+  pages, no dashboard cards, no marketing content, no agent diagrams, no onboarding tours.
+- Dependencies are earned. No Postgres, pgvector, LangGraph, queues or agents without a
+  measurement that shows the current choice failing. Record the measurement in `DECISIONS.md`.
+- The primary path is never mocked. Fake providers live only in `backend/tests`.
+- The backend schema is the source of truth for types. After changing `backend/app/schemas.py`,
+  run `backend/.venv/Scripts/python backend/scripts/export_openapi.py` then `npm run api:types`,
+  and commit both generated files.
+- Identity goes through `backend/app/hashing.py`. A test fails otherwise.
+- Git is Pavan's. Do not commit or push.
+
+- A prompt or retrieval change is judged by the golden set (`docs/GOLDENS.md`): run
+  `backend/scripts/run_goldens.py` and keep the change only if the set moves in its favour.
+
+Checks before saying anything is done (CI runs the same):
+
+```
+cd backend && .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check . && .venv/Scripts/python -m mypy && .venv/Scripts/python -m pytest -q
+npm run typecheck && npm run lint && npm run format:check && npm test
+npm run e2e   # browser flows; builds the interface, replays the model's recorded answers; about two minutes
+```
+
+Record decisions as they are taken in `DECISIONS.md`. Keep `README.md`'s release checklist true.
