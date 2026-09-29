@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from .api import batches, documents, engineering, findings, guidance, health, memos, runs
@@ -39,6 +40,9 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         yield
 
     app = FastAPI(title="Contract Workbench", version="0.1.0", lifespan=lifespan)
+    # Responses over 1 KB go out compressed; Starlette leaves text/event-stream alone, so the live
+    # run stream is unaffected. Lighthouse found the document JSON going out raw.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

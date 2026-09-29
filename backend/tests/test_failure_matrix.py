@@ -144,3 +144,18 @@ def test_a_pdf_with_more_pages_than_any_contract_is_refused(client: TestClient, 
     response = client.post("/api/documents", files={"file": ("long.pdf", buffer.getvalue(), "application/pdf")})
     assert response.status_code == 413
     assert "pages" in response.text
+
+
+def test_large_responses_are_compressed_and_the_event_stream_is_not(client: TestClient) -> None:
+    run = upload_and_ask(client, "What is the cap on each party's liability?", with_guidance=False)
+    # The fixture contract's JSON is under the 1 KB threshold; a longer upload is what compression is for.
+    uploaded = client.post("/api/documents", files={"file": ("long.txt", (CONTRACT + "\n") * 6, "text/plain")})
+    document_id = uploaded.json()["id"]
+    document = client.get(f"/api/documents/{document_id}", headers={"Accept-Encoding": "gzip"})
+    assert document.status_code == 200
+    assert document.headers.get("content-encoding") == "gzip"
+    assert document.json()["id"] == document_id  # the client decodes it; the payload is intact
+    with client.stream("GET", f"/api/runs/{run['run_id']}/events", headers={"Accept-Encoding": "gzip"}) as events:
+        assert events.status_code == 200
+        assert events.headers["content-type"].startswith("text/event-stream")
+        assert "content-encoding" not in events.headers

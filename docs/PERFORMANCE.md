@@ -29,6 +29,22 @@ Sixteen times the sections cost 3.4 times the time to paper; the initial render 
 is about 1.1 s after the fetch ends, roughly 0.55 ms per section. Jumps stay within two frames
 at both sizes.
 
+## Lighthouse (2026-09-28, production build, desktop preset, Chrome headless)
+
+| Page | Performance | Accessibility | Best practices | SEO | FCP | LCP | TBT | CLS |
+|---|---|---|---|---|---|---|---|---|
+| Landing | 100 | 100 | 100 | 100 | 0.3 s | 0.7 s | 0 ms | 0.001 |
+| Workspace with a completed run | 99 | 100 | 100 | 100 | 0.3 s | 1.0 s | 0 ms | 0.003 |
+
+One finding was real and cheap: the API sent the document JSON uncompressed, 55,971 bytes for the
+sample. Responses over 1 KB now go out gzipped (16,393 bytes for the same document); Starlette leaves
+the event stream alone, and one test holds both facts. The rest are diagnostics, left as they are
+with the reason: one render-blocking CSS chunk (Next's own stylesheet), unused JavaScript inside the
+framework bundle, legacy polyfills for Next's default browser targets (a narrower browserslist would
+drop them; no measured need at a score of 99), and one forced reflow on the workspace with a total
+blocking time of 0 ms. No Lighthouse gate in CI yet: the scores sit at the ceiling, and a gate earns
+its place the first time a change moves one. Re-run: `npx lighthouse <url> --preset=desktop`.
+
 ## Decision
 
 No virtualisation. Scrolling and citation navigation are frame-bound at 2,001 sections, and the
