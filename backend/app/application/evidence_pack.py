@@ -1,0 +1,126 @@
+"""Use case: a self-verifying evidence pack for a run.
+
+One zip holds the original document bytes, the canonical sections the run read, the run record
+with its hashes, every finding with its located spans, and a dependency-free `verify.py` that
+re-hashes the document and the sections and re-locates every quote at its stored offsets under
+the same normalisation the workbench used. Anyone with Python can check the evidence on their
+own machine without this service. Nothing in the pack is computed by a model.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from ..config import settings
+from ..errors import NotFound
+from ..hashing import sha256_bytes
+from ..models import Run, iso, utcnow
+from ..verify import spans as verifier
+from .ingest_document import original_path
+
+QUOTE_MAP = {chr(k): v for k, v in verifier._QUOTE_MAP.items()}  # the one normalisation table, embedded in verify.py
+
+# The standalone checker shipped in every pack. It lives in a text file so that the rule
+# 'only app/hashing.py imports hashlib' stays enforceable by a grep over the code.
+VERIFY_PY = (Path(__file__).with_name("verify_template.txt")).read_text(encoding="utf-8")
+
+README_TXT = """Evidence pack for one Contract Workbench run.
+
+  run.json        the run: question, stage, hashes of the document, sections, prompt and options, model
+  sections.json   the canonical sections the run read, exactly as stored (offsets index into these texts)
+  findings.json   every finding the model proposed with its status and every quoted span, located or withheld
+  document/       the original uploaded bytes, when they were kept
+  verify.py       a dependency-free check: python3 verify.py
+
+The pack asserts nothing a machine cannot re-check. Run verify.py; every PASS line is a claim you
+have now checked yourself.
+"""
+
+
+@dataclass(frozen=True)
+class EvidencePack:
+    filename: str
+    data: bytes
+
+
+def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
+    run = session.get(Run, run_id)
+    if run is None:
+        raise NotFound("run", run_id)
+    document = run.document
+    sections = [{"id": s.id, "ordinal": s.ordinal, "number": s.number, "heading": s.heading, "text": s.text} for s in document.sections]
+    sections_json = json.dumps(sections, ensure_ascii=False, indent=1)
+    findings = [
+        {
+            "id": f.id,
+            "ordinal": f.ordinal,
+            "topic": f.topic,
+            "status": f.status,
+            "status_source": f.status_source,
+            "conclusion": f.conclusion,
+            "review": (
+                {"verdict": f.review.verdict, "reviewer": f.review.reviewer, "note": f.review.note, "at": iso(f.review.created_at)} if f.review else None
+            ),
+            "spans": [
+                {
+                    "ordinal": s.ordinal,
+                    "section_id": s.section_id,
+                    "cited_label": s.cited_section_label,
+                    "start": s.start,
+                    "end": s.end,
+                    "quote": s.quote,
+                    "verified": s.verified,
+                    "method": s.method,
+                }
+                for s in f.spans
+            ],
+        }
+        for f in run.findings
+    ]
+    original = original_path(document)
+    original_bytes = original.read_bytes() if original.exists() else None
+    record = {
+        "run_id": run.id,
+        "fingerprint": run.fingerprint,
+        "question": run.question,
+        "stage": run.stage,
+        "reason": run.reason,
+        "task": run.task,
+        "document": {
+            "id": document.id,
+            "name": document.name,
+            "sha256": document.sha256,
+            "parser_version": document.parser_version,
+            "file": f"document/{document.name}" if original_bytes is not None else None,
+        },
+        "sections_sha256": sha256_bytes(sections_json.encode("utf-8")),
+        "guidance_sha256": run.guidance_sha256,
+        "provider": run.provider,
+        "model": run.model,
+        "prompt_version": run.prompt_version,
+        "prompt_hash": run.prompt_hash,
+        "options": json.loads(run.options_json or "{}"),
+        "created_at": iso(run.created_at),
+        "finished_at": iso(run.finished_at),
+        "packed_at": iso(utcnow()),
+        "verifier": {"ladder": ["exact", "normalized", "casefold", "alnum"], "label_stripping": True},
+        "workbench_link": f"{settings.app_url}/?document={document.id}&run={run.id}",
+    }
+    verify_py = VERIFY_PY.replace("__QUOTE_MAP__", json.dumps(json.dumps(QUOTE_MAP, ensure_ascii=True)))
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as pack:
+        pack.writestr("README.txt", README_TXT)
+        pack.writestr("run.json", json.dumps(record, ensure_ascii=False, indent=1))
+        pack.writestr("sections.json", sections_json)
+        pack.writestr("findings.json", json.dumps(findings, ensure_ascii=False, indent=1))
+        pack.writestr("verify.py", verify_py)
+        if original_bytes is not None:
+            pack.writestr(f"document/{document.name}", original_bytes)
+    return EvidencePack(filename=f"evidence-{run.id}.zip", data=buffer.getvalue())
