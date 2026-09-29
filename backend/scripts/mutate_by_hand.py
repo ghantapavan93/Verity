@@ -2,7 +2,7 @@
 suite, restore the file, report which test noticed.
 
 This is the measurement that would earn a mutation-testing dependency, kept as a script until it
-does (DECISIONS.md, 2026-09-28: nine mutants, one survivor, one test added). Every file is restored
+does (DECISIONS.md, 2026-09-28: nine mutants, one survivor, one test added; sixteen since 2026-09-29). Every file is restored
 from memory in a ``finally`` block and its bytes are compared afterwards; the script refuses to
 report success if anything differs.
 
@@ -52,7 +52,7 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("M6 span offset drifts by one character", SERVICE, "start=located.start if located else -1,", "start=located.start + 1 if located else -1,"),
     Mutant("M7 digits ignored by the letters-and-digits tier", SPANS, "if ch.isalnum():", "if ch.isalpha():"),
     Mutant("M8 label-strip tier loses its name", SPANS, 'f"unprefixed:{found.method}"', 'f"{found.method}"'),
-    Mutant("M9 immutability trigger never fires", DB, "WHEN {stage_of} IN {finished} ", "WHEN 0 "),
+    Mutant("M9 immutability trigger never fires", DB, "WHEN {condition} ", "WHEN 0 "),
     Mutant(
         "M10 duplicate request creates a second run (lookup and unique index both off)",
         START_RUN,
@@ -67,6 +67,30 @@ MUTANTS: tuple[Mutant, ...] = (
         '_finish(session, run, "complete", error=str(error), reason="provider_error")',
     ),
     Mutant("M12 evidence pack skips the document hash", VERIFY_TEMPLATE, 'report(sha256(HERE / document["file"]) == document["sha256"],', "report(True,"),
+    Mutant(
+        "M13 a match may start inside a word or a number",
+        SPANS,
+        "    if start > 0 and text[start - 1].isalnum() and text[start].isalnum():\n        return False\n",
+        "    if False:\n        return False\n",
+    ),
+    Mutant(
+        "M14 a match may end inside a word or a number",
+        SPANS,
+        "    return not (end < len(text) and text[end - 1].isalnum() and text[end].isalnum())\n",
+        "    return True\n",
+    ),
+    Mutant(
+        "M15 evidence pack skips the hash the run recorded",
+        VERIFY_TEMPLATE,
+        'report(hashlib.sha256(joined.encode("utf-8")).hexdigest() == recorded,',
+        "report(True,",
+    ),
+    Mutant(
+        "M16 section text of a finished run may change",
+        DB,
+        '"sections": f"EXISTS (SELECT 1 FROM runs WHERE runs.document_id = OLD.document_id AND runs.stage IN {finished})",',
+        '"sections": "0",',
+    ),
 )
 
 

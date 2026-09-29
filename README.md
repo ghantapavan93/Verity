@@ -55,7 +55,7 @@ cd backend
 .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check .   # style and lint, pyproject.toml
 .venv/Scripts/python -m mypy                                                            # strict, app + scripts + tests
 .venv/Scripts/lint-imports                                                              # the three import contracts: verifier pure, providers blind, layers downward (.importlinter)
-.venv/Scripts/python -m pytest -q                                                       # 146 tests, no model needed; seven Hypothesis properties of the verifier, one stateful property of the run record, one Schemathesis fuzz of every route
+.venv/Scripts/python -m pytest -q                                                       # 151 tests, no model needed; seven Hypothesis properties of the verifier, one stateful property of the run record, one Schemathesis fuzz of every route (WORKBENCH_FUZZ_SCALE=20 for the deep pass)
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
 npm test                                                    # Vitest: the run follower and the URL state, 7 tests
@@ -78,7 +78,7 @@ cd backend
 .venv/Scripts/python scripts/reverify.py --withheld                                 # replay verification over recorded runs, no model call
 .venv/Scripts/python scripts/run_batch.py --corpus <dir> --task core-fields         # field extraction over a corpus (docs/BATCH.md)
 .venv/Scripts/python scripts/cluster_corpus.py --corpus <dir>                       # document families against the labels (docs/FAMILIES.md)
-.venv/Scripts/python scripts/mutate_by_hand.py                                    # twelve hand mutants of the evidence boundary; each must be killed
+.venv/Scripts/python scripts/mutate_by_hand.py                                    # sixteen hand mutants of the evidence boundary; each must be killed
 ```
 
 ## How the code is organised
@@ -139,6 +139,7 @@ repository and appear under this product's Runs surface as records.
 | Verifier | exact → normalized → casefold → letters-and-digits, plus section-label stripping, each tier named on the span; no similarity ratio (a 0.994 match hid a changed digit); `scripts/reverify.py` replays verification over recorded runs without a model call |
 | Citation record | counted from every answered run, not sampled (`GET /api/engineering/citations`, shown under Runs); at 2026-09-28 across 243 runs: 425 of 469 quoted passages verified (343 exact, 46 normalized, 5 casefold, 6 letters-and-digits, 15 after label stripping, 10 relocated to another candidate section) and 42 of 384 findings withheld |
 | Human review | a finding can be confirmed or dismissed by a named person, undone, and the state survives reload; append-only, idempotent; on the drawer and in the memo; Documents' "reviewed" comes from it |
+| Reference check | a pass whose conclusion names a section the document does not have becomes needs review, by code, with the source shown; over the 398 recorded asserting findings it fires on 4, all wrong references, and never on the 25 that write a section's id as its number (`docs/GOLDENS.md`) |
 | Immutable records | the database refuses any update or delete on a finished run, its stages, findings and spans (SQLite triggers); reviews and memos are separate rows |
 | Failure matrix | provider unavailable, transport failure retried once, malformed and empty files, oversized upload, a DOCX that unpacks past 256 MB and a PDF over 2,000 pages (both 413 before parsing), memo asked twice, prompt change, reader version: one test per row in `backend/tests/test_failure_matrix.py`; stale runs in `backend/tests/test_api_flow.py` |
 | Stage record | every stage row has start, end, duration, status, attempt, input and output hashes and an error code; a run that has made no progress for four model timeouts plus a minute (the longest legitimate run: two validation rounds, each with one transport retry) is failed on the next read |
@@ -156,7 +157,7 @@ repository and appear under this product's Runs surface as records.
 | Independent review | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true, recorded as delivered before any fix, with what changed after (`docs/REVIEW-INDEPENDENT.md`) |
 | Validation | what is proven, partial, missing and not justified, capability by capability, with the validator that holds each claim (`docs/VALIDATION.md`) |
 | Browser flows | twenty Playwright flows against the production build and the real API: the seven happy paths (landing, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; and three flows the validation brief named: a review against guidance that ends in a finding with a status and the guidance in the drawer, a malformed upload refused with the reason and nothing opened, a refresh mid-run after which the run finishes and the URL brings it back; traces kept on failure |
-| Checks | backend 146 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter; interface 7 unit tests and 20 browser flows, tsc, eslint, prettier, production build; results page 23; the CI workflow runs all of it and fails on generated-type drift, and waits on branch `ci` for the token's workflow scope |
+| Checks | backend 151 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter; interface 7 unit tests and 20 browser flows, tsc, eslint, prettier, production build; results page 23; the CI workflow runs all of it and fails on generated-type drift, and waits on branch `ci` for the token's workflow scope |
 
 ## What is deliberately not here yet
 

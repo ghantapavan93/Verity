@@ -95,6 +95,8 @@ def test_a_quote_is_never_found_inside_a_longer_number_or_word() -> None:
     assert locate("$1,500", "The fee is $11,500 per year.") is None
     assert locate("30 days", "Payment is due within 130 days.") is None
     assert locate("able to terminate", "The Provider is unable to terminate for convenience.") is None
+    assert locate("Section 1", "Section 12 applies to renewals.") is None
+    assert locate("pay", "Payment is due on receipt.") is None
     found = locate("15) days", "Customer may cure within fifteen (15) days of notice.")
     assert found is not None and found.method == "exact"
 

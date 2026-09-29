@@ -17,7 +17,7 @@ purpose, with the measurement that would earn it written down.
 | Reading DOCX, PDF and text into numbered sections | proven | the reader tests; the failure matrix (malformed, empty, oversized, a DOCX declaring more than 256 MB, a PDF over 2,000 pages, an encrypted PDF), Schemathesis on the upload route | hidden text set by a character style, and PDF headings by font size, are open questions in `docs/DESIGN.md` |
 | Retrieval within a document | proven, with a measured blind spot | `scripts/eval_retrieval.py`: Recall@6 0.85 on 164 CUAD cases with experts' spans, 0.92 on 38 goldens; uncapped-liability questions 0.44 | hybrid retrieval measured 0.95 and 0.97 and is available behind `WORKBENCH_RETRIEVAL=hybrid`, not default, after one golden regressed (`docs/RETRIEVAL.md`) |
 | Answering in the schema, Qwen3 8B, prompt v2 | proven on the golden set | `scripts/run_goldens.py`: 37 of 44 under BM25 (g08 g11 g12 g26 g35 g42 g44 fail), 40 of 44 under hybrid | one model measured; the 4B was rejected on the set (`docs/ROUTING.md`); SkillOpt proposed no edit to the prompt (`docs/SKILLOPT.md`) |
-| A quote is shown only when code finds it in the text | proven | `tests/test_spans.py`; seven Hypothesis properties; a replay of the verifier over 611 recorded spans; twelve hand mutants of the evidence boundary, all killed | the verifier gained a boundary rule today (v3) after the independent review found "5 days" inside "fifteen (15) days"; there is still no similarity tier, by census |
+| A quote is shown only when code finds it in the text | proven | `tests/test_spans.py`; seven Hypothesis properties; a replay of the verifier over 611 recorded spans; sixteen hand mutants of the evidence boundary, all killed | the verifier gained a boundary rule today (v3) after the independent review found "5 days" inside "fifteen (15) days"; there is still no similarity tier, by census |
 | Status decision under guidance | partial | the status tests; golden g29 | day-count parsing is exercised by one golden; more are added when a change to that decision needs measuring |
 | The run record: stages, hashes, immutability | proven | SQLite triggers on runs, stages, findings, spans and, since today, the sections and documents a finished run read; the stateful property that finished runs never change and verified spans read back as their quotes; `test_failure_matrix` | |
 | The same question is one run | proven | fingerprint lookup plus a partial unique index; the stateful property; mutant M10 (lookup and index both off) killed; the browser flow that asks twice | |
@@ -35,7 +35,7 @@ purpose, with the measurement that would earn it written down.
 | Independent scrutiny | done once | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true (`docs/REVIEW-INDEPENDENT.md`) | one reviewer, one pass |
 | More than one user, authentication, tenancy | not justified | | a local single-user tool; `docs/SCALE.md` names what would earn each |
 | A worker queue, PostgreSQL, object storage, a persistent vector index, a virtualised document view, an agent framework | not justified | `ENGINEERING_CONSTITUTION.md`, `docs/SCALE.md` | each waits on a measurement it would have to win |
-| A mutation-testing dependency | not justified | twelve hand mutants in `scripts/mutate_by_hand.py`, each named for the decision it breaks | earned when the hand mutants stop finding gaps in the suite |
+| A mutation-testing dependency | not justified | sixteen hand mutants in `scripts/mutate_by_hand.py`, each named for the decision it breaks | earned when the hand mutants stop finding gaps in the suite |
 
 ## The order the validators ran in, and what each found
 
@@ -52,13 +52,15 @@ purpose, with the measurement that would earn it written down.
    review, memo, in any order, and no finished run ever changes.
 4. **Schemathesis.** Every operation in `openapi.json`, twelve generated examples each, the
    event stream excluded because it never ends: no 5xx.
-5. **Hand mutants over the named targets.** Twelve, one decision line each: a mismatch counted
+5. **Hand mutants over the named targets.** Sixteen, one decision line each: a mismatch counted
    as verified, the verified flag inverted, relocation disabled, a run complete with nothing
    verified, the status decided as if all quotes verified, an offset drifting by one, digits
    ignored by the letters-and-digits tier, the label-strip tier losing its name, the immutability
    trigger never firing, a duplicate request creating a second run, a provider failure leaving
-   the run complete, the pack skipping the document hash. All killed; the duplicate-request
-   mutant needed both the lookup and the unique index off, because the index alone caught it.
+   the run complete, the pack skipping the document hash, and, since the review, a match starting or
+   ending inside a word, the pack skipping the hash the run recorded, and section text of a finished
+   run changing. All killed; the duplicate-request mutant needed both the lookup and the unique index
+   off, because the index alone caught it.
 6. **Browser truth for the three critical flows.** A review against guidance to a finding with
    a status and the guidance in the drawer; a malformed upload refused with the reason and nothing
    opened; a refresh mid-run after which the run finishes and the URL brings it back. Twenty
@@ -81,5 +83,5 @@ Only fixes to what the validators found: `create_run` commits before returning; 
 window is four model timeouts plus a minute; the verifier refuses a match that splits a run of
 letters and digits; the evidence pack carries and checks the reading stage's recorded hash;
 sections and documents of a finished run are immutable; the lawyer pack is built by a script from
-the record. Checks after the phase: backend 146 tests, ruff, mypy strict, import-linter; twenty
-browser flows; twelve mutants killed; the verifier replay over 611 spans lost nothing.
+the record. Checks after the phase: backend 151 tests, ruff, mypy strict, import-linter; twenty
+browser flows; sixteen mutants killed; the verifier replay over 611 spans lost nothing.

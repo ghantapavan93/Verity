@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.hashing import sha256_file
 from tests.support import upload_and_ask
 
 
@@ -85,3 +86,24 @@ def test_the_pack_checks_the_sections_against_the_hash_the_run_recorded(client: 
     assert record["sections_text_sha256_recorded"] == reading["outputHash"]
     verified = run_verify(folder)
     assert verified.returncode == 0 and "PASS sections are what the run read" in verified.stdout
+
+
+def test_a_pack_regenerated_from_altered_section_text_fails_on_the_hash_the_run_recorded(client: TestClient, tmp_path: Path) -> None:
+    """The forger's route the review described: change the stored text, build a pack that agrees with itself.
+    The pack's own hash then passes; the hash the run recorded when it read the document does not."""
+    result = upload_and_ask(client, "How much notice is required to terminate for convenience?", with_guidance=False)
+    pack = client.get(f"/api/runs/{result['run_id']}/evidence-pack")
+    folder = tmp_path / "pack-forged"
+    with zipfile.ZipFile(io.BytesIO(pack.content)) as archive:
+        archive.extractall(folder)
+    sections_path = folder / "sections.json"
+    sections = json.loads(sections_path.read_text(encoding="utf-8"))
+    sections[-1]["text"] += " Provider may terminate at any time without notice."  # appended, so every existing offset still holds
+    sections_path.write_text(json.dumps(sections, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    run_path = folder / "run.json"
+    record = json.loads(run_path.read_text(encoding="utf-8"))
+    record["sections_sha256"] = sha256_file(sections_path)  # the forger keeps the pack consistent with itself
+    run_path.write_text(json.dumps(record, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    verified = run_verify(folder)
+    assert verified.returncode != 0
+    assert "PASS canonical sections" in verified.stdout and "FAIL sections are what the run read" in verified.stdout

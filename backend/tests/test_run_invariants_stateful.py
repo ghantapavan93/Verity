@@ -20,7 +20,7 @@ from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, initialize, invariant, rule, run_state_machine_as_test
 
 from app.verify.spans import alnum_with_map
-from tests.support import CONTRACT, GUIDANCE
+from tests.support import CONTRACT, FUZZ_SCALE, GUIDANCE
 
 SECOND_CONTRACT = CONTRACT.replace("Nevada", "Delaware").replace("thirty (30)", "sixty (60)")
 QUESTIONS = (
@@ -140,5 +140,5 @@ def test_operation_sequences_keep_the_record_s_invariants(client: TestClient) ->
                             text = sections[span["sectionId"]][span["start"] : span["end"]]
                             assert letters_and_digits(text) == letters_and_digits(span["quote"])
 
-    Workbench.TestCase.settings = settings(max_examples=6, stateful_step_count=10, deadline=None)
+    Workbench.TestCase.settings = settings(max_examples=6 * FUZZ_SCALE, stateful_step_count=10 * min(FUZZ_SCALE, 3), deadline=None)
     run_state_machine_as_test(Workbench, settings=Workbench.TestCase.settings)  # type: ignore[no-untyped-call]

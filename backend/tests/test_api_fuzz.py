@@ -15,6 +15,8 @@ import schemathesis
 from hypothesis import HealthCheck, settings
 from schemathesis.checks import not_a_server_error
 
+from tests.support import FUZZ_SCALE
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import config
@@ -33,7 +35,7 @@ schema = schemathesis.openapi.from_asgi("/openapi.json", app).exclude(path_regex
 
 
 @schema.parametrize()
-@settings(max_examples=12, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large, HealthCheck.filter_too_much])
+@settings(max_examples=12 * FUZZ_SCALE, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large, HealthCheck.filter_too_much])
 def test_no_route_answers_with_a_server_error(case: schemathesis.Case[Any]) -> None:
     response = case.call()
     case.validate_response(response, checks=[not_a_server_error])  # type: ignore[list-item]

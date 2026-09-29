@@ -9,6 +9,7 @@ from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from app.verify.spans import alnum_with_map, bounded, locate, strip_label
+from tests.support import FUZZ_SCALE
 
 TEXT_ALPHABET = st.characters(
     whitelist_categories=("Lu", "Ll", "Lo", "Nd", "Pc", "Pd", "Ps", "Pe", "Po", "Zs"),
@@ -57,7 +58,7 @@ def text_with_numbered_quote(draw: st.DrawFn) -> tuple[str, str, int]:
     return f"{draw(texts)} {quote} {draw(texts)}", quote, position
 
 
-@settings(max_examples=400, deadline=None)
+@settings(max_examples=400 * FUZZ_SCALE, deadline=None)
 @given(text_and_substring())
 def test_a_verbatim_substring_is_found_exactly_and_the_offsets_return_it(pair: tuple[str, str]) -> None:
     text, quote = pair
@@ -71,7 +72,7 @@ def test_a_verbatim_substring_is_found_exactly_and_the_offsets_return_it(pair: t
     assert found.method == "exact"
 
 
-@settings(max_examples=300, deadline=None)
+@settings(max_examples=300 * FUZZ_SCALE, deadline=None)
 @given(text_and_substring())
 def test_whatever_is_located_is_bounded_by_non_letters_and_non_digits(pair: tuple[str, str]) -> None:
     text, quote = pair
@@ -80,7 +81,7 @@ def test_whatever_is_located_is_bounded_by_non_letters_and_non_digits(pair: tupl
         assert bounded(text, found.start, found.end)
 
 
-@settings(max_examples=400, deadline=None)
+@settings(max_examples=400 * FUZZ_SCALE, deadline=None)
 @given(texts, texts)
 def test_whatever_is_located_has_the_quote_s_letters_and_digits(text: str, quote: str) -> None:
     found = locate(quote, text)
@@ -91,7 +92,7 @@ def test_whatever_is_located_has_the_quote_s_letters_and_digits(text: str, quote
     assert found.method in {"exact", "normalized", "casefold", "alnum"}
 
 
-@settings(max_examples=300, deadline=None)
+@settings(max_examples=300 * FUZZ_SCALE, deadline=None)
 @given(text_with_spaced_quote(), st.sampled_from(["  ", "\n", " ", " \n "]))
 def test_extra_whitespace_inside_a_quote_is_forgiven_without_moving_the_span_off_the_text(pair: tuple[str, str], filler: str) -> None:
     text, quote = pair
@@ -101,7 +102,7 @@ def test_extra_whitespace_inside_a_quote_is_forgiven_without_moving_the_span_off
     assert letters_and_digits(text[found.start : found.end]) == letters_and_digits(loosened)
 
 
-@settings(max_examples=300, deadline=None)
+@settings(max_examples=300 * FUZZ_SCALE, deadline=None)
 @given(text_with_numbered_quote(), st.integers(min_value=1, max_value=9))
 def test_a_changed_digit_is_never_matched_to_the_original_digit(triple: tuple[str, str, int], offset: int) -> None:
     text, quote, position = triple
@@ -114,13 +115,13 @@ def test_a_changed_digit_is_never_matched_to_the_original_digit(triple: tuple[st
         assert letters_and_digits(text[found.start : found.end]) == letters_and_digits(altered)
 
 
-@settings(max_examples=200, deadline=None)
+@settings(max_examples=200 * FUZZ_SCALE, deadline=None)
 @given(st.text(alphabet=" \t\n ", max_size=8), texts)
 def test_an_empty_or_blank_quote_is_never_located(blank: str, text: str) -> None:
     assert locate(blank, text) is None
 
 
-@settings(max_examples=200, deadline=None)
+@settings(max_examples=200 * FUZZ_SCALE, deadline=None)
 @given(
     st.integers(min_value=1, max_value=99), st.text(alphabet=st.characters(whitelist_categories=("Lu", "Ll")), min_size=3, max_size=20), text_and_substring()
 )
