@@ -24,7 +24,7 @@ class Settings(BaseModel):
     model_timeout_s: float = 600.0
     # Sections handed to the model per run. Six covers a clause, its neighbours and one or two
     # cross-referenced sections without crowding an 8B model's context.
-    retrieval_k: int = 6
+    retrieval_k: int = int(os.environ.get("WORKBENCH_RETRIEVAL_K", "6"))  # part of a run's identity; ten is the measured candidate (docs/RETRIEVAL.md)
     retrieval: str = os.environ.get("WORKBENCH_RETRIEVAL", "bm25")  # bm25 | hybrid (docs/RETRIEVAL.md)
     embed_model: str = os.environ.get("WORKBENCH_EMBED_MODEL", "nomic-embed-text")
     prompt_version: str = os.environ.get("WORKBENCH_PROMPT_VERSION", "answer-v2")

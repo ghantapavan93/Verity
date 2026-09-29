@@ -24,7 +24,7 @@ from ..retrieval.lexical import LexicalIndex
 from ..verify.spans import Located, locate
 from .events import StageEvent, bus
 from .prose import label_handles
-from .status import decide
+from .status import check_references, decide
 
 log = logging.getLogger(__name__)
 
@@ -229,6 +229,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                     )
                 )
             decision = decide(item.status_hint, item.observed, item.required, guidance_text is not None, all_verified)
+            decision = check_references(decision, label_handles(item.conclusion, labels), (s.number for s in sections), by_label)
             verified_any = verified_any or all_verified
             if not all_verified:
                 withheld_count += 1

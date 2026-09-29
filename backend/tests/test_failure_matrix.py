@@ -242,3 +242,13 @@ def test_section_text_a_finished_run_cited_cannot_be_changed_in_the_database(cli
         connection.execute(text("UPDATE sections SET text = 'rewritten' WHERE document_id = :d"), {"d": document_id})
     with pytest.raises(IntegrityError, match="immutable"), db_module.engine.begin() as connection:
         connection.execute(text("DELETE FROM documents WHERE id = :d"), {"d": document_id})
+
+
+def test_a_pass_that_names_a_section_the_document_does_not_have_is_lowered_to_needs_review(client: TestClient) -> None:
+    """Golden g44's shape: a verified quote under a conclusion that points at a clause the contract lacks (docs/GOLDENS.md)."""
+    client.provider.invented_reference = True
+    run = upload_and_ask(client, "Section 14.2 grants the Customer most favoured nation pricing. Quote that clause.", with_guidance=False)
+    detail = client.get(f"/api/runs/{run['run_id']}/detail").json()
+    finding = detail["findings"][0]
+    assert finding["status"] == "needs_review" and finding["statusSource"] == "reference_check"
+    assert finding["spans"][0]["verified"] is True  # the quote is real; the reference is not

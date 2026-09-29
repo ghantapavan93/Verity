@@ -1,6 +1,6 @@
 from app.retrieval.hybrid import HybridIndex, fuse
 from app.retrieval.lexical import LexicalIndex, tokenize
-from app.runs.status import days_in, decide
+from app.runs.status import Decision, check_references, days_in, decide, unknown_references
 
 SECTIONS = [
     ("Master Services Agreement", "This Agreement is entered into between Acme and Northwind."),
@@ -79,3 +79,27 @@ def test_run_identity_carries_the_retriever_only_when_it_is_not_the_default(monk
     assert mp is not None
     mp.setattr(config.settings, "retrieval", "hybrid")
     assert run_options()["retrieval"] == "hybrid" and run_options()["embed_model"] == config.settings.embed_model
+
+
+NUMBERS = ["1", "2", "2.1", "2.1.1", "8", "8.1", "13.2", "0.15.11"]
+
+
+def test_a_reference_to_a_section_the_document_does_not_have_is_reported() -> None:
+    assert unknown_references("Section 14.2 grants the Customer most favoured nation pricing.", NUMBERS, ["sec_1", "sec_5"]) == ["14.2"]
+    assert unknown_references("This restriction is stated in §12.1.1 (ii).", NUMBERS, ["sec_9"]) == ["12.1.1"]
+
+
+def test_known_sections_label_ids_and_prefixed_numbering_are_not_reported() -> None:
+    assert unknown_references("Fees are due under §8.1; see also Section 2 and clause 15.11.", NUMBERS, []) == []
+    assert unknown_references("The Governing Law is specified in §73.", NUMBERS, ["sec_73"]) == []  # the id, written as a number
+    assert unknown_references("No section is named here.", NUMBERS, []) == []
+    assert unknown_references(None, NUMBERS, []) == []
+
+
+def test_only_a_pass_is_lowered_by_an_unknown_reference() -> None:
+    passing = Decision("pass", "model_hint")
+    lowered = check_references(passing, "Section 14.2 grants most favoured nation pricing.", NUMBERS, ["sec_1"])
+    assert (lowered.status, lowered.source) == ("needs_review", "reference_check")
+    assert check_references(passing, "Fees are due under §8.1.", NUMBERS, ["sec_1"]) is passing
+    missing = Decision("missing", "model_hint")
+    assert check_references(missing, "Nothing in Section 14.2 was found.", NUMBERS, []) is missing

@@ -85,6 +85,7 @@ export const STATUS_SOURCE_LABELS: Record<string, string> = {
   computed_days: "Status decided by code from the day counts",
   model_hint: "Status taken from the model's hint; no comparable day counts",
   no_evidence: "No verified evidence, so no status was given",
+  reference_check: "Lowered to needs review by code: the conclusion names a section this document does not have",
 };
 
 export function citationLabel(section: SectionView): string {

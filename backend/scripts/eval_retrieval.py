@@ -28,7 +28,7 @@ from app.config import settings  # noqa: E402
 from app.ingest import ingest  # noqa: E402
 from app.retrieval.lexical import LexicalIndex  # noqa: E402
 
-KS = (1, 3, 5, 6, 8)
+KS = (1, 3, 5, 6, 8)  # extended by --k, for the question of whether a larger k would reach what k = 6 misses
 EMBED_MODEL = "nomic-embed-text"
 RRF_K = 60
 _embed_cache: dict[str, list[list[float]]] = {}
@@ -145,11 +145,11 @@ def evaluate(case: Case, mode: str = "bm25", k: int = max(KS)) -> Outcome:
     return Outcome(case.set_name, case.category, reachable, rank, noise)
 
 
-def summarise(outcomes: list[Outcome]) -> dict[str, Any]:
+def summarise(outcomes: list[Outcome], ks: tuple[int, ...] = KS) -> dict[str, Any]:
     n = len(outcomes)
     reachable = [o for o in outcomes if o.reachable]
     row: dict[str, Any] = {"cases": n, "reachable": len(reachable)}
-    for k in KS:
+    for k in ks:
         row[f"R@{k}"] = sum(1 for o in reachable if o.rank is not None and o.rank <= k) / max(1, len(reachable))
     row["MRR"] = sum(1 / o.rank for o in reachable if o.rank is not None) / max(1, len(reachable))
     noises = [o.noise_at_6 for o in reachable if o.noise_at_6 is not None]
@@ -157,11 +157,12 @@ def summarise(outcomes: list[Outcome]) -> dict[str, Any]:
     return row
 
 
-def table(title: str, rows: dict[str, dict[str, Any]]) -> str:
-    lines = [f"**{title}**", "", "| Set | cases | reachable | R@1 | R@3 | R@5 | R@6 | R@8 | MRR | noise@6 |", "|---|---|---|---|---|---|---|---|---|---|"]
+def table(title: str, rows: dict[str, dict[str, Any]], ks: tuple[int, ...] = KS) -> str:
+    header = "| Set | cases | reachable | " + " | ".join(f"R@{k}" for k in ks) + " | MRR | noise@6 |"
+    lines = [f"**{title}**", "", header, "|" + "---|" * (5 + len(ks))]
     for name, r in rows.items():
         lines.append(
-            f"| {name} | {r['cases']} | {r['reachable']} | " + " | ".join(f"{r[f'R@{k}']:.2f}" for k in KS) + f" | {r['MRR']:.2f} | {r['noise@6']:.2f} |"
+            f"| {name} | {r['cases']} | {r['reachable']} | " + " | ".join(f"{r[f'R@{k}']:.2f}" for k in ks) + f" | {r['MRR']:.2f} | {r['noise@6']:.2f} |"
         )
     return "\n".join(lines)
 
@@ -169,8 +170,11 @@ def table(title: str, rows: dict[str, dict[str, Any]]) -> str:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=["bm25", "dense", "hybrid"], action="append", help="ranking to evaluate (repeatable); default bm25")
+    parser.add_argument("--k", type=int, action="append", help="an extra cut-off column (repeatable), for example --k 10 --k 12")
+    parser.add_argument("--ranks", action="store_true", help="also print the rank of the first hit for every golden question")
     args = parser.parse_args(argv)
     modes = args.mode or ["bm25"]
+    ks = tuple(sorted(set(KS) | set(args.k or [])))
     corpora = BACKEND / "app" / "batch" / "corpora"
     cuad30 = json.loads((corpora / "cuad-30.json").read_text(encoding="utf-8"))
     labels30 = json.loads((corpora / "cuad-30-labels.json").read_text(encoding="utf-8"))
@@ -189,16 +193,20 @@ def main(argv: list[str]) -> int:
     cases += golden_cases()
 
     for mode in modes:
-        outcomes = [evaluate(c, mode) for c in cases]
-        by_set = {name: summarise([o for o in outcomes if o.set_name == name]) for name in ("CUAD-30", "CUAD-SkillOpt-30", "goldens")}
-        cuad_all = summarise([o for o in outcomes if o.set_name.startswith("CUAD")])
+        outcomes = [evaluate(c, mode, max(ks)) for c in cases]
+        by_set = {name: summarise([o for o in outcomes if o.set_name == name], ks) for name in ("CUAD-30", "CUAD-SkillOpt-30", "goldens")}
+        cuad_all = summarise([o for o in outcomes if o.set_name.startswith("CUAD")], ks)
         labels = {"bm25": "BM25, heading x3", "dense": f"dense ({EMBED_MODEL}, cosine)", "hybrid": f"hybrid (BM25 + {EMBED_MODEL}, RRF)"}
         label = labels[mode]
-        print(table(f"{label}; k = {settings.retrieval_k} in production", {**by_set, "CUAD both": cuad_all}))
+        print(table(f"{label}; k = {settings.retrieval_k} in production", {**by_set, "CUAD both": cuad_all}, ks))
+        if args.ranks:
+            for case, outcome in zip(cases, outcomes, strict=True):
+                if case.set_name == "goldens":
+                    print(f"    rank {outcome.rank if outcome.rank is not None else '-':>3}  {case.question[:90]}")
         print()
         categories = sorted({o.category for o in outcomes if o.set_name.startswith("CUAD")})
         cuad = [o for o in outcomes if o.set_name.startswith("CUAD")]
-        print(table(f"{mode}: CUAD by category, both sets", {c: summarise([o for o in cuad if o.category == c]) for c in categories}))
+        print(table(f"{mode}: CUAD by category, both sets", {c: summarise([o for o in cuad if o.category == c], ks) for c in categories}, ks))
         print()
     unreachable = [o for o in outcomes if not o.reachable]
     print(

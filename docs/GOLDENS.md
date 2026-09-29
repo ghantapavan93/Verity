@@ -155,6 +155,42 @@ g12, g26, g35, g42, g44. Against Recording 3 (reader v3): g23 and g30 now pass, 
 regressed. **Recording 4h, the same under hybrid retrieval: 40 of 44.** Fails g11, g12, g36, g44: four gained, g36 lost
 (right section retrieved first, quote written with an ellipsis, withheld). The retrieval decision is in `docs/RETRIEVAL.md`.
 
+**Recording 4, the seven failures read from the records (2026-09-29).** Each run's candidates, findings,
+spans and raw output, held against the golden's sections:
+
+| Golden | Labelled section retrieved? | What the model did | Whose it is |
+|---|---|---|---|
+| g08 fees due (§4.5/4.2) | no: §4.5 ranks 9th under BM25 | answered from the order form's payment row and §5.5.4's final invoice, both verified | retrieval's |
+| g11 non-compete (absent) | n/a | wrote the right conclusion ("does not stop the Provider") with status pass and the entire-agreement clause as evidence, which the judge reads as asserting the point | the prompt's: a "no" about a point the sections do not address is "not found" |
+| g12 IP indemnity (§9.1) | no: §9.1 ranks 10th | answered from the cover page's covered-claims definitions, verified | retrieval's |
+| g26 infringement remedies (§9.4/9.1) | yes, §9.4 was 3rd | cited §12.11 "No Third-Party Beneficiary", misreading "third party's rights" | the model's |
+| g35 days to dispute (§4.6) | yes, first | paraphrased the sentence; the quote is nowhere in the document; withheld, correctly | the model's; the verifier did its job |
+| g42 modification (§12.2) | no: §12.2 ranks 7th | answered from the cover page's Additions and Modifications rows, verified | retrieval's |
+| g44 false premise (absent) | n/a | repeated "Section 14.2 grants…" as a pass, with an unrelated verified quote | the prompt's, and a missing check: the document has no §14.2 |
+
+Two more things the records show, counted over every asserting finding in the database (398): in 25
+the conclusion writes "§73" where 73 is the id of the section handed to the model (`sec_73`), not a
+number a reader would find in the contract; in 4 the conclusion names a section the document does
+not have (g44's §14.2 twice; §12.1.1 for §2.1.1 twice). None of the 4 is a false alarm once a number
+is also accepted when a section number ends with it (the Model Services Contract's `0.15.11`-style
+numbering).
+
+**Pre-registered on 2026-09-29, before any of it ran:**
+
+1. `answer-v3` is `answer-v2` plus three rules: a question that asserts what the sections do not show
+   is answered under rule 8 (g44); a "no" about a point the sections do not address is "not found in
+   the sections reviewed" with status missing (g11); a section is referred to by the number in its
+   heading, never by its bracketed id (the 25). Judged on all 44 goldens at k = 6 against Recording 4;
+   adopted only with no regression and at least one gain.
+2. A code check, not a prompt rule: a pass whose conclusion names a section number that exists
+   neither in the document nor among the ids handed to the model becomes needs_review, with the
+   reason stated and the source recorded as `reference_check`. It fires on 4 of the 398 recorded
+   findings, all of them wrong references, and changes no recorded run. It does not make g44 pass:
+   needs_review still asserts; it makes the finding honest on screen. g44 passes only when the prompt
+   stops repeating the premise.
+3. `WORKBENCH_RETRIEVAL_K=10`, under the rule in `docs/RETRIEVAL.md`, measured after 1 with whichever
+   prompt won, so the two are not confounded.
+
 **The earlier note, kept as written:** Recording 4 (reader v4, verifier v2) had not been made. The two fixes above were verified by
 replay over the recorded runs (verifier v2: 9 spans gained, 0 lost) and by the reader tests; the
 full re-recording (84 runs, about an hour of the one GPU) was deliberately not run on

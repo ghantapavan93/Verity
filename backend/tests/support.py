@@ -4,6 +4,7 @@ and can be told to misbehave, and the upload-and-ask helper. The client fixture 
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any
 
@@ -76,11 +77,14 @@ class FakeProvider:
         assert quote in body
         if self.paraphrase:
             quote = "The customer can walk away with about two weeks of notice."
+        conclusion = f"Customer may terminate for convenience on 15 days' written notice; the guidance requires at least 30 days. [{label}]"
+        if getattr(self, "invented_reference", False):
+            conclusion = f"Section 14.2 grants the Customer most favoured nation pricing. [{label}]"  # a real quote under an invented reference
         payload = {
             "findings": [
                 {
                     "topic": "Termination for convenience",
-                    "conclusion": f"Customer may terminate for convenience on 15 days' written notice; the guidance requires at least 30 days. [{label}]",
+                    "conclusion": conclusion,
                     "status_hint": "pass",
                     "evidence": [{"section_id": label, "quote": quote}],
                     "guidance_reference": "at 30 days' notice or more",
@@ -93,6 +97,11 @@ class FakeProvider:
             "note": None,
         }
         return Generation(text=json.dumps(payload), input_tokens=100, output_tokens=50, latency_ms=12.5, model=self.model)
+
+
+# Multiplies every Hypothesis and Schemathesis budget. WORKBENCH_FUZZ_SCALE=20 is the deep pass recorded in
+# docs/VALIDATION.md; the default keeps the suite under half a minute.
+FUZZ_SCALE = int(os.environ.get("WORKBENCH_FUZZ_SCALE", "1"))
 
 
 def upload_and_ask(client: TestClient, question: str, with_guidance: bool = True) -> dict[str, Any]:

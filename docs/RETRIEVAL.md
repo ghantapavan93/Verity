@@ -83,3 +83,29 @@ its numbers: ten points more recall on expert labels, three more goldens net, on
 the default the first time a run shows no regression, which, with deterministic decoding, means after
 a change elsewhere, for example the prompt experiment against non-verbatim quotes that g36 and g44 both
 call for, judged with hybrid on. Both recordings are in `docs/GOLDENS.md`.
+
+## Would a larger k reach what k = 6 misses? (2026-09-29, BM25, no model call)
+
+`eval_retrieval.py --k 10 --k 12 --ranks`. The three goldens BM25 misses at six are all reached at
+ten: fees due after an invoice (§4.5 ranks 9th), the IP indemnity (§9.1 ranks 10th), how the
+agreement is modified (§12.2 ranks 7th). The other four failures of Recording 4 are not retrieval's
+(`docs/GOLDENS.md`).
+
+| Set | R@6 | R@8 | R@10 | R@12 |
+|---|---|---|---|---|
+| CUAD-30 | 0.91 | 0.92 | 0.95 | 0.96 |
+| CUAD-SkillOpt-30 | 0.81 | 0.89 | 0.89 | 0.90 |
+| goldens | 0.92 | 0.95 | 1.00 | 1.00 |
+| CUAD both | 0.85 | 0.90 | 0.91 | 0.93 |
+
+By category at k = 10: uncapped liability stays at 0.50 (a vocabulary gap, not a depth problem),
+non-compete 0.69 → 0.81, cap on liability and termination for convenience reach 1.00.
+
+The cost is context: ten sections instead of six is roughly two thirds more prompt per call for an
+8B model on a 6 GB GPU, and more room to pick a wrong section (noise@6 is already 0.75 on CUAD).
+**Rule, fixed before the run:** `WORKBENCH_RETRIEVAL_K=10` is measured on the 44 goldens against the
+same prompt at k = 6, after the prompt question in `docs/GOLDENS.md` is settled so the two are not
+confounded. It becomes the default only with no regression, at least one gain, and median model
+latency up by less than half. If it regresses, the three misses stay named here as retrieval's and
+hybrid remains the measured alternative.
+
