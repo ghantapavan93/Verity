@@ -2,7 +2,8 @@
 
 Documents, guidance, prompts, memo files and run fingerprints are all hashed here, so a change
 to how identity is computed is a change in one file with one set of tests. Nothing else in the
-tree imports hashlib.
+application imports hashlib; a test scans `app/` for it. The evidence pack's standalone
+`verify.py` and two scripts hash on their own because they run outside the application.
 """
 
 from __future__ import annotations

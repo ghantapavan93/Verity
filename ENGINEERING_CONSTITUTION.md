@@ -64,8 +64,10 @@ at its measurement or its requirement is removed.
 7. One canonical implementation each for hashing, text normalisation, citation location and
    status decisions. No `utils`, `helpers` or `misc` modules.
 8. The primary runtime path never falls back to mock data. Fixtures and fake providers live in
-   tests and are unmistakably test-only. When the API or the model is unavailable, the
-   interface says so.
+   tests and are unmistakably test-only. The one exception is the record/replay provider in
+   `app/providers/replay.py`: it is selected only by `WORKBENCH_PROVIDER=record|replay`, never by
+   default, and exists so the browser flows replay the model's recorded answers without a GPU.
+   When the API or the model is unavailable, the interface says so.
 9. Failures are typed by owner: unsupported file, not found, conflict, provider error,
    invalid structured output, unverified citations, insufficient evidence, interrupted run.
    Each has one response shape and one wording on screen.
@@ -169,8 +171,8 @@ repository is committed by the assistant.
 - No font-size heading detection for PDFs: pypdf's visitor did not report sizes on printed
   files; a character-metrics library would be a new dependency for one feature.
 - Browser tests came on an explicit requirement, not a broken release (the second way under
-  rule 2): seven Playwright flows in `e2e/`, with the model's answers recorded once and replayed
-  so they run in CI without a GPU.
+  rule 2): twenty Playwright flows in `e2e/`, with the model's answers recorded once and replayed
+  so they run without a GPU (the CI workflow waits on branch `ci` for the token's workflow scope).
 - No pyright alongside mypy: one type checker, and mypy needs no Node in the backend job.
 - No guidance goldens yet: the status decision with guidance rests on day-count parsing the set
   does not exercise; goldens with guidance are added when a change to that decision needs

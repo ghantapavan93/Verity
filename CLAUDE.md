@@ -14,7 +14,9 @@ Fixed decisions, not open for re-litigation in a session:
   pages, no dashboard cards, no marketing content, no agent diagrams, no onboarding tours.
 - Dependencies are earned. No Postgres, pgvector, LangGraph, queues or agents without a
   measurement that shows the current choice failing. Record the measurement in `DECISIONS.md`.
-- The primary path is never mocked. Fake providers live only in `backend/tests`.
+- The primary path is never mocked. Fake providers live in `backend/tests`, with one exception: the
+  record/replay provider in `backend/app/providers/replay.py`, chosen only by `WORKBENCH_PROVIDER=record|replay`,
+  never by default, so the browser flows run without a GPU. Nothing else in `app/` may answer for the model.
 - The backend schema is the source of truth for types. After changing `backend/app/schemas.py`,
   run `backend/.venv/Scripts/python backend/scripts/export_openapi.py` then `npm run api:types`,
   and commit both generated files.

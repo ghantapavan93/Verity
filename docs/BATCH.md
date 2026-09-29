@@ -63,8 +63,8 @@ answer-v2, concurrency 1, reader v4 (batch `ff81b6b33a804475`).**
 | wall time | 57.1 min |
 | documents/min · values/min | 0.35 · 0.82 |
 | answered with a verified citation | 47 of 60 |
-| not found (the model said the contract does not address it) | 9 |
-| withheld (the quote was not in the document) | 4 |
+| not found (the model said the contract does not address it) | 10 |
+| withheld (the quote was not in the document) | 3 |
 | failed runs (invalid output, provider error, other) | 0 · 0 · 0 |
 | retries of the model call | 0 |
 | model latency p50 · p95 · mean | 44.3 s · 134.7 s · 57.0 s |
@@ -72,9 +72,9 @@ answer-v2, concurrency 1, reader v4 (batch `ff81b6b33a804475`).**
 | quoted spans · verified | 146 · 135 (92%) |
 
 Reading the values table (`GET /api/batches/ff81b6b33a804475/values.csv`): every contract
-returned a governing-law and a termination value except two (the Pilot Agreement and the
+returned a governing-law and a termination value except three (the Pilot Agreement and the
 Mid-Tier charges schedule said "not found" for governing law; the NHS special terms had their
-governing-law quote withheld), and the liability cap was "not found" on seven documents, most
+governing-law quote withheld), and the liability cap was "not found" on eight documents, most
 of them plausibly right (the mutual NDA, the DPA addendum, the consolidated schedules, the ICO
 addendum carry no cap of their own) and withheld on two. Three citations point at a schedule's
 or cover page's text rather than a numbered clause, and the Model Services Contract's clause

@@ -44,20 +44,22 @@ npm run api:types                          # regenerates src/lib/api.schema.ts f
 
 ## Checks
 
-The same commands run locally and in CI (`.github/workflows/checks.yml`). CI also fails when
+The same commands are wired into `.github/workflows/checks.yml`, which also fails when
 `openapi.json` or `src/lib/api.schema.ts` differ from what the API generates, so the interface
-cannot drift from the backend.
+cannot drift from the backend. That workflow sits on branch `ci` and has not run yet: pushing it
+needs the `workflow` scope on the GitHub token, which has not been granted. Until it lands, every
+check below runs locally, by hand, before a push.
 
 ```bash
 cd backend
 .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check .   # style and lint, pyproject.toml
 .venv/Scripts/python -m mypy                                                            # strict, app + scripts + tests
 .venv/Scripts/lint-imports                                                              # the three import contracts: verifier pure, providers blind, layers downward (.importlinter)
-.venv/Scripts/python -m pytest -q                                                       # 113 tests, no model needed; six are Hypothesis properties of the verifier
+.venv/Scripts/python -m pytest -q                                                       # 146 tests, no model needed; seven Hypothesis properties of the verifier, one stateful property of the run record, one Schemathesis fuzz of every route
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
 npm test                                                    # Vitest: the run follower and the URL state, 7 tests
-npm run e2e                                                 # Playwright: seventeen browser flows, real API, the model's recorded answers replayed, faults by marker
+npm run e2e                                                 # Playwright: twenty browser flows, real API, the model's recorded answers replayed, faults by marker
 ```
 
 The browser flows run the production build against the API, each on its own port and data
@@ -76,7 +78,7 @@ cd backend
 .venv/Scripts/python scripts/reverify.py --withheld                                 # replay verification over recorded runs, no model call
 .venv/Scripts/python scripts/run_batch.py --corpus <dir> --task core-fields         # field extraction over a corpus (docs/BATCH.md)
 .venv/Scripts/python scripts/cluster_corpus.py --corpus <dir>                       # document families against the labels (docs/FAMILIES.md)
-.venv/Scripts/python scripts/mutate_by_hand.py                                    # nine hand mutants of the evidence boundary; each must be killed
+.venv/Scripts/python scripts/mutate_by_hand.py                                    # twelve hand mutants of the evidence boundary; each must be killed
 ```
 
 ## How the code is organised
@@ -138,8 +140,8 @@ repository and appear under this product's Runs surface as records.
 | Citation record | counted from every answered run, not sampled (`GET /api/engineering/citations`, shown under Runs); at 2026-09-28 across 243 runs: 425 of 469 quoted passages verified (343 exact, 46 normalized, 5 casefold, 6 letters-and-digits, 15 after label stripping, 10 relocated to another candidate section) and 42 of 384 findings withheld |
 | Human review | a finding can be confirmed or dismissed by a named person, undone, and the state survives reload; append-only, idempotent; on the drawer and in the memo; Documents' "reviewed" comes from it |
 | Immutable records | the database refuses any update or delete on a finished run, its stages, findings and spans (SQLite triggers); reviews and memos are separate rows |
-| Failure matrix | provider unavailable, transport failure retried once, malformed and empty files, oversized upload, a DOCX that unpacks past 256 MB and a PDF over 2,000 pages (both 413 before parsing), memo asked twice, prompt change, reader version, stale runs: one test per row in `backend/tests/test_failure_matrix.py` |
-| Stage record | every stage row has start, end, duration, status, attempt, input and output hashes and an error code; a run cannot stay in flight longer than the model timeout plus a minute |
+| Failure matrix | provider unavailable, transport failure retried once, malformed and empty files, oversized upload, a DOCX that unpacks past 256 MB and a PDF over 2,000 pages (both 413 before parsing), memo asked twice, prompt change, reader version: one test per row in `backend/tests/test_failure_matrix.py`; stale runs in `backend/tests/test_api_flow.py` |
+| Stage record | every stage row has start, end, duration, status, attempt, input and output hashes and an error code; a run that has made no progress for four model timeouts plus a minute (the longest legitimate run: two validation rounds, each with one transport retry) is failed on the next read |
 | Model routing | a run carries its task and why its model answered it; the policy is empty until a smaller model is measured on the golden set (`docs/ROUTING.md`) |
 | Batch extraction | a field task over a corpus of 20 licensed public contracts, bounded concurrency, every value with its citation; first recording: 47 of 60 values answered with a verified citation in 57 min on one laptop GPU, 0 failures, 135 of 146 quotes verified (`docs/BATCH.md`) |
 | Document families | structural fingerprints, exact Jaccard, single-linkage families, pairwise precision/recall/F1 against hand labels with the threshold sweep; finds the template family, not the suites (`docs/FAMILIES.md`) |
@@ -150,9 +152,11 @@ repository and appear under this product's Runs surface as records.
 | Retrieval | BM25 scored against labels, 164 CUAD cases with experts' spans and 38 goldens: Recall@6 0.85 and 0.92; a hybrid with a local embedding model measured at 0.95 and 0.97 and built behind a setting; on the 44 goldens BM25 37, hybrid 40 with one regression, so BM25 stays the default by the rule (`docs/RETRIEVAL.md`) |
 | Failure envelope | one table of cases, expected, observed and the test that holds each; writing it found two 422s that were a 500 and a wrong reason (`docs/FAILURE-ENVELOPE.md`) |
 | Scale | what was measured and what each next step would have to earn; nothing says millions (`docs/SCALE.md`) |
-| Domain review | ten verified findings packed for a practising lawyer with five questions and room for disagreement (`docs/DOMAIN-REVIEW.md`); not yet reviewed |
-| Browser flows | seventeen Playwright flows against the production build and the real API: the seven happy paths (landing, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; traces kept on failure; a CI job |
-| Checks | backend 113 tests (six Hypothesis properties), ruff, mypy strict; interface 7 unit tests and 17 browser flows, tsc, eslint, prettier, production build; results page 23; CI runs all of it and fails on generated-type drift |
+| Domain review | ten findings packed for a practising lawyer with five questions and room for disagreement, built from the record by document, model, prompt and retrieval (`backend/scripts/domain_review_pack.py`, `docs/DOMAIN-REVIEW.md`); not yet reviewed |
+| Independent review | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true, recorded as delivered before any fix, with what changed after (`docs/REVIEW-INDEPENDENT.md`) |
+| Validation | what is proven, partial, missing and not justified, capability by capability, with the validator that holds each claim (`docs/VALIDATION.md`) |
+| Browser flows | twenty Playwright flows against the production build and the real API: the seven happy paths (landing, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; and three flows the validation brief named: a review against guidance that ends in a finding with a status and the guidance in the drawer, a malformed upload refused with the reason and nothing opened, a refresh mid-run after which the run finishes and the URL brings it back; traces kept on failure |
+| Checks | backend 146 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter; interface 7 unit tests and 20 browser flows, tsc, eslint, prettier, production build; results page 23; the CI workflow runs all of it and fails on generated-type drift, and waits on branch `ci` for the token's workflow scope |
 
 ## What is deliberately not here yet
 

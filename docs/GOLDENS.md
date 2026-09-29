@@ -1,6 +1,6 @@
 # The golden set
 
-Forty-two fixed questions about the bundled sample contract (Common Paper Cloud Service
+Forty-four fixed questions about the bundled sample contract (Common Paper Cloud Service
 Agreement, CC BY 4.0), in eleven categories, each with the outcome a careful reader expects. Every
 prompt version, and every candidate model, is run against all of them; code judges each run from
 its record; the Runs surface shows the verdicts side by side as previous answer, new answer,
