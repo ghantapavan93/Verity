@@ -33,3 +33,5 @@ npm run e2e   # browser flows; builds the interface, replays the model's recorde
 ```
 
 Record decisions as they are taken in `DECISIONS.md`. Keep `README.md`'s release checklist true.
+
+Library documentation comes from the Context7 MCP server declared in `.mcp.json` (Upstash, MIT, no key needed at the default rate): ask it for the current Next.js, Playwright, FastAPI or SQLAlchemy API before writing against one, instead of trusting memory.
