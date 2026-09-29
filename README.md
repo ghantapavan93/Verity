@@ -52,7 +52,7 @@ cannot drift from the backend.
 cd backend
 .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check .   # style and lint, pyproject.toml
 .venv/Scripts/python -m mypy                                                            # strict, app + scripts + tests
-.venv/Scripts/python -m pytest -q                                                       # 104 tests, no model needed; six are Hypothesis properties of the verifier
+.venv/Scripts/python -m pytest -q                                                       # 113 tests, no model needed; six are Hypothesis properties of the verifier
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
 npm test                                                    # Vitest: the run follower and the URL state, 7 tests
@@ -132,7 +132,7 @@ repository and appear under this product's Runs surface as records.
 | Secrets | none in the tree; `.env*`, `data/` and `.venv/` are ignored |
 | Sample licence | Common Paper CSA v2.1, CC BY 4.0; the bundled file's SHA-256 matches the corpus manifest |
 | Repeated request | same inputs return the existing run (`reused: true`); a failed run is retryable; a run interrupted by a restart is failed with the reason |
-| Golden set | 44 questions on the sample in eleven categories (four with guidance and an expected status, two adversarial; the false-premise one fails today and says so in `docs/GOLDENS.md`), judged by code under each prompt version and model; previous answer / new answer / what changed / better or worse on the Runs surface; `run_goldens.py --report`; the kill rule is `docs/GOLDENS.md` |
+| Golden set | 44 questions on the sample in eleven categories (four with guidance and an expected status, two adversarial; the false-premise one fails today and says so in `docs/GOLDENS.md`); 37 of 44 under the current reader, judged by code under each prompt version and model; previous answer / new answer / what changed / better or worse on the Runs surface; `run_goldens.py --report`; the kill rule is `docs/GOLDENS.md` |
 | Verifier | exact → normalized → casefold → letters-and-digits, plus section-label stripping, each tier named on the span; no similarity ratio (a 0.994 match hid a changed digit); `scripts/reverify.py` replays verification over recorded runs without a model call |
 | Citation record | counted from every answered run, not sampled (`GET /api/engineering/citations`, shown under Runs); at 2026-09-28 across 243 runs: 425 of 469 quoted passages verified (343 exact, 46 normalized, 5 casefold, 6 letters-and-digits, 15 after label stripping, 10 relocated to another candidate section) and 42 of 384 findings withheld |
 | Human review | a finding can be confirmed or dismissed by a named person, undone, and the state survives reload; append-only, idempotent; on the drawer and in the memo; Documents' "reviewed" comes from it |
@@ -146,8 +146,12 @@ repository and appear under this product's Runs surface as records.
 | Lighthouse | landing 100/100/100/100 and workspace with a run 99/100/100/100 on the production build, LCP 0.7 s and 1.0 s; the one real finding, uncompressed API JSON, fixed with gzip and a test (`docs/PERFORMANCE.md`) |
 | Dependencies | every pin moves through Dependabot, weekly, grouped per ecosystem (`.github/dependabot.yml`); CodeQL code scanning is on the CI branch, pending the workflow scope |
 | SkillOpt | Microsoft's skill optimizer run against the production answer path, the seed prompt as the skill, CUAD contracts disjoint from CUAD-30 as data, the goldens as the untouched judge: six steps, twelve analyst calls, zero edits proposed, answer-v2 stands; why, and what would change it, in `docs/SKILLOPT.md` |
+| Retrieval | BM25 scored against labels, 164 CUAD cases with experts' spans and 38 goldens: Recall@6 0.85 and 0.92; a hybrid with a local embedding model measured at 0.95 and 0.97 and built behind a setting; on the 44 goldens BM25 37, hybrid 40 with one regression, so BM25 stays the default by the rule (`docs/RETRIEVAL.md`) |
+| Failure envelope | one table of cases, expected, observed and the test that holds each; writing it found two 422s that were a 500 and a wrong reason (`docs/FAILURE-ENVELOPE.md`) |
+| Scale | what was measured and what each next step would have to earn; nothing says millions (`docs/SCALE.md`) |
+| Domain review | ten verified findings packed for a practising lawyer with five questions and room for disagreement (`docs/DOMAIN-REVIEW.md`); not yet reviewed |
 | Browser flows | seven Playwright flows against the production build and the real API: landing, sample to sections, question to a verified citation whose highlight is the quote's own text, the withheld question, reload from the URL, Findings and Runs with the evidence pack, the memo; the model's answers recorded once and replayed; traces kept on failure; a CI job |
-| Checks | backend 104 tests (six Hypothesis properties), ruff, mypy strict; interface 7 unit tests and 7 browser flows, tsc, eslint, prettier, production build; results page 23; CI runs all of it and fails on generated-type drift |
+| Checks | backend 113 tests (six Hypothesis properties), ruff, mypy strict; interface 7 unit tests and 7 browser flows, tsc, eslint, prettier, production build; results page 23; CI runs all of it and fails on generated-type drift |
 
 ## What is deliberately not here yet
 

@@ -150,7 +150,12 @@ boundary. What would address it is a prompt rule for questions that assert what 
 show (an answer-v3), judged on all 44 goldens under the rule above before it replaces answer-v2. Not
 run tonight: the GPU is on the CUAD recording.
 
-**Recording 4 (reader v4, verifier v2) has not been made.** The two fixes above were verified by
+**Recording 4, 2026-09-29: 44 goldens, reader v4, verifier v2, Qwen3 8B, answer-v2, BM25: 37 of 44.** Fails g08, g11,
+g12, g26, g35, g42, g44. Against Recording 3 (reader v3): g23 and g30 now pass, as the reader change predicted; nothing
+regressed. **Recording 4h, the same under hybrid retrieval: 40 of 44.** Fails g11, g12, g36, g44: four gained, g36 lost
+(right section retrieved first, quote written with an ellipsis, withheld). The retrieval decision is in `docs/RETRIEVAL.md`.
+
+**The earlier note, kept as written:** Recording 4 (reader v4, verifier v2) had not been made. The two fixes above were verified by
 replay over the recorded runs (verifier v2: 9 spans gained, 0 lost) and by the reader tests; the
 full re-recording (84 runs, about an hour of the one GPU) was deliberately not run on
 2026-09-28 so the machine could finish the batch. Expected effect: g23 and g26 pass, nothing

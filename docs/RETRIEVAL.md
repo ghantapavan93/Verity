@@ -65,3 +65,21 @@ has earned the goldens re-run, not yet the pipeline. It runs behind `WORKBENCH_R
 retrieval mode is part of a run's identity when it is not the default, and the 44 goldens are re-run
 under it. It becomes the default only with no regression there. The embedding model is local
 (nomic-embed-text, 274 MB, $0); a missing model fails the run with a reason, never silently falls back.
+
+## The goldens under both retrievers, 2026-09-29, reader v4, verifier v2, Qwen3 8B, answer-v2
+
+| Retriever | Pass | Fails |
+|---|---|---|
+| BM25 | 37 of 44 | g08, g11, g12, g26, g35, g42, g44 |
+| hybrid | 40 of 44 | g11, g12, g36, g44 |
+
+Hybrid gains g08, g26, g35 and g42 and loses g36. On g36 the labelled section (5.3.2) was hybrid's
+first candidate; the model quoted it with an ellipsis, the verifier withheld the quote, and the golden
+failed. The cause is the model's quote, not retrieval, and the rule does not ask about causes: it asks
+whether any golden regressed. One did.
+
+**Decision.** BM25 stays the default. Hybrid stays available behind `WORKBENCH_RETRIEVAL=hybrid`, with
+its numbers: ten points more recall on expert labels, three more goldens net, one regression. It becomes
+the default the first time a run shows no regression, which, with deterministic decoding, means after
+a change elsewhere, for example the prompt experiment against non-verbatim quotes that g36 and g44 both
+call for, judged with hybrid on. Both recordings are in `docs/GOLDENS.md`.
