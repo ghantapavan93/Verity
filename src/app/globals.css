@@ -1,49 +1,93 @@
+/* The frozen visual system: dark graphite shell, warm paper for the document, restrained
+   indigo-to-cyan lighting for focus, upload, selection and model-processing states only.
+   Components never name a colour; they use these tokens. */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  color-scheme: dark;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: var(--font-source-serif), Georgia, "Times New Roman", serif;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+  --accent-1: #776bff;
+  --accent-2: #8ddcff;
+  --spectral: linear-gradient(135deg, #776bff, #8ddcff);
 
-html {
-  height: 100%;
-}
+  --bg: #0e0f13;
+  --bg-glow: rgba(119, 107, 255, 0.12);
+  --surface: rgba(255, 255, 255, 0.035);
+  --surface-2: rgba(255, 255, 255, 0.065);
+  --glass: rgba(22, 24, 31, 0.93);
+  --glass-blur: 20px;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #edeef2;
+  --text-2: #a7abb5;
+  --text-3: #6f7481;
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
+  --doc-bg: #f6f2ea;
+  --doc-text: #1b1a18;
+  --doc-text-2: #6a655c;
+  --doc-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  --doc-lit: rgba(141, 220, 255, 0.35);
+  --doc-mark: rgba(119, 107, 255, 0.18);
+  --doc-mark-line: rgba(119, 107, 255, 0.55);
 
-body {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --assistant-bg: linear-gradient(165deg, rgba(119, 107, 255, 0.1), rgba(141, 220, 255, 0.05) 45%, rgba(255, 255, 255, 0.02));
+  --assistant-border: rgba(141, 220, 255, 0.18);
+  --composer-bg: rgba(255, 255, 255, 0.05);
+  --halo: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 24px 60px rgba(0, 0, 0, 0.5);
+  --halo-active: 0 0 0 1px rgba(141, 220, 255, 0.4), 0 0 0 6px rgba(119, 107, 255, 0.14), 0 24px 60px rgba(0, 0, 0, 0.55);
+  --chip-bg: rgba(255, 255, 255, 0.06);
+  --rail-bg: rgba(255, 255, 255, 0.02);
+
+  --status-review-bg: rgba(255, 196, 120, 0.14);
+  --status-review-text: #f3c88c;
+  --status-review-border: rgba(255, 196, 120, 0.35);
+  --status-pass-bg: rgba(141, 220, 255, 0.12);
+  --status-pass-text: #a9e3ff;
+  --status-pass-border: rgba(141, 220, 255, 0.35);
+  --status-muted-bg: rgba(255, 255, 255, 0.06);
+  --status-muted-text: #a7abb5;
+  --status-muted-border: rgba(255, 255, 255, 0.18);
+
+  --radius-s: 8px;
+  --radius-m: 12px;
+  --radius-l: 16px;
+  --dur-fast: 160ms;
+  --dur: 200ms;
+  --dur-slow: 320ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 * {
   box-sizing: border-box;
-  padding: 0;
+}
+
+html,
+body {
   margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-a {
+button {
+  font: inherit;
   color: inherit;
-  text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
