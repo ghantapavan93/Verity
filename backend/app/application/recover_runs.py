@@ -22,11 +22,15 @@ from ..runs.events import TERMINAL
 
 log = logging.getLogger(__name__)
 
+MAX_MODEL_CALLS_PER_RUN = 4  # analysis.service: two validation rounds, each with one transport retry
 STALE_MARGIN_S = 60.0
 
 
 def stale_after_seconds() -> float:
-    return settings.model_timeout_s + STALE_MARGIN_S
+    # A legitimate run can span four model calls without writing progress: one transport retry and one
+    # corrected retry, each up to the model timeout. Declaring it dead earlier freed its fingerprint while it
+    # was alive (independent review, 2026-09-29). The window is the worst legitimate case plus a minute.
+    return settings.model_timeout_s * MAX_MODEL_CALLS_PER_RUN + STALE_MARGIN_S
 
 
 def recover_interrupted_runs(session: Session, stale_after_s: float | None = None) -> int:

@@ -87,10 +87,29 @@ class MemoryWatch:
 def ask_and_wait(client: httpx.Client, document_id: str, question: str) -> Sample:
     began = time.perf_counter()
     started = client.post("/api/runs", json={"documentId": document_id, "guidanceId": None, "question": question})
+    if started.status_code >= 500 or not started.content:
+        return Sample(
+            question=question, wall_ms=(time.perf_counter() - began) * 1000, queue_ms=None, model_ms=None, verify_ms=None, stage=f"http {started.status_code}"
+        )
     started.raise_for_status()
     run_id = started.json()["id"]
+    http_errors = 0
     while True:
-        run = client.get(f"/api/runs/{run_id}").json()
+        polled = client.get(f"/api/runs/{run_id}")
+        if polled.status_code >= 500 or not polled.content:
+            http_errors += 1  # the API answered a read with an error; counted, not hidden
+            if http_errors > 30:
+                return Sample(
+                    question=question,
+                    wall_ms=(time.perf_counter() - began) * 1000,
+                    queue_ms=None,
+                    model_ms=None,
+                    verify_ms=None,
+                    stage=f"poll http {polled.status_code}",
+                )
+            time.sleep(1.0)
+            continue
+        run = polled.json()
         if run["stage"] in TERMINAL:
             break
         time.sleep(1.0)
@@ -119,7 +138,7 @@ def level_row(level: int, samples: list[Sample], elapsed_s: float, peak_mb: floa
     queues = [s.queue_ms for s in samples if s.queue_ms is not None]
     models = [s.model_ms for s in samples if s.model_ms is not None]
     verifies = [s.verify_ms for s in samples if s.verify_ms is not None]
-    failed = sum(1 for s in samples if s.stage == "failed")
+    failed = sum(1 for s in samples if s.stage == "failed" or s.stage.startswith(("http", "poll")))
 
     def fmt(value: float | None) -> str:
         return "-" if value is None else f"{value / 1000:.1f}"
@@ -137,12 +156,13 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--document", type=Path, required=True, help="the contract to ask about; uploaded once")
     parser.add_argument("--levels", default=",".join(str(n) for n in LEVELS))
     parser.add_argument("--json", type=Path, help="also write every sample here")
+    parser.add_argument("--skip", type=int, default=0, help="questions to skip, when earlier levels already used them")
     args = parser.parse_args(argv)
     levels = [int(n) for n in args.levels.split(",")]
 
     goldens: dict[str, Any] = json.loads((BACKEND / "app" / "goldens" / "set.json").read_text(encoding="utf-8"))
     questions = [str(g["question"]) for g in goldens["goldens"] if not g.get("guidance")]
-    if sum(levels) > len(questions):
+    if args.skip + sum(levels) > len(questions):
         print(f"need {sum(levels)} distinct questions, have {len(questions)}")
         return 2
 
@@ -158,7 +178,7 @@ def main(argv: list[str]) -> int:
     print("| concurrent | level wall s | run wall s p50 / p95 | queue s p50 / p95 | model s p50 / p95 | verify ms p50 / p95 | failed | API peak MB |")
     print("|---|---|---|---|---|---|---|---|")
     every: list[dict[str, Any]] = []
-    cursor = 0
+    cursor = args.skip
     for level in levels:
         batch = questions[cursor : cursor + level]
         cursor += level

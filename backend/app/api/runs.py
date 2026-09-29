@@ -164,6 +164,11 @@ def create_run(
         response.status_code = status.HTTP_200_OK
     out = run_out(started.run)
     out.reused = not started.created
+    # The request's session lives until the background task ends (FastAPI closes yield-dependencies after
+    # the response, and Starlette runs background tasks inside the response). Reading the run after the
+    # commit began a new transaction, and that transaction pinned a pool connection for the whole run:
+    # at twenty concurrent starts the pool of fifteen ran dry (docs/SCALE.md). Ending it here frees the connection.
+    session.commit()
     return out
 
 
