@@ -1,0 +1,13 @@
+{
+  "name": "cuad-clauses",
+  "description": "Seven clause questions that map one to one onto CUAD v1 categories, so a batch over CUAD contracts can be scored against the experts' spans (docs/CUAD.md). Each is an ordinary question run; the value is the first finding whose citation verified.",
+  "fields": [
+    {"key": "governing_law", "label": "Governing law", "question": "What law governs this agreement and where must disputes be brought?", "cuad_category": "Governing Law"},
+    {"key": "termination_for_convenience", "label": "Termination for convenience", "question": "May either party terminate this agreement for convenience, without cause, and on what notice?", "cuad_category": "Termination For Convenience"},
+    {"key": "liability_cap", "label": "Liability cap", "question": "What is the cap on each party's liability?", "cuad_category": "Cap On Liability"},
+    {"key": "uncapped_liability", "label": "Uncapped liability", "question": "Which liabilities are excluded from the cap or left uncapped?", "cuad_category": "Uncapped Liability"},
+    {"key": "non_compete", "label": "Non-compete", "question": "Does this agreement restrict either party from competing with the other, and how?", "cuad_category": "Non-Compete"},
+    {"key": "change_of_control", "label": "Change of control", "question": "What happens to this agreement if a party undergoes a change of control?", "cuad_category": "Change Of Control"},
+    {"key": "most_favoured_nation", "label": "Most favoured nation", "question": "Is there a most favoured nation clause?", "cuad_category": "Most Favored Nation"}
+  ]
+}
