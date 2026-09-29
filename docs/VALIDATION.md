@@ -49,7 +49,10 @@ purpose, with the measurement that would earn it written down.
 3. **Properties and state.** Seven Hypothesis properties of the verifier (offsets return the
    quote, whitespace and typographic differences are forgiven, a changed digit never matches, a
    located span never splits a word or a number) and one stateful machine over the API: ask,
-   review, memo, in any order, and no finished run ever changes.
+   review, memo, in any order, and no finished run ever changes. Every budget scales with
+   `WORKBENCH_FUZZ_SCALE`; the deep pass at twenty (properties at 4,000 to 8,000 examples each, the
+   machine at 120 runs of 30 steps, Schemathesis at 240 examples per operation) ran on 2026-09-29
+   after the day's changes: 31 tests, 8 min 55 s, nothing falsified.
 4. **Schemathesis.** Every operation in `openapi.json`, twelve generated examples each, the
    event stream excluded because it never ends: no 5xx.
 5. **Hand mutants over the named targets.** Sixteen, one decision line each: a mismatch counted
