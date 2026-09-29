@@ -8,6 +8,9 @@ fabricated quote → finding withheld (test_api_flow); one changed digit → ver
 
 from __future__ import annotations
 
+import io
+import zipfile
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -111,3 +114,33 @@ def test_a_prompt_change_is_a_new_run_and_the_old_one_is_untouched(client: TestC
 def test_the_reader_version_travels_with_the_document(client: TestClient) -> None:
     uploaded = client.post("/api/documents", files={"file": ("agreement.txt", CONTRACT.encode("utf-8"), "text/plain")}).json()
     assert uploaded["parserVersion"] == PARSER_VERSION
+
+
+def test_a_docx_that_unpacks_far_beyond_its_size_is_refused_before_it_is_parsed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.ingest import readers as readers_module
+
+    monkeypatch.setattr(readers_module, "MAX_DOCX_UNPACKED_BYTES", 1_000_000)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("word/document.xml", "<w:document>" + " " * 3_000_000 + "</w:document>")
+    assert len(buffer.getvalue()) < 20_000, "the bomb itself is small; only its declared size is large"
+    response = client.post("/api/documents", files={"file": ("bomb.docx", buffer.getvalue(), "application/octet-stream")})
+    assert response.status_code == 413
+    assert "unpacks to" in response.text
+
+
+def test_a_pdf_with_more_pages_than_any_contract_is_refused(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pypdf import PdfWriter
+
+    from app.ingest import readers as readers_module
+
+    monkeypatch.setattr(readers_module, "MAX_PDF_PAGES", 5)
+    writer = PdfWriter()
+    for _ in range(6):
+        writer.add_blank_page(width=200, height=200)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    response = client.post("/api/documents", files={"file": ("long.pdf", buffer.getvalue(), "application/pdf")})
+    assert response.status_code == 413
+    assert "pages" in response.text

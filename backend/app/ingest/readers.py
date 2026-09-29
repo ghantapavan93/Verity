@@ -33,6 +33,10 @@ SUPPORTED = {
 }
 
 
+MAX_DOCX_UNPACKED_BYTES = 256 * 1024 * 1024  # a 25 MB upload that unpacks past this is a bomb, not a contract
+MAX_PDF_PAGES = 2000
+
+
 class UnsupportedFile(ValueError):
     pass
 
@@ -169,7 +173,23 @@ def _docx_pages(data: bytes) -> int | None:
     return int(match.group(1)) if match else None
 
 
+class TooLargeToRead(UnsupportedFile):
+    """Well-formed, but it would cost more memory or time than any contract needs; refused before parsing."""
+
+
+def _unpacked_size(data: bytes) -> int | None:
+    """The declared uncompressed size of a zip package; zipfile never reads a member past its declaration."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            return sum(info.file_size for info in archive.infolist())
+    except zipfile.BadZipFile:
+        return None
+
+
 def read_docx(data: bytes) -> ReadResult:
+    unpacked = _unpacked_size(data)
+    if unpacked is not None and unpacked > MAX_DOCX_UNPACKED_BYTES:
+        raise TooLargeToRead(f"the .docx unpacks to {unpacked // (1024 * 1024)} MB; the limit is {MAX_DOCX_UNPACKED_BYTES // (1024 * 1024)} MB")
     try:
         document = DocxDocument(io.BytesIO(data))
     except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError) as error:
@@ -231,6 +251,12 @@ def read_docx(data: bytes) -> ReadResult:
 def read_pdf(data: bytes) -> ReadResult:
     try:
         reader = PdfReader(io.BytesIO(data))
+        page_count = len(reader.pages)
+    except (PyPdfError, ValueError, KeyError) as error:
+        raise UnsupportedFile("the file is not a readable PDF") from error
+    if page_count > MAX_PDF_PAGES:
+        raise TooLargeToRead(f"the PDF has {page_count} pages; the limit is {MAX_PDF_PAGES}")
+    try:
         pages = list(reader.pages)
     except (PyPdfError, ValueError, KeyError) as error:
         raise UnsupportedFile("the file is not a readable PDF") from error

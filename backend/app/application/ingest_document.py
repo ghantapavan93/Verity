@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..errors import InvalidInput, TooLarge
 from ..hashing import sha256_bytes
-from ..ingest import PARSER_VERSION, UnsupportedFile, ingest
+from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, ingest
 from ..models import Document, Section
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -48,6 +48,8 @@ def ingest_document(session: Session, filename: str, data: bytes) -> IngestedDoc
     started = time.perf_counter()
     try:
         parsed = ingest(filename or "upload", data)
+    except TooLargeToRead as error:
+        raise TooLarge(str(error)) from error
     except UnsupportedFile as error:
         raise InvalidInput(str(error)) from error
     parse_ms = round((time.perf_counter() - started) * 1000, 1)

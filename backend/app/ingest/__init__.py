@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..hashing import sha256_bytes
-from .readers import SUPPORTED, ReadResult, UnsupportedFile, read
+from .readers import SUPPORTED, ReadResult, TooLargeToRead, UnsupportedFile, read
 from .sections import ParsedSection, build_sections
 
-__all__ = ["PARSER_VERSION", "SUPPORTED", "Ingested", "UnsupportedFile", "ingest"]
+__all__ = ["PARSER_VERSION", "SUPPORTED", "Ingested", "TooLargeToRead", "UnsupportedFile", "ingest"]
 
 # Stored on every document so a run record says which reader produced the text its citations
 # point into. Bump it whenever the reader changes what a file's text is.
