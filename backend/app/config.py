@@ -1,0 +1,50 @@
+"""Runtime settings. Everything has a default that works on a laptop with Ollama running."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+from pydantic import BaseModel
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+
+class Settings(BaseModel):
+    data_dir: Path = Path(os.environ.get("WORKBENCH_DATA_DIR", BACKEND_DIR / "data"))
+    database_url: str = os.environ.get("WORKBENCH_DATABASE_URL", "")
+    provider: str = os.environ.get("WORKBENCH_PROVIDER", "ollama")
+    model: str = os.environ.get("WORKBENCH_MODEL", "qwen3:8b")
+    ollama_url: str = os.environ.get("WORKBENCH_OLLAMA_URL", "http://localhost:11434")
+    # The same decoding settings that produced schema-valid output across 250 calls in A1-lite.
+    temperature: float = 0.0
+    seed: int = 42
+    num_ctx: int = 16384
+    model_timeout_s: float = 600.0
+    # Sections handed to the model per run. Six covers a clause, its neighbours and one or two
+    # cross-referenced sections without crowding an 8B model's context.
+    retrieval_k: int = 6
+    prompt_version: str = os.environ.get("WORKBENCH_PROMPT_VERSION", "answer-v2")
+    # task → model overrides, each justified by a measurement in docs/ROUTING.md; empty means the default model for every task.
+    routing_policy: dict[str, str] = json.loads(os.environ.get("WORKBENCH_ROUTING_POLICY", "{}"))
+    replay_file: Path = Path(os.environ.get("WORKBENCH_REPLAY_FILE", BACKEND_DIR.parent / "e2e" / "replay.json"))
+    cors_origins: list[str] = [
+        o.strip() for o in os.environ.get("WORKBENCH_CORS_ORIGINS", "http://localhost:3900,http://127.0.0.1:3900").split(",") if o.strip()
+    ]
+    # Where the interface runs, for links that lead from a memo or an evidence pack back to a run.
+    app_url: str = os.environ.get("WORKBENCH_APP_URL", "http://localhost:3900").rstrip("/")
+    # Optional: the results.json of the ivo-experiments repository, for the Runs surface, and the
+    # published page it was built for (links become "Open experiment" → <url>#<id>).
+    experiments_results: Path | None = Path(os.environ["WORKBENCH_EXPERIMENTS_RESULTS"]) if os.environ.get("WORKBENCH_EXPERIMENTS_RESULTS") else None
+    experiments_url: str | None = os.environ.get("WORKBENCH_EXPERIMENTS_URL") or None
+
+    @property
+    def sqlite_url(self) -> str:
+        if self.database_url:
+            return self.database_url
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        return f"sqlite:///{(self.data_dir / 'workbench.db').as_posix()}"
+
+
+settings = Settings()
