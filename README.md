@@ -14,8 +14,8 @@ the exact passage → inspect the evidence → generate a review memo (HTML and 
 that path is mocked. **Findings** lists every verified finding and opens its document at the
 passage. **Runs** shows each run's record (document and guidance hashes, prompt version and hash,
 decoding options, tokens, latency, stage timeline, the sections handed to the model, how each
-quote was located, the raw output), the **golden set** (forty-two fixed questions about the sample in
-ten categories, judged by code under every prompt version and model, with the comparison between
+quote was located, the raw output), the **golden set** (forty-four fixed questions about the sample in
+eleven categories, judged by code under every prompt version and model, with the comparison between
 versions; the rule for keeping a prompt change is in `docs/GOLDENS.md`) and, beneath those, the three pre-registered
 experiments that were killed before this product was built, read from the `ivo-experiments`
 results file. DOCX files are read as Word shows them with all changes accepted: tracked
@@ -52,7 +52,7 @@ cannot drift from the backend.
 cd backend
 .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check .   # style and lint, pyproject.toml
 .venv/Scripts/python -m mypy                                                            # strict, app + scripts + tests
-.venv/Scripts/python -m pytest -q                                                       # 101 tests, no model needed; six are Hypothesis properties of the verifier
+.venv/Scripts/python -m pytest -q                                                       # 103 tests, no model needed; six are Hypothesis properties of the verifier
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
 npm test                                                    # Vitest: the run follower and the URL state, 7 tests
@@ -130,19 +130,19 @@ repository and appear under this product's Runs surface as records.
 | Secrets | none in the tree; `.env*`, `data/` and `.venv/` are ignored |
 | Sample licence | Common Paper CSA v2.1, CC BY 4.0; the bundled file's SHA-256 matches the corpus manifest |
 | Repeated request | same inputs return the existing run (`reused: true`); a failed run is retryable; a run interrupted by a restart is failed with the reason |
-| Golden set | 42 questions on the sample in ten categories (four with guidance and an expected status), judged by code under each prompt version and model; previous answer / new answer / what changed / better or worse on the Runs surface; `run_goldens.py --report`; the kill rule is `docs/GOLDENS.md` |
+| Golden set | 44 questions on the sample in eleven categories (four with guidance and an expected status, two adversarial; the false-premise one fails today and says so in `docs/GOLDENS.md`), judged by code under each prompt version and model; previous answer / new answer / what changed / better or worse on the Runs surface; `run_goldens.py --report`; the kill rule is `docs/GOLDENS.md` |
 | Verifier | exact → normalized → casefold → letters-and-digits, plus section-label stripping, each tier named on the span; no similarity ratio (a 0.994 match hid a changed digit); `scripts/reverify.py` replays verification over recorded runs without a model call |
 | Citation record | counted from every answered run, not sampled (`GET /api/engineering/citations`, shown under Runs); at 2026-09-28 across 243 runs: 425 of 469 quoted passages verified (343 exact, 46 normalized, 5 casefold, 6 letters-and-digits, 15 after label stripping, 10 relocated to another candidate section) and 42 of 384 findings withheld |
 | Human review | a finding can be confirmed or dismissed by a named person, undone, and the state survives reload; append-only, idempotent; on the drawer and in the memo; Documents' "reviewed" comes from it |
 | Immutable records | the database refuses any update or delete on a finished run, its stages, findings and spans (SQLite triggers); reviews and memos are separate rows |
-| Failure matrix | provider unavailable, transport failure retried once, malformed and empty files, oversized upload, memo asked twice, prompt change, reader version, stale runs: one test per row in `backend/tests/test_failure_matrix.py` |
+| Failure matrix | provider unavailable, transport failure retried once, malformed and empty files, oversized upload, a DOCX that unpacks past 256 MB and a PDF over 2,000 pages (both 413 before parsing), memo asked twice, prompt change, reader version, stale runs: one test per row in `backend/tests/test_failure_matrix.py` |
 | Stage record | every stage row has start, end, duration, status, attempt, input and output hashes and an error code; a run cannot stay in flight longer than the model timeout plus a minute |
 | Model routing | a run carries its task and why its model answered it; the policy is empty until a smaller model is measured on the golden set (`docs/ROUTING.md`) |
 | Batch extraction | a field task over a corpus of 20 licensed public contracts, bounded concurrency, every value with its citation; first recording: 47 of 60 values answered with a verified citation in 57 min on one laptop GPU, 0 failures, 135 of 146 quotes verified (`docs/BATCH.md`) |
 | Document families | structural fingerprints, exact Jaccard, single-linkage families, pairwise precision/recall/F1 against hand labels with the threshold sweep; finds the template family, not the suites (`docs/FAMILIES.md`) |
 | Interface performance | 2,001 sections on screen 1.6 s after navigation in the production build, citation jumps within two frames; no virtualisation, and the number that would earn it is written down (`docs/PERFORMANCE.md`) |
 | Browser flows | seven Playwright flows against the production build and the real API: landing, sample to sections, question to a verified citation whose highlight is the quote's own text, the withheld question, reload from the URL, Findings and Runs with the evidence pack, the memo; the model's answers recorded once and replayed; traces kept on failure; a CI job |
-| Checks | backend 101 tests (six Hypothesis properties), ruff, mypy strict; interface 7 unit tests and 7 browser flows, tsc, eslint, prettier, production build; results page 23; CI runs all of it and fails on generated-type drift |
+| Checks | backend 103 tests (six Hypothesis properties), ruff, mypy strict; interface 7 unit tests and 7 browser flows, tsc, eslint, prettier, production build; results page 23; CI runs all of it and fails on generated-type drift |
 
 ## What is deliberately not here yet
 
