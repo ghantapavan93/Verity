@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+sqlalchemy>=2.0
+pydantic>=2.7
+python-docx
+pypdf
+rank-bm25
+httpx
+pytest

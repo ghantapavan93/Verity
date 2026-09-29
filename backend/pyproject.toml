@@ -1,0 +1,42 @@
+# Checks for the backend. The service itself is installed from requirements.txt; these settings
+# are what CI and a developer run before a change is finished (see README, "Checks").
+
+[tool.ruff]
+line-length = 160 # the same width as Prettier's printWidth for the interface
+target-version = "py313"
+src = ["."]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", # pycodestyle, pyflakes
+  "I",           # import order
+  "UP",          # modern syntax for the Python we run
+  "B", "BLE",    # bugbear; blind excepts must say why (see runs.service)
+  "ANN",         # every function signature is typed
+  "SIM", "PIE", "RET", "C4",
+  "RUF",
+  "PT",          # pytest style
+  "T20",         # no print in the service
+]
+ignore = [
+  "PT018",                    # composite assertions: pytest's rewriting already shows each side
+  "RUF001", "RUF002", "RUF003", # · § ’ … are the product's typography, in strings and comments on purpose
+]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["T201"] # command-line entry points print
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["app", "scripts", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["rank_bm25", "rank_bm25.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

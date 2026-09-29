@@ -1,0 +1,2 @@
+# Generated from openapi.json by `npm run api:types`; its formatting belongs to the generator.
+src/lib/api.schema.ts

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The API is Python; its virtualenv carries JavaScript of its own that is not ours to lint.
+    "backend/**",
   ]),
 ]);
 

@@ -1,0 +1,6 @@
+# Checks only; the service imports none of these. Install with the runtime pins:
+#   pip install -r requirements.lock -r requirements-dev.txt
+ruff==0.16.9
+mypy==2.3.1
+lxml-stubs==0.5.1
+hypothesis==6.168.3

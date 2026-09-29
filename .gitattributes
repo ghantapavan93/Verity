@@ -1,0 +1,7 @@
+# Text is stored with LF whatever the machine; Prettier and ruff expect it and CI runs on Linux.
+* text=auto eol=lf
+*.docx binary
+*.pdf binary
+*.ico binary
+*.png binary
+*.woff2 binary
