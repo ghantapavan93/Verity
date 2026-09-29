@@ -44,7 +44,45 @@ validation curve, and why they did not carry.
 
 ## Results
 
-Not recorded yet. The run is started with:
+**Run `20260929-023859-real`, 2026-09-28, config as committed.** 67 minutes, not the three hours budgeted:
+no candidate ever reached the gate, so the 21-item gate rollouts never happened.
+
+| What | Value |
+|---|---|
+| Baseline, answer-v2 on the 21 validation items | 14 correct (hard 0.667): 4 correct, 10 correct absence, 6 asserted where experts found none, 1 cited elsewhere |
+| Training rollouts, six steps of seven | 5/7, 6/7, 6/7, 5/7, 6/7, 4/7: 32 of 42 |
+| Training outcomes | 13 correct, 19 correct absence, 5 asserted where experts found none, 5 missed |
+| Optimizer calls | 12 analyst (a failure and a success analysis every step), 1 meta-skill, 1 slow update; 38,530 tokens |
+| Edits proposed | 0, in every one of the 12 analyst replies; all parsed as valid JSON |
+| Candidates, gate evaluations, accepts | 0, 0, 0; six steps recorded as "skip: no usable patches" |
+| Best skill | the seed; `best_skill.md` is byte-identical to answer-v2 |
+| Target model | 63 calls, p50 53.4 s, p95 87.7 s; reflection 90 to 126 s per step |
+
+**Judgment.** There is no candidate prompt, so there is nothing to run on the goldens. answer-v2 stands.
+
+**What the failures were.** The dominant "failure" is disagreement with the CUAD labels, not an invented
+clause: six of the seven baseline failures and five of the ten training failures are cases where the
+model cited a real passage (§1.4 terminating for convenience on ninety days' notice; §9 and §1 on
+liabilities outside a cap) that the annotators did not mark. The gate counts those as zero, which would
+push any optimizer toward answering "not found" more often; that nothing was accepted is a relief, not
+a loss. The five misses split three and two: three where a retrieved section carried the expert span and
+the model still said "not found" (the kind a prompt rule can address), two where retrieval never handed
+the span over. The validation split is absence-heavy, five of its 21 items carry a span, so the hard
+score is mostly a measure of absence handling.
+
+**A check on the zero.** The same two failures of step 1, fed to the same optimizer outside the loop with
+a shorter framing, produced one generic edit ("ensure the quoted passage directly supports the
+conclusion"). Inside the loop, with the full trajectories and at temperature 0.7, it produced none. The
+zero is therefore a property of a small local optimizer under a long context, not a parsing fault: the
+tool's malformed-JSON warning never fired, and `json_repair` was installed mid-run without effect.
+
+**What would change the outcome, written down so a second run is a decision and not a drift:** a
+stronger optimizer model (the paper's setting; it costs money, Pavan's call); a training and validation
+split drawn from span-present items so the failures are of the fixable kind; the disagreements with the
+labels reviewed by hand or counted as neutral instead of zero; a larger validation set. None of that
+changes the rule: whatever a run produces is judged on the untouched goldens.
+
+The run was started with:
 
 ```bash
 cd backend
