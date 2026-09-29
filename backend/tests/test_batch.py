@@ -65,3 +65,14 @@ def test_the_same_bytes_in_two_directories_are_one_document(client: TestClient, 
         out = report(session, batch_id)
     assert (out.documents, out.requested, out.runs_created, out.runs_reused) == (2, 6, 6, 0)
     assert [row.document_name for row in out.rows] == ["alpha.txt", "beta.txt"]
+
+
+def test_cuad_matching_rule_containment_jaccard_and_a_clear_miss() -> None:
+    from app.batch.cuad_match import hits, retrieved_carries
+
+    expert = ["This Agreement shall be governed by the laws of the State of New York, without regard to its conflict of laws principles."]
+    assert hits("governed by the laws of the State of New York", expert)  # contained
+    assert hits("This Agreement shall be governed by the laws of the State of New York without regard to conflicts of law rules", expert)  # token overlap
+    assert not hits("Either party may terminate this Agreement on thirty days' written notice.", expert)
+    assert retrieved_carries("12. Law. " + expert[0] + " 13. Notices.", expert[0])
+    assert not retrieved_carries("Payment is due within thirty (30) days of invoice.", expert[0])

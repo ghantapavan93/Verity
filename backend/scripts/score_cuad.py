@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
@@ -26,6 +25,7 @@ sys.path.insert(0, str(BACKEND))
 from sqlalchemy import select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
+from app.batch.cuad_match import hits, retrieved_carries  # noqa: E402
 from app.batch.service import value_for  # noqa: E402
 from app.db import SessionLocal, init_db  # noqa: E402
 from app.models import Batch, BatchItem, Document, Run, Section  # noqa: E402
@@ -33,41 +33,11 @@ from app.models import Batch, BatchItem, Document, Run, Section  # noqa: E402
 MANIFEST = BACKEND / "app" / "batch" / "corpora" / "cuad-30.json"
 LABELS = BACKEND / "app" / "batch" / "corpora" / "cuad-30-labels.json"
 TASK = BACKEND / "app" / "batch" / "tasks" / "cuad-clauses.json"
-JACCARD = 0.5
-RETRIEVED_COVERAGE = 0.8
 PRECISION_FLOOR = 0.80
 RECALL_FLOOR = 0.50
 RETRIEVAL_TRIGGER = 1 / 3
 
 OUTCOMES = ("correct", "cited elsewhere", "missed", "correct absence", "asserted where experts found none", "failed", "in progress")
-
-
-def normalise(text: str) -> str:
-    return re.sub(r"\s+", " ", text.casefold()).strip()
-
-
-def tokens(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", normalise(text)))
-
-
-def hits(located: str, experts: list[str]) -> bool:
-    a = normalise(located)
-    ta = tokens(a)
-    for expert in experts:
-        b = normalise(expert)
-        if a and b and (a in b or b in a):
-            return True
-        tb = tokens(b)
-        if ta and tb and len(ta & tb) / len(ta | tb) >= JACCARD:
-            return True
-    return False
-
-
-def retrieved_carries(section_text: str, expert: str) -> bool:
-    if normalise(expert) in normalise(section_text):
-        return True
-    te = tokens(expert)
-    return bool(te) and len(te & tokens(section_text)) / len(te) >= RETRIEVED_COVERAGE
 
 
 @dataclass(frozen=True)

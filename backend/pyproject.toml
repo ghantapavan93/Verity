@@ -28,6 +28,7 @@ extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["T201"] # command-line entry points print
+"experiments/**/*.py" = ["T201"] # experiment runners print
 
 [tool.mypy]
 python_version = "3.13"

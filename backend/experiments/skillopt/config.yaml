@@ -1,0 +1,47 @@
+# SkillOpt over the workbench's answer prompt. Pre-registered in docs/SKILLOPT.md; the paths that
+# depend on the machine (skill_init, split_dir, out_root) are filled in by run.py as absolute paths.
+_base_: ../../data/skillopt/SkillOpt/configs/_base_/default.yaml
+
+model:
+  backend: openai_compatible
+  optimizer_backend: openai_compatible
+  target_backend: openai_compatible
+  optimizer: qwen3:8b
+  target: qwen3:8b
+  reasoning_effort: ""
+
+train:
+  num_epochs: 2
+  train_size: 21        # must equal the training split: 3 contracts x 7 questions
+  batch_size: 7         # three steps per epoch
+  accumulation: 1
+  seed: 42
+
+gradient:
+  minibatch_size: 7
+  merge_batch_size: 7
+  analyst_workers: 1    # one GPU serves both roles; nothing runs concurrently
+  failure_only: false
+
+optimizer:
+  learning_rate: 3      # at most three edits per step
+  min_learning_rate: 1
+  lr_scheduler: cosine
+  lr_control_mode: fixed
+  skill_update_mode: patch
+  use_slow_update: true
+  slow_update_samples: 8
+  use_meta_skill: true
+
+evaluation:
+  use_gate: true        # a candidate replaces the skill only when it strictly beats it on the validation items
+  gate_metric: hard
+  sel_env_num: 0        # the whole validation split: 3 contracts x 7 questions = 21 items
+  test_env_num: 0
+  eval_test: false      # the test is outside SkillOpt: the 44 goldens and CUAD-30, untouched
+
+env:
+  name: workbench
+  split_mode: split_dir
+  workers: 1
+  exec_timeout: 900
