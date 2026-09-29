@@ -34,4 +34,17 @@ npm run e2e   # browser flows; builds the interface, replays the model's recorde
 
 Record decisions as they are taken in `DECISIONS.md`. Keep `README.md`'s release checklist true.
 
-Library documentation comes from the Context7 MCP server declared in `.mcp.json` (Upstash, MIT, no key needed at the default rate): ask it for the current Next.js, Playwright, FastAPI or SQLAlchemy API before writing against one, instead of trusting memory.
+Framework and library documentation, in this order of authority:
+
+1. **Next.js: the installed docs win.** Before changing anything that touches the App Router, layouts
+   or pages, caching, route handlers, Server Components, Server Actions, metadata, navigation,
+   streaming, image or font handling, proxy or middleware behaviour, or build and config behaviour,
+   read the matching file under `node_modules/next/dist/docs/01-app/` first. Not the web, not memory.
+   The rule and the ownership table it must not override are in `AGENTS.md`.
+2. **Other libraries (Playwright, FastAPI, SQLAlchemy, pydantic): the Context7 MCP server** declared in
+   `.mcp.json` (Upstash, MIT, no key needed at the default rate) gives the current API of the pinned
+   version; ask it before writing against one.
+
+The hierarchy this repository runs on: installed framework docs decide framework correctness;
+`ENGINEERING_CONSTITUTION.md` decides architectural ownership; the generated OpenAPI types are the
+frontend-backend contract; the domain and database invariants are the system's truth.

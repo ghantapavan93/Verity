@@ -14,3 +14,25 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Project-specific Next.js rule
+
+The installed Next.js documentation, `node_modules/next/dist/docs/` (this tree runs 16.3.6), is
+authoritative for framework behaviour. Read it before writing framework code; not the web, not memory.
+
+Reading it does not override `ENGINEERING_CONSTITUTION.md`. Framework conventions decide how Next.js
+code is written; they never move domain truth, evidence verification, persistence rules, model
+behaviour or a legal or business decision into a React component, a Server Component, a Route
+Handler, a Server Action, middleware or any other framework primitive. What a framework can do does
+not decide who owns it.
+
+| Next.js and React own | FastAPI and the application layer own |
+|---|---|
+| presentation, interaction, URL state, SSE consumption, document rendering, motion, the command palette | run creation, retrieval, model invocation, verification, finding decisions, idempotency, memo generation, persistence |
+
+Before introducing a new Next.js primitive:
+
+1. Read the installed-version documentation for it.
+2. Name the application responsibility it would serve.
+3. Confirm that responsibility does not already belong to the FastAPI or application layer.
+4. Prefer the smallest framework mechanism that keeps the ownership boundaries above.
