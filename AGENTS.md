@@ -1,3 +1,10 @@
+# Working in this repository
+
+Start with `CLAUDE.md` (the working rules and the check commands) and `ENGINEERING_CONSTITUTION.md`
+(where responsibility lives: the model proposes, deterministic code verifies, the database freezes a
+finished run). `DECISIONS.md` records why things are the way they are. The block below is written
+and maintained by Next.js; leave it as it is.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
