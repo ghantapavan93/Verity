@@ -8,6 +8,11 @@ model; a claim that its evidence is verified may only come from deterministic co
 rule: every sophisticated component must earn its existence with either a measured failure it
 fixes or an explicit requirement from the product.
 
+Before broad repository exploration, read `docs/SYSTEM_MAP.md`. Re-read source files only for the
+subsystem being changed or when the map's recorded commit is stale. Never perform a broad rewrite
+because the map is stale: first update the relevant map entry by reading the owning implementation,
+then make the smallest change inside the existing ownership boundary.
+
 Fixed decisions, not open for re-litigation in a session:
 
 - The visual system is frozen (shell C in `src/app/globals.css`). No theme switching, no extra

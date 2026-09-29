@@ -66,7 +66,9 @@ purpose, with the measurement that would earn it written down.
    off, because the index alone caught it.
 6. **Browser truth for the three critical flows.** A review against guidance to a finding with
    a status and the guidance in the drawer; a malformed upload refused with the reason and nothing
-   opened; a refresh mid-run after which the run finishes and the URL brings it back. Twenty
+   opened; a refresh once the run is in the URL, which brings it back (the run id reaches the URL
+   only when the run has finished, so the reload happens after completion; a true mid-run refresh
+   is unproven, see `docs/SYSTEM_TRUTH.md`). Twenty
    flows pass in replay in under a minute; the axe pass found one scrollable region without a
    keyboard focus, fixed.
 7. **The load envelope** at 1, 5, 10 and 20 concurrent questions with the live model
