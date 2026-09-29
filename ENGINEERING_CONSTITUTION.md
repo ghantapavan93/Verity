@@ -147,7 +147,7 @@ row names the measurement or requirement that earned the component, as the secon
 | Immutability triggers | the requirement that a finished run is a record; found a real defect (startup recovery swept another process's live run) | kept; recovery is now by staleness |
 | Stage records with hashes and attempts | the requirement that failures be inspectable without inference | kept |
 | Provider retry, malformed-file refusals, memo idempotency | the failure matrix, one test per row | kept |
-| Golden set of 42 in ten categories, regression report | the A1 lesson: a prompt change is judged on held-out questions or not at all | kept |
+| Golden set of 44 in eleven categories, regression report | the A1 lesson: a prompt change is judged on held-out questions or not at all | kept |
 | Model in the run's identity, router with an empty policy | the requirement to compare models like prompts; the policy waits for a measurement | kept, policy empty |
 | Batch extraction | the requirement to show the pipeline over a corpus, with numbers | kept; twenty documents, stated as twenty |
 | Document families | measured on twenty labeled documents: template families found, suites not; the next signal was tested in the text and rejected | kept as measured; suite detection not built |
