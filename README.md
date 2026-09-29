@@ -52,7 +52,7 @@ cannot drift from the backend.
 cd backend
 .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check .   # style and lint, pyproject.toml
 .venv/Scripts/python -m mypy                                                            # strict, app + scripts + tests
-.venv/Scripts/python -m pytest -q                                                       # 103 tests, no model needed; six are Hypothesis properties of the verifier
+.venv/Scripts/python -m pytest -q                                                       # 104 tests, no model needed; six are Hypothesis properties of the verifier
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
 npm test                                                    # Vitest: the run follower and the URL state, 7 tests
@@ -94,6 +94,8 @@ inputs (document bytes, guidance, question, prompt hash, model and options) and 
 finished, enforced by the database.
 The stage, status and reason vocabularies are declared once as types in `backend/app/models.py`
 and used by the ORM, the API schema, the CHECK constraints and the run service.
+Agents start at `AGENTS.md` and `CLAUDE.md`; library documentation reaches them through the Context7
+MCP server declared in `.mcp.json`.
 
 The bundled sample (`public/samples/cloud-service-agreement.docx`) is Common Paper's Cloud
 Service Agreement, © Common Paper, CC BY 4.0, unmodified. It is a real standard agreement;
@@ -141,8 +143,10 @@ repository and appear under this product's Runs surface as records.
 | Batch extraction | a field task over a corpus of 20 licensed public contracts, bounded concurrency, every value with its citation; first recording: 47 of 60 values answered with a verified citation in 57 min on one laptop GPU, 0 failures, 135 of 146 quotes verified (`docs/BATCH.md`) |
 | Document families | structural fingerprints, exact Jaccard, single-linkage families, pairwise precision/recall/F1 against hand labels with the threshold sweep; finds the template family, not the suites (`docs/FAMILIES.md`) |
 | Interface performance | 2,001 sections on screen 1.6 s after navigation in the production build, citation jumps within two frames; no virtualisation, and the number that would earn it is written down (`docs/PERFORMANCE.md`) |
+| Lighthouse | landing 100/100/100/100 and workspace with a run 99/100/100/100 on the production build, LCP 0.7 s and 1.0 s; the one real finding, uncompressed API JSON, fixed with gzip and a test (`docs/PERFORMANCE.md`) |
+| Dependencies | every pin moves through Dependabot, weekly, grouped per ecosystem (`.github/dependabot.yml`); CodeQL code scanning is on the CI branch, pending the workflow scope |
 | Browser flows | seven Playwright flows against the production build and the real API: landing, sample to sections, question to a verified citation whose highlight is the quote's own text, the withheld question, reload from the URL, Findings and Runs with the evidence pack, the memo; the model's answers recorded once and replayed; traces kept on failure; a CI job |
-| Checks | backend 103 tests (six Hypothesis properties), ruff, mypy strict; interface 7 unit tests and 7 browser flows, tsc, eslint, prettier, production build; results page 23; CI runs all of it and fails on generated-type drift |
+| Checks | backend 104 tests (six Hypothesis properties), ruff, mypy strict; interface 7 unit tests and 7 browser flows, tsc, eslint, prettier, production build; results page 23; CI runs all of it and fails on generated-type drift |
 
 ## What is deliberately not here yet
 
