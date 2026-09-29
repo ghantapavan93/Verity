@@ -35,10 +35,10 @@ ABSENT = Golden("g", "q", "absent", (), "")
 
 def test_the_set_is_well_formed() -> None:
     golden_set = load_set()
-    assert len(golden_set.goldens) == 42
-    assert len({g.id for g in golden_set.goldens}) == 42
+    assert len(golden_set.goldens) == 44
+    assert len({g.id for g in golden_set.goldens}) == 44
     assert all(g.sections for g in golden_set.goldens if g.kind == "present")
-    assert sum(1 for g in golden_set.goldens if g.kind == "absent") == 5
+    assert sum(1 for g in golden_set.goldens if g.kind == "absent") == 6
     assert set(golden_set.categories) == {g.category for g in golden_set.goldens}, "every category is described and used"
     with_guidance = [g for g in golden_set.goldens if g.guidance]
     assert len(with_guidance) == 4 and all(g.status in ("pass", "needs_review") for g in with_guidance)
