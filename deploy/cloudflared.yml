@@ -1,0 +1,18 @@
+# Ingress for the named Cloudflare Tunnel that publishes the workbench (deploy/README.md).
+#
+#   cloudflared tunnel --config deploy/cloudflared.yml run ivo-workbench
+#
+# One public hostname. Requests under /api go to the FastAPI process, everything else to the Next
+# production server; rules are matched in order. One hostname, not two, because Cloudflare Access
+# sits in front: the browser's calls to the API are then same-origin and carry the Access session,
+# where a second API hostname would answer a fetch or an EventSource with a redirect to the login
+# page that the browser cannot follow. No inbound port is opened; the tunnel connects outward.
+# Credentials are not here: `cloudflared tunnel run ivo-workbench` finds them under ~/.cloudflared.
+
+ingress:
+  - hostname: ivo.pavan.dev
+    path: ^/api(/.*)?$
+    service: http://127.0.0.1:8000
+  - hostname: ivo.pavan.dev
+    service: http://127.0.0.1:3900
+  - service: http_status:404
