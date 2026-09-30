@@ -157,8 +157,11 @@ export function absolute(url: string): string {
   return url.startsWith("http") ? url : `${API_URL}${url}`;
 }
 
+const POLL_FAILURES_BEFORE_GIVING_UP = 5;
+
 /**
- * Follow a run's stages. Uses the SSE stream, and falls back to polling if the stream drops.
+ * Follow a run's stages. Uses the SSE stream, and falls back to polling if the stream drops; polling
+ * retries a few times before it reports, because the run's record outlives any one request.
  * `onDone` receives the final run once, after the terminal stage.
  */
 export function followRun(
@@ -170,6 +173,7 @@ export function followRun(
   let finished = false;
   let source: EventSource | null = null;
   let pollTimer: number | null = null;
+  let failures = 0; // consecutive poll failures; the record is truth, so a blip is retried before anyone is told
 
   const finish = async () => {
     if (finished) return;
@@ -194,9 +198,15 @@ export function followRun(
         return;
       }
     } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
+      failures += 1;
+      if (failures >= POLL_FAILURES_BEFORE_GIVING_UP) {
+        onError(error instanceof Error ? error.message : String(error));
+        return;
+      }
+      pollTimer = window.setTimeout(poll, 3000);
       return;
     }
+    failures = 0;
     pollTimer = window.setTimeout(poll, 3000);
   };
 

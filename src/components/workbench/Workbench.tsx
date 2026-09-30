@@ -24,7 +24,7 @@ import { useRunFollower } from "./hooks/useRunFollower";
 import { useUrlState } from "./hooks/useUrlState";
 import { Landing } from "./landing/Landing";
 import { Rail } from "./shell/Rail";
-import { transitions, type Stage, type View } from "./shell/constants";
+import { type Stage, TERMINAL, type View, transitions } from "./shell/constants";
 import { DocumentsView } from "./views/DocumentsView";
 import { FindingsView } from "./views/FindingsView";
 import { RunsView } from "./views/RunsView";
@@ -63,7 +63,7 @@ export function Workbench() {
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
 
   const runs = useRunFollower();
-  const { run, setRun, setRunError, setStageDetails, stop: stopRun, ask: startRun } = runs;
+  const { run, show: showRun, setRunError, stop: stopRun, ask: startRun } = runs;
   const guidance = useGuidance(setRunError);
   const { guidance: guidanceRecord, setGuidance, setDraft: setGuidanceDraft, open: guidanceOpen, setOpen: setGuidanceOpen } = guidance;
   const memo = useMemoAction();
@@ -116,9 +116,10 @@ export function Workbench() {
         const uploaded = await uploadDocument(file);
         setDoc(uploaded);
         setIsSample(sample);
-        setRun(null);
+        showRun(null); // the previous run's follower and drawer do not outlive its document
         resetMemo();
         setHighlight(null);
+        setEvidence(null);
         setProcessingLabel("Ready");
         window.setTimeout(() => setStage("workspace"), READY_PAUSE_MS);
       } catch (error) {
@@ -126,7 +127,7 @@ export function Workbench() {
         setStage("empty");
       }
     },
-    [setRun, resetMemo],
+    [showRun, resetMemo],
   );
 
   const loadSample = useCallback(async () => {
@@ -184,7 +185,7 @@ export function Workbench() {
         stopRun();
         setDoc(loaded);
         setIsSample(false);
-        setRun(null);
+        showRun(null);
         resetMemo();
         setRunError(null);
         setHighlight(null);
@@ -195,7 +196,7 @@ export function Workbench() {
         setViewError(errorMessage(error));
       }
     },
-    [doc, stopRun, setRun, resetMemo, setRunError],
+    [doc, stopRun, showRun, resetMemo, setRunError],
   );
 
   /** Show a recorded run in the workspace: its document, its guidance as the scope, its findings. */
@@ -212,14 +213,13 @@ export function Workbench() {
         stopRun();
         setDoc(loadedDoc);
         setIsSample(false);
-        setRun(loadedRun);
+        showRun(loadedRun); // followed when it is still in flight
         setGuidance(loadedGuidance ? { id: loadedGuidance.id, text: loadedGuidance.text } : null);
         setGuidanceDraft(loadedGuidance ? loadedGuidance.text : DEFAULT_GUIDANCE);
         resetMemo();
         setRunError(null);
         setHighlight(null);
         setEvidence(null);
-        setStageDetails({});
         setPendingFindingId(findingId);
         setStage("workspace");
         if (show) setView("assistant");
@@ -227,10 +227,25 @@ export function Workbench() {
         setViewError(errorMessage(error));
       }
     },
-    [doc, stopRun, setRun, setGuidance, setGuidanceDraft, resetMemo, setRunError, setStageDetails],
+    [doc, stopRun, showRun, setGuidance, setGuidanceDraft, resetMemo, setRunError],
   );
 
   useUrlState({ view, doc, stage, run, openRun, openDocument, navigate });
+
+  // Reviews are made on the Findings surface; when the Assistant is shown again its finished run is re-read from the
+  // record, so the drawer's review state and the memo's review head are the record's, not a stale copy.
+  const finishedRunId = run && TERMINAL.includes(run.stage) ? run.id : null;
+  const reviewHead = run?.reviewHead ?? "";
+  useEffect(() => {
+    if (view !== "assistant" || !finishedRunId) return;
+    let cancelled = false;
+    getRun(finishedRunId)
+      .then((fresh) => !cancelled && fresh.reviewHead !== reviewHead && showRun(fresh))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [view, finishedRunId, reviewHead, showRun]);
 
   // Spoken to screen readers through the live region; derived, never stored.
   const announcement = useMemo(() => {

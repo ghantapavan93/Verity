@@ -23,6 +23,11 @@ async function ask(page: Page, question: string): Promise<void> {
 
 const finding = (page: Page) => page.getByText(/Evidence · \d+ verified passage/);
 
+/** Letters only: the question is also the retrieval query, and a digit would be a term the contract has. */
+function nonce(): string {
+  return Array.from({ length: 8 }, () => "abcdefghijklmnopqrstuvwxyz"[Math.floor(Math.random() * 26)]).join("");
+}
+
 test.describe("failure states", () => {
   // The fault markers are an affordance of the replay provider; a recording run asks the real model.
   test.skip(process.env.E2E_PROVIDER === "record", "faults are injected by the replay provider only");
@@ -52,7 +57,8 @@ test.describe("failure states", () => {
       void route.abort();
     });
     await openSample(page);
-    await ask(page, LIABILITY);
+    // A new run held in flight by the replay provider, so a stream is opened (and dropped) rather than a finished run reused.
+    await ask(page, `${LIABILITY} [[zzdelay:${nonce()}]]`);
     await expect(finding(page)).toBeVisible({ timeout: 30_000 });
     expect(streams).toBeGreaterThan(0);
   });
@@ -101,6 +107,13 @@ test.describe("state that must survive", () => {
     await ask(page, LIABILITY);
     await expect(finding(page)).toBeVisible();
     await page.getByRole("button", { name: "Findings" }).click();
+    // The flows share one data directory across runs and the run is reused by fingerprint, so a previous run may
+    // have confirmed this finding already; a review is append-only and undo is a review too.
+    await expect(page.getByText(/awaiting review/)).toBeVisible(); // the list has loaded
+    const undo = page.getByRole("button", { name: "Undo" }).first();
+    if (await undo.isVisible().catch(() => false)) {
+      await undo.click();
+    }
     const confirm = page.getByRole("button", { name: "Confirm" }).first();
     await confirm.click();
     const name = page.getByPlaceholder("Your name, asked once");

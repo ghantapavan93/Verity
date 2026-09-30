@@ -14,7 +14,7 @@ import { GuidanceScope } from "./GuidanceScope";
 import { RunOutcome, WithheldList } from "./RunOutcome";
 import { StageList } from "./StageList";
 import { absolute } from "@/lib/api";
-import { STAGE_LABELS, type DocumentView, type FindingView, type SectionView, type SpanView } from "@/lib/types";
+import { STAGE_LABELS, type DocumentView, type FindingView, type SectionView, type SpanView, type RunStage } from "@/lib/types";
 
 // The third question has no answer in the sample; on it the model tends to propose a quote that
 // is not there, and the verifier withholds it. That moment is meant to be one click away.
@@ -68,8 +68,11 @@ export function AssistantPanel({
   reduceMotion: boolean;
 }) {
   const { morph, quick } = transitions(reduceMotion);
-  const { run, runError, stageDetails } = runs;
-  const stageLabel = run && run.stage in STAGE_LABELS ? STAGE_LABELS[run.stage as keyof typeof STAGE_LABELS] : null;
+  const { run, pending, runError, stageDetails } = runs;
+  // A run being created shows as reading; a run in flight shows the API's stage; a run that could not start shows its error.
+  const liveStage: RunStage | null = pending && !runError ? "reading" : run && run.stage in STAGE_LABELS ? run.stage : null;
+  const stageLabel = liveStage ? STAGE_LABELS[liveStage as keyof typeof STAGE_LABELS] : null;
+  const question = run?.question ?? pending?.question ?? "";
   const checkingLabel = guidance.guidance ? "Checking against guidance" : "Checking the contract";
 
   return (
@@ -85,7 +88,7 @@ export function AssistantPanel({
       </header>
 
       <div className={styles.assistantBody}>
-        {!run ? (
+        {!run && !pending ? (
           <div className={styles.assistantIdle}>
             <p className={styles.assistantPrompt}>What would you like to know?</p>
             <div className={styles.actionList}>
@@ -103,7 +106,7 @@ export function AssistantPanel({
           </div>
         ) : (
           <div className={styles.thread}>
-            <div className={styles.userTurn}>{run.question}</div>
+            <div className={styles.userTurn}>{question}</div>
             <AnimatePresence mode="wait" initial={false}>
               {stageLabel ? (
                 <motion.div
@@ -114,9 +117,9 @@ export function AssistantPanel({
                   exit={{ opacity: 0 }}
                   transition={quick}
                 >
-                  <StageList current={run.stage} details={stageDetails} checkingLabel={checkingLabel} reduceMotion={reduceMotion} />
+                  <StageList current={liveStage ?? "reading"} details={stageDetails} checkingLabel={checkingLabel} reduceMotion={reduceMotion} />
                 </motion.div>
-              ) : run.stage === "complete" && run.findings.length > 0 ? (
+              ) : run && run.stage === "complete" && run.findings.length > 0 ? (
                 <motion.div
                   key="results"
                   className={styles.results}
@@ -169,7 +172,13 @@ export function AssistantPanel({
                 </motion.div>
               ) : (
                 <motion.div key="unresolved" className={styles.unresolved} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={quick}>
-                  <RunOutcome run={run} runError={runError} sectionsById={sectionsById} onRetry={onAsk} onEvidence={onOpenEvidence} />
+                  {run ? (
+                    <RunOutcome run={run} runError={runError} sectionsById={sectionsById} onRetry={onAsk} onEvidence={onOpenEvidence} />
+                  ) : (
+                    <p className={styles.errorLine} role="alert">
+                      {runError}
+                    </p>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

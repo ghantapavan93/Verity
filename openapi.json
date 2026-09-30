@@ -2228,6 +2228,17 @@
             ],
             "title": "Guidancesha256"
           },
+          "guidanceText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidancetext"
+          },
           "hasGuidance": {
             "default": false,
             "title": "Hasguidance",
@@ -2496,6 +2507,17 @@
             },
             "title": "Findings",
             "type": "array"
+          },
+          "guidanceText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidancetext"
           },
           "hasGuidance": {
             "default": false,

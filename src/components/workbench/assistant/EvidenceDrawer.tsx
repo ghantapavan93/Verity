@@ -49,7 +49,7 @@ export function EvidenceDrawer({
               <IconClose />
             </button>
           </header>
-          <EvidenceBody finding={finding} run={run} guidance={guidanceText} sectionsById={sectionsById} onJump={onJump} />
+          <EvidenceBody finding={finding} run={run} guidance={run ? (run.guidanceText ?? null) : guidanceText} sectionsById={sectionsById} onJump={onJump} />
         </motion.aside>
       )}
     </AnimatePresence>

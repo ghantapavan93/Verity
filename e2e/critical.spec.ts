@@ -6,6 +6,11 @@ import { expect, test, type Page } from "@playwright/test";
 const LIABILITY = "What is the limitation of liability?";
 const GUIDANCE = "Our standard: the liability cap must be at least twelve months of fees; anything lower needs review.";
 
+/** Letters only: the question is also the retrieval query, and a digit would be a term the contract has. */
+function nonce(): string {
+  return Array.from({ length: 8 }, () => "abcdefghijklmnopqrstuvwxyz"[Math.floor(Math.random() * 26)]).join("");
+}
+
 async function openSample(page: Page): Promise<void> {
   await page.goto("/");
   await page.getByRole("button", { name: "try a sample agreement" }).click();
@@ -36,15 +41,20 @@ test("a malformed upload is refused with the reason, and nothing is opened", asy
   await expect(page).not.toHaveURL(/[?&]document=/);
 });
 
-test("a refresh while a run is in flight loses nothing: the run finishes and the URL brings it back", async ({ page }) => {
+test("a refresh while a run is in flight loses nothing: the page reattaches to the same run and shows its result", async ({ page }) => {
   await openSample(page);
   const composer = page.getByPlaceholder("Ask anything about this contract…");
-  await composer.fill(LIABILITY);
+  // The replay provider holds its recorded answer back for eight seconds, so the run is genuinely in flight at the reload.
+  await composer.fill(`${LIABILITY} [[zzdelay:${nonce()}]]`);
   const started = page.waitForResponse((r) => r.url().includes("/api/runs") && r.request().method() === "POST");
   await composer.press("Enter");
-  await started;
-  await page.waitForURL(/[?&]run=/);
+  const created = await started;
+  const runId = ((await created.json()) as { id: string }).id;
+  await page.waitForURL(new RegExp(`[?&]run=${runId}`)); // the run id is in the URL as soon as the run exists
+  await expect(page.getByText("Checking the contract")).toBeVisible(); // still running: the model has not answered
   await page.reload();
-  await expect(page.getByText(/Evidence · \d+ verified passage/)).toBeVisible();
+  await expect(page.getByText(/Reading contract|Finding relevant language|Checking the contract|Verifying citations/).first()).toBeVisible(); // reattached, still in flight
+  await expect(page.getByText(/Evidence · \d+ verified passage/)).toBeVisible({ timeout: 30_000 });
+  await expect(page).toHaveURL(new RegExp(`[?&]run=${runId}`)); // the same run, not a second one
   await expect(page.locator("section[data-section]").first()).toBeVisible();
 });

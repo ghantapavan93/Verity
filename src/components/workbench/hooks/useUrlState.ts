@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { TERMINAL, VIEWS, type Stage, type View } from "../shell/constants";
+import { VIEWS, type Stage, type View } from "../shell/constants";
 import type { DocumentView, RunView } from "@/lib/types";
 
 interface UrlStateArgs {
@@ -15,8 +15,9 @@ interface UrlStateArgs {
 }
 
 /**
- * The URL carries `document`, `run` and `view`, so an open document, a finished run and the
- * current surface survive a reload. Restored once on mount; written whenever they change.
+ * The URL carries `document`, `run` and `view`, so an open document, the run (in flight or finished)
+ * and the current surface survive a reload. Restored once on mount; written whenever they change. A run
+ * in flight is written as soon as it exists, so a refresh mid-run reattaches to it instead of losing it.
  */
 export function useUrlState({ view, doc, stage, run, openRun, openDocument, navigate }: UrlStateArgs) {
   const restored = useRef(false);
@@ -39,7 +40,7 @@ export function useUrlState({ view, doc, stage, run, openRun, openDocument, navi
     const params = new URLSearchParams();
     if (view !== "assistant") params.set("view", view);
     if (doc && stage === "workspace") params.set("document", doc.id);
-    if (run?.id && doc && stage === "workspace" && TERMINAL.includes(run.stage)) params.set("run", run.id);
+    if (run?.id && doc && stage === "workspace") params.set("run", run.id);
     const query = params.toString();
     const next = `${window.location.pathname}${query ? `?${query}` : ""}`;
     if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(null, "", next);

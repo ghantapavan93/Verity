@@ -35,6 +35,7 @@ const running: RunView = {
   reused: false,
   hasGuidance: false,
   reviewHead: "",
+  guidanceText: null,
 };
 const finished: RunView = { ...running, stage: "complete" };
 
@@ -87,11 +88,11 @@ describe("useUrlState", () => {
     expect(window.location.search).toBe("");
   });
 
-  it("writes the open document, then the finished run, then the view; and clears them when the workspace closes", () => {
+  it("writes the open document and the run at once, then the view; and clears them when the workspace closes", () => {
     setUrl("");
     const initial = props({ doc, stage: "workspace", run: running });
     const { rerender } = renderHook((p) => useUrlState(p), { initialProps: initial });
-    expect(window.location.search).toBe("?document=doc1");
+    expect(window.location.search).toBe("?document=doc1&run=run1"); // the run in flight is already in the URL
 
     rerender({ ...initial, run: finished });
     expect(window.location.search).toBe("?document=doc1&run=run1");

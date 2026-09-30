@@ -92,6 +92,15 @@ def test_whitespace_only_guidance_is_refused_not_stored_as_empty(client: TestCli
     assert refused.status_code == 422 and "empty once whitespace is removed" in refused.json()["detail"]
 
 
+def test_the_run_carries_the_guidance_it_was_given(client: TestClient) -> None:
+    from tests.support import GUIDANCE
+
+    guided = upload_and_ask(client, "How much notice does the customer need to give to terminate for convenience?")
+    assert guided["run"]["guidanceText"] == GUIDANCE
+    plain = upload_and_ask(client, "What law governs this agreement?", with_guidance=False)
+    assert plain["run"]["guidanceText"] is None
+
+
 def test_bad_upload_and_missing_run_are_clear(client: TestClient) -> None:
     rejected = client.post("/api/documents", files={"file": ("sheet.xlsx", b"x", "application/octet-stream")})
     assert rejected.status_code == 422

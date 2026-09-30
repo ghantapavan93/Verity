@@ -158,6 +158,8 @@ class RunOut(ApiModel):
     has_guidance: bool = False
     # The identity of the findings' current review state; a memo carries the head it was written under.
     review_head: str = ""
+    # The guidance the run was given, as stored; the drawer shows this, never the text in the composer at the time.
+    guidance_text: str | None = None
 
 
 class RunSummary(ApiModel):

@@ -12,7 +12,9 @@ verified, decided and stored exactly as a live run is.
 from __future__ import annotations
 
 import json
+import re
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypedDict
@@ -25,6 +27,15 @@ SEPARATOR = "\n␞\n"  # keeps "system + user" from colliding with a different s
 
 FAULT_PROVIDER = "[[fault:provider]]"
 FAULT_GARBAGE = "[[fault:garbage]]"
+# "[[zzdelay]]" in a question holds the recorded answer back for eight seconds, so a browser flow can refresh while the
+# run is genuinely in flight. The marker is removed before the request key is computed: the recorded answer is the
+# same, only later. It carries no digits and no English word, because the question is also the retrieval query and a
+# term that occurs in the contract ("8" is a section number) would change the candidates and so the recorded key.
+# (The marker also changes the run's fingerprint, so the run is a new one, not a reused one.)
+# An optional nonce of letters ("[[zzdelay:kqzv]]") makes the question, and so the run, new on a database that has
+# already answered it; letters only, for the same reason as above.
+DELAY = re.compile(r"\s*\[\[zzdelay(?::[a-z]+)?\]\]")
+DELAY_SECONDS = 8.0
 
 
 class RecordedAnswer(TypedDict):
@@ -77,6 +88,9 @@ class ReplayProvider:
             raise ProviderError("simulated outage: the model endpoint refused the connection")
         if FAULT_GARBAGE in user:
             return Generation(text="this is not the JSON you asked for", input_tokens=None, output_tokens=None, latency_ms=1.0, model=self.model)
+        if DELAY.search(user):
+            time.sleep(DELAY_SECONDS)
+            user = DELAY.sub("", user, count=1)
         key = request_key(system, user)
         answer = self.answers.get(key)
         if answer is None:

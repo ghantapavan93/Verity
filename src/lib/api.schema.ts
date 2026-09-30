@@ -1307,6 +1307,8 @@ export interface components {
             guidanceId: string | null;
             /** Guidancesha256 */
             guidanceSha256: string | null;
+            /** Guidancetext */
+            guidanceText?: string | null;
             /**
              * Hasguidance
              * @default false
@@ -1392,6 +1394,8 @@ export interface components {
             error: string | null;
             /** Findings */
             findings: components["schemas"]["FindingOut"][];
+            /** Guidancetext */
+            guidanceText?: string | null;
             /**
              * Hasguidance
              * @default false

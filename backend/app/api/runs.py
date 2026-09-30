@@ -76,6 +76,7 @@ def run_out(run: Run) -> RunOut:
         reason=run.reason,
         has_guidance=run.guidance_id is not None,
         review_head=review_head(run),
+        guidance_text=run.guidance.text if run.guidance else None,
     )
 
 
