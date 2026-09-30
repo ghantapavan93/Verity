@@ -35,7 +35,7 @@ purpose, with the measurement that would earn it written down.
 | Independent scrutiny | done once | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true (`docs/REVIEW-INDEPENDENT.md`) | one reviewer, one pass |
 | More than one user, authentication, tenancy | not justified | | a local single-user tool; `docs/SCALE.md` names what would earn each |
 | A worker queue, PostgreSQL, object storage, a persistent vector index, a virtualised document view, an agent framework | not justified | `ENGINEERING_CONSTITUTION.md`, `docs/SCALE.md` | each waits on a measurement it would have to win |
-| A mutation-testing dependency | not justified | sixteen hand mutants in `scripts/mutate_by_hand.py`, each named for the decision it breaks | earned when the hand mutants stop finding gaps in the suite |
+| A mutation-testing dependency | not justified | twenty-four hand mutants in `scripts/mutate_by_hand.py`, each named for the decision it breaks | earned when the hand mutants stop finding gaps in the suite |
 
 ## The order the validators ran in, and what each found
 

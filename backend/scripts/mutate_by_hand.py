@@ -2,7 +2,7 @@
 suite, restore the file, report which test noticed.
 
 This is the measurement that would earn a mutation-testing dependency, kept as a script until it
-does (DECISIONS.md, 2026-09-28: nine mutants, one survivor, one test added; sixteen since 2026-09-29). Every file is restored
+does (DECISIONS.md, 2026-09-28: nine mutants, one survivor, one test added; sixteen since 2026-09-29, twenty-four since its evening). Every file is restored
 from memory in a ``finally`` block and its bytes are compared afterwards; the script refuses to
 report success if anything differs.
 
@@ -22,9 +22,13 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 SERVICE = BACKEND / "app" / "runs" / "service.py"
 SPANS = BACKEND / "app" / "verify" / "spans.py"
+TOKENS = BACKEND / "app" / "verify" / "tokens.py"
+STATUS = BACKEND / "app" / "runs" / "status.py"
 DB = BACKEND / "app" / "db.py"
 MODELS = BACKEND / "app" / "models.py"
 START_RUN = BACKEND / "app" / "application" / "start_run.py"
+RECOVER = BACKEND / "app" / "application" / "recover_runs.py"
+RUNS_API = BACKEND / "app" / "api" / "runs.py"
 VERIFY_TEMPLATE = BACKEND / "app" / "application" / "verify_template.txt"
 SUITE_TIMEOUT_S = 300
 
@@ -48,9 +52,19 @@ MUTANTS: tuple[Mutant, ...] = (
         'if verified_any:\n            _finish(session, run, "complete")',
         'if True:\n            _finish(session, run, "complete")',
     ),
-    Mutant("M5 status decided as if all quotes verified", SERVICE, "guidance_text is not None, all_verified)", "guidance_text is not None, True)"),
+    Mutant(
+        "M5 status decided as if all quotes verified",
+        SERVICE,
+        "                all_verified,\n                quotes=[span.quote for span in spans if span.verified],\n",
+        "                True,\n                quotes=[span.quote for span in spans if span.verified],\n",
+    ),
     Mutant("M6 span offset drifts by one character", SERVICE, "start=located.start if located else -1,", "start=located.start + 1 if located else -1,"),
-    Mutant("M7 digits ignored by the letters-and-digits tier", SPANS, "if ch.isalnum():", "if ch.isalpha():"),
+    Mutant(
+        "M7 numbers lose their value in the typed tier",
+        TOKENS,
+        "            canonical = canonical_number(surface)\n        elif kind is Kind.CURRENCY:",
+        '            canonical = "0"\n        elif kind is Kind.CURRENCY:',
+    ),
     Mutant("M8 label-strip tier loses its name", SPANS, 'f"unprefixed:{found.method}"', 'f"{found.method}"'),
     Mutant("M9 immutability trigger never fires", DB, "WHEN {condition} ", "WHEN 0 "),
     Mutant(
@@ -63,8 +77,8 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M11 provider failure leaves the run complete",
         SERVICE,
-        '_finish(session, run, "failed", error=str(error), reason="provider_error")',
-        '_finish(session, run, "complete", error=str(error), reason="provider_error")',
+        '        _fail(session, run, str(error), "provider_error")\n',
+        '        _finish(session, run, "complete", error=str(error), reason="provider_error")\n',
     ),
     Mutant("M12 evidence pack skips the document hash", VERIFY_TEMPLATE, 'report(sha256(HERE / document["file"]) == document["sha256"],', "report(True,"),
     Mutant(
@@ -90,6 +104,46 @@ MUTANTS: tuple[Mutant, ...] = (
         DB,
         '"sections": f"EXISTS (SELECT 1 FROM runs WHERE runs.document_id = OLD.document_id AND runs.stage IN {finished})",',
         '"sections": "0",',
+    ),
+    Mutant(
+        "M17 the event stream never re-reads the record",
+        RUNS_API,
+        "                    ended = _ended_in_the_record(run_id)\n",
+        "                    ended = None\n",
+    ),
+    Mutant(
+        "M18 staleness recovery tells no open stream",
+        RECOVER,
+        'bus.publish(StageEvent(run.id, "failed", message))',
+        'bus.publish(StageEvent("nobody", "failed", message))',
+    ),
+    Mutant("M19 a failed worker writes into its broken session", SERVICE, "    session.rollback()\n    session.refresh(run)\n", ""),
+    Mutant(
+        "M20 two documents may share bytes and reader",
+        MODELS,
+        'Index("ux_documents_sha256_parser", "sha256", "parser_version", unique=True)',
+        'Index("ux_documents_sha256_parser", "sha256", "parser_version", unique=False)',
+    ),
+    Mutant(
+        "M21 a run may have two memos",
+        MODELS,
+        'Index("ux_memos_run_review", "run_id", "review_head", unique=True)',
+        'Index("ux_memos_run_review", "run_id", "review_head", unique=False)',
+    ),
+    Mutant(
+        "M22 the verifier searches beyond the slice the model saw",
+        SERVICE,
+        "    located = locate(quote, section.text[:window], _label(section)) if section is not None else None\n",
+        "    located = locate(quote, section.text, _label(section)) if section is not None else None\n",
+    ),
+    Mutant(
+        "M23 the status is computed from the model's numbers, not the quote's",
+        STATUS,
+        "    fact = next((f for f in (observed_fact(q, stated=observed) for q in quotes) if f is not None), None)\n",
+        '    fact = observed_fact(observed or "") if observed else None\n',
+    ),
+    Mutant(
+        "M24 a finished run may enter another stage", SERVICE, "    assert_transition(previous.stage if previous is not None else None, stage)\n", "    pass\n"
     ),
 )
 

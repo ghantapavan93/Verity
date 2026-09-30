@@ -191,6 +191,23 @@ numbering).
 3. `WORKBENCH_RETRIEVAL_K=10`, under the rule in `docs/RETRIEVAL.md`, measured after 1 with whichever
    prompt won, so the two are not confounded.
 
+**Recording 5, 2026-09-29 (20:00 to 21:45 local, after the CUAD-30 batch on the same GPU): 44 goldens, reader v4,
+verifier v4, Qwen3 8B; three runs, one variable at a time, judged under the three rules above.**
+
+| Run | Result | Against Recording 4 (answer-v2, k = 6: 37 of 44) | Median model latency | Verdict under the rule |
+|---|---|---|---|---|
+| answer-v3, k = 6 | 37 of 44 | gain g11 (the "no" about an absent point is now "not found"); regression g30 (the dispute-window quote dropped words, withheld); 16 runs changed citation or status under the same verdict | 33.3 s (k = 6 baseline 26.2 s) | **not adopted**: one regression |
+| answer-v2, k = 10 | 38 of 44 | gains g08, g12, g35 (the three misses named as retrieval's: the labelled section now within reach); regressions g39 (the force-majeure quote withheld) and g43 (the injected instruction answered "not found") | 41.2 s, +57% | **not adopted**: two regressions, and latency over the half |
+| answer-v3, k = 10 | 38 of 44 (against answer-v2 at k = 10: gains g39, g42, g43; regressions g04, g08, g35; mean latency −5.0 s) | informational: neither variable won on its own | | not adopted |
+
+The k = 10 latencies carry a caveat written the moment it was noticed: four of the 44 runs (g08, g10, g21, g24: 137,
+104, 83 and 167 s) were made while a browser-flow build and a Docling parse ran on the same machine; the median
+without them is still above the k = 6 median by more than the rule allows, so the verdict does not turn on them.
+What the two runs say together: the three retrieval misses are reachable at k = 10 and the model pays for the wider
+window in two other places; answer-v3's rules fix the one case they name and cost one elsewhere. Both stay available
+(`WORKBENCH_RETRIEVAL_K`, `--prompt answer-v3`) and neither is the default. Every run is in the record under its own
+identity; `run_goldens.py --report` reads them back.
+
 **The earlier note, kept as written:** Recording 4 (reader v4, verifier v2) had not been made. The two fixes above were verified by
 replay over the recorded runs (verifier v2: 9 spans gained, 0 lost) and by the reader tests; the
 full re-recording (84 runs, about an hour of the one GPU) was deliberately not run on

@@ -70,3 +70,24 @@ Nothing else in the pipeline is within an order of magnitude of that.
 | Virtualised document view | more than about 5,000 sections on screen; measured not needed at 2,001 |
 
 Each of these is a measurement to make, not a box to tick.
+
+## Admission to the model, measured (2026-09-29, 22:00 local)
+
+`scripts/measure_admission.py --corpus data/cuad/corpus-30 --documents 3 --questions 4 --concurrency 2`: a batch runner
+asking three fields over three CUAD contracts with two workers while a person asks four questions one after another,
+all in one process through one admission controller with one call in flight, against the live Qwen3 8B; the same work
+twice, once served first come first served and once as shipped (four interactive admissions per batch admission).
+Record `data/logs/admission-20260929-221804.json`.
+
+| Policy | Person's queue waits (s) | Person finished | Everything finished | Batch queue waits, max (s) |
+|---|---|---|---|---|
+| first come, first served | 95, 111, 120, 58 | 705 s | 735 s | 248 |
+| four interactive per batch | 34, 32, 70, 59 | 534 s | 778 s | 324 |
+
+The weighting halves what a person waits (median 103 s to 46 s, finished 24% sooner) and costs the batch six percent
+on its total, with no call starved: the worst batch wait grew from 248 to 324 s and every call finished. That is the
+measurement that earns the two queues; the first-come policy stays in the code for the next measurement and nothing
+else. Every call's wait is on its checking stage ("model answered in 58 s · queued 111 s behind 2"), so the queue is
+visible in the record, not inferred. What this does not do: cross processes. The API and a batch runner started as a
+separate process each have their own controller and meet only at the model, which serialises them without a record;
+a shared queue is earned by a requirement for that, not by this.

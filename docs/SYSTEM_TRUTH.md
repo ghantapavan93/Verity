@@ -4,7 +4,8 @@ A comprehension pass over the code at commit `43a67f3` (2026-09-29). Nothing her
 README or the design brief; every statement was traced to a file and, where it mattered, executed
 in memory. No code was changed for this pass. Marks: **UNPROVEN** means no test holds the claim;
 **UNKNOWN** means the code does not decide it (or, for Ivo, the public evidence does not say).
-Defects found while tracing are listed at the end, unfixed, so nothing below is quietly improved.
+Defects found while tracing are listed at the end, so nothing below is quietly improved; a fix is
+recorded there with its date and its measurement.
 The index of files and functions is `docs/SYSTEM_MAP.md`.
 
 ## B. The workflow, as it runs
@@ -152,7 +153,7 @@ staleness; persistence and immutability; human review; the memo and the evidence
 BM25 top-k over (heading, text) with question + guidance → one schema-constrained model call (≤ 4
 with retries) → pydantic validation → per-quote location in the stored text (exact → normalized →
 casefold → alnum; label strip; relocation to another candidate) → finding shown or withheld → status
-(no_evidence / computed_days / model_hint, then reference_check) → complete / unresolved / failed →
+(no_evidence / position_check / computed_days / model_hint, then reference_check) → complete / unresolved / failed →
 immutable run record → drawer, Findings, memo, evidence pack read that record`
 
 ## G. Is this an agent?
@@ -177,10 +178,13 @@ stored on the run. Retrieval appends the guidance text to the query. The prompt 
 user message as `LEGAL GUIDANCE: …`, and rule 4 of `answer-v2` tells the model to fill `observed`
 (the contract's position) and `required` (the guidance's position) and a hint.
 
-Then `decide()`: if any span is unverified → unresolved (`no_evidence`); else if guidance is present
-and both `observed` and `required` yield a day count → `computed_days`: pass when observed ≥
-required, or ≤ when `required` contains an at-most phrase (within, no more than, at most, …),
-otherwise needs_review, the hint discarded; else the model's hint (`model_hint`). Against a 15-day
+Then `decide()`: if any span is unverified → unresolved (`no_evidence`); else a day count in
+`observed` must appear in a verified quote and one in `required` must appear in the guidance, or the
+finding is needs_review with the source `position_check` (2026-09-29); else if guidance is present
+and both yield a day count → `computed_days`: pass when observed ≥ required, or ≤ when `required`
+contains a ceiling phrase (within, no more than, at most, no longer than, not to exceed, up to, no
+later than, …), otherwise needs_review, the hint discarded; else the model's hint (`model_hint`).
+Against a 15-day
 clause, "15 days' written notice" versus "at least 30 days" → needs_review by code whatever the
 model hinted. The code never reads the sentence "Anything below 30 days needs review" itself.
 
@@ -188,16 +192,19 @@ What holds and what does not:
 - Contradiction (contract outside the guidance): needs_review by code when the numbers parse.
 - Vague guidance (no day counts): the model's hint stands, labelled "Status taken from the model's hint".
 - No guidance: the hint stands; rule 5 tells the model "pass" for a plain answer and "missing" when silent.
-- **"Within guidance" without guidance is possible.** `STATUS_LABELS` maps `pass` to "Within guidance"
-  regardless of whether guidance existed (`src/lib/types.ts`), and the memo writes "<topic> · Within
-  guidance" next to a guidance row reading "none supplied" (`memo/service.py`). The status source
-  line in the drawer is the only cue. This is a labelling defect, recorded at the end.
-- Whitespace-only guidance is accepted, stored as "", shown to the model as "none supplied", yet
-  `decide()` is told guidance is present (UNPROVEN edge).
-- `observed` and `required` are model-written and never compared with the verified quote; a verbatim
-  "thirty (30) days" quote can sit under `observed` "90 days" and the status is computed from 90.
-- The phrase list is narrow: "no longer than 30 days", "up to 30 days" and "not to exceed 30 days"
-  are read as minimums; "twenty-one (21) days" and "30 (thirty) days" parse as no day count.
+- **A pass is worded by what it was checked against.** The run (`RunOut.has_guidance`) and the findings
+  list (`FindingRecord.has_guidance`) say whether guidance was given; `statusLabel` (`src/lib/types.ts`)
+  and the memo's `status_label` write "Within guidance" only then and "Answered" otherwise. Before
+  2026-09-29 every pass read "Within guidance", next to a memo row saying "none supplied".
+- Whitespace-only guidance is refused with a 422 (2026-09-29); guidance is text or absent.
+- `observed` and `required` are model-written; since 2026-09-29 a day count in them is checked against
+  the verified quotes and the guidance before anything is computed from it (`position_check`). Over
+  the 595 recorded findings, nine statuses had been computed from day counts and none disagreed with
+  its quote; the check guards the rule, not a failure seen.
+- Ceiling phrases: "no longer than", "not longer than", "not to exceed", "up to", "no later than",
+  "not later than" and "or shorter" join "within", "no more than", "at most"; "twenty-one (21) days",
+  "30 (thirty) days" and "20 Working Days" parse (fourteen recorded quotes and positions say
+  "Working Days"). A working day is compared as a day, like a business day before it.
 
 ## I. What "verified evidence" means
 
@@ -210,8 +217,9 @@ text, and the interface highlights that slice. There is no similarity or fuzzy t
 | exact | raw quote as a substring of raw text | identical characters | context, relevance, which occurrence (the first bounded one) |
 | normalized | curly quotes and dashes unified, zero-width and bidi marks removed, whitespace runs collapsed, on both sides | letters, case, digits and all other punctuation identical, in order | quote style, dash style, line breaks, amount of whitespace |
 | casefold | normalized plus Unicode casefold | as normalized, minus case | capitalisation of defined terms |
-| alnum | letters and digits only, casefolded, on both sides | the same letters and digits in the same order, none inserted or removed | punctuation and symbols, including inside numbers: "$1,500" matches "$15.00", "15%" matches "1.5%"; word splits ("not ice" matches "notice"); parentheses |
-| unprefixed:<tier> | the section's number, heading or label cut off the front of the quote (at least two letters or digits), the remainder through the ladder | the remainder meets the tier | anything about the cut prefix: for §1.5, the quote "15 days' written notice" verifies against "forty-five (45) days' written notice" as `unprefixed:exact`, highlighting only "days' written notice" |
+| alnum | letters and digits only, casefolded, on both sides; a full stop between two digits is kept as a decimal point (verifier v4) | the same letters and digits in the same order, none inserted or removed; "$15.00" is not "$1,500" and "1.5%" is not "15%" | punctuation and symbols otherwise, including a thousands separator ("1500" matches "1,500"); word splits ("not ice" matches "notice"); parentheses |
+| typed | `verify/tokens.py` (verifier v5, in place of alnum; measured over 1,058 recorded spans before wiring: keeps 52 of the 53 alnum spans, gains 3, moves none; replay over 1,299 after: +10, −0) | numbers as values (Decimal), words as letters at word boundaries, punctuation nothing; a match is whole tokens and carries its count of occurrences | a word join or split between words (the reader's own artefact, four spans in the record); nothing about digits |
+| unprefixed:<tier> | the section's label (its number as written, then its heading) or its heading alone (at least two letters or digits) cut off the front of the quote, the remainder through the ladder; the number alone is never cut (verifier v4) | the remainder meets the tier; digits at the front of a quote are always part of what must be found | anything about the cut heading: "12.11 No Third-Party Beneficiary There are no…" is verified from "There are no…" |
 | relocated:<method> | the quote searched in the other handed candidates, in retrieval order | the quote exists in a section the model was given | that it came from the cited section; the found section is what is stored and shown |
 
 At every tier a match may not split a run of letters and digits at either edge (`bounded()`), so
@@ -219,17 +227,17 @@ At every tier a match may not split a run of letters and digits at either edge (
 inside "Section 12". A verbatim quote that drops a neighbouring word is still found, and the
 highlight shows the dropped word.
 
-- **Can "30 days" become "90 days" and verify?** Normally no: a changed digit is found only where the
-  text carries it, bounded, in a handed section. Two exceptions found by tracing: the numeric label
-  strip above, and the alnum tier's blindness to separators inside numbers. Both UNPROVEN as
-  exploits in the record; both real in code.
+- **Can "30 days" become "90 days" and verify?** No: a changed digit is found only where the text
+  carries it, bounded, in a handed section. Two exceptions were found by tracing on 2026-09-29 and
+  closed the same day by verifier v4: the number alone is no longer cut off a quote, and a decimal
+  point between digits counts as a digit. Neither had fired in the record: 847 recorded spans
+  replayed under v4, none changed.
 - **Can a quote spanning a word boundary match?** Not across a letter or digit ("5 days" in "15
   days"). Across a word ("less than 30 days" in "not less than 30 days"): yes, exact, by design.
 - **Can a quote from the wrong section verify?** Yes, if it exists in another section handed to the
   model; it is labelled `relocated:*` and the section where it was found is stored and shown.
-  Sections not handed over are never searched. The verifier searches the full stored text while
-  the prompt showed at most 5,000 characters of it, so a quote from a tail the model never saw
-  would verify (UNPROVEN).
+  Sections not handed over are never searched. Since verifier v5 the search is bounded to the
+  5,000 characters the prompt carried, so a quote from a tail the model never saw does not verify.
 - **Can the model set verified=true?** No.
 - **Unverifiable quote**: span start −1, end −1, verified false, method `none`; the finding becomes
   unresolved (`no_evidence`) even if its other quotes verified; the run is complete if another
@@ -331,7 +339,7 @@ Ten questions an Ivo engineer could ask after five minutes, derived from the imp
 | 5 | The provider dies after persistence but before I get the result? | partial: the record is independent of the client; the URL and polling restore it; the same question returns the same run; a stuck run is failed after 41 minutes; but an open event stream to a run that recovery failed hangs on keep-alives |
 | 6 | Why BM25 and not semantic retrieval? | answer now: measured; hybrid built, better on labels, one golden regressed, kept behind a flag with the rule written down |
 | 7 | Your computed status uses `observed` and `required`. Who checks them against the quote? | cannot answer: nobody; they are model text |
-| 8 | Why does a finding say "Within guidance" when I supplied no guidance? | cannot answer: the label maps `pass` to that phrase regardless (H) |
+| 8 | Why does a finding say "Within guidance" when I supplied no guidance? | it no longer does: a pass without guidance is labelled "Answered" (H, fixed 2026-09-29) |
 | 9 | Headers, footers, footnotes, comments and content controls: where did they go? | cannot answer for those parts: dropped silently; only hidden runs and tracked changes are counted and shown |
 | 10 | Show me exactly what the model saw for this run. | partial: the record shows the candidates, the raw output and the input hash of prompt + message, but not the message text; the prompt is versioned by hash; the evidence pack excludes the prompt |
 
@@ -395,21 +403,23 @@ deviations and collaboration have no counterpart here. What this repository show
 
 ## Found while tracing, not fixed
 
-Recorded so that the truth above is not quietly improved. Each is a candidate for a measured change.
+Recorded so that the truth above is not quietly improved. Each is a candidate for a measured change;
+an item fixed since carries the date and the measurement, and the rest stand.
 
-1. **Verifier, numeric label strip**: a quote beginning with the section's number loses those digits and verifies against a different number (I).
-2. **Verifier, alnum tier**: punctuation inside numbers and currency or percent symbols are invisible ("$1,500" vs "$15.00"; "15%" vs "1.5%").
-3. **Verifier window**: quotes are checked against the full stored text, not the 5,000 characters the prompt showed.
-4. **Status trusts model text**: `observed` / `required` are never compared with the verified quote; `AT_LEAST` is defined but unused; "no longer than", "up to", "not to exceed" read as minimums; "twenty-one (21) days" parses as no count.
-5. **"Within guidance" without guidance**: the label and the memo heading say it for any `pass`.
-6. **Whitespace-only guidance** is accepted and stored empty while `decide()` is told guidance is present.
-7. **DOCX content dropped silently**: headers, footers, footnotes, endnotes, comments, block-level content controls, `altChunk`, auto-numbering; style-level hidden text kept; a deleted paragraph mark joins paragraphs with no separator.
+1. **Verifier, numeric label strip**: a quote beginning with the section's number loses those digits and verifies against a different number (I). **Fixed 2026-09-29, verifier v4:** the number alone is never cut off a quote; a label is recognised only as written, number then heading. Census of the record first: 20 `unprefixed` spans, none cut by the number alone; replay over 847 spans, nothing changed; sixteen hand mutants killed.
+2. **Verifier, alnum tier**: punctuation inside numbers and currency or percent symbols are invisible ("$1,500" vs "$15.00"; "15%" vs "1.5%"). **Fixed 2026-09-29, verifier v4:** a full stop between two digits is kept in the letters-and-digits tier; a thousands separator still is not, because "1500" and "1,500" are one number to a reader. Census first: 24 alnum spans in the record, none with a decimal; replay unchanged.
+3. **Verifier window**: quotes are checked against the full stored text, not the 5,000 characters the prompt showed. **Measured and fixed 2026-09-29:** of 976 verified spans in the record none ended beyond the window (495 handed sections were longer); verifier v5 bounds the search to the first 5,000 characters of each candidate, the slice the prompt carried, and `verify.py` in the evidence pack reports any span beyond it.
+4. **Status trusts model text**: `observed` / `required` are never compared with the verified quote; `AT_LEAST` is defined but unused; "no longer than", "up to", "not to exceed" read as minimums; "twenty-one (21) days" parses as no count. **Fixed 2026-09-29, twice:** first `position_check` (a stated day count must be in a verified quote or in the guidance), the ceiling phrases, the parenthesised and working-day forms; then, after the chain, the status computed from typed facts parsed from the quote and the guidance (`policy/durations.py`), with units, ambiguity (`ambiguous_fact`) and the evaluation's sentence on the finding; the model's numbers can no longer be the operand. Census first: 9 computed statuses in the record, none disagreeing with its quote; 14 more recorded day counts parse, all "Working Days".
+5. **"Within guidance" without guidance**: the label and the memo heading say it for any `pass`. **Fixed 2026-09-29:** `has_guidance` on `RunOut` and `FindingRecord`; a pass without guidance reads "Answered" in the chip, the tables and the memo heading (`tests/test_api_flow.py`).
+6. **Whitespace-only guidance** is accepted and stored empty while `decide()` is told guidance is present. **Fixed 2026-09-29:** refused with a 422 that says so; guidance is either text or absent.
+7. **DOCX content dropped silently**: headers, footers, footnotes, endnotes, comments, block-level content controls, `altChunk`, auto-numbering; style-level hidden text kept; a deleted paragraph mark joins paragraphs with no separator. **Dropped no longer silently (2026-09-29):** `ingest/coverage.py` records what the reading did with each of seventeen parts; the document carries it, the paper says what was not read, the pack records it. Census of the 36 licensed contracts and the sample: 32 footers and 12 headers with real text, 2 footnotes, 5 content controls, 17 fields, 27 automatic numbering. Reading those parts is a reader change to be measured in the parser tournament, not made here.
+8a. **Hostile packages, measured (2026-09-29):** an entity bomb and absurd nesting in `document.xml` are refused as unreadable packages in 0.02 s (lxml refuses them before python-docx sees a body); twenty thousand members are read in 0.5 s; these are tests now (`tests/test_hostile_packages.py`), so a change in the envelope is deliberate.
 8. **Unguarded exception paths**: the DOCX body walk and the PDF plain-mode fallback can surface as 500s; a password-protected Word file gets the generic message.
 9. **Long first paragraph** becomes the title and reaches the prompt untruncated through the heading line.
-10. **Reuse before validation**: identical bytes are reused under any filename or extension; the 25 MB check runs after the whole body is in memory; the upload handler parses synchronously inside an async route.
-11. **Two rows possible**: no unique constraint on (document sha256, parser version) or on `memos.run_id`; concurrent first requests can duplicate, and a second memo overwrites the file.
-12. **Recovered runs and event streams**: recovery does not publish to the bus; an open stream to a recovered run receives keep-alives forever.
-13. **Error handlers without rollback**: after a database error inside a run, `_finish` itself can raise and the run waits for staleness recovery.
-14. **Frontend**: a failed poll after a dropped stream stops polling and leaves the stage list spinning; "Open in workspace" on an in-progress run never follows it; a new upload does not stop the previous follower or close the drawer; the finished stage is applied one round trip before the findings; the drawer's guidance text is the UI's, not the run's; the memo does not pick up later reviews.
-15. **Claims to correct**: the "refresh mid-run" browser flow reloads after the run has finished (README and `docs/VALIDATION.md` are corrected in this commit to say so); `DECISIONS.md` still carries the batch's earlier 9 / 4 counts in an older entry; the goldens runner ignores the routing policy (harmless while it is empty); one comment says sections are sent in document order when they are sent in rank order; a whitespace-only reviewer name is stored as an empty string; one oversized file aborts a whole batch; the staleness window ignores embedding calls under hybrid retrieval.
+10. **Reuse before validation**: identical bytes are reused under any filename or extension; the 25 MB check runs after the whole body is in memory; the upload handler parses synchronously inside an async route. **Partly fixed 2026-09-29:** the declared size is refused before a byte is read and the bytes are checked again once read; the parse runs in the thread pool, off the event loop. Reuse by bytes under any name stands: the same bytes are the same document, whatever they are called.
+11. **Two rows possible**: no unique constraint on (document sha256, parser version) or on `memos.run_id`; concurrent first requests can duplicate, and a second memo overwrites the file. **Fixed 2026-09-29:** unique indexes `ux_documents_sha256_parser` and `ux_memos_run_id` (added to an existing database at startup; rows from before reader versioning carry NULL and stay distinct); a request that loses the insert is handed the winner with `reused`; the memo is written aside and moved into place only after its row is in, so a loser never touches the winner's file (`tests/test_uniqueness.py`; mutants M20, M21).
+12. **Recovered runs and event streams**: recovery does not publish to the bus; an open stream to a recovered run receives keep-alives forever. **Fixed 2026-09-29:** recovery publishes the failed stage on the bus, and the stream re-reads the run's stage at every heartbeat, so a run ended by another process ends its streams within fifteen seconds (`tests/test_run_endings.py`; mutants M17, M18). Stored events carry ids and a reconnect resumes from `Last-Event-ID`. A stage row names its process, and a run whose process provably died on this host is recovered at once rather than after the staleness window (`runs/owner.py`).
+13. **Error handlers without rollback**: after a database error inside a run, `_finish` itself can raise and the run waits for staleness recovery. **Fixed 2026-09-29:** `_fail` rolls the session back, re-reads the run and, when another writer has already ended it, keeps that record and leaves; the case seen at twenty concurrent runs (recovery in another process, then the immutability trigger) is now a test (mutant M19).
+14. **Frontend**: a failed poll after a dropped stream stops polling and leaves the stage list spinning; "Open in workspace" on an in-progress run never follows it; a new upload does not stop the previous follower or close the drawer; the finished stage is applied one round trip before the findings; the drawer's guidance text is the UI's, not the run's; the memo does not pick up later reviews. **Fixed 2026-09-29** (the drawer now shows the run's own guidance, `RunOut.guidance_text`): the follower is a state machine (polling retries five times, then a disconnected state with resume; a run in flight loaded from the record is followed; a new upload stops the follower and closes the drawer; the terminal stage is applied only with the record), and the Assistant re-reads its finished run when shown again, so reviews reach the drawer and the memo's review head.
+15. **Claims to correct**: the "refresh mid-run" browser flow reloads after the run has finished (README and `docs/VALIDATION.md` are corrected in this commit to say so; **since 2026-09-29 it refreshes mid-run**: the replay provider holds its answer back and the page reattaches to the same run); `DECISIONS.md` still carries the batch's earlier 9 / 4 counts in an older entry; the goldens runner ignores the routing policy (harmless while it is empty); one comment says sections are sent in document order when they are sent in rank order; a whitespace-only reviewer name is stored as an empty string; one oversized file aborts a whole batch; the staleness window ignores embedding calls under hybrid retrieval.
 16. **Evidence in gitignored data**: the CUAD archive, the load-envelope JSON and logs, the Lighthouse reports and the 2,001-section fixture exist only under `backend/data/`; a fresh clone re-checks them through recorded hashes and URLs only.

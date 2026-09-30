@@ -109,3 +109,9 @@ confounded. It becomes the default only with no regression, at least one gain, a
 latency up by less than half. If it regresses, the three misses stay named here as retrieval's and
 hybrid remains the measured alternative.
 
+**Measured 2026-09-29 (Recording 5, `docs/GOLDENS.md`):** answer-v2 at k = 10 scores 38 of 44 against 37 at k = 6; the three
+misses named above (g08, g12, g35) pass, and two goldens that passed at k = 6 fail (g39, a quote withheld; g43, the injected
+instruction answered "not found"); median model latency 41.2 s against 26.2 s, +57%, four runs of the 44 slowed by other
+work on the machine and the verdict not turning on them. Under the rule, k = 10 is not the default. It remains a run option,
+and the three misses remain retrieval's: reachable at depth, at a price paid elsewhere.
+

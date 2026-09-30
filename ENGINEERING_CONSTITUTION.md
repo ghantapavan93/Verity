@@ -144,7 +144,7 @@ row names the measurement or requirement that earned the component, as the secon
 
 | Component | Earned by | State |
 |---|---|---|
-| Verifier tiers (alnum, label stripping) | a census of withheld quotes: most were text in the document missed by strictness; replay showed 5 gained, 0 lost | kept; no ratio tier because 0.994 hid a changed digit |
+| Verifier tiers (alnum, label stripping) | a census of withheld quotes: most were text in the document missed by strictness; replay showed 5 gained, 0 lost | kept; no ratio tier because 0.994 hid a changed digit; v4 (2026-09-29) dropped the number-alone strip and keeps decimal points after tracing showed both could hide a changed number, replay over 847 spans unchanged |
 | Human review | the product requirement that a person adjudicates what the model proposed and code verified | kept; append-only, reversible |
 | Immutability triggers | the requirement that a finished run is a record; found a real defect (startup recovery swept another process's live run) | kept; recovery is now by staleness |
 | Stage records with hashes and attempts | the requirement that failures be inspectable without inference | kept |

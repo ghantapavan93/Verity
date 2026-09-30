@@ -86,7 +86,33 @@ compared against this one with the same rule.
 
 ## Results
 
-Not recorded yet. The run is started with:
+**Recorded 2026-09-29 (batch `51398ed416634c15`, task `cuad-clauses`, corpus `cuad-30`, qwen3:8b, 210 values, 210 runs,
+reader v4, BM25 k = 6, answer-v2; started 16:14 local, finished 19:59; model latency p50 49.8 s, p95 147.4 s).**
+The full per-case list is `backend/data/logs/cuad-30-score.log`; `scripts/score_cuad.py 51398ed416634c15` reproduces it.
+
+| Category | expert spans | correct | cited elsewhere | missed | correct absence | asserted, experts found none | precision | recall | absence agreement |
+|---|---|---|---|---|---|---|---|---|---|
+| Change Of Control | 5 | 4 | 0 | 1 | 24 | 1 | 1.00 | 0.80 | 0.96 |
+| Governing Law | 28 | 24 | 3 | 1 | 1 | 1 | 0.89 | 0.86 | 0.50 |
+| Cap On Liability | 15 | 10 | 0 | 5 | 15 | 0 | 1.00 | 0.67 | 1.00 |
+| Most Favored Nation | 1 | 0 | 0 | 1 | 29 | 0 | n/a | 0.00 | 1.00 |
+| Non-Compete | 8 | 1 | 4 | 3 | 10 | 12 | 0.20 | 0.12 | 0.45 |
+| Termination For Convenience | 11 | 8 | 0 | 3 | 16 | 3 | 1.00 | 0.73 | 0.84 |
+| Uncapped Liability | 7 | 3 | 2 | 2 | 9 | 14 | 0.60 | 0.43 | 0.39 |
+| **all** | 75 | 50 | 9 | 16 | 104 | 31 | **0.85** | **0.67** | 0.77 |
+
+Against the floors written above the run: citation precision 0.85 (floor 0.80) and recall 0.67 (floor 0.50), so the
+clause lookup is fit to draft a repository review of these seven categories, with two categories named as unfit on
+their own: non-compete (precision 0.20: twelve assertions where the experts marked nothing, mostly exclusivity and
+non-solicitation language read as a non-compete) and uncapped liability (precision 0.60, fourteen such assertions:
+indemnities and disclaimers read as an uncapped exposure). Retrieval: 7 of the 25 misses had no expert span among
+the six sections handed to the model (28%), below the one-third trigger, so BM25 did not fail this measurement; the
+misses are mostly the model's, answering "not found" from sections that carried the clause, as ContractEval reported
+for open-weight models. Nothing was retuned. A second recording under another prompt, retrieval depth or model is
+compared with this table under the same rule; the golden runs at k = 10 and under answer-v3 that followed this
+batch on the same GPU are recorded in `docs/GOLDENS.md` and `docs/RETRIEVAL.md`.
+
+The run was started with:
 
 ```bash
 cd backend
