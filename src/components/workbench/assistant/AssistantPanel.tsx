@@ -128,6 +128,7 @@ export function AssistantPanel({
                     <FindingCard
                       key={finding.id}
                       finding={finding}
+                      hasGuidance={run.hasGuidance}
                       sectionsById={sectionsById}
                       onJump={onJump}
                       onEvidence={(trigger) => onOpenEvidence(finding, trigger)}

@@ -73,6 +73,7 @@ def run_out(run: Run) -> RunOut:
         note=run.note,
         error=run.error,
         reason=run.reason,
+        has_guidance=run.guidance_id is not None,
     )
 
 

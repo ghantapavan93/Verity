@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import json
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -219,6 +221,26 @@ def test_interrupted_runs_are_failed_on_restart_and_become_retryable(client: Tes
     assert after["stage"] == "failed" and after["reason"] == "internal_error" and "restarted" in after["error"]
     retry = client.post("/api/runs", json={"documentId": result["document"]["id"], "guidanceId": None, "question": question})
     assert retry.status_code == 202 and retry.json()["id"] != stuck_id, "a failed run does not block its fingerprint"
+
+
+def test_a_pass_without_guidance_is_a_plain_answer_not_within_guidance(client: TestClient) -> None:
+    """Found while tracing (docs/SYSTEM_TRUTH.md H, 2026-09-29): every pass was labelled "Within guidance", guidance or
+    not. The run and the findings list now say whether guidance was given, and the memo heads such a pass "Answered"."""
+    result = upload_and_ask(client, "Can the customer terminate for convenience?", with_guidance=False)
+    run = result["run"]
+    assert run["hasGuidance"] is False and run["findings"][0]["status"] == "pass"
+    assert client.get(f"/api/runs/{result['run_id']}/detail").json()["hasGuidance"] is False
+    record = next(r for r in client.get("/api/findings").json() if r["runId"] == result["run_id"])
+    assert record["hasGuidance"] is False
+    memo = client.post("/api/memos", json={"runId": result["run_id"]}).json()
+    html = client.get(memo["htmlUrl"]).text
+    assert "· Answered</h2>" in html and "Within guidance" not in html
+    with zipfile.ZipFile(io.BytesIO(client.get(memo["docxUrl"]).content)) as package:
+        body = package.read("word/document.xml").decode("utf-8")
+    assert "Answered" in body and "Within guidance" not in body
+
+    guided = upload_and_ask(client, "Can the customer terminate for convenience?")
+    assert guided["run"]["hasGuidance"] is True and guided["run"]["findings"][0]["status"] == "needs_review"
 
 
 def test_an_answer_without_any_quote_is_not_a_finding(client: TestClient) -> None:

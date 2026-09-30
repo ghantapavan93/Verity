@@ -67,6 +67,7 @@ def list_findings(document_id: str | None = Query(default=None, alias="documentI
                 conclusion=finding.conclusion,
                 verified_spans=count,
                 citations=citations,
+                has_guidance=run.guidance_id is not None,
                 created_at=iso(run.created_at) or "",
             )
         )

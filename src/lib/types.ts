@@ -74,12 +74,17 @@ export const REASON_TITLES: Record<RunReason, string> = {
   internal_error: "The run did not complete",
 };
 
-export const STATUS_LABELS: Record<FindingStatus, string> = {
-  pass: "Within guidance",
+const STATUS_LABELS: Record<Exclude<FindingStatus, "pass">, string> = {
   needs_review: "Needs review",
   missing: "Not found",
   unresolved: "Unresolved",
 };
+
+/** A pass is "within guidance" only when the run had guidance; without it the model gave a plain answer (prompt rule 5). */
+export function statusLabel(status: FindingStatus, hasGuidance: boolean): string {
+  if (status === "pass") return hasGuidance ? "Within guidance" : "Answered";
+  return STATUS_LABELS[status];
+}
 
 export const STATUS_SOURCE_LABELS: Record<string, string> = {
   computed_days: "Status decided by code from the day counts",

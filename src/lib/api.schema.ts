@@ -382,7 +382,8 @@ export interface paths {
         };
         /**
          * Run Events
-         * @description Stage transitions only. Replays what already happened, then streams until the run ends.
+         * @description Stage transitions only. Replays what already happened, then streams until the run ends, by this process's
+         *     bus or, at the latest, one heartbeat after the record says it ended.
          */
         get: operations["run_events_api_runs__run_id__events_get"];
         put?: never;
@@ -951,6 +952,11 @@ export interface components {
              * @enum {string}
              */
             evidenceKind: "passage" | "coverage";
+            /**
+             * Hasguidance
+             * @default false
+             */
+            hasGuidance: boolean;
             /** Id */
             id: string;
             /** Question */
@@ -1256,6 +1262,11 @@ export interface components {
             guidanceId: string | null;
             /** Guidancesha256 */
             guidanceSha256: string | null;
+            /**
+             * Hasguidance
+             * @default false
+             */
+            hasGuidance: boolean;
             /** Id */
             id: string;
             /** Inputtokens */
@@ -1331,6 +1342,11 @@ export interface components {
             error: string | null;
             /** Findings */
             findings: components["schemas"]["FindingOut"][];
+            /**
+             * Hasguidance
+             * @default false
+             */
+            hasGuidance: boolean;
             /** Id */
             id: string;
             /** Latencyms */

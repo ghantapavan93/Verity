@@ -5,7 +5,7 @@ import wb from "../Workbench.module.css";
 import styles from "./Views.module.css";
 import { errorMessage, listFindings, reviewFinding } from "@/lib/api";
 import { formatWhen, plural } from "@/lib/format";
-import { STATUS_LABELS, type FindingRecord, type FindingStatus, type ReviewVerdict } from "@/lib/types";
+import { statusLabel, type FindingRecord, type FindingStatus, type ReviewVerdict } from "@/lib/types";
 
 export function statusTone(status: FindingStatus): string {
   return status === "needs_review" ? wb.statusReview : status === "pass" ? wb.statusPass : wb.statusMuted;
@@ -143,7 +143,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                       {r.citations.length === 0 && <span className={styles.tag}>{plural(r.verifiedSpans, "passage")}</span>}
                     </div>
                     <div className={styles.rowSide}>
-                      <span className={`${wb.statusChip} ${statusTone(r.status)}`}>{STATUS_LABELS[r.status]}</span>
+                      <span className={`${wb.statusChip} ${statusTone(r.status)}`}>{statusLabel(r.status, r.hasGuidance)}</span>
                       <span>{formatWhen(r.createdAt)}</span>
                     </div>
                   </button>

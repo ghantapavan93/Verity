@@ -1298,6 +1298,11 @@
             "title": "Evidencekind",
             "type": "string"
           },
+          "hasGuidance": {
+            "default": false,
+            "title": "Hasguidance",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -2143,6 +2148,11 @@
             ],
             "title": "Guidancesha256"
           },
+          "hasGuidance": {
+            "default": false,
+            "title": "Hasguidance",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -2401,6 +2411,11 @@
             },
             "title": "Findings",
             "type": "array"
+          },
+          "hasGuidance": {
+            "default": false,
+            "title": "Hasguidance",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
@@ -3666,7 +3681,7 @@
     },
     "/api/runs/{run_id}/events": {
       "get": {
-        "description": "Stage transitions only. Replays what already happened, then streams until the run ends.",
+        "description": "Stage transitions only. Replays what already happened, then streams until the run ends, by this process's\nbus or, at the latest, one heartbeat after the record says it ended.",
         "operationId": "run_events_api_runs__run_id__events_get",
         "parameters": [
           {

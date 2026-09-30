@@ -31,7 +31,17 @@ from ..config import settings
 from ..hashing import sha256_file
 from ..models import EvidenceSpan, Finding, Run, iso, utcnow
 
-STATUS_LABELS = {"pass": "Within guidance", "needs_review": "Needs review", "missing": "Not found", "unresolved": "Unresolved"}
+STATUS_LABELS = {"needs_review": "Needs review", "missing": "Not found", "unresolved": "Unresolved"}
+
+
+def status_label(status: str, with_guidance: bool) -> str:
+    """A pass is "within guidance" only when the run had guidance to be within; without it the model gave a plain
+    answer (prompt rule 5). Found while tracing on 2026-09-29: every pass used to be headed "Within guidance"."""
+    if status == "pass":
+        return "Within guidance" if with_guidance else "Answered"
+    return STATUS_LABELS.get(status, status)
+
+
 AUTHOR = "Contract Workbench"
 CUSTOM_PROPERTIES_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.custom-properties+xml"
 CUSTOM_PROPERTIES_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}"
@@ -111,7 +121,7 @@ def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str])
     else:
         parts.append("<p>None. Every finding was within guidance or a plain answer.</p>")
     for f in findings:
-        parts.append(f"<h2>{escape(f.topic)} · {STATUS_LABELS.get(f.status, f.status)}</h2>")
+        parts.append(f"<h2>{escape(f.topic)} · {status_label(f.status, run.guidance is not None)}</h2>")
         parts.append(f"<p>{escape(f.conclusion)}</p>")
         for span in f.spans:
             source = by_span[id(span)]
@@ -277,7 +287,7 @@ def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str],
         document.add_paragraph("None. Every finding was within guidance or a plain answer.")
 
     for f in findings:
-        document.add_heading(f"{f.topic} · {STATUS_LABELS.get(f.status, f.status)}", level=2)
+        document.add_heading(f"{f.topic} · {status_label(f.status, run.guidance is not None)}", level=2)
         document.add_paragraph(f.conclusion)
         for span in f.spans:
             source = by_span[id(span)]

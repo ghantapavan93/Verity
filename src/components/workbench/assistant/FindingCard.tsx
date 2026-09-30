@@ -14,12 +14,14 @@ function excerpt(quote: string, max = 150): string {
  */
 export function FindingCard({
   finding,
+  hasGuidance,
   sectionsById,
   onJump,
   onEvidence,
   onFollowUp,
 }: {
   finding: FindingView;
+  hasGuidance: boolean;
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
   onEvidence: (trigger: HTMLElement | null) => void;
@@ -34,7 +36,7 @@ export function FindingCard({
     <article className={styles.result}>
       <header className={styles.resultHead}>
         <span className={styles.resultTopic}>{finding.topic}</span>
-        <StatusChip status={finding.status} />
+        <StatusChip status={finding.status} hasGuidance={hasGuidance} />
       </header>
       <p className={styles.resultText}>{finding.conclusion}</p>
       {evidence.length > 0 && (

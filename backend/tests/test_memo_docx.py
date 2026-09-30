@@ -8,6 +8,7 @@ import zipfile
 
 from fastapi.testclient import TestClient
 
+from app.memo.service import status_label
 from tests.support import upload_and_ask
 
 
@@ -33,3 +34,9 @@ def test_the_docx_memo_carries_its_record_and_its_links(client: TestClient) -> N
     html = client.get(memo["htmlUrl"]).text
     assert "href='#src-1'" in html and "id='src-1'" in html and f"run={result['run_id']}" in html
     assert "Required —" not in html and "Observed —" not in html
+
+
+def test_a_pass_is_within_guidance_only_when_the_run_had_guidance() -> None:
+    assert status_label("pass", True) == "Within guidance"
+    assert status_label("pass", False) == "Answered"
+    assert status_label("needs_review", False) == "Needs review" and status_label("missing", True) == "Not found"

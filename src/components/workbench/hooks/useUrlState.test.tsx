@@ -24,6 +24,7 @@ const running: RunView = {
   error: null,
   reason: null,
   reused: false,
+  hasGuidance: false,
 };
 const finished: RunView = { ...running, stage: "complete" };
 

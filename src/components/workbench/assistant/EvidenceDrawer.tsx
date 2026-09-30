@@ -121,7 +121,7 @@ function EvidenceBody({
           <div>
             <dt>Result</dt>
             <dd>
-              <StatusChip status={finding.status} />
+              <StatusChip status={finding.status} hasGuidance={run?.hasGuidance ?? false} />
             </dd>
           </div>
           {finding.review && (

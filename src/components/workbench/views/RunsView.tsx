@@ -17,7 +17,7 @@ import { formatClock, formatDelta, formatLatency, formatWhen, plural, shortHash 
 import {
   OUTCOME_LABELS,
   REASON_TITLES,
-  STATUS_LABELS,
+  statusLabel,
   STATUS_SOURCE_LABELS,
   type BatchSummary,
   type BatchValue,
@@ -390,7 +390,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
           <article key={f.id} className={styles.finding}>
             <div className={styles.findingHead}>
               <span>{f.topic}</span>
-              <span className={`${wb.statusChip} ${statusTone(f.status)}`}>{STATUS_LABELS[f.status]}</span>
+              <span className={`${wb.statusChip} ${statusTone(f.status)}`}>{statusLabel(f.status, run.hasGuidance)}</span>
             </div>
             <p className={styles.findingText}>{f.conclusion}</p>
             <p className={styles.quiet}>{STATUS_SOURCE_LABELS[f.statusSource] ?? f.statusSource}</p>

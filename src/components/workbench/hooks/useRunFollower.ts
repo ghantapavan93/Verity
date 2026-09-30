@@ -39,6 +39,7 @@ export function useRunFollower() {
       error: null,
       reason: null,
       reused: false,
+      hasGuidance: guidanceId !== null,
     });
     try {
       const created = await createRun({ documentId, guidanceId, question });

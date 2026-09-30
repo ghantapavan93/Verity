@@ -133,6 +133,8 @@ class RunOut(ApiModel):
     reason: RunReasonName | None = None
     # True when POST /api/runs handed back an existing run for the same inputs instead of starting one.
     reused: bool = False
+    # Whether the run was given legal guidance. A pass is "within guidance" only when it was; otherwise it is a plain answer.
+    has_guidance: bool = False
 
 
 class RunSummary(ApiModel):
@@ -165,6 +167,7 @@ class FindingRecord(ApiModel):
     review: ReviewOut | None = None
     # Section labels of the verified citations, e.g. ["§5.4", "§5.3.1"].
     citations: list[str] = []
+    has_guidance: bool = False
     created_at: str
 
 
