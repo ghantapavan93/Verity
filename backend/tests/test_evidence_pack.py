@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.hashing import sha256_file
+from app.hashing import sha256_bytes, sha256_file
 from tests.support import upload_and_ask
 
 
@@ -32,7 +32,7 @@ def test_the_pack_verifies_itself_and_a_tampered_pack_fails(client: TestClient, 
 
     record = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     assert record["run_id"] == result["run_id"] and record["document"]["sha256"] == result["document"]["sha256"]
-    assert record["verifier"]["ladder"] == ["exact", "normalized", "casefold", "alnum"]
+    assert record["verifier"]["ladder"] == ["exact", "normalized", "casefold", "typed"] and record["verifier"]["version"] == "v5"
 
     verified = run_verify(folder)
     assert verified.returncode == 0, verified.stdout + verified.stderr
@@ -131,3 +131,43 @@ def test_the_pack_carries_the_rebuilt_model_input_and_verify_py_checks_it(client
     (tmp_path / "model_input" / "user.txt").write_text(user.replace("QUESTION:", "QUESTION (edited):"), encoding="utf-8")
     output = subprocess.run([sys.executable, str(tmp_path / "verify.py")], capture_output=True, text=True, cwd=tmp_path, check=False)
     assert output.returncode == 1 and "FAIL model input" in output.stdout
+
+
+def test_verify_py_rechecks_a_typed_span_and_refuses_a_changed_value(tmp_path: Path) -> None:
+    """A typed span (verifier v5) is re-checked by the pack's own verifier without the workbench: same letters at word
+    boundaries, same values; a changed value fails."""
+    from app.application.evidence_pack import QUOTE_MAP, VERIFY_PY
+
+    section_text = "The fee of “$1,500” per user is payable within thirty (30) days."
+    sections = [{"id": "s1", "ordinal": 0, "number": "4.1", "heading": "Fees", "text": section_text}]
+    sections_json = json.dumps(sections, ensure_ascii=False, indent=1)
+    start, end = section_text.index("fee of"), section_text.index("per user") + len("per user")
+
+    def pack(quote: str) -> Path:
+        folder = tmp_path / quote.replace("$", "d").replace(" ", "_").replace(".", "p")
+        folder.mkdir()
+        (folder / "sections.json").write_text(sections_json, encoding="utf-8", newline="\n")
+        (folder / "run.json").write_text(
+            json.dumps(
+                {
+                    "document": {"file": None, "sha256": "x"},
+                    "sections_sha256": sha256_bytes(sections_json.encode("utf-8")),
+                    "prompt_version": "answer-v2",
+                    "prompt_hash": "",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (folder / "findings.json").write_text(
+            json.dumps(
+                [{"ordinal": 0, "spans": [{"ordinal": 0, "section_id": "s1", "start": start, "end": end, "quote": quote, "verified": True, "method": "typed"}]}]
+            ),
+            encoding="utf-8",
+        )
+        (folder / "verify.py").write_text(VERIFY_PY.replace("__QUOTE_MAP__", json.dumps(json.dumps(QUOTE_MAP, ensure_ascii=True))), encoding="utf-8")
+        return folder
+
+    same_value = subprocess.run([sys.executable, "verify.py"], cwd=pack("fee of $1500 per user"), capture_output=True, text=True, check=False)
+    assert same_value.returncode == 0 and "PASS finding 1 span 1" in same_value.stdout, same_value.stdout
+    changed_value = subprocess.run([sys.executable, "verify.py"], cwd=pack("fee of $15.00 per user"), capture_output=True, text=True, check=False)
+    assert changed_value.returncode == 1 and "FAIL finding 1 span 1" in changed_value.stdout, changed_value.stdout

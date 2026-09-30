@@ -112,8 +112,10 @@ class SpanOut(ApiModel):
     end: int
     quote: str
     verified: bool
-    # How the quote was located: exact | normalized | casefold | relocated:<method> | none.
+    # How the quote was located: exact | normalized | casefold | typed (verifier v5; alnum before it) | relocated:<method> | none.
     method: str = "none"
+    # How many places the quote occurs in the section under the tier that matched; null on records made before verifier v5.
+    match_count: int | None = None
     # The label the model cited (sec_N); kept so a misattribution stays visible on the run record.
     cited_section_label: str = ""
 

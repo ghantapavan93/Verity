@@ -50,13 +50,14 @@ BODY = "Customer may terminate this Agreement or any Order Form for convenience 
 
 def test_quotation_marks_and_punctuation_do_not_block_a_match() -> None:
     found = locate("GDPR means European Union Regulation 2016/679 as implemented by local law", DEFINITION)
-    assert found is not None and found.method == "alnum"
+    assert found is not None and found.method == "typed"
     assert DEFINITION[found.start : found.end] == "GDPR” means European Union Regulation 2016/679 as implemented by local law"
 
 
 def test_an_inserted_space_is_forgiven_but_a_changed_digit_or_word_is_not() -> None:
-    spaced = locate("upon fifteen (1 5) days written notice", BODY)
-    assert spaced is not None and spaced.method == "alnum"
+    assert locate("upon fifteen (1 5) days written notice", BODY) is None, "a number split in two is two numbers (verifier v5)"
+    spaced = locate("upon fifteen (15) days written notice", BODY)
+    assert spaced is not None and spaced.method == "typed"
     assert BODY[spaced.start : spaced.end] == "upon fifteen (15) days’ written notice"
     assert locate("upon fifteen (16) days’ written notice", BODY) is None
     assert locate("upon sixteen (15) days’ written notice", BODY) is None
@@ -85,7 +86,8 @@ def test_a_heading_copied_without_its_number_is_stripped_too() -> None:
     found = locate(quote, text, label="12.11 No Third-Party Beneficiary")
     assert found is not None and found.method == "unprefixed:exact"
     assert text[found.start : found.end] == text
-    assert locate("12.11 There are no third-party beneficiaries of this Agreement.", text, label="12.11 No Third-Party Beneficiary") is not None
+    # Verifier v4: the number alone is not a label to strip; a quote that starts with digits keeps them.
+    assert locate("12.11 There are no third-party beneficiaries of this Agreement.", text, label="12.11 No Third-Party Beneficiary") is None
     assert locate(quote, text, label="12.11 Assignment") is None, "a different heading is not a label to strip"
 
 
@@ -120,3 +122,32 @@ def test_a_verbatim_quote_with_a_boundary_is_still_found_even_when_it_drops_cont
     # "less than 30 days" is a verbatim quote of "not less than 30 days"; the highlight shows the "not".
     found = locate("less than 30 days", "Notice of not less than 30 days is required.")
     assert found is not None and found.method == "exact"
+
+
+def test_a_number_alone_is_never_stripped_so_a_changed_number_cannot_hide_behind_a_label() -> None:
+    """Found by tracing (docs/SYSTEM_TRUTH.md, 2026-09-29): under verifier v2 and v3 the number of §1.5 was cut
+    from "15 days' written notice" and the remainder verified against "forty-five (45) days' written notice"."""
+    text = "Either party may terminate on forty-five (45) days' written notice to the other."
+    assert locate("15 days' written notice", text, label="1.5 Termination") is None
+    assert locate("15 days' written notice", text, label="15 Termination") is None
+    assert locate("1.5 days' written notice", text, label="1.5 Termination") is None
+    assert locate("1.5", text, label="1.5 Termination") is None
+    # The label written as the model saw it, number and heading, is still forgiven.
+    found = locate("1.5 Termination Either party may terminate on forty-five (45) days' written notice", text, label="1.5 Termination")
+    assert found is not None and found.method == "unprefixed:exact"
+    found = locate("1.5. Termination. Either party may terminate", text, label="1.5 Termination")
+    assert found is not None and found.method == "unprefixed:exact"
+    # A number written differently from the label is not the label: "15 Termination" is not §1.5.
+    assert locate("15 Termination Either party may terminate", text, label="1.5 Termination") is None
+
+
+def test_a_decimal_point_is_a_digit_to_the_alnum_tier() -> None:
+    """Found by tracing (docs/SYSTEM_TRUTH.md, 2026-09-29): the letters-and-digits tier read "$1,500" and "$15.00"
+    as the same six characters, and "15%" as "1.5%"."""
+    assert locate("fee of $15.00 per user", "The fee of “$1,500” per user is payable annually.") is None
+    assert locate("interest at 15% per annum", "Interest accrues at “1.5%” per annum.") is None
+    assert locate("a cap of 2.0 times the fees", "A cap of “20” times the fees applies.") is None
+    found = locate("fee of $1500 per user", "The fee of “$1,500” per user is payable annually.")
+    assert found is not None and found.method == "typed", "a thousands separator is not something a reader notices"
+    found = locate("interest accrues at 1.5% per annum", "Interest accrues at “1.5%” per annum.")
+    assert found is not None and found.method == "typed"

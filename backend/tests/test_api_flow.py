@@ -25,7 +25,7 @@ def test_full_path_produces_a_verified_finding_and_a_memo(client: TestClient) ->
     assert "sec_" not in finding["conclusion"] and finding["conclusion"].endswith("at least 30 days. §2")
     assert finding["evidenceKind"] == "passage"
     span = finding["spans"][0]
-    assert span["verified"] is True
+    assert span["verified"] is True and span["matchCount"] == 1, "the quote occurs once; the location is unambiguous"
     section = next(s for s in result["document"]["sections"] if s["id"] == span["sectionId"])
     assert section["heading"] == "Termination for Convenience"
     assert section["text"][span["start"] : span["end"]] == span["quote"]

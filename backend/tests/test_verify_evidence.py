@@ -44,3 +44,18 @@ def test_a_quote_found_nowhere_is_not_located_and_keeps_the_cited_section() -> N
     assert section is TERM
     assert located is None
     assert method == "none"
+
+
+def test_a_quote_beyond_the_characters_the_model_was_shown_is_not_evidence_the_model_had() -> None:
+    """Verifier v5: the search is bounded to the prompt window. Before it, no recorded span lay beyond the window (0 of 976),
+    so this is the rule guarded, not a failure repaired; mutant M22 breaks it."""
+    from app.analysis.service import MAX_SECTION_CHARS_IN_PROMPT
+
+    tail = "The Provider may terminate on ninety (90) days' notice."
+    long_section = Section(id="long", ordinal=0, number="9", heading="Termination", text=("Filler sentence. " * 400)[:MAX_SECTION_CHARS_IN_PROMPT] + " " + tail)
+    assert len(long_section.text) > MAX_SECTION_CHARS_IN_PROMPT and tail in long_section.text
+    by_label = {"sec_0": long_section}
+    _section, located, method = verify_evidence(tail, "sec_0", by_label, [long_section])
+    assert located is None and method == "none", "the model never saw those characters; the quote is beyond the window"
+    _section, located, method = verify_evidence(tail, "sec_0", by_label, [long_section], window=len(long_section.text))
+    assert located is not None and method == "exact", "the same quote is found once the window covers it"

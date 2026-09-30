@@ -47,6 +47,7 @@ def finding_out(finding: Finding) -> FindingOut:
                 quote=s.quote,
                 verified=s.verified,
                 method=s.method,
+                match_count=s.match_count,
                 cited_section_label=s.cited_section_label,
             )
             for s in finding.spans

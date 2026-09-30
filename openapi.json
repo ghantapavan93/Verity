@@ -2772,6 +2772,17 @@
             "title": "End",
             "type": "integer"
           },
+          "matchCount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchcount"
+          },
           "method": {
             "default": "none",
             "title": "Method",

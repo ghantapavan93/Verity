@@ -1490,6 +1490,8 @@ export interface components {
             citedSectionLabel: string;
             /** End */
             end: number;
+            /** Matchcount */
+            matchCount?: number | null;
             /**
              * Method
              * @default none

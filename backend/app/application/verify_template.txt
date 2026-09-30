@@ -6,8 +6,8 @@ Checks, in order:
   2. the canonical sections file's sha256 is the one the run recorded;
   3. every span the workbench marked verified is found again: the characters at the stored
      offsets of the stored section text match the quoted passage under the same ladder the
-     workbench used (exact, normalized, casefold, letters-and-digits; label stripping when the
-     workbench recorded it);
+     workbench used (exact, normalized, casefold, typed tokens; letters-and-digits on records made
+     before verifier v5; label stripping when the workbench recorded it);
   4. spans the workbench marked unverified are listed, with nothing to check: the workbench
      withheld them;
   5. when the pack carries the rebuilt model input, its hash is the one the run recorded when it
@@ -19,9 +19,11 @@ This verifier establishes integrity between the original input, the canonical re
 given to the model and the stored spans. It does not, and cannot, say the conclusions are right.
 Exit code 0 when every check passes, 1 otherwise.
 """
+import decimal
 import hashlib
 import json
 import pathlib
+import re
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -53,6 +55,53 @@ def alnum(text):
     return "".join(ch.casefold() for ch in text if ch.isalnum())
 
 
+TOKEN = re.compile(
+    r"(?P<section>\d+(?:\.\d+){2,}(?:\([a-z0-9]+\))*|\d+(?:\.\d+)?(?:\([a-z0-9]+\))+)"
+    r"|(?P<currency>(?:[$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)\s?\d[\d,]*(?:\.\d+)?)"
+    r"|(?P<percent>\d[\d,]*(?:\.\d+)?\s?(?:%|percent\b|per\s+cent\b))"
+    r"|(?P<number>\d[\d,]*(?:\.\d+)?)"
+    r"|(?P<word>[^\W\d_]+)"
+    r"|(?P<punct>[^\w\s]|_)",
+    re.IGNORECASE,
+)
+
+
+def number(text):
+    try:
+        return format(decimal.Decimal(text.replace(",", "").replace(" ", "")).normalize(), "f")
+    except decimal.InvalidOperation:
+        return text
+
+
+def typed(text):
+    """The workbench's typed tokens (verify/tokens.py) in standard-library form: rigid tokens and runs of joined words."""
+    items = []
+    run = []
+    for match in TOKEN.finditer(text):
+        kind = match.lastgroup
+        surface = match.group(0)
+        if kind == "punct":
+            continue
+        if kind == "word":
+            run.append(surface.casefold())
+            continue
+        if run:
+            items.append(("word", "".join(run)))
+            run = []
+        if kind == "number":
+            items.append(("number", number(surface)))
+        elif kind == "currency":
+            symbol = re.match(r"(?:[$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)", surface, re.IGNORECASE).group(0)
+            items.append(("currency", symbol.upper() + number(surface[len(symbol):])))
+        elif kind == "percent":
+            items.append(("percent", number(re.match(r"[\d,]*(?:\.\d+)?", surface).group(0)) + "%"))
+        else:
+            items.append(("section", surface.lower()))
+    if run:
+        items.append(("word", "".join(run)))
+    return items
+
+
 
 def same(found, quote, method):
     base = method.split(":")[-1]
@@ -66,6 +115,8 @@ def same(found, quote, method):
         return normalize(found).casefold() == normalize(quote).strip().casefold()
     if base == "alnum":
         return alnum(found) == alnum(quote)
+    if base == "typed":
+        return typed(found) == typed(quote)
     return False
 
 

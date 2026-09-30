@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from ..analysis.service import SectionForPrompt, analyze, build_user_message, load_prompt
+from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, SectionForPrompt, analyze, build_user_message, load_prompt
 from ..config import settings
 from ..hashing import sha256_text
 from ..models import RUN_STAGES, TERMINAL_STAGES, EvidenceSpan, Finding, Run, RunReasonName, RunStage, RunStageName, Section, as_utc, utcnow
@@ -101,16 +101,20 @@ def _label(section: Section) -> str:
     return f"{section.number} {section.heading}".strip()
 
 
-def verify_evidence(quote: str, cited_label: str, by_label: Mapping[str, Section], chosen: Sequence[Section]) -> tuple[Section | None, Located | None, str]:
+def verify_evidence(
+    quote: str, cited_label: str, by_label: Mapping[str, Section], chosen: Sequence[Section], window: int = MAX_SECTION_CHARS_IN_PROMPT
+) -> tuple[Section | None, Located | None, str]:
     """Where a proposed quote is, if anywhere: first in the section the model cited, then in the other
-    candidates (a real quote attributed to the wrong section is kept and marked relocated). The one
-    implementation; replay verification (application.reverify_run) uses it too."""
+    candidates (a real quote attributed to the wrong section is kept and marked relocated). The search is
+    bounded to the first ``window`` characters of each section, which is what the prompt carried: a quote from
+    a tail the model never saw is not evidence the model had (verifier v5; over the record before it, no verified
+    span lay beyond the window). The one implementation; replay verification (application.reverify_run) uses it too."""
     section = by_label.get(cited_label)
-    located = locate(quote, section.text, _label(section)) if section is not None else None
+    located = locate(quote, section.text[:window], _label(section)) if section is not None else None
     if located is not None:
         return section, located, located.method
     for candidate in chosen:
-        found = locate(quote, candidate.text, _label(candidate))
+        found = locate(quote, candidate.text[:window], _label(candidate))
         if found is not None:
             return candidate, found, f"relocated:{found.method}"
     return section, None, "none"
@@ -226,6 +230,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                         quote=evidence.quote,
                         verified=verified,
                         method=method,
+                        match_count=located.count if located else None,
                     )
                 )
             decision = decide(item.status_hint, item.observed, item.required, guidance_text is not None, all_verified)

@@ -84,6 +84,9 @@ function EvidenceBody({
               ) : (
                 <div className={styles.drawerRefStatic}>{section ? citationLabel(section) : "Section not identified"}</div>
               )}
+              {span.verified && span.matchCount != null && span.matchCount > 1 && (
+                <div className={styles.drawerRefStatic}>This passage occurs {span.matchCount} times in the section; the first is highlighted.</div>
+              )}
               <blockquote className={span.verified ? styles.drawerQuote : `${styles.drawerQuote} ${styles.quoteWithheld}`}>“{span.quote}”</blockquote>
               <span className={styles.verifiedTag}>
                 {!span.verified

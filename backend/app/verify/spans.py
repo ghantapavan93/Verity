@@ -7,11 +7,16 @@ that matched is stored on the span and shown in the interface:
 1. exact       the quote is a substring of the text;
 2. normalized  typographic quotes and dashes unified and whitespace runs collapsed, on both sides;
 3. casefold    the same, case-insensitively;
-4. alnum       letters and digits only, casefolded: punctuation, quotation marks and spacing are
-               ignored, but every letter and every digit must match, in order.
+4. typed       (verifier v5, in place of the letters-and-digits tier) the quote and the text as typed tokens:
+               a number is a value ("1,500" is "1500", "15.00" is not), an amount keeps its currency, a
+               percentage its sign, a section identifier its dots; a run of letters is a word compared at word
+               boundaries, so a space the reader lost or added between words is forgiven while a word may never
+               begin inside another; punctuation and quotation marks carry nothing (verify/tokens.py).
 
-A quote that begins with the section's own label ("13.1 Defining Variables Variables have …") is
-retried without it, and the tier is reported as ``unprefixed:<tier>``.
+A quote that begins with the section's own label ("13.1 Defining Variables Variables have …") or
+its heading alone is retried without it, and the tier is reported as ``unprefixed:<tier>``. The
+number is recognised only as written and followed by its heading, never on its own (verifier v4):
+before, "15 days' notice" under §1.5 lost its digits and verified against "45 days' notice".
 
 There is no similarity-ratio tier. A census of every withheld quote (DECISIONS.md, 2026-09-28)
 found a 0.994 ratio hiding a changed digit, and in a contract the digit is the point. The alnum
@@ -27,7 +32,15 @@ Offsets always index the ORIGINAL text, so the interface highlights the characte
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+
+from .tokens import locate_tokens
+
+VERIFIER_VERSION = "v5"
+
+# A section number as the reader writes it: "12", "8.1.2". Anything else in front of a label is heading text.
+_SECTION_NUMBER = re.compile(r"\d+(?:\.\d+)*")
 
 _QUOTE_MAP = str.maketrans(
     {
@@ -55,6 +68,9 @@ class Located:
     start: int
     end: int
     method: str
+    # How many places in the text the quote occurs under the tier that matched; 1 means the location is unambiguous,
+    # more means the first bounded occurrence is shown and the record says so (verifier v5).
+    count: int = 1
 
 
 def normalize_with_map(text: str) -> tuple[str, list[int]]:
@@ -90,14 +106,20 @@ def fold_with_map(text: str, index_map: list[int]) -> tuple[str, list[int]]:
 
 
 def alnum_with_map(text: str) -> tuple[str, list[int]]:
-    """Letters and digits only, casefolded, each mapped to its index in the original."""
+    """Letters and digits only, casefolded, each mapped to its index in the original. A full stop between
+    two digits is a decimal point and is kept (verifier v4): "$15.00" is not "$1,500", "1.5%" is not "15%";
+    a thousands separator is dropped, because "1500" and "1,500" are the same number to a reader."""
     out: list[str] = []
     index_map: list[int] = []
+    last = len(text) - 1
     for i, ch in enumerate(text):
         if ch.isalnum():
             folded = ch.casefold()
             out.append(folded)
             index_map.extend([i] * len(folded))
+        elif ch == "." and 0 < i < last and text[i - 1].isdigit() and text[i + 1].isdigit():
+            out.append(ch)
+            index_map.append(i)
     return "".join(out), index_map
 
 
@@ -117,8 +139,11 @@ def bounded(text: str, start: int, end: int) -> bool:
     return not (end < len(text) and text[end - 1].isalnum() and text[end].isalnum())
 
 
-def _find_bounded(haystack: str, needle: str, index_map: list[int] | None, text: str) -> tuple[int, int] | None:
-    """The first occurrence of ``needle`` in ``haystack`` whose span, mapped back onto ``text``, is bounded."""
+def _find_bounded(haystack: str, needle: str, index_map: list[int] | None, text: str) -> tuple[int, int, int] | None:
+    """The first occurrence of ``needle`` in ``haystack`` whose span, mapped back onto ``text``, is bounded, with the
+    number of bounded occurrences."""
+    first: tuple[int, int] | None = None
+    count = 0
     at = haystack.find(needle)
     while at >= 0:
         if index_map is None:
@@ -126,15 +151,17 @@ def _find_bounded(haystack: str, needle: str, index_map: list[int] | None, text:
         else:
             start, end = index_map[at], index_map[at + len(needle) - 1] + 1
         if bounded(text, start, end):
-            return start, end
+            count += 1
+            if first is None:
+                first = (start, end)
         at = haystack.find(needle, at + 1)
-    return None
+    return None if first is None else (first[0], first[1], count)
 
 
 def _ladder(quote: str, text: str) -> Located | None:
     found = _find_bounded(text, quote, None, text)
     if found is not None:
-        return Located(found[0], found[1], "exact")
+        return Located(found[0], found[1], "exact", found[2])
 
     norm_text, norm_map = normalize_with_map(text)
     norm_quote = _normalize_quote(quote)
@@ -142,40 +169,45 @@ def _ladder(quote: str, text: str) -> Located | None:
         return None
     found = _find_bounded(norm_text, norm_quote, norm_map, text)
     if found is not None:
-        return Located(found[0], found[1], "normalized")
+        return Located(found[0], found[1], "normalized", found[2])
 
     folded_text, folded_map = fold_with_map(norm_text, norm_map)
     found = _find_bounded(folded_text, norm_quote.casefold(), folded_map, text)
     if found is not None:
-        return Located(found[0], found[1], "casefold")
+        return Located(found[0], found[1], "casefold", found[2])
 
-    alnum_text, alnum_map = alnum_with_map(text)
-    alnum_quote, _ = alnum_with_map(quote)
-    if not alnum_quote:
-        return None
-    found = _find_bounded(alnum_text, alnum_quote, alnum_map, text)
-    if found is not None:
-        return Located(found[0], found[1], "alnum")
+    typed = locate_tokens(quote, text)
+    if typed is not None and bounded(text, typed.start, typed.end):
+        return Located(typed.start, typed.end, "typed", typed.count)
     return None
 
 
 def strip_label(quote: str, label: str) -> str | None:
     """The quote without the section label the model copied in front of it, or None when it does not
-    start with it. The label may have been copied whole ("12.11 No Third-Party Beneficiary"), as the
-    heading alone, or as the number alone; the longest match is removed."""
-    quote_alnum, quote_map = alnum_with_map(quote)
-    number, _, heading = label.partition(" ")
-    candidates = [label, heading, number] if heading else [label]
-    for candidate in candidates:
-        candidate_alnum, _ = alnum_with_map(candidate)
-        if len(candidate_alnum) < 2 or not quote_alnum.startswith(candidate_alnum) or len(quote_alnum) == len(candidate_alnum):
-            continue
-        # The first character of the quote that belongs to the text proper.
-        cut = quote_map[len(candidate_alnum)]
-        remainder = quote[cut:].lstrip()
-        if remainder:
-            return remainder
-    return None
+    start with it. The label may have been copied whole ("12.11 No Third-Party Beneficiary") or as the
+    heading alone; the number is recognised only as written, with its dots, followed by a separator,
+    and never on its own (verifier v4): "15 days" does not carry the label of §1.5, and a number that
+    is not a label is a number the ladder must find."""
+    first, _, rest = label.partition(" ")
+    number, heading = (first, rest) if _SECTION_NUMBER.fullmatch(first) else ("", label)
+    norm_quote, norm_map = normalize_with_map(quote)
+    start = 0
+    if number:
+        written = re.match(rf"{re.escape(number)}[.):\]]?(?:\s|$)", norm_quote)
+        if written is not None:
+            if written.end() >= len(norm_quote):
+                return None  # the quote is the number and nothing else
+            start = norm_map[written.end()]
+    heading_alnum, _ = alnum_with_map(heading)
+    if len(heading_alnum) < 2:
+        return None
+    body = quote[start:]
+    body_alnum, body_map = alnum_with_map(body)
+    if not body_alnum.startswith(heading_alnum) or len(body_alnum) == len(heading_alnum):
+        return None
+    # The first character of the quote that belongs to the text proper.
+    remainder = body[body_map[len(heading_alnum)] :].lstrip()
+    return remainder or None
 
 
 def locate(quote: str, text: str, label: str | None = None) -> Located | None:
@@ -188,5 +220,5 @@ def locate(quote: str, text: str, label: str | None = None) -> Located | None:
         if stripped is not None:
             found = _ladder(stripped, text)
             if found is not None:
-                found = Located(found.start, found.end, f"unprefixed:{found.method}")
+                found = Located(found.start, found.end, f"unprefixed:{found.method}", found.count)
     return found

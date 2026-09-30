@@ -89,7 +89,7 @@ def test_whatever_is_located_has_the_quote_s_letters_and_digits(text: str, quote
         return
     assert 0 <= found.start < found.end <= len(text)
     assert letters_and_digits(text[found.start : found.end]) == letters_and_digits(quote)
-    assert found.method in {"exact", "normalized", "casefold", "alnum"}
+    assert found.method in {"exact", "normalized", "casefold", "typed"}
 
 
 @settings(max_examples=300 * FUZZ_SCALE, deadline=None)

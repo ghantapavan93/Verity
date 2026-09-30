@@ -17,6 +17,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT
 from ..config import settings
 from ..errors import NotFound
 from ..hashing import sha256_bytes
@@ -82,6 +83,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
                     "quote": s.quote,
                     "verified": s.verified,
                     "method": s.method,
+                    "match_count": s.match_count,
                 }
                 for s in f.spans
             ],
@@ -135,7 +137,13 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         "created_at": iso(run.created_at),
         "finished_at": iso(run.finished_at),
         "packed_at": iso(utcnow()),
-        "verifier": {"ladder": ["exact", "normalized", "casefold", "alnum"], "label_stripping": True, "boundary": "no edge splits a run of letters and digits"},
+        "verifier": {
+            "version": verifier.VERIFIER_VERSION,
+            "ladder": ["exact", "normalized", "casefold", "typed"],
+            "label_stripping": True,
+            "boundary": "no edge splits a run of letters and digits; a typed match is whole tokens",
+            "window_chars": MAX_SECTION_CHARS_IN_PROMPT,
+        },
         "workbench_link": f"{settings.app_url}/?document={document.id}&run={run.id}",
     }
     verify_py = VERIFY_PY.replace("__QUOTE_MAP__", json.dumps(json.dumps(QUOTE_MAP, ensure_ascii=True)))

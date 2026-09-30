@@ -208,6 +208,8 @@ class EvidenceSpan(Base):
     quote: Mapped[str] = mapped_column(Text)
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
     method: Mapped[str] = mapped_column(String(32), default="none")
+    # How many places the quote occurs in the section under the tier that matched; 1 is unambiguous; NULL before v5.
+    match_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     finding: Mapped[Finding] = relationship(back_populates="spans")
     section: Mapped[Section | None] = relationship()
