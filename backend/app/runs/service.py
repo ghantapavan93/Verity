@@ -23,8 +23,10 @@ from ..retrieval.hybrid import HybridIndex
 from ..retrieval.lexical import LexicalIndex
 from ..verify.spans import Located, locate
 from .events import StageEvent, bus
+from .owner import this_process
 from .prose import label_handles
 from .status import check_references, decide
+from .transitions import assert_transition
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +51,7 @@ def _set_stage(
         raise ValueError(f"unknown run stage {stage!r}")
     now = utcnow()
     previous = session.query(RunStage).filter_by(run_id=run.id).order_by(RunStage.id.desc()).first()
+    assert_transition(previous.stage if previous is not None else None, stage)
     if previous is not None and previous.completed_at is None:
         # Closed and committed before the run can turn terminal: once it has, the database refuses
         # every update to the run's rows, including this one.
@@ -59,7 +62,7 @@ def _set_stage(
             previous.error_code = error_code
         session.commit()
     run.stage = stage
-    row = RunStage(run_id=run.id, stage=stage, at=now, detail=detail, status="running", input_hash=input_hash)
+    row = RunStage(run_id=run.id, stage=stage, at=now, detail=detail, status="running", input_hash=input_hash, owner=this_process().render())
     if stage in TERMINAL_STAGES:
         row.completed_at = now
         row.duration_ms = 0.0

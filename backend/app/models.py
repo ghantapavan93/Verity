@@ -164,6 +164,8 @@ class RunStage(Base):
     output_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # The run reason when the stage ended the run without a result.
     error_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # The process that opened the stage (runs.owner: host, pid, start time), so a run whose process died can be recovered at once.
+    owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     run: Mapped[Run] = relationship(back_populates="stages")
 

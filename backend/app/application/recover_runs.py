@@ -5,8 +5,10 @@ thing a stage can legitimately do (the model call, bounded by its timeout) plus 
 run is recorded as failed with the reason, so the same question can be asked again (a failed run
 does not block its fingerprint) and the record says what happened. The rule is by staleness,
 not by process: the API, the golden runner and a batch runner all write runs into the same
-database, and a restart of one must not fail the others' live work. It runs at startup and
-whenever runs are read.
+database, and a restart of one must not fail the others' live work. One exception, exact rather
+than assumed: a stage row names the process that opened it, and a run whose process provably no
+longer exists on this host is recovered at once (runs.owner). It runs at startup and whenever
+runs are read.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..models import Run, RunStage, as_utc, utcnow
 from ..runs.events import TERMINAL, StageEvent, bus
+from ..runs.owner import owner_is_gone
 
 log = logging.getLogger(__name__)
 
@@ -41,11 +44,14 @@ def recover_interrupted_runs(session: Session, stale_after_s: float | None = Non
     for run in session.query(Run).filter(Run.stage.notin_(sorted(TERMINAL))).all():
         latest = session.query(RunStage).filter_by(run_id=run.id).order_by(RunStage.id.desc()).first()
         started = as_utc(latest.at) if latest is not None else as_utc(run.created_at)
-        if now - started < limit:
+        gone = latest is not None and owner_is_gone(latest.owner)
+        if not gone and now - started < limit:
             continue
         minutes = int((now - started).total_seconds() // 60)
         message = (
-            f"Interrupted: no progress for {minutes} min after the {run.stage} stage started; the process running it "
+            f"Interrupted: the process running the {run.stage} stage ({latest.owner}) no longer exists. Ask the question again."
+            if gone and latest is not None
+            else f"Interrupted: no progress for {minutes} min after the {run.stage} stage started; the process running it "
             "stopped or restarted. Ask the question again."
         )
         if latest is not None and latest.completed_at is None:

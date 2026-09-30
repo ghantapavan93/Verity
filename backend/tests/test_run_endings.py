@@ -113,3 +113,61 @@ def test_a_worker_whose_run_was_ended_by_recovery_leaves_the_recovery_record_and
     assert run["stage"] == "failed" and run["reason"] == "internal_error" and run["error"].startswith("Interrupted")
     stages = [s["stage"] for s in client.get(f"/api/runs/{result['run_id']}/detail").json()["stages"]]
     assert stages.count("failed") == 1 and stages[-1] == "failed", stages
+
+
+def test_a_run_whose_process_is_gone_is_recovered_at_once_and_a_live_one_waits_for_staleness(client: TestClient) -> None:
+    """The stage row names its process; a dead process on this host is proof, a live one or another host is not."""
+    from app.models import RunStage
+    from app.runs.owner import ProcessIdentity, this_process
+
+    dead = ProcessIdentity(this_process().host, 4_000_000, "").render()  # no such pid
+    run_id = _run_in_flight(client, "Is there an arbitration clause?")
+    with SessionLocal() as session:
+        first = session.get(Run, run_id)
+        assert first is not None
+        other = Run(
+            document_id=first.document_id,
+            question="Is there a most favoured nation clause?",
+            stage="checking",
+            provider="fake",
+            model="fake-1",
+            prompt_version="answer-v2",
+            prompt_hash=load_prompt().sha256,
+            document_sha256=first.document_sha256,
+            fingerprint=compute_fingerprint(first.document_id, None, "Is there a most favoured nation clause?", load_prompt().sha256, run_options()),
+        )
+        session.add(other)
+        session.commit()
+        other_id = other.id
+        session.add(RunStage(run_id=run_id, stage="checking", detail="against the question", status="running", owner=dead))
+        session.add(RunStage(run_id=other_id, stage="checking", detail="against the question", status="running", owner=this_process().render()))
+        session.commit()
+        assert recover_interrupted_runs(session) == 1
+    recovered = client.get(f"/api/runs/{run_id}").json()
+    assert recovered["stage"] == "failed" and "no longer exists" in recovered["error"]
+    assert client.get(f"/api/runs/{other_id}").json()["stage"] == "checking", "a live process's run is not touched"
+
+
+def test_every_stage_row_a_worker_writes_names_its_process(client: TestClient) -> None:
+    from app.models import RunStage
+    from app.runs.owner import this_process
+
+    result = upload_and_ask(client, "What law governs this agreement?", with_guidance=False)
+    with SessionLocal() as session:
+        owners = {row.owner for row in session.query(RunStage).filter_by(run_id=result["run_id"])}
+    assert owners == {this_process().render()}
+
+
+def test_the_stage_writer_refuses_an_impossible_transition(client: TestClient) -> None:
+    """The transition table is checked where stages are written; mutant M24 removes the check."""
+    from app.runs.service import _set_stage
+    from app.runs.transitions import IllegalTransition
+
+    result = upload_and_ask(client, "What law governs this agreement?", with_guidance=False)
+    with SessionLocal() as session:
+        run = session.get(Run, result["run_id"])
+        assert run is not None and run.stage == "complete"
+        with pytest.raises(IllegalTransition, match="finished"):
+            _set_stage(session, run, "checking")
+        session.rollback()
+    assert client.get(f"/api/runs/{result['run_id']}").json()["stage"] == "complete"
