@@ -22,7 +22,9 @@ from ..errors import NotFound
 from ..hashing import sha256_bytes
 from ..models import Run, iso, utcnow
 from ..verify import spans as verifier
+from .create_memo import review_head
 from .ingest_document import original_path
+from .reconstruct_input import reconstruct_input
 
 QUOTE_MAP = {chr(k): v for k, v in verifier._QUOTE_MAP.items()}  # the one normalisation table, embedded in verify.py
 
@@ -36,6 +38,9 @@ README_TXT = """Evidence pack for one Contract Workbench run.
   sections.json   the canonical sections the run read, exactly as stored (offsets index into these texts)
   findings.json   every finding the model proposed with its status and every quoted span, located or withheld
   document/       the original uploaded bytes, when they were kept
+  model_input/    the exact system and user messages the model was given, rebuilt from the record (when the
+                  record still allows it); run.json carries the hash the run recorded when it made the call
+  guidance.txt    the legal guidance the run was given, when any
   verify.py       a dependency-free check: python3 verify.py
 
 The pack asserts nothing a machine cannot re-check. Run verify.py; every PASS line is a claim you
@@ -85,6 +90,19 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
     ]
     original = original_path(document)
     original_bytes = original.read_bytes() if original.exists() else None
+    rebuilt = reconstruct_input(session, run.id)
+    model_input = {
+        "input_sha256_recorded": rebuilt.recorded_input_sha256,
+        "reconstructable": rebuilt.matches,
+        "problem": rebuilt.problem,
+        "system_file": "model_input/system.txt" if rebuilt.matches else None,
+        "user_file": "model_input/user.txt" if rebuilt.matches else None,
+        "prompt_window_chars": 5000,
+    }
+    context_slices = [
+        {"label": s.label, "section_id": s.section_id, "rank": s.rank, "start": s.start, "end": s.end, "truncated": s.truncated, "sha256": s.content_sha256}
+        for s in rebuilt.slices
+    ]
     record = {
         "run_id": run.id,
         "fingerprint": run.fingerprint,
@@ -104,6 +122,10 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         # can be checked against the record and not only against itself.
         "sections_text_sha256_recorded": next((s.output_hash for s in run.stages if s.stage == "reading"), None),
         "guidance_sha256": run.guidance_sha256,
+        "guidance_file": "guidance.txt" if run.guidance else None,
+        "review_head": review_head(run),
+        "model_input": model_input,
+        "context_slices": context_slices,
         "provider": run.provider,
         "model": run.model,
         "prompt_version": run.prompt_version,
@@ -126,4 +148,9 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         pack.writestr("verify.py", verify_py)
         if original_bytes is not None:
             pack.writestr(f"document/{document.name}", original_bytes)
+        if rebuilt.matches and rebuilt.system is not None and rebuilt.user is not None:
+            pack.writestr("model_input/system.txt", rebuilt.system)
+            pack.writestr("model_input/user.txt", rebuilt.user)
+        if run.guidance:
+            pack.writestr("guidance.txt", run.guidance.text)
     return EvidencePack(filename=f"evidence-{run.id}.zip", data=buffer.getvalue())

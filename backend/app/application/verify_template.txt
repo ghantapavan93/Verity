@@ -9,7 +9,14 @@ Checks, in order:
      workbench used (exact, normalized, casefold, letters-and-digits; label stripping when the
      workbench recorded it);
   4. spans the workbench marked unverified are listed, with nothing to check: the workbench
-     withheld them.
+     withheld them;
+  5. when the pack carries the rebuilt model input, its hash is the one the run recorded when it
+     made the call, and every context slice (the part of a section the model was shown) hashes
+     to what run.json says and appears verbatim in the user message;
+  6. a located span that lies beyond the slice the model was shown is reported: the quote exists
+     in the document, but the model never saw those characters (a NOTE, not a failure).
+This verifier establishes integrity between the original input, the canonical reading, the context
+given to the model and the stored spans. It does not, and cannot, say the conclusions are right.
 Exit code 0 when every check passes, 1 otherwise.
 """
 import hashlib
@@ -44,6 +51,7 @@ def normalize(text):
 
 def alnum(text):
     return "".join(ch.casefold() for ch in text if ch.isalnum())
+
 
 
 def same(found, quote, method):
@@ -101,7 +109,33 @@ def main():
             checked += 1
             where = f"section {section['number'] or section['heading']} characters {span['start']}-{span['end']} ({span['method']})"
             report(same(found, span["quote"], span["method"]), f"{label}: {where}")
-    print(f"\n{checked} located span(s) checked, {withheld} withheld, {failures} failure(s)")
+    slices = {s["section_id"]: s for s in run.get("context_slices", [])}
+    model_input = run.get("model_input") or {}
+    if model_input.get("user_file") and model_input.get("system_file"):
+        system = (HERE / model_input["system_file"]).read_text(encoding="utf-8")
+        user = (HERE / model_input["user_file"]).read_text(encoding="utf-8")
+        prompt_hex = hashlib.sha256(system.encode("utf-8")).hexdigest()
+        recomputed = hashlib.sha256((prompt_hex + user).encode("utf-8")).hexdigest()
+        report(recomputed == model_input.get("input_sha256_recorded"), f"model input: rebuilt messages hash to what the run recorded {str(model_input.get('input_sha256_recorded'))[:16]}...")
+        report(prompt_hex == run["prompt_hash"], f"prompt {run['prompt_version']}: system text hashes to the recorded prompt hash")
+        for s in run.get("context_slices", []):
+            section = sections.get(s["section_id"])
+            if section is None:
+                report(False, f"context slice {s['label']}: section missing from the pack")
+                continue
+            shown = section["text"][s["start"] : s["end"]]
+            ok = hashlib.sha256(shown.encode("utf-8")).hexdigest() == s["sha256"] and shown in user
+            report(ok, f"context slice {s['label']} (rank {s['rank']}): {s['end'] - s['start']} characters{' of a truncated section' if s['truncated'] else ''}, in the user message")
+    elif model_input:
+        print(f"NOTE the model input could not be rebuilt from the record: {model_input.get('problem')}")
+    beyond = 0
+    for finding in findings:
+        for span in finding["spans"]:
+            s = slices.get(span["section_id"])
+            if span["verified"] and s is not None and span["end"] > s["end"]:
+                beyond += 1
+                print(f"NOTE finding {finding['ordinal'] + 1} span {span['ordinal'] + 1} lies beyond the {s['end']} characters of its section the model was shown")
+    print(f"\n{checked} located span(s) checked, {withheld} withheld, {beyond} beyond the model-seen slice, {failures} failure(s)")
     return 1 if failures else 0
 
 

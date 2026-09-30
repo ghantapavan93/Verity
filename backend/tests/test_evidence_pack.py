@@ -37,7 +37,7 @@ def test_the_pack_verifies_itself_and_a_tampered_pack_fails(client: TestClient, 
     verified = run_verify(folder)
     assert verified.returncode == 0, verified.stdout + verified.stderr
     assert "PASS document bytes" in verified.stdout and "PASS canonical sections" in verified.stdout
-    assert "1 located span(s) checked, 0 withheld, 0 failure(s)" in verified.stdout
+    assert "1 located span(s) checked, 0 withheld, 0 beyond the model-seen slice, 0 failure(s)" in verified.stdout
 
     sections = json.loads((folder / "sections.json").read_text(encoding="utf-8"))
     for section in sections:
@@ -107,3 +107,27 @@ def test_a_pack_regenerated_from_altered_section_text_fails_on_the_hash_the_run_
     verified = run_verify(folder)
     assert verified.returncode != 0
     assert "PASS canonical sections" in verified.stdout and "FAIL sections are what the run read" in verified.stdout
+
+
+def test_the_pack_carries_the_rebuilt_model_input_and_verify_py_checks_it(client: TestClient, tmp_path: Path) -> None:
+    result = upload_and_ask(client, "How much notice does the customer need to give to terminate for convenience?")
+    data = client.get(f"/api/runs/{result['run_id']}/evidence-pack").content
+    with zipfile.ZipFile(io.BytesIO(data)) as pack:
+        names = set(pack.namelist())
+        assert {"model_input/system.txt", "model_input/user.txt", "guidance.txt"} <= names
+        record = json.loads(pack.read("run.json"))
+        user = pack.read("model_input/user.txt").decode("utf-8")
+        pack.extractall(tmp_path)
+    assert record["model_input"]["reconstructable"] is True and record["model_input"]["input_sha256_recorded"]
+    assert record["context_slices"] and all(s["sha256"] and s["end"] <= 5000 for s in record["context_slices"])
+    assert record["review_head"] and record["guidance_file"] == "guidance.txt"
+    assert user.startswith("QUESTION: How much notice") and "LEGAL GUIDANCE: We can accept" in user
+    output = subprocess.run([sys.executable, str(tmp_path / "verify.py")], capture_output=True, text=True, cwd=tmp_path, check=False)
+    assert output.returncode == 0, output.stdout + output.stderr
+    assert "PASS model input: rebuilt messages hash" in output.stdout and "PASS context slice" in output.stdout
+    assert "0 beyond the model-seen slice" in output.stdout
+
+    # A tampered user message fails the input check, and the tampering is named.
+    (tmp_path / "model_input" / "user.txt").write_text(user.replace("QUESTION:", "QUESTION (edited):"), encoding="utf-8")
+    output = subprocess.run([sys.executable, str(tmp_path / "verify.py")], capture_output=True, text=True, cwd=tmp_path, check=False)
+    assert output.returncode == 1 and "FAIL model input" in output.stdout
