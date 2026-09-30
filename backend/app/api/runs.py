@@ -36,6 +36,7 @@ def finding_out(finding: Finding) -> FindingOut:
         topic=finding.topic,
         status=finding.status,
         status_source=finding.status_source,
+        status_reason=finding.status_reason,
         evidence_kind="coverage" if finding.status == "missing" else "passage",
         review=review_out(finding.review),
         conclusion=finding.conclusion,

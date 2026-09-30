@@ -121,6 +121,12 @@ function EvidenceBody({
               <dd>{finding.required}</dd>
             </div>
           )}
+          {finding.statusReason && (
+            <div>
+              <dt>Decided by code</dt>
+              <dd>{finding.statusReason}</dd>
+            </div>
+          )}
           <div>
             <dt>Result</dt>
             <dd>

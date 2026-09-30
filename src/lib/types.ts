@@ -91,6 +91,8 @@ export const STATUS_SOURCE_LABELS: Record<string, string> = {
   model_hint: "Status taken from the model's hint; no comparable day counts",
   no_evidence: "No verified evidence, so no status was given",
   reference_check: "Lowered to needs review by code: the conclusion names a section this document does not have",
+  position_check: "Lowered to needs review by code: the day count the model stated is not in the verified quote or the guidance",
+  ambiguous_fact: "Lowered to needs review by code: the quote states a duration two ways that disagree",
 };
 
 export function citationLabel(section: SectionView): string {

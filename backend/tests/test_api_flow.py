@@ -26,6 +26,8 @@ def test_full_path_produces_a_verified_finding_and_a_memo(client: TestClient) ->
     assert finding["evidenceKind"] == "passage"
     span = finding["spans"][0]
     assert span["verified"] is True and span["matchCount"] == 1, "the quote occurs once; the location is unambiguous"
+    assert finding["statusSource"] == "computed_days"
+    assert finding["statusReason"] == "the contract provides 15 calendar days; the guidance requires at least 30 calendar days"
     section = next(s for s in result["document"]["sections"] if s["id"] == span["sectionId"])
     assert section["heading"] == "Termination for Convenience"
     assert section["text"][span["start"] : span["end"]] == span["quote"]

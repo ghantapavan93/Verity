@@ -961,6 +961,8 @@ export interface components {
              * @enum {string}
              */
             status: "pass" | "needs_review" | "missing" | "unresolved";
+            /** Statusreason */
+            statusReason?: string | null;
             /**
              * Statussource
              * @default

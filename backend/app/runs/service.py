@@ -233,7 +233,15 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                         match_count=located.count if located else None,
                     )
                 )
-            decision = decide(item.status_hint, item.observed, item.required, guidance_text is not None, all_verified)
+            decision = decide(
+                item.status_hint,
+                item.observed,
+                item.required,
+                guidance_text is not None,
+                all_verified,
+                quotes=[span.quote for span in spans if span.verified],
+                guidance=guidance_text,
+            )
             decision = check_references(decision, label_handles(item.conclusion, labels), (s.number for s in sections), by_label)
             verified_any = verified_any or all_verified
             if not all_verified:
@@ -244,6 +252,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 topic=label_handles(item.topic, labels)[:255],
                 status=decision.status,
                 status_source=decision.source,
+                status_reason=decision.reason or None,
                 conclusion=label_handles(item.conclusion, labels),
                 guidance_reference=label_handles(item.guidance_reference, labels) or None,
                 observed=label_handles(item.observed, labels) or None,

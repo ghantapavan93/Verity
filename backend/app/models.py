@@ -178,6 +178,8 @@ class Finding(Base):
     topic: Mapped[str] = mapped_column(String(255))
     status: Mapped[FindingStatusName] = mapped_column(String(32))
     status_source: Mapped[str] = mapped_column(String(32))
+    # The sentence the policy evaluation gives for a computed status; NULL when the status is the model's hint.
+    status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     conclusion: Mapped[str] = mapped_column(Text)
     guidance_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     observed: Mapped[str | None] = mapped_column(String(255), nullable=True)

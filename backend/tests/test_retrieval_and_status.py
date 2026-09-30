@@ -1,6 +1,6 @@
 from app.retrieval.hybrid import HybridIndex, fuse
 from app.retrieval.lexical import LexicalIndex, tokenize
-from app.runs.status import Decision, check_references, days_in, decide, unknown_references
+from app.runs.status import Decision, check_references, decide, unknown_references
 
 SECTIONS = [
     ("Master Services Agreement", "This Agreement is entered into between Acme and Northwind."),
@@ -24,18 +24,21 @@ def test_no_overlap_returns_nothing() -> None:
     assert LexicalIndex(SECTIONS).search("zzzz qqqq", k=3) == []
 
 
-def test_days_parsing() -> None:
-    assert days_in("fifteen (15) days' written notice") == 15
-    assert days_in("at least 30 days") == 30
-    assert days_in("thirty days") == 30
-    assert days_in("immediately") is None
-
-
-def test_status_is_computed_from_days_when_both_sides_have_them() -> None:
-    assert decide("pass", "15 days", "at least 30 days", True, True).status == "needs_review"
-    assert decide("needs_review", "45 days", "at least 30 days", True, True).status == "pass"
-    assert decide("pass", "60 days", "no more than 30 days", True, True).status == "needs_review"
-    assert decide("pass", "15 days", "at least 30 days", True, True).source == "computed_days"
+def test_status_is_computed_from_the_quote_and_the_guidance_never_from_the_model_alone() -> None:
+    quote = "Customer may terminate upon fifteen (15) days' written notice."
+    guidance = "We accept termination on 30 days' notice or more."
+    decision = decide("pass", "15 days", "at least 30 days", True, True, quotes=[quote], guidance=guidance)
+    assert (decision.status, decision.source) == ("needs_review", "computed_days")
+    assert decision.reason == "the contract provides 15 calendar days; the guidance requires at least 30 calendar days"
+    assert decide("needs_review", "45 days", "at least 30 days", True, True, quotes=["forty-five (45) days' notice"], guidance=guidance).status == "pass"
+    assert decide("pass", "60 days", "no more than 30 days", True, True, quotes=["sixty (60) days"], guidance="Cure within 30 days.").status == "needs_review"
+    # The model's own numbers, with no quote to ground them, compute nothing: the hint stands and says so.
+    assert decide("pass", "15 days", "at least 30 days", True, True) == Decision("pass", "model_hint")
+    assert decide("pass", "one month's notice", None, True, True, quotes=["one (1) month's notice"], guidance=guidance) == Decision("pass", "model_hint"), (
+        "a month is not thirty days: incomparable, so the hint"
+    )
+    ambiguous = decide("pass", "21 days", None, True, True, quotes=["twenty-one (30) days' notice"], guidance=guidance)
+    assert (ambiguous.status, ambiguous.source) == ("needs_review", "ambiguous_fact")
 
 
 def test_status_falls_back_to_the_hint_and_never_trusts_unverified_evidence() -> None:
@@ -103,3 +106,22 @@ def test_only_a_pass_is_lowered_by_an_unknown_reference() -> None:
     assert check_references(passing, "Fees are due under §8.1.", NUMBERS, ["sec_1"]) is passing
     missing = Decision("missing", "model_hint")
     assert check_references(missing, "Nothing in Section 14.2 was found.", NUMBERS, []) is missing
+
+
+def test_a_stated_position_the_quote_does_not_carry_lowers_the_status() -> None:
+    """Found while tracing (docs/SYSTEM_TRUTH.md H): `observed` and `required` were never compared with the record."""
+    quote = "Customer may terminate on thirty (30) days' written notice."
+    guidance = "We accept 30 days' notice or more."
+    # The model says 90 days; the verified quote says 30. Code refuses to compute a pass from 90.
+    assert decide("pass", "90 days' notice", "at least 30 days", True, True, quotes=[quote], guidance=guidance).source == "position_check"
+    # The model's required count is not in the guidance either.
+    assert decide("pass", "30 days' notice", "at least 45 days", True, True, quotes=[quote], guidance=guidance).source == "position_check"
+    # Both positions are in the record: computed as before.
+    assert decide("needs_review", "30 days' notice", "at least 30 days", True, True, quotes=[quote], guidance=guidance).source == "computed_days"
+    # A quote without a duration grounds nothing: the model's numbers compute nothing, and the hint stands as a hint.
+    assert decide(
+        "pass", "30 days' notice", "at least 30 days", True, True, quotes=["Either party may terminate for convenience."], guidance=guidance
+    ) == Decision("pass", "model_hint")
+    # Without guidance the model's hint stands, as before, unless it states a count the quote does not carry.
+    assert decide("pass", None, None, False, True, quotes=[quote]) == Decision("pass", "model_hint")
+    assert decide("pass", "60 days", None, False, True, quotes=[quote]).source == "position_check"

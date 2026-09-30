@@ -124,8 +124,10 @@ class FindingOut(ApiModel):
     id: str
     topic: str
     status: FindingStatusName
-    # computed_days | model_hint | no_evidence: who decided the status.
+    # computed_days | model_hint | no_evidence | reference_check | position_check | ambiguous_fact: who decided the status.
     status_source: str = ""
+    # The policy evaluation's sentence when the status was computed ("the contract provides 15 calendar days; the guidance requires at least 30 calendar days").
+    status_reason: str | None = None
     # passage: the spans support the conclusion. coverage: the point was not found and the spans are
     # the closest provisions that were read, cited so a reader can see what was searched.
     evidence_kind: Literal["passage", "coverage"] = "passage"

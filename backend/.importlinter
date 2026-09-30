@@ -29,6 +29,6 @@ layers =
     app.batch | app.goldens | app.families
     app.application
     app.runs | app.routing
-    app.analysis | app.retrieval | app.verify | app.ingest | app.memo
+    app.analysis | app.retrieval | app.verify | app.ingest | app.memo | app.policy
     app.providers
     app.models : app.db : app.schemas : app.config : app.hashing : app.errors

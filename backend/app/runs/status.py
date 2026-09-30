@@ -1,62 +1,60 @@
-"""Code decides the status. Where the observed and required positions are day counts, they
-are compared; otherwise the model's hint is used and the source is recorded as such."""
+"""Code decides the status. The notice period a verified quote provides and the position the guidance requires are
+parsed by code (policy.durations), never copied from the model's `observed` and `required`: those two may only point
+at which of the quote's durations the model means, and a count they state that the evidence does not carry lowers
+the finding to needs review (`position_check`). Where a rule and a fact exist and are comparable, the evaluation
+decides (`computed_days`) and its sentence is kept on the finding; an ambiguous fact ("twenty-one (30) days") is
+`ambiguous_fact`; anything else is the model's hint, recorded as such (2026-09-29, wired after the CUAD-30 chain).
+Measured before the wiring: nine recorded statuses had been computed from day counts, none disagreeing with its quote.
+"""
 
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from ..analysis.schema import StatusHint
 from ..models import FindingStatusName
-
-DAYS = re.compile(r"(\d+)\s*(?:\(\s*\d+\s*\))?\s*(?:calendar\s+|business\s+)?days?", re.IGNORECASE)
-WORD_NUMBERS = {
-    "five": 5,
-    "seven": 7,
-    "ten": 10,
-    "fourteen": 14,
-    "fifteen": 15,
-    "twenty": 20,
-    "thirty": 30,
-    "forty-five": 45,
-    "forty five": 45,
-    "sixty": 60,
-    "ninety": 90,
-}
-AT_LEAST = re.compile(r"(?:≥|>=|at least|no less than|not less than|minimum of|a minimum|or more|or longer)", re.IGNORECASE)
-AT_MOST = re.compile(r"(?:≤|<=|at most|no more than|not more than|maximum of|a maximum|or less|or fewer|within)", re.IGNORECASE)
+from ..policy.durations import evaluate, observed_fact, parse_durations, parse_rule
 
 
 @dataclass(frozen=True)
 class Decision:
     status: FindingStatusName
-    source: str  # computed_days | model_hint | no_evidence | reference_check
+    source: str  # computed_days | model_hint | no_evidence | reference_check | position_check | ambiguous_fact
+    reason: str = ""
 
 
-def days_in(text: str | None) -> int | None:
-    if not text:
-        return None
-    match = DAYS.search(text)
-    if match:
-        return int(match.group(1))
-    lowered = text.lower()
-    for word, value in WORD_NUMBERS.items():
-        if re.search(rf"\b{re.escape(word)}\b\s*(?:\(\d+\))?\s*days?", lowered):
-            return value
-    return None
+def _durations(text: str | None) -> set[object]:
+    return {m.duration for m in parse_durations(text) if m.duration is not None}
 
 
-def decide(status_hint: StatusHint, observed: str | None, required: str | None, guidance_present: bool, all_spans_verified: bool) -> Decision:
+def decide(
+    status_hint: StatusHint,
+    observed: str | None,
+    required: str | None,
+    guidance_present: bool,
+    all_spans_verified: bool,
+    quotes: Sequence[str] = (),
+    guidance: str | None = None,
+) -> Decision:
     if not all_spans_verified:
         return Decision("unresolved", "no_evidence")
-    if guidance_present and observed and required:
-        observed_days, required_days = days_in(observed), days_in(required)
-        if observed_days is not None and required_days is not None:
-            if AT_MOST.search(required):
-                return Decision("pass" if observed_days <= required_days else "needs_review", "computed_days")
-            # "at least" is the default reading for a notice-period requirement.
-            return Decision("pass" if observed_days >= required_days else "needs_review", "computed_days")
+    # The model's stated positions are checked against the record before anything is computed.
+    stated, in_quotes = _durations(observed), set().union(*(_durations(q) for q in quotes)) if quotes else set()
+    if stated and in_quotes and not stated & in_quotes:
+        return Decision("needs_review", "position_check", "the position the model stated is not in the verified quote")
+    stated_required, in_guidance = _durations(required), _durations(guidance)
+    if stated_required and in_guidance and not stated_required & in_guidance:
+        return Decision("needs_review", "position_check", "the requirement the model stated is not in the guidance")
+    rule = parse_rule(guidance) if guidance_present else None
+    fact = next((f for f in (observed_fact(q, stated=observed) for q in quotes) if f is not None), None)
+    if rule is not None and fact is not None:
+        evaluation = evaluate(fact, rule)
+        if evaluation.outcome in ("pass", "needs_review"):
+            return Decision("pass" if evaluation.outcome == "pass" else "needs_review", "computed_days", evaluation.reason)
+        if evaluation.outcome == "ambiguous":
+            return Decision("needs_review", "ambiguous_fact", evaluation.reason)
     return Decision(status_hint, "model_hint")
 
 

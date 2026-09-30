@@ -1303,6 +1303,17 @@
             "title": "Status",
             "type": "string"
           },
+          "statusReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statusreason"
+          },
           "statusSource": {
             "default": "",
             "title": "Statussource",
