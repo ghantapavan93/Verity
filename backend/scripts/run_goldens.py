@@ -120,7 +120,7 @@ def main() -> int:
 
     versions = args.prompt or [settings.prompt_version]
     golden_set = load_set()
-    provider = make_provider(model=args.model)
+    provider = make_provider(model=args.model, workload="batch")
     ok, detail = provider.healthy()
     if not ok:
         print(f"provider not ready: {detail}")

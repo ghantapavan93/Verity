@@ -58,7 +58,7 @@ def main() -> int:
         return 0
     if not args.corpus:
         parser.error("--corpus is required unless --report is given")
-    provider = make_provider(model=args.model)
+    provider = make_provider(model=args.model, workload="batch")
     ok, detail = provider.healthy()
     if not ok:
         print(f"provider not ready: {detail}")

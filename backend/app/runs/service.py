@@ -182,6 +182,9 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         answered = f"model answered in {seconds:.0f} s" if seconds >= 1 else "model answered"
         if result.attempts > 1:
             answered += f" · attempt {result.attempts}"
+        admitted = getattr(provider, "last", None)
+        if admitted is not None and admitted.queue_wait_ms >= 1000:
+            answered += f" · queued {admitted.queue_wait_ms / 1000:.0f} s behind {admitted.queue_depth_at_arrival + 1}"
         _note_stage(session, run, "checking", answered, output_hash=sha256_text(result.generation.text), attempt=result.attempts)
 
         if result.proposal is None:

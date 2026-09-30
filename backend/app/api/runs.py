@@ -155,7 +155,7 @@ def provider_for(run: Run | None, default: ModelProvider) -> ModelProvider:
     """The default provider when the run's model is its model; otherwise one for the run's model. Tests keep their fake."""
     if run is None or run.model == default.model or default.name != "ollama":
         return default
-    return make_provider(default.name, run.model)
+    return make_provider(default.name, run.model, workload=getattr(default, "workload", "interactive"))
 
 
 @router.post("", response_model=RunOut, status_code=status.HTTP_202_ACCEPTED)
