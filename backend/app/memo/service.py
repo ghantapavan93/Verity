@@ -96,7 +96,7 @@ def _sources(findings: list[Finding], section_titles: dict[str, str]) -> list[So
 # ----------------------------------------------------------------------------- HTML
 
 
-def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str]) -> str:
+def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str], review_head: str = "") -> str:
     date = datetime.now().astimezone().strftime("%d %B %Y")
     issues = [f for f in findings if f.status in ("needs_review", "missing")]
     sources = _sources(findings, section_titles)
@@ -149,7 +149,7 @@ def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str])
         )
     parts.append("</table>")
     parts.append(
-        f"<hr><p><small>Generated from run {escape(run.id)} · model {escape(run.model)} · "
+        f"<hr><p><small>Generated from run {escape(run.id)} · review state {escape(review_head[:8]) or 'none'} · model {escape(run.model)} · "
         f"prompt {escape(run.prompt_version)} ({escape(run.prompt_hash[:12])}) · "
         "every quoted passage was verified verbatim against the document text before this memo was written.</small></p></body></html>"
     )
@@ -224,7 +224,7 @@ def _custom_properties(document: WordDocument, values: dict[str, str]) -> None:
     package.relate_to(part, RT.CUSTOM_PROPERTIES)
 
 
-def _properties(document: WordDocument, run: Run, verified: int, total: int) -> None:
+def _properties(document: WordDocument, run: Run, verified: int, total: int, review_head: str = "") -> None:
     core = document.core_properties
     core.title = f"Contract review memo · {run.document.name}"
     core.subject = run.question
@@ -247,13 +247,14 @@ def _properties(document: WordDocument, run: Run, verified: int, total: int) -> 
             "workbench_prompt_version": run.prompt_version,
             "workbench_prompt_hash": run.prompt_hash,
             "workbench_citations_verified": f"{verified} of {total}",
+            "workbench_review_head": review_head,
             "workbench_generated_at": iso(utcnow()) or "",
             "workbench_link": f"{settings.app_url}/?document={run.document_id}&run={run.id}",
         },
     )
 
 
-def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str], out_dir: Path) -> tuple[Path, str]:
+def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str], out_dir: Path, review_head: str = "") -> tuple[Path, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     document = DocxDocument()
     normal = document.styles["Normal"]
@@ -262,7 +263,7 @@ def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str],
     _ensure_hyperlink_style(document)
     sources = _sources(findings, section_titles)
     by_span = {id(s.span): s for s in sources}
-    _properties(document, run, sum(1 for s in sources if s.span.verified), len(sources))
+    _properties(document, run, sum(1 for s in sources if s.span.verified), len(sources), review_head)
 
     document.add_heading("Contract Review Memo", level=1)
     date = datetime.now().astimezone().strftime("%d %B %Y")
@@ -333,7 +334,7 @@ def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str],
 
     footer = document.add_paragraph()
     footer.add_run(
-        f"Generated from run {run.id} · model {run.model} · prompt {run.prompt_version} ({run.prompt_hash[:12]}). "
+        f"Generated from run {run.id} · review state {review_head[:8] or 'none'} · model {run.model} · prompt {run.prompt_version} ({run.prompt_hash[:12]}). "
         "Every quoted passage was verified verbatim against the document text before this memo was written. "
         "The run id, document hash, model and prompt are also in this file's document properties."
     ).italic = True

@@ -275,7 +275,8 @@ export interface paths {
         put?: never;
         /**
          * Create Memo
-         * @description 201 with the run's memo, or 200 with the one written earlier: the run is immutable, so is its memo.
+         * @description 201 with a memo for the run's current review state, or 200 with the one already written under it. A review
+         *     after a memo makes the next request write a new memo; the earlier one is kept as it was.
          */
         post: operations["create_memo_api_memos_post"];
         delete?: never;
@@ -1203,6 +1204,11 @@ export interface components {
             htmlUrl: string;
             /** Id */
             id: string;
+            /**
+             * Reviewhead
+             * @default
+             */
+            reviewHead: string;
             /** Runid */
             runId: string;
         };
@@ -1300,6 +1306,11 @@ export interface components {
              * @default false
              */
             reused: boolean;
+            /**
+             * Reviewhead
+             * @default
+             */
+            reviewHead: string;
             /** Routingreason */
             routingReason?: string | null;
             /**
@@ -1368,6 +1379,11 @@ export interface components {
              * @default false
              */
             reused: boolean;
+            /**
+             * Reviewhead
+             * @default
+             */
+            reviewHead: string;
             /**
              * Stage
              * @enum {string}

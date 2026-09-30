@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -66,11 +67,24 @@ def ingest_document(session: Session, filename: str, data: bytes) -> IngestedDoc
     )
     document.sections = [Section(ordinal=i, number=s.number, heading=s.heading, text=s.text) for i, s in enumerate(parsed.sections)]
     session.add(document)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # Another request stored the same bytes between the lookup and the insert; the database kept its row.
+        session.rollback()
+        winner = stored_document(session, parsed.sha256)
+        if winner is None:
+            raise
+        keep_original(winner, data)
+        return IngestedDocument(winner, created=False)
     session.refresh(document)
+    keep_original(document, data)
+    return IngestedDocument(document, created=True)
 
+
+def keep_original(document: Document, data: bytes) -> None:
+    """Store the uploaded bytes under their hash once; the same bytes from any request are the same file."""
     path = original_path(document)
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_bytes(data)
-    return IngestedDocument(document, created=True)

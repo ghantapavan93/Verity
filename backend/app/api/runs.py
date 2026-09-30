@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, stat
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from ..application.create_memo import review_head
 from ..application.evidence_pack import build_evidence_pack
 from ..application.recover_runs import recover_interrupted_runs
 from ..application.start_run import start_run
@@ -74,6 +75,7 @@ def run_out(run: Run) -> RunOut:
         error=run.error,
         reason=run.reason,
         has_guidance=run.guidance_id is not None,
+        review_head=review_head(run),
     )
 
 

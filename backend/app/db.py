@@ -48,6 +48,10 @@ def init_db(target_engine: Engine | None = None) -> None:
     ensure_immutability(target)
 
 
+# Indexes a later model replaced; dropped so the replacement can be created. Never a data change.
+SUPERSEDED_INDEXES: dict[str, tuple[str, ...]] = {"memos": ("ux_memos_run_id",)}
+
+
 def ensure_columns(target_engine: Engine) -> None:
     """Add columns that the models gained since the file was created. Additive only; SQLite has
     no cheap way to drop or retype, and nothing here needs it."""
@@ -64,6 +68,8 @@ def ensure_columns(target_engine: Engine) -> None:
                     connection.exec_driver_sql(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {column_type}')
             for index in table.indexes:
                 connection.execute(CreateIndex(index, if_not_exists=True))
+            for name in SUPERSEDED_INDEXES.get(table.name, ()):
+                connection.exec_driver_sql(f'DROP INDEX IF EXISTS "{name}"')
 
 
 def ensure_immutability(target_engine: Engine) -> None:

@@ -139,13 +139,20 @@ export function AssistantPanel({
                   <div className={styles.memoRow}>
                     {memo.memo ? (
                       <>
-                        <span className={styles.memoDone}>Review memo ready</span>
+                        <span className={styles.memoDone}>
+                          {memo.memo.reviewHead === run.reviewHead ? "Review memo ready" : "Review memo predates a later review"}
+                        </span>
                         <a className={styles.actionLink} href={absolute(memo.memo.htmlUrl)} target="_blank" rel="noreferrer">
                           Open
                         </a>
                         <a className={styles.actionLink} href={absolute(memo.memo.docxUrl)}>
                           Download .docx
                         </a>
+                        {memo.memo.reviewHead !== run.reviewHead && (
+                          <button type="button" className={styles.memoButton} onClick={() => void memo.generate(run)} disabled={memo.busy}>
+                            {memo.busy ? "Writing memo…" : "Write a new memo"}
+                          </button>
+                        )}
                       </>
                     ) : (
                       <button type="button" className={styles.memoButton} onClick={() => void memo.generate(run)} disabled={memo.busy}>

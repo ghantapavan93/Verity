@@ -135,6 +135,8 @@ class RunOut(ApiModel):
     reused: bool = False
     # Whether the run was given legal guidance. A pass is "within guidance" only when it was; otherwise it is a plain answer.
     has_guidance: bool = False
+    # The identity of the findings' current review state; a memo carries the head it was written under.
+    review_head: str = ""
 
 
 class RunSummary(ApiModel):
@@ -287,6 +289,8 @@ class MemoOut(ApiModel):
     docx_url: str
     html_url: str
     docx_sha256: str
+    # The review state this memo describes; when the run's head differs, a later review is not in it.
+    review_head: str = ""
 
 
 class HealthOut(ApiModel):

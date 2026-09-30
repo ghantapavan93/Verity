@@ -44,7 +44,7 @@ def test_operation_sequences_keep_the_record_s_invariants(client: TestClient) ->
             self.guidance_id: str | None = None
             self.runs: dict[str, dict[str, Any]] = {}  # run id -> snapshot when first seen finished
             self.by_inputs: dict[tuple[str, str | None, str], str] = {}
-            self.memos: dict[str, str] = {}
+            self.memos: dict[str, tuple[str, str]] = {}  # run id -> (memo id, review head it was written under)
 
         @initialize()
         def upload(self) -> None:
@@ -114,10 +114,16 @@ def test_operation_sequences_keep_the_record_s_invariants(client: TestClient) ->
             run_id = complete[pick % len(complete)]
             response = client.post("/api/memos", json={"runId": run_id})
             assert response.status_code in (200, 201), response.text
-            memo_id = response.json()["id"]
+            memo = response.json()
+            head = client.get(f"/api/runs/{run_id}").json()["reviewHead"]
+            assert memo["reviewHead"] == head, "a memo describes the review state the run is in when it is asked for"
             if run_id in self.memos:
-                assert self.memos[run_id] == memo_id, "a memo asked twice is the same memo"
-            self.memos[run_id] = memo_id
+                previous_id, previous_head = self.memos[run_id]
+                if previous_head == head:
+                    assert previous_id == memo["id"], "a memo asked twice under the same review state is the same memo"
+                else:
+                    assert previous_id != memo["id"], "a review since the last memo earns a new memo; the old one is kept"
+            self.memos[run_id] = (memo["id"], head)
 
         @invariant()
         def finished_runs_do_not_change(self) -> None:

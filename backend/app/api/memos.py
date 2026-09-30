@@ -14,12 +14,20 @@ router = APIRouter(prefix="/api/memos", tags=["memos"])
 
 
 def _out(memo: Memo) -> MemoOut:
-    return MemoOut(id=memo.id, run_id=memo.run_id, docx_url=f"/api/memos/{memo.id}/docx", html_url=f"/api/memos/{memo.id}/html", docx_sha256=memo.docx_sha256)
+    return MemoOut(
+        id=memo.id,
+        run_id=memo.run_id,
+        docx_url=f"/api/memos/{memo.id}/docx",
+        html_url=f"/api/memos/{memo.id}/html",
+        docx_sha256=memo.docx_sha256,
+        review_head=memo.review_head or "",
+    )
 
 
 @router.post("", response_model=MemoOut, status_code=status.HTTP_201_CREATED)
 def create_memo(body: MemoIn, response: Response, session: Session = Depends(get_session)) -> MemoOut:
-    """201 with the run's memo, or 200 with the one written earlier: the run is immutable, so is its memo."""
+    """201 with a memo for the run's current review state, or 200 with the one already written under it. A review
+    after a memo makes the next request write a new memo; the earlier one is kept as it was."""
     created = create_memo_for_run(session, body.run_id)
     if not created.created:
         response.status_code = status.HTTP_200_OK

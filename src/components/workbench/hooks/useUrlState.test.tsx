@@ -25,6 +25,7 @@ const running: RunView = {
   reason: null,
   reused: false,
   hasGuidance: false,
+  reviewHead: "",
 };
 const finished: RunView = { ...running, stage: "complete" };
 

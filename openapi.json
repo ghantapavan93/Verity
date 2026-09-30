@@ -1969,6 +1969,11 @@
             "title": "Id",
             "type": "string"
           },
+          "reviewHead": {
+            "default": "",
+            "title": "Reviewhead",
+            "type": "string"
+          },
           "runId": {
             "title": "Runid",
             "type": "string"
@@ -2272,6 +2277,11 @@
             "title": "Reused",
             "type": "boolean"
           },
+          "reviewHead": {
+            "default": "",
+            "title": "Reviewhead",
+            "type": "string"
+          },
           "routingReason": {
             "anyOf": [
               {
@@ -2481,6 +2491,11 @@
             "default": false,
             "title": "Reused",
             "type": "boolean"
+          },
+          "reviewHead": {
+            "default": "",
+            "title": "Reviewhead",
+            "type": "string"
           },
           "stage": {
             "enum": [
@@ -3408,7 +3423,7 @@
     },
     "/api/memos": {
       "post": {
-        "description": "201 with the run's memo, or 200 with the one written earlier: the run is immutable, so is its memo.",
+        "description": "201 with a memo for the run's current review state, or 200 with the one already written under it. A review\nafter a memo makes the next request write a new memo; the earlier one is kept as it was.",
         "operationId": "create_memo_api_memos_post",
         "requestBody": {
           "content": {

@@ -40,6 +40,7 @@ export function useRunFollower() {
       reason: null,
       reused: false,
       hasGuidance: guidanceId !== null,
+      reviewHead: "",
     });
     try {
       const created = await createRun({ documentId, guidanceId, question });
