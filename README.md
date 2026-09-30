@@ -55,7 +55,7 @@ cd backend
 .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check .   # style and lint, pyproject.toml
 .venv/Scripts/python -m mypy                                                            # strict, app + scripts + tests
 .venv/Scripts/lint-imports                                                              # the three import contracts: verifier pure, providers blind, layers downward (.importlinter)
-.venv/Scripts/python -m pytest -q                                                       # 275 tests, no model needed; seven Hypothesis properties of the verifier, one stateful property of the run record, one Schemathesis fuzz of every route (WORKBENCH_FUZZ_SCALE=20 for the deep pass)
+.venv/Scripts/python -m pytest -q                                                       # 277 tests, no model needed; seven Hypothesis properties of the verifier, one stateful property of the run record, one Schemathesis fuzz of every route (WORKBENCH_FUZZ_SCALE=20 for the deep pass)
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
 npm test                                                    # Vitest: the run follower, the URL state and the explanation, 13 tests
@@ -87,6 +87,7 @@ cd backend
 .venv/Scripts/python scripts/run_batch.py --corpus <dir> --task core-fields         # field extraction over a corpus (docs/BATCH.md)
 .venv/Scripts/python scripts/cluster_corpus.py --corpus <dir>                       # document families against the labels (docs/FAMILIES.md)
 .venv/Scripts/python scripts/mutate_by_hand.py                                    # twenty-four hand mutants of the evidence boundary; each must be killed
+.venv/Scripts/python scripts/data_audit.py --write                                # every agreement the repository touched, by sha256, with source, licence, role and the measurements on it (docs/DATA-EVIDENCE.md)
 ```
 
 ## How the code is organised
@@ -170,11 +171,12 @@ repository and appear under this product's Runs surface as records.
 | Retrieval | BM25 scored against labels, 164 CUAD cases with experts' spans and 38 goldens: Recall@6 0.85 and 0.92; a hybrid with a local embedding model measured at 0.95 and 0.97 and built behind a setting; on the 44 goldens BM25 37, hybrid 40 with one regression, so BM25 stays the default by the rule (`docs/RETRIEVAL.md`) |
 | Failure envelope | one table of cases, expected, observed and the test that holds each; writing it found two 422s that were a 500 and a wrong reason (`docs/FAILURE-ENVELOPE.md`) |
 | Scale | what was measured and what each next step would have to earn; nothing says millions (`docs/SCALE.md`) |
+| Data behind the claims | every agreement the repository has touched, by SHA-256, with its source, licence, role (evaluation, fixture, runtime) and the measurements made on it, and the denominator of each measured set kept apart; produced by `scripts/data_audit.py` from the manifests, the store and the records outside git, never by copying a result (`docs/DATA-EVIDENCE.md`) |
 | Domain review | ten findings packed for a practising lawyer with five questions and room for disagreement, built from the record by document, model, prompt and retrieval (`backend/scripts/domain_review_pack.py`, `docs/DOMAIN-REVIEW.md`); not yet reviewed |
 | Independent review | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true, recorded as delivered before any fix, with what changed after (`docs/REVIEW-INDEPENDENT.md`) |
 | Validation | what is proven, partial, missing and not justified, capability by capability, with the validator that holds each claim (`docs/VALIDATION.md`) |
 | Browser flows | twenty Playwright flows against the production build and the real API: the seven happy paths (landing, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; and three flows the validation brief named: a review against guidance that ends in a finding with a status and the guidance in the drawer, a malformed upload refused with the reason and nothing opened, a refresh once the run is in the URL brings it back (the run id reaches the URL only when the run has finished, so this reloads after completion; a true mid-run refresh is unproven); traces kept on failure |
-| Checks | backend 275 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter, twenty-four hand mutants killed; interface 13 unit tests and 20 browser flows, tsc, eslint, prettier, production build; results page 23; the CI workflow runs all of it and fails on generated-type drift, and waits on branch `ci` for the token's workflow scope |
+| Checks | backend 277 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter, twenty-four hand mutants killed; interface 13 unit tests and 20 browser flows, tsc, eslint, prettier, production build; results page 23; the CI workflow runs all of it and fails on generated-type drift, and waits on branch `ci` for the token's workflow scope |
 
 ## What is deliberately not here yet
 
