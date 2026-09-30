@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..models import Run, RunStage, as_utc, utcnow
-from ..runs.events import TERMINAL
+from ..runs.events import TERMINAL, StageEvent, bus
 
 log = logging.getLogger(__name__)
 
@@ -63,5 +63,6 @@ def recover_interrupted_runs(session: Session, stale_after_s: float | None = Non
         )
         session.commit()
         log.warning("run_id=%s recovered_as=failed reason=internal_error stale_minutes=%d", run.id, minutes)
+        bus.publish(StageEvent(run.id, "failed", message))  # an open stream to this run ends now, not at the next heartbeat
         recovered += 1
     return recovered

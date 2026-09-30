@@ -280,10 +280,23 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             )
     except ProviderError as error:
         log.exception("run %s failed at the provider", run_id)
-        _finish(session, run, "failed", error=str(error), reason="provider_error")
+        _fail(session, run, str(error), "provider_error")
     except Exception as error:
         log.exception("run %s failed", run_id)
-        _finish(session, run, "failed", error=f"{type(error).__name__}: {error}", reason="internal_error")
+        _fail(session, run, f"{type(error).__name__}: {error}", "internal_error")
+
+
+def _fail(session: Session, run: Run, error: str, reason: RunReasonName) -> None:
+    """Record a failure. The session is rolled back first, because the failure may be the database's own: a run
+    that staleness recovery in another process has already ended refuses every further write, and writing the
+    failure into the same session raised again (found while tracing, 2026-09-29; seen at twenty concurrent runs
+    the day before). A run another writer ended keeps that writer's record; this worker leaves quietly."""
+    session.rollback()
+    session.refresh(run)
+    if run.stage in TERMINAL_STAGES:
+        log.warning("run_id=%s already %s when its worker failed: %s", run.id, run.stage, error)
+        return
+    _finish(session, run, "failed", error=error, reason=reason)
 
 
 def _finish(session: Session, run: Run, stage: RunStageName, note: str | None = None, error: str | None = None, reason: RunReasonName | None = None) -> None:

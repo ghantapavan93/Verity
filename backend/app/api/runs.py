@@ -4,7 +4,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -204,13 +204,29 @@ def evidence_pack(run_id: str, session: Session = Depends(get_session)) -> Respo
     return Response(content=pack.data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{pack.filename}"'})
 
 
-def _sse(event: str, data: dict[str, object]) -> str:
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+def _sse(event: str, data: dict[str, object], event_id: int | None = None) -> str:
+    # A stored stage row carries its id, so a client that reconnects sends it back as Last-Event-ID and is
+    # replayed only what it has not seen. Live bus events carry no id; the record is the sequence.
+    head = f"id: {event_id}\n" if event_id is not None else ""
+    return f"{head}event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def _ended_in_the_record(run_id: str) -> str | None:
+    """The terminal stage of a run that another writer ended: a batch runner or staleness recovery in another
+    process, whose events never reach this process's bus. Read at every heartbeat so no stream outlives its run
+    (found while tracing, 2026-09-29)."""
+    with SessionLocal() as session:
+        run = session.get(Run, run_id)
+    return run.stage if run is not None and run.stage in TERMINAL else None
 
 
 @router.get("/{run_id}/events")
-async def run_events(run_id: str) -> StreamingResponse:
-    """Stage transitions only. Replays what already happened, then streams until the run ends."""
+async def run_events(run_id: str, request: Request) -> StreamingResponse:
+    """Stage transitions only. Replays what already happened, then streams until the run ends, by this process's
+    bus or, at the latest, one heartbeat after the record says it ended."""
+
+    after_text = request.headers.get("last-event-id") or request.query_params.get("after")
+    after = int(after_text) if after_text and after_text.isdigit() else None
 
     async def stream() -> AsyncIterator[str]:
         queue = bus.subscribe(run_id)
@@ -221,7 +237,9 @@ async def run_events(run_id: str) -> StreamingResponse:
                     yield _sse("error", {"detail": "run not found"})
                     return
                 for row in run.stages:
-                    yield _sse("stage", {"runId": run_id, "stage": row.stage, "detail": row.detail})
+                    if after is not None and row.id <= after:
+                        continue
+                    yield _sse("stage", {"runId": run_id, "stage": row.stage, "detail": row.detail}, event_id=row.id)
                 if run.stage in TERMINAL:
                     yield _sse("stage", {"runId": run_id, "stage": run.stage, "final": True})
                     return
@@ -229,6 +247,10 @@ async def run_events(run_id: str) -> StreamingResponse:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)
                 except TimeoutError:
+                    ended = _ended_in_the_record(run_id)
+                    if ended is not None:
+                        yield _sse("stage", {"runId": run_id, "stage": ended, "final": True})
+                        return
                     yield ": keep-alive\n\n"
                     continue
                 final = event.stage in TERMINAL
