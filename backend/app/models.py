@@ -68,6 +68,8 @@ class Document(Base):
     # DOCX: revisions the file carried and runs marked hidden. The text is the accepted view without them.
     tracked_changes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hidden_runs: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # JSON list of what this reading did with each part of the file (ingest.coverage); NULL for readings made before it was recorded.
+    coverage_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     sections: Mapped[list[Section]] = relationship(back_populates="document", order_by="Section.ordinal", cascade="all, delete-orphan")

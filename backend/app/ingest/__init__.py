@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..hashing import sha256_bytes
+from .coverage import PartCoverage
 from .readers import SUPPORTED, ReadResult, TooLargeToRead, UnsupportedFile, read
 from .sections import ParsedSection, build_sections
 
@@ -31,6 +32,7 @@ class Ingested:
     sections: list[ParsedSection]
     tracked_changes: int
     hidden_runs: int
+    coverage: list[PartCoverage]
 
 
 def ingest(filename: str, data: bytes) -> Ingested:
@@ -47,4 +49,5 @@ def ingest(filename: str, data: bytes) -> Ingested:
         sections=sections,
         tracked_changes=result.tracked_changes,
         hidden_runs=result.hidden_runs,
+        coverage=result.coverage,
     )

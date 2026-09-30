@@ -9,7 +9,16 @@ import type { DocumentView, RunView } from "@/lib/types";
 import type { Stage, View } from "../shell/constants";
 import { useUrlState } from "./useUrlState";
 
-const doc: DocumentView = { id: "doc1", name: "agreement.docx", pages: 9, sha256: null, sections: [], createdAt: "2026-09-28T00:00:00+00:00", reused: false };
+const doc: DocumentView = {
+  id: "doc1",
+  coverage: null,
+  name: "agreement.docx",
+  pages: 9,
+  sha256: null,
+  sections: [],
+  createdAt: "2026-09-28T00:00:00+00:00",
+  reused: false,
+};
 const running: RunView = {
   id: "run1",
   question: "q",

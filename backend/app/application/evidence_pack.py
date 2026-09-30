@@ -23,7 +23,7 @@ from ..hashing import sha256_bytes
 from ..models import Run, iso, utcnow
 from ..verify import spans as verifier
 from .create_memo import review_head
-from .ingest_document import original_path
+from .ingest_document import coverage_of, original_path
 from .reconstruct_input import reconstruct_input
 
 QUOTE_MAP = {chr(k): v for k, v in verifier._QUOTE_MAP.items()}  # the one normalisation table, embedded in verify.py
@@ -115,6 +115,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
             "name": document.name,
             "sha256": document.sha256,
             "parser_version": document.parser_version,
+            "parse_coverage": coverage_of(document),
             "file": f"document/{document.name}" if original_bytes is not None else None,
         },
         "sections_sha256": sha256_bytes(sections_json.encode("utf-8")),

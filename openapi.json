@@ -528,8 +528,83 @@
         "title": "CitationRecordOut",
         "type": "object"
       },
+      "CoverageOut": {
+        "description": "What the reading did with one part of the file: read, accepted, excluded, partial, omitted, absent or unknown.",
+        "properties": {
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "part": {
+            "title": "Part",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "part",
+          "status"
+        ],
+        "title": "CoverageOut",
+        "type": "object"
+      },
+      "CoverageReport": {
+        "description": "A reading's coverage with its provenance. persisted: recorded by the reading at upload. reconstructed: computed later\nfrom the stored bytes under the same reader version; the same facts, not captured at the time.",
+        "properties": {
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageOut"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "readerVersion": {
+            "title": "Readerversion",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "persisted",
+              "reconstructed"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "readerVersion",
+          "source",
+          "parts"
+        ],
+        "title": "CoverageReport",
+        "type": "object"
+      },
       "DocumentOut": {
         "properties": {
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoverageReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "default": "",
             "title": "Createdat",

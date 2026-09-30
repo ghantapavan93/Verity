@@ -13,11 +13,18 @@ export interface Highlight {
   span: SpanView | null;
 }
 
+/** The parts of the file this reading did not read, with what the file had of them. Recorded by the API at upload. */
+function notRead(doc: DocumentView): string[] {
+  return (doc.coverage?.parts ?? []).filter((c) => c.status === "omitted" && c.count > 0).map((c) => `${c.part.replace(/_/g, " ")} (${c.count})`);
+}
+
 /** What is on the paper, and which view of the file it is when the file carried revisions or hidden text. */
 function describe(doc: DocumentView): string {
   const parts = [doc.pages ? plural(doc.pages, "page") : "", plural(doc.sections.length, "section")];
   if (doc.trackedChanges) parts.push(`accepted view of ${plural(doc.trackedChanges, "tracked change")}`);
   if (doc.hiddenRuns) parts.push(`${plural(doc.hiddenRuns, "hidden run")} left out`);
+  const unread = notRead(doc);
+  if (unread.length) parts.push(`${plural(unread.length, "part")} not read`);
   if (doc.reused) parts.push("already in the workbench, opened as stored");
   return parts.filter(Boolean).join(" · ");
 }
@@ -55,6 +62,12 @@ export function DocumentPane({
         <div className={styles.docMeta}>
           Contract · {docMeta} · Uploaded {doc ? formatWhen(doc.createdAt) : ""}
         </div>
+        {doc && notRead(doc).length > 0 && (
+          <p className={styles.docNote} data-testid="coverage-note">
+            Not read by this reading: {notRead(doc).join(", ")}. Citations come only from what was read.
+            {doc.coverage?.source === "reconstructed" ? " (Described from the stored file; this reading did not record it at the time.)" : ""}
+          </p>
+        )}
         {doc && doc.sections.length > 0 && doc.sections.filter((s) => s.number).length < 3 && (
           <p className={styles.docNotice}>
             Little structure was found in this file&apos;s text, so sections are approximate. Citations are still verified against the text itself.

@@ -657,8 +657,47 @@ export interface components {
             /** Withheldfindings */
             withheldFindings: number;
         };
+        /**
+         * CoverageOut
+         * @description What the reading did with one part of the file: read, accepted, excluded, partial, omitted, absent or unknown.
+         */
+        CoverageOut: {
+            /**
+             * Count
+             * @default 0
+             */
+            count: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Part */
+            part: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * CoverageReport
+         * @description A reading's coverage with its provenance. persisted: recorded by the reading at upload. reconstructed: computed later
+         *     from the stored bytes under the same reader version; the same facts, not captured at the time.
+         */
+        CoverageReport: {
+            /** Parts */
+            parts: components["schemas"]["CoverageOut"][];
+            /** Readerversion */
+            readerVersion: string;
+            /** Schemaversion */
+            schemaVersion: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "persisted" | "reconstructed";
+        };
         /** DocumentOut */
         DocumentOut: {
+            coverage?: components["schemas"]["CoverageReport"] | null;
             /**
              * Createdat
              * @default

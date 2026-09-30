@@ -87,6 +87,11 @@ def test_events_replay_the_recorded_stages(client: TestClient) -> None:
     assert stages[0] == "reading" and stages[-1] in ("complete", "unresolved")
 
 
+def test_whitespace_only_guidance_is_refused_not_stored_as_empty(client: TestClient) -> None:
+    refused = client.post("/api/guidance", json={"text": "   \n\t  "})
+    assert refused.status_code == 422 and "empty once whitespace is removed" in refused.json()["detail"]
+
+
 def test_bad_upload_and_missing_run_are_clear(client: TestClient) -> None:
     rejected = client.post("/api/documents", files={"file": ("sheet.xlsx", b"x", "application/octet-stream")})
     assert rejected.status_code == 422

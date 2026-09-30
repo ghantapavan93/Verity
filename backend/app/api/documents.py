@@ -5,12 +5,13 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Response, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from ..application.ingest_document import ingest_document
+from ..application.ingest_document import coverage_of, ingest_document, refuse_if_too_large
 from ..db import get_session
 from ..errors import NotFound
 from ..models import Document, Finding, FindingReview, Run, Section, iso
-from ..schemas import DocumentOut, DocumentSummary, SectionOut
+from ..schemas import CoverageReport, DocumentOut, DocumentSummary, SectionOut
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -25,6 +26,7 @@ def to_document_out(document: Document) -> DocumentOut:
         parser_version=document.parser_version,
         tracked_changes=document.tracked_changes,
         hidden_runs=document.hidden_runs,
+        coverage=CoverageReport.model_validate(report) if (report := coverage_of(document)) else None,
         created_at=iso(document.created_at) or "",
         sections=[SectionOut(id=s.id, number=s.number, heading=s.heading, text=s.text) for s in document.sections],
     )
@@ -33,8 +35,10 @@ def to_document_out(document: Document) -> DocumentOut:
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload_document(file: UploadFile, response: Response, session: Session = Depends(get_session)) -> DocumentOut:
     """201 with a new document, or 200 with the stored document that has exactly these bytes."""
+    refuse_if_too_large(file.size)  # the declared size, before a byte is read; the bytes are checked again once read
     data = await file.read()
-    ingested = ingest_document(session, file.filename or "upload", data)
+    # Parsing is CPU work of up to seconds (docs/PARSER-COMPARISON.md: 44 s on a 1.25-million-character contract); it leaves the event loop.
+    ingested = await run_in_threadpool(ingest_document, session, file.filename or "upload", data)
     if not ingested.created:
         response.status_code = status.HTTP_200_OK
     out = to_document_out(ingested.document)

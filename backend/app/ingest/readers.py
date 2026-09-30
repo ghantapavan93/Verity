@@ -13,7 +13,7 @@ from __future__ import annotations
 import io
 import re
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from docx import Document as DocxDocument
 from docx.opc.exceptions import PackageNotFoundError
@@ -24,6 +24,7 @@ from lxml import etree
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
+from .coverage import PartCoverage, docx_coverage, pdf_coverage, txt_coverage
 from .sections import HEADING_NUMBER, Block, looks_like_heading
 
 SUPPORTED = {
@@ -50,6 +51,8 @@ class ReadResult:
     # marks and table rows) and runs marked hidden. Both are left out of the blocks.
     tracked_changes: int = 0
     hidden_runs: int = 0
+    # What this reading did with each part of the file (ingest.coverage); anything unread is listed as unread.
+    coverage: list[PartCoverage] = field(default_factory=list)
 
 
 def read(filename: str, data: bytes) -> ReadResult:
@@ -237,12 +240,14 @@ def read_docx(data: bytes) -> ReadResult:
                 if cells:
                     add(" | ".join(cells))
     add(carry.strip())
+    tracked = len(body.xpath(_REVISIONS_XPATH))
     return ReadResult(
         blocks=blocks,
         pages=_docx_pages(data),
         title=title,
-        tracked_changes=len(body.xpath(_REVISIONS_XPATH)),
+        tracked_changes=tracked,
         hidden_runs=walk.hidden_runs,
+        coverage=docx_coverage(data, etree.tostring(body, encoding="unicode"), tracked, walk.hidden_runs),
     )
 
 
@@ -273,7 +278,7 @@ def read_pdf(data: bytes) -> ReadResult:
             text = page.extract_text() or ""
         lines.extend(re.sub(r"[ \t]{2,}", " ", line) for line in text.splitlines())
         lines.append("")
-    return ReadResult(blocks=_blocks_from_lines(lines), pages=len(pages), title=_first_line(lines))
+    return ReadResult(coverage=pdf_coverage(page_count), blocks=_blocks_from_lines(lines), pages=len(pages), title=_first_line(lines))
 
 
 # ---------------------------------------------------------------------------- TXT
@@ -282,7 +287,7 @@ def read_pdf(data: bytes) -> ReadResult:
 def read_txt(data: bytes) -> ReadResult:
     text = data.decode("utf-8", errors="replace")
     lines = text.splitlines()
-    return ReadResult(blocks=_blocks_from_lines(lines), pages=None, title=_first_line(lines))
+    return ReadResult(coverage=txt_coverage(), blocks=_blocks_from_lines(lines), pages=None, title=_first_line(lines))
 
 
 def _first_line(lines: list[str]) -> str:

@@ -21,6 +21,25 @@ class SectionOut(ApiModel):
     text: str
 
 
+class CoverageOut(ApiModel):
+    """What the reading did with one part of the file: read, accepted, excluded, partial, omitted, absent or unknown."""
+
+    part: str
+    status: str
+    count: int = 0
+    note: str = ""
+
+
+class CoverageReport(ApiModel):
+    """A reading's coverage with its provenance. persisted: recorded by the reading at upload. reconstructed: computed later
+    from the stored bytes under the same reader version; the same facts, not captured at the time."""
+
+    schema_version: int
+    reader_version: str
+    source: Literal["persisted", "reconstructed"]
+    parts: list[CoverageOut]
+
+
 class DocumentOut(ApiModel):
     id: str
     name: str
@@ -31,6 +50,8 @@ class DocumentOut(ApiModel):
     # DOCX: revisions found in the file and hidden runs left out. The sections are the accepted view.
     tracked_changes: int | None = None
     hidden_runs: int | None = None
+    # What this reading did with each part of the file; null when it cannot be described (bytes gone or an older reader).
+    coverage: CoverageReport | None = None
     # True when POST /api/documents found these bytes already stored and handed back that document.
     reused: bool = False
     created_at: str = ""
