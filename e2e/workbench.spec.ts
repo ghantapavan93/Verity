@@ -77,6 +77,15 @@ test("a question ends in a finding whose citation opens the document's own text"
   } else {
     expect(comparable(highlighted)).toBe(comparable(quoted));
   }
+
+  // Why this answer: the run explained from its record by the API, in the drawer, per finding.
+  await drawer.getByRole("button", { name: "Why this answer?" }).click();
+  const why = drawer.getByTestId("why-this-answer");
+  await expect(why).toBeVisible();
+  await expect(why.getByText("ModelProposal")).toBeVisible();
+  await expect(why.getByTestId("source-match").first()).toContainText("Inside model-visible context");
+  await expect(why.getByTestId("policy-evaluation").first()).toContainText("Final status");
+  await expect(why).toContainText("rebuilt input matches");
   await page.getByRole("button", { name: "Close evidence" }).click();
 });
 

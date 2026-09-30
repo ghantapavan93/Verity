@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import wb from "../Workbench.module.css";
+import { WhyThisAnswer } from "../assistant/WhyThisAnswer";
 import { TERMINAL } from "../shell/constants";
 import styles from "./Views.module.css";
 import { statusTone } from "./FindingsView";
@@ -361,7 +362,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>
-          Sections handed to the model <span className={styles.sectionNote}>lexical retrieval, in document order</span>
+          Sections handed to the model <span className={styles.sectionNote}>lexical retrieval, in rank order: the first row was ranked first</span>
         </h2>
         <table className={styles.table}>
           <thead>
@@ -416,6 +417,16 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
           Raw model output <span className={styles.sectionNote}>structured JSON under a fixed schema; no chain-of-thought is requested or stored</span>
         </h2>
         <pre className={styles.raw}>{run.rawOutput ?? "(none)"}</pre>
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>
+          Why this answer?{" "}
+          <span className={styles.sectionNote}>
+            the run explained from its record by the API: what was read, what retrieval chose, what the model saw and proposed, what code established
+          </span>
+        </h2>
+        <WhyThisAnswer runId={run.id} />
       </section>
     </>
   );

@@ -80,13 +80,16 @@ class FakeProvider:
         conclusion = f"Customer may terminate for convenience on 15 days' written notice; the guidance requires at least 30 days. [{label}]"
         if getattr(self, "invented_reference", False):
             conclusion = f"Section 14.2 grants the Customer most favoured nation pricing. [{label}]"  # a real quote under an invented reference
+        cited = label
+        if getattr(self, "cite_wrong_section", False):
+            cited = "sec_0" if label != "sec_0" else "sec_9"  # a real quote attributed to another section, as an 8B model sometimes does
         payload = {
             "findings": [
                 {
                     "topic": "Termination for convenience",
                     "conclusion": conclusion,
                     "status_hint": "pass",
-                    "evidence": [{"section_id": label, "quote": quote}],
+                    "evidence": [{"section_id": cited, "quote": quote}],
                     "guidance_reference": "at 30 days' notice or more",
                     "observed": "15 days' written notice",
                     "required": "at least 30 days",

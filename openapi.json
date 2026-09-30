@@ -972,6 +972,458 @@
         "title": "ExperimentsOut",
         "type": "object"
       },
+      "ExplanationCandidate": {
+        "description": "A section retrieval handed to the model, in rank order, with the ContextSlice of it the prompt carried.",
+        "properties": {
+          "characters": {
+            "title": "Characters",
+            "type": "integer"
+          },
+          "heading": {
+            "default": "",
+            "title": "Heading",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "number": {
+            "default": "",
+            "title": "Number",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "sectionId": {
+            "title": "Sectionid",
+            "type": "string"
+          },
+          "sliceEnd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sliceend"
+          },
+          "sliceStart": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slicestart"
+          },
+          "truncated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Truncated"
+          }
+        },
+        "required": [
+          "rank",
+          "label",
+          "sectionId",
+          "characters",
+          "sliceStart",
+          "sliceEnd",
+          "truncated"
+        ],
+        "title": "ExplanationCandidate",
+        "type": "object"
+      },
+      "ExplanationFinding": {
+        "properties": {
+          "conclusion": {
+            "title": "Conclusion",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "recordedPolicyEvaluation": {
+            "$ref": "#/components/schemas/RecordedPolicyEvaluation"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shown": {
+            "title": "Shown",
+            "type": "boolean"
+          },
+          "sourceMatches": {
+            "items": {
+              "$ref": "#/components/schemas/SourceMatch"
+            },
+            "title": "Sourcematches",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "needs_review",
+              "missing",
+              "unresolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ordinal",
+          "topic",
+          "conclusion",
+          "status",
+          "shown",
+          "sourceMatches",
+          "recordedPolicyEvaluation"
+        ],
+        "title": "ExplanationFinding",
+        "type": "object"
+      },
+      "ExplanationReading": {
+        "properties": {
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoverageReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "documentId": {
+            "title": "Documentid",
+            "type": "string"
+          },
+          "documentName": {
+            "title": "Documentname",
+            "type": "string"
+          },
+          "documentSha256": {
+            "title": "Documentsha256",
+            "type": "string"
+          },
+          "hiddenRuns": {
+            "title": "Hiddenruns",
+            "type": "integer"
+          },
+          "notRead": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notread",
+            "type": "array"
+          },
+          "numberedSections": {
+            "title": "Numberedsections",
+            "type": "integer"
+          },
+          "pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pages"
+          },
+          "readerVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readerversion"
+          },
+          "recordedSectionsHash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recordedsectionshash"
+          },
+          "sections": {
+            "title": "Sections",
+            "type": "integer"
+          },
+          "trackedChanges": {
+            "title": "Trackedchanges",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "documentId",
+          "documentName",
+          "documentSha256",
+          "readerVersion",
+          "pages",
+          "sections",
+          "numberedSections",
+          "trackedChanges",
+          "hiddenRuns",
+          "coverage",
+          "notRead",
+          "recordedSectionsHash"
+        ],
+        "title": "ExplanationReading",
+        "type": "object"
+      },
+      "ExplanationReconstruction": {
+        "description": "The exact model input, rebuilt from the record and checked against the hash the checking stage wrote.",
+        "properties": {
+          "charactersOutsideContext": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Charactersoutsidecontext"
+          },
+          "guidanceText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidancetext"
+          },
+          "hasGuidance": {
+            "title": "Hasguidance",
+            "type": "boolean"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "options": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Options",
+            "type": "object"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "promptHash": {
+            "title": "Prompthash",
+            "type": "string"
+          },
+          "promptVersion": {
+            "title": "Promptversion",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "queueNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queuenote"
+          },
+          "rebuiltInputSha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rebuiltinputsha256"
+          },
+          "reconstructable": {
+            "title": "Reconstructable",
+            "type": "boolean"
+          },
+          "recordedInputSha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recordedinputsha256"
+          },
+          "windowChars": {
+            "title": "Windowchars",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reconstructable",
+          "problem",
+          "recordedInputSha256",
+          "rebuiltInputSha256",
+          "windowChars",
+          "charactersOutsideContext",
+          "question",
+          "hasGuidance",
+          "guidanceText",
+          "promptVersion",
+          "promptHash",
+          "model",
+          "options",
+          "queueNote"
+        ],
+        "title": "ExplanationReconstruction",
+        "type": "object"
+      },
+      "ExplanationReproducibility": {
+        "properties": {
+          "documentId": {
+            "title": "Documentid",
+            "type": "string"
+          },
+          "documentSha256": {
+            "title": "Documentsha256",
+            "type": "string"
+          },
+          "evidencePackPath": {
+            "title": "Evidencepackpath",
+            "type": "string"
+          },
+          "guidanceSha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidancesha256"
+          },
+          "inputMatches": {
+            "title": "Inputmatches",
+            "type": "boolean"
+          },
+          "promptHash": {
+            "title": "Prompthash",
+            "type": "string"
+          },
+          "promptVersion": {
+            "title": "Promptversion",
+            "type": "string"
+          },
+          "readerVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readerversion"
+          },
+          "recordedInputSha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recordedinputsha256"
+          },
+          "runId": {
+            "title": "Runid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "documentId",
+          "documentSha256",
+          "readerVersion",
+          "guidanceSha256",
+          "promptVersion",
+          "promptHash",
+          "recordedInputSha256",
+          "inputMatches",
+          "evidencePackPath"
+        ],
+        "title": "ExplanationReproducibility",
+        "type": "object"
+      },
       "FamiliesOut": {
         "properties": {
           "available": {
@@ -2075,6 +2527,156 @@
         "title": "MemoOut",
         "type": "object"
       },
+      "ModelProposal": {
+        "description": "What the model proposed, in its own words, parsed from the stored raw output; correlated to a finding by ordinal.",
+        "properties": {
+          "conclusion": {
+            "title": "Conclusion",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "guidanceReference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidancereference"
+          },
+          "observed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "required": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required"
+          },
+          "statusHint": {
+            "title": "Statushint",
+            "type": "string"
+          },
+          "suggestedPosition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestedposition"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ordinal",
+          "topic",
+          "conclusion",
+          "statusHint",
+          "observed",
+          "required",
+          "guidanceReference",
+          "suggestedPosition",
+          "evidence"
+        ],
+        "title": "ModelProposal",
+        "type": "object"
+      },
+      "ProposalEvidence": {
+        "properties": {
+          "citedLabel": {
+            "title": "Citedlabel",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "citedLabel",
+          "quote"
+        ],
+        "title": "ProposalEvidence",
+        "type": "object"
+      },
+      "RecordedPolicyEvaluation": {
+        "description": "The status as it was recorded when the run finished, with its source and its sentence. Nothing re-derived.",
+        "properties": {
+          "deterministic": {
+            "title": "Deterministic",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "needs_review",
+              "missing",
+              "unresolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "statusReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statusreason"
+          },
+          "statusSource": {
+            "title": "Statussource",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "statusSource",
+          "statusReason",
+          "deterministic",
+          "summary"
+        ],
+        "title": "RecordedPolicyEvaluation",
+        "type": "object"
+      },
       "ReviewIn": {
         "properties": {
           "note": {
@@ -2468,6 +3070,105 @@
         "title": "RunDetail",
         "type": "object"
       },
+      "RunExplanation": {
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ExplanationFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/ModelProposal"
+            },
+            "title": "Proposals",
+            "type": "array"
+          },
+          "proposalsProblem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposalsproblem"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "reading": {
+            "$ref": "#/components/schemas/ExplanationReading"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "insufficient_evidence",
+                  "citations_unverified",
+                  "invalid_output",
+                  "provider_error",
+                  "internal_error"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reconstruction": {
+            "$ref": "#/components/schemas/ExplanationReconstruction"
+          },
+          "reproducibility": {
+            "$ref": "#/components/schemas/ExplanationReproducibility"
+          },
+          "retrieval": {
+            "items": {
+              "$ref": "#/components/schemas/ExplanationCandidate"
+            },
+            "title": "Retrieval",
+            "type": "array"
+          },
+          "runId": {
+            "title": "Runid",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "reading",
+              "finding_evidence",
+              "checking",
+              "verifying",
+              "complete",
+              "unresolved",
+              "failed"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "question",
+          "stage",
+          "reason",
+          "reading",
+          "retrieval",
+          "reconstruction",
+          "proposals",
+          "proposalsProblem",
+          "findings",
+          "reproducibility"
+        ],
+        "title": "RunExplanation",
+        "type": "object"
+      },
       "RunIn": {
         "properties": {
           "documentId": {
@@ -2770,6 +3471,103 @@
           "text"
         ],
         "title": "SectionOut",
+        "type": "object"
+      },
+      "SourceMatch": {
+        "description": "What the verifier established for one proposed quote: where it is in the stored text, if anywhere.",
+        "properties": {
+          "citedLabel": {
+            "title": "Citedlabel",
+            "type": "string"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "insideModelVisibleContext": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insidemodelvisiblecontext"
+          },
+          "locatedHeading": {
+            "title": "Locatedheading",
+            "type": "string"
+          },
+          "locatedLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locatedlabel"
+          },
+          "locatedSectionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locatedsectionid"
+          },
+          "matchCount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchcount"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "relocated": {
+            "title": "Relocated",
+            "type": "boolean"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "quote",
+          "citedLabel",
+          "locatedSectionId",
+          "locatedLabel",
+          "locatedHeading",
+          "verified",
+          "method",
+          "matchCount",
+          "start",
+          "end",
+          "relocated",
+          "insideModelVisibleContext"
+        ],
+        "title": "SourceMatch",
         "type": "object"
       },
       "SpanOut": {
@@ -3890,6 +4688,49 @@
           }
         },
         "summary": "Evidence Pack",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/runs/{run_id}/explanation": {
+      "get": {
+        "description": "Why this answer: what was read, what retrieval chose, the exact model input, the model's proposal, each\nSourceMatch and the recorded policy evaluation, all from the record. Read-only; nothing is recomputed as fact.",
+        "operationId": "get_run_explanation_api_runs__run_id__explanation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunExplanation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run Explanation",
         "tags": [
           "runs"
         ]

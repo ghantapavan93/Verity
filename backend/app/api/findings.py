@@ -7,18 +7,12 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..application.review_finding import review_finding
+from ..application.review_finding import review_finding, review_out
 from ..db import get_session
-from ..models import Document, EvidenceSpan, Finding, FindingReview, Run, iso
-from ..schemas import FindingRecord, FindingReviewOut, ReviewIn, ReviewOut
+from ..models import Document, EvidenceSpan, Finding, Run, iso
+from ..schemas import FindingRecord, FindingReviewOut, ReviewIn
 
 router = APIRouter(prefix="/api/findings", tags=["findings"])
-
-
-def review_out(review: FindingReview | None) -> ReviewOut | None:
-    if review is None or review.verdict == "cleared":
-        return None
-    return ReviewOut(verdict=review.verdict, reviewer=review.reviewer, note=review.note, at=iso(review.created_at) or "")
 
 
 @router.post("/{finding_id}/review", response_model=FindingReviewOut, status_code=status.HTTP_201_CREATED)

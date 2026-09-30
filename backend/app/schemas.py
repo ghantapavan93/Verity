@@ -506,3 +506,154 @@ class ExperimentsOut(ApiModel):
     generated_at: str | None = None
     board: list[ExperimentRecord] = []
     baselines: list[ExperimentRecord] = []
+
+
+# ------------------------------------------------------------------ "Why this answer?": the explanation of a run
+# A read-only projection of the record (application/explain_run.py). Nothing here is computed by a model, and
+# nothing is recomputed by today's code and presented as what the run established: the model's proposal is
+# its stored words, the SourceMatch is the stored location, the policy evaluation is the recorded status,
+# source and sentence.
+
+
+class ExplanationReading(ApiModel):
+    document_id: str
+    document_name: str
+    document_sha256: str
+    reader_version: str | None
+    pages: int | None
+    sections: int
+    # Sections with a number; the paper calls the structure approximate below three, and so does the explanation.
+    numbered_sections: int
+    tracked_changes: int
+    hidden_runs: int
+    coverage: CoverageReport | None
+    # The parts the reading omitted with content, as the paper prints them: "footers (1)".
+    not_read: list[str]
+    # The reading stage's output hash: the sections' text as the run read it.
+    recorded_sections_hash: str | None
+
+
+class ExplanationCandidate(ApiModel):
+    """A section retrieval handed to the model, in rank order, with the ContextSlice of it the prompt carried."""
+
+    rank: int
+    label: str
+    section_id: str
+    number: str = ""
+    heading: str = ""
+    characters: int
+    slice_start: int | None
+    slice_end: int | None
+    # From the reconstructed ContextSlice; null when the input could not be reconstructed.
+    truncated: bool | None
+
+
+class ExplanationReconstruction(ApiModel):
+    """The exact model input, rebuilt from the record and checked against the hash the checking stage wrote."""
+
+    reconstructable: bool
+    problem: str | None
+    recorded_input_sha256: str | None
+    rebuilt_input_sha256: str | None
+    window_chars: int
+    # Characters of the handed sections that lay beyond their ContextSlice and never reached the model; null without slices.
+    characters_outside_context: int | None
+    question: str
+    has_guidance: bool
+    guidance_text: str | None
+    prompt_version: str
+    prompt_hash: str
+    model: str
+    options: dict[str, float | int | str]
+    # The admission wait the checking stage recorded, when there was one ("queued 12 s behind 3").
+    queue_note: str | None
+
+
+class ProposalEvidence(ApiModel):
+    cited_label: str
+    quote: str
+
+
+class ModelProposal(ApiModel):
+    """What the model proposed, in its own words, parsed from the stored raw output; correlated to a finding by ordinal."""
+
+    ordinal: int
+    topic: str
+    conclusion: str
+    status_hint: str
+    observed: str | None
+    required: str | None
+    guidance_reference: str | None
+    suggested_position: str | None
+    evidence: list[ProposalEvidence]
+
+
+class SourceMatch(ApiModel):
+    """What the verifier established for one proposed quote: where it is in the stored text, if anywhere."""
+
+    quote: str
+    cited_label: str
+    located_section_id: str | None
+    located_label: str | None
+    located_heading: str
+    verified: bool
+    method: str
+    match_count: int | None
+    start: int
+    end: int
+    relocated: bool
+    # Whether the located offsets fall within the ContextSlice the model was shown for that section; null when
+    # the quote was not located or the slices could not be reconstructed.
+    inside_model_visible_context: bool | None
+
+
+class RecordedPolicyEvaluation(ApiModel):
+    """The status as it was recorded when the run finished, with its source and its sentence. Nothing re-derived."""
+
+    status: FindingStatusName
+    status_source: str
+    status_reason: str | None
+    # True when code decided the status (computed_days, position_check, ambiguous_fact, reference_check).
+    deterministic: bool
+    summary: str
+
+
+class ExplanationFinding(ApiModel):
+    id: str
+    ordinal: int
+    topic: str
+    conclusion: str
+    status: FindingStatusName
+    shown: bool
+    source_matches: list[SourceMatch]
+    recorded_policy_evaluation: RecordedPolicyEvaluation
+    review: ReviewOut | None = None
+
+
+class ExplanationReproducibility(ApiModel):
+    run_id: str
+    document_id: str
+    document_sha256: str
+    reader_version: str | None
+    guidance_sha256: str | None
+    prompt_version: str
+    prompt_hash: str
+    recorded_input_sha256: str | None
+    input_matches: bool
+    evidence_pack_path: str
+
+
+class RunExplanation(ApiModel):
+    run_id: str
+    question: str
+    stage: RunStageName
+    reason: RunReasonName | None
+    reading: ExplanationReading
+    retrieval: list[ExplanationCandidate]
+    reconstruction: ExplanationReconstruction
+    proposals: list[ModelProposal]
+    # "Model proposal not reconstructable for this run." when the stored raw output does not parse under the
+    # shape the model was asked for or does not line up with the findings by ordinal; never guessed from text.
+    proposals_problem: str | None
+    findings: list[ExplanationFinding]
+    reproducibility: ExplanationReproducibility

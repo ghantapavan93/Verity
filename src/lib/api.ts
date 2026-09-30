@@ -16,6 +16,7 @@ import type {
   MemoRecord,
   ReviewIn,
   RunDetailView,
+  RunExplanationView,
   RunStage,
   RunSummary,
   RunView,
@@ -105,6 +106,11 @@ export function listRuns(): Promise<RunSummary[]> {
 
 export function getRunDetail(id: string): Promise<RunDetailView> {
   return request<RunDetailView>(`/api/runs/${id}/detail`);
+}
+
+/** Why this answer: the run explained from its record, assembled by the API; the interface renders it and decides nothing. */
+export function getRunExplanation(id: string): Promise<RunExplanationView> {
+  return request<RunExplanationView>(`/api/runs/${id}/explanation`);
 }
 
 export function listFindings(documentId?: string): Promise<FindingRecord[]> {

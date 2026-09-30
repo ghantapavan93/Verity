@@ -16,6 +16,7 @@ export type FindingView = Schemas["FindingOut"];
 export type RunView = Schemas["RunOut"];
 export type RunSummary = Schemas["RunSummary"];
 export type RunDetailView = Schemas["RunDetail"];
+export type RunExplanationView = Schemas["RunExplanation"];
 export type StageEventView = Schemas["StageOut"];
 export type CandidateView = Schemas["CandidateOut"];
 export type FindingRecord = Schemas["FindingRecord"];

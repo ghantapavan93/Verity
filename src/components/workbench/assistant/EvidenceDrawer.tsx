@@ -1,11 +1,12 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import type { Ref } from "react";
+import { useState, type Ref } from "react";
 import styles from "../Workbench.module.css";
 import { IconClose } from "../icons";
 import { EASE } from "../shell/constants";
 import { StatusChip } from "../shell/primitives";
+import { WhyThisAnswer } from "./WhyThisAnswer";
 import { formatWhen } from "@/lib/format";
 import { citationLabel, type FindingView, type RunView, type SectionView, type SpanView } from "@/lib/types";
 
@@ -69,6 +70,7 @@ function EvidenceBody({
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
 }) {
+  const [why, setWhy] = useState(false);
   return (
     <>
       <section className={styles.drawerSection}>
@@ -181,6 +183,10 @@ function EvidenceBody({
               <dd>{run.id}</dd>
             </div>
           </dl>
+          <button type="button" className={styles.whyToggle} aria-expanded={why} onClick={() => setWhy((open) => !open)}>
+            {why ? "Hide why this answer" : "Why this answer?"}
+          </button>
+          {why && <WhyThisAnswer runId={run.id} findingId={finding.id} />}
         </section>
       )}
     </>

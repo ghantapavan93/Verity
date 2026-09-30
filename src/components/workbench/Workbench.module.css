@@ -1323,3 +1323,73 @@
   text-decoration-color: var(--status-review-text);
   text-decoration-thickness: 1px;
 }
+
+/* ---- Why this answer: the run explained from its record, in the drawer and on the Runs record */
+
+.why {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.whyLede {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.whyTable {
+  width: 100%;
+  margin: 6px 0 0;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.whyTable th,
+.whyTable td {
+  padding: 4px 6px 4px 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.whyTable th {
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.whyMono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.whyLabel {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.whyProblem {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-2);
+}
+
+.whyToggle {
+  margin: 10px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--accent, var(--text));
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

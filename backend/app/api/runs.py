@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 
 from ..application.create_memo import review_head
 from ..application.evidence_pack import build_evidence_pack
+from ..application.explain_run import explain_run
 from ..application.recover_runs import recover_interrupted_runs
+from ..application.review_finding import review_out
 from ..application.start_run import start_run
 from ..db import SessionLocal, get_session
 from ..errors import NotFound
@@ -19,9 +21,8 @@ from ..providers import make_provider
 from ..providers.base import ModelProvider
 from ..runs.events import TERMINAL, bus
 from ..runs.service import execute_run
-from ..schemas import CandidateOut, FindingOut, RunDetail, RunIn, RunOut, RunSummary, SpanOut, StageOut
+from ..schemas import CandidateOut, FindingOut, RunDetail, RunExplanation, RunIn, RunOut, RunSummary, SpanOut, StageOut
 from .deps import get_provider
-from .findings import review_out
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 HEARTBEAT_SECONDS = 15
@@ -201,6 +202,14 @@ def get_run_detail(run_id: str, session: Session = Depends(get_session)) -> RunD
     if run is None:
         raise NotFound("run", run_id)
     return run_detail(run)
+
+
+@router.get("/{run_id}/explanation", response_model=RunExplanation)
+def get_run_explanation(run_id: str, session: Session = Depends(get_session)) -> RunExplanation:
+    """Why this answer: what was read, what retrieval chose, the exact model input, the model's proposal, each
+    SourceMatch and the recorded policy evaluation, all from the record. Read-only; nothing is recomputed as fact."""
+    recover_interrupted_runs(session)
+    return explain_run(session, run_id)
 
 
 @router.get("/{run_id}/evidence-pack")

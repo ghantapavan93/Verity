@@ -415,6 +415,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/explanation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Run Explanation
+         * @description Why this answer: what was read, what retrieval chose, the exact model input, the model's proposal, each
+         *     SourceMatch and the recorded policy evaluation, all from the record. Read-only; nothing is recomputed as fact.
+         */
+        get: operations["get_run_explanation_api_runs__run_id__explanation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -813,6 +834,143 @@ export interface components {
             repoHead?: string | null;
             /** Source */
             source: string | null;
+        };
+        /**
+         * ExplanationCandidate
+         * @description A section retrieval handed to the model, in rank order, with the ContextSlice of it the prompt carried.
+         */
+        ExplanationCandidate: {
+            /** Characters */
+            characters: number;
+            /**
+             * Heading
+             * @default
+             */
+            heading: string;
+            /** Label */
+            label: string;
+            /**
+             * Number
+             * @default
+             */
+            number: string;
+            /** Rank */
+            rank: number;
+            /** Sectionid */
+            sectionId: string;
+            /** Sliceend */
+            sliceEnd: number | null;
+            /** Slicestart */
+            sliceStart: number | null;
+            /** Truncated */
+            truncated: boolean | null;
+        };
+        /** ExplanationFinding */
+        ExplanationFinding: {
+            /** Conclusion */
+            conclusion: string;
+            /** Id */
+            id: string;
+            /** Ordinal */
+            ordinal: number;
+            recordedPolicyEvaluation: components["schemas"]["RecordedPolicyEvaluation"];
+            review?: components["schemas"]["ReviewOut"] | null;
+            /** Shown */
+            shown: boolean;
+            /** Sourcematches */
+            sourceMatches: components["schemas"]["SourceMatch"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "needs_review" | "missing" | "unresolved";
+            /** Topic */
+            topic: string;
+        };
+        /** ExplanationReading */
+        ExplanationReading: {
+            coverage: components["schemas"]["CoverageReport"] | null;
+            /** Documentid */
+            documentId: string;
+            /** Documentname */
+            documentName: string;
+            /** Documentsha256 */
+            documentSha256: string;
+            /** Hiddenruns */
+            hiddenRuns: number;
+            /** Notread */
+            notRead: string[];
+            /** Numberedsections */
+            numberedSections: number;
+            /** Pages */
+            pages: number | null;
+            /** Readerversion */
+            readerVersion: string | null;
+            /** Recordedsectionshash */
+            recordedSectionsHash: string | null;
+            /** Sections */
+            sections: number;
+            /** Trackedchanges */
+            trackedChanges: number;
+        };
+        /**
+         * ExplanationReconstruction
+         * @description The exact model input, rebuilt from the record and checked against the hash the checking stage wrote.
+         */
+        ExplanationReconstruction: {
+            /** Charactersoutsidecontext */
+            charactersOutsideContext: number | null;
+            /** Guidancetext */
+            guidanceText: string | null;
+            /** Hasguidance */
+            hasGuidance: boolean;
+            /** Model */
+            model: string;
+            /** Options */
+            options: {
+                [key: string]: number | string;
+            };
+            /** Problem */
+            problem: string | null;
+            /** Prompthash */
+            promptHash: string;
+            /** Promptversion */
+            promptVersion: string;
+            /** Question */
+            question: string;
+            /** Queuenote */
+            queueNote: string | null;
+            /** Rebuiltinputsha256 */
+            rebuiltInputSha256: string | null;
+            /** Reconstructable */
+            reconstructable: boolean;
+            /** Recordedinputsha256 */
+            recordedInputSha256: string | null;
+            /** Windowchars */
+            windowChars: number;
+        };
+        /** ExplanationReproducibility */
+        ExplanationReproducibility: {
+            /** Documentid */
+            documentId: string;
+            /** Documentsha256 */
+            documentSha256: string;
+            /** Evidencepackpath */
+            evidencePackPath: string;
+            /** Guidancesha256 */
+            guidanceSha256: string | null;
+            /** Inputmatches */
+            inputMatches: boolean;
+            /** Prompthash */
+            promptHash: string;
+            /** Promptversion */
+            promptVersion: string;
+            /** Readerversion */
+            readerVersion: string | null;
+            /** Recordedinputsha256 */
+            recordedInputSha256: string | null;
+            /** Runid */
+            runId: string;
         };
         /** FamiliesOut */
         FamiliesOut: {
@@ -1253,6 +1411,56 @@ export interface components {
             /** Runid */
             runId: string;
         };
+        /**
+         * ModelProposal
+         * @description What the model proposed, in its own words, parsed from the stored raw output; correlated to a finding by ordinal.
+         */
+        ModelProposal: {
+            /** Conclusion */
+            conclusion: string;
+            /** Evidence */
+            evidence: components["schemas"]["ProposalEvidence"][];
+            /** Guidancereference */
+            guidanceReference: string | null;
+            /** Observed */
+            observed: string | null;
+            /** Ordinal */
+            ordinal: number;
+            /** Required */
+            required: string | null;
+            /** Statushint */
+            statusHint: string;
+            /** Suggestedposition */
+            suggestedPosition: string | null;
+            /** Topic */
+            topic: string;
+        };
+        /** ProposalEvidence */
+        ProposalEvidence: {
+            /** Citedlabel */
+            citedLabel: string;
+            /** Quote */
+            quote: string;
+        };
+        /**
+         * RecordedPolicyEvaluation
+         * @description The status as it was recorded when the run finished, with its source and its sentence. Nothing re-derived.
+         */
+        RecordedPolicyEvaluation: {
+            /** Deterministic */
+            deterministic: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "needs_review" | "missing" | "unresolved";
+            /** Statusreason */
+            statusReason: string | null;
+            /** Statussource */
+            statusSource: string;
+            /** Summary */
+            summary: string;
+        };
         /** ReviewIn */
         ReviewIn: {
             /** Note */
@@ -1381,6 +1589,31 @@ export interface components {
              */
             withheld: components["schemas"]["FindingOut"][];
         };
+        /** RunExplanation */
+        RunExplanation: {
+            /** Findings */
+            findings: components["schemas"]["ExplanationFinding"][];
+            /** Proposals */
+            proposals: components["schemas"]["ModelProposal"][];
+            /** Proposalsproblem */
+            proposalsProblem: string | null;
+            /** Question */
+            question: string;
+            reading: components["schemas"]["ExplanationReading"];
+            /** Reason */
+            reason: ("insufficient_evidence" | "citations_unverified" | "invalid_output" | "provider_error" | "internal_error") | null;
+            reconstruction: components["schemas"]["ExplanationReconstruction"];
+            reproducibility: components["schemas"]["ExplanationReproducibility"];
+            /** Retrieval */
+            retrieval: components["schemas"]["ExplanationCandidate"][];
+            /** Runid */
+            runId: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "reading" | "finding_evidence" | "checking" | "verifying" | "complete" | "unresolved" | "failed";
+        };
         /** RunIn */
         RunIn: {
             /** Documentid */
@@ -1482,6 +1715,36 @@ export interface components {
             number: string;
             /** Text */
             text: string;
+        };
+        /**
+         * SourceMatch
+         * @description What the verifier established for one proposed quote: where it is in the stored text, if anywhere.
+         */
+        SourceMatch: {
+            /** Citedlabel */
+            citedLabel: string;
+            /** End */
+            end: number;
+            /** Insidemodelvisiblecontext */
+            insideModelVisibleContext: boolean | null;
+            /** Locatedheading */
+            locatedHeading: string;
+            /** Locatedlabel */
+            locatedLabel: string | null;
+            /** Locatedsectionid */
+            locatedSectionId: string | null;
+            /** Matchcount */
+            matchCount: number | null;
+            /** Method */
+            method: string;
+            /** Quote */
+            quote: string;
+            /** Relocated */
+            relocated: boolean;
+            /** Start */
+            start: number;
+            /** Verified */
+            verified: boolean;
         };
         /** SpanOut */
         SpanOut: {
@@ -2222,6 +2485,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_explanation_api_runs__run_id__explanation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunExplanation"];
                 };
             };
             /** @description Validation Error */

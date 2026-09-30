@@ -12,7 +12,15 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from ..errors import Conflict, NotFound
-from ..models import Finding, FindingReview, ReviewVerdictName
+from ..models import Finding, FindingReview, ReviewVerdictName, iso
+from ..schemas import ReviewOut
+
+
+def review_out(review: FindingReview | None) -> ReviewOut | None:
+    """The one mapping of a review row to its API shape: the current decision, or nothing when unreviewed or cleared."""
+    if review is None or review.verdict == "cleared":
+        return None
+    return ReviewOut(verdict=review.verdict, reviewer=review.reviewer, note=review.note, at=iso(review.created_at) or "")
 
 
 @dataclass(frozen=True)

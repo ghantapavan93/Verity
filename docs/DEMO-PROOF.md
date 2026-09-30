@@ -72,8 +72,10 @@ Recorded before anything is changed; each is a candidate for a measured change, 
    and a golden run behind it.
 3. **The model cited the wrong part.** It attributed the quote to `sec_4` (part 5); the quote lives in
    `sec_0` (part 1). The verifier relocated it and recorded `relocated:exact` and the cited label
-   (`citedSectionLabel` on the span), and the drawer shows the method; it does not say which section the
-   model had named. Part of the "Why this answer?" mapping.
+   (`citedSectionLabel` on the span), and the drawer shows the method; it did not say which section the
+   model had named. **Shown since 2026-09-30:** "Why this answer?" reads "Model cited sec_4 · Located in sec_0 ·
+   EXHIBIT 10.102 (part 1) (not where the model said) · relocated:exact · Occurrences 1 · Offsets 4136–4284 ·
+   Inside model-visible context yes", from the record.
 4. **The memo omits the policy sentence.** It carries observed, required, the status and the review, but
    not "the contract provides 60 calendar days; the guidance requires at least 90 calendar days", which
    is the one line that says why the status is what it is.
