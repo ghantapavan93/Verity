@@ -87,4 +87,4 @@ changes, update its row and the commit above. Never rewrite broadly because a ro
 | `docs/GOLDENS.md`, `docs/RETRIEVAL.md`, `docs/ROUTING.md`, `docs/SKILLOPT.md` | the golden set and recordings; retrieval measured against labels; model routing; prompt optimisation |
 | `docs/BATCH.md`, `docs/CUAD.md`, `docs/FAMILIES.md`, `docs/DOMAIN-REVIEW.md` | batch recording; CUAD-30 pre-registration; families against labels; the lawyer pack |
 | `docs/FAILURE-ENVELOPE.md`, `docs/SCALE.md`, `docs/PERFORMANCE.md` | cases and the test that holds each; the measured envelope and what each next step must earn; interface measurements |
-| `docs/VALIDATION.md`, `docs/REVIEW-INDEPENDENT.md`, `docs/DEMO.md` | the validation audit; the independent review and its fixes; the walkthrough |
+| `docs/VALIDATION.md`, `docs/REVIEW-INDEPENDENT.md`, `docs/DEMO.md`, `docs/DEMO-PROOF.md` | the validation audit; the independent review and its fixes; the walkthrough; the stranger's-document record (a never-seen DOCX through every step, read back from the record, with what it exposed; fixture from `backend/experiments/demo_proof/make_fixture.py`) |
