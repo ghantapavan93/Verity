@@ -143,7 +143,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                       {r.citations.length === 0 && <span className={styles.tag}>{plural(r.verifiedSpans, "passage")}</span>}
                     </div>
                     <div className={styles.rowSide}>
-                      <span className={`${wb.statusChip} ${statusTone(r.status)}`}>{statusLabel(r.status, r.hasGuidance)}</span>
+                      <span className={`${wb.statusChip} ${statusTone(r.status)}`}>{statusLabel(r.status, r.hasGuidance, r.statusSource)}</span>
                       <span>{formatWhen(r.createdAt)}</span>
                     </div>
                   </button>

@@ -391,7 +391,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
           <article key={f.id} className={styles.finding}>
             <div className={styles.findingHead}>
               <span>{f.topic}</span>
-              <span className={`${wb.statusChip} ${statusTone(f.status)}`}>{statusLabel(f.status, run.hasGuidance)}</span>
+              <span className={`${wb.statusChip} ${statusTone(f.status)}`}>{statusLabel(f.status, run.hasGuidance, f.statusSource)}</span>
             </div>
             <p className={styles.findingText}>{f.conclusion}</p>
             <p className={styles.quiet}>{STATUS_SOURCE_LABELS[f.statusSource] ?? f.statusSource}</p>

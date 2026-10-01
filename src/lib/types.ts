@@ -81,9 +81,16 @@ const STATUS_LABELS: Record<Exclude<FindingStatus, "pass">, string> = {
   unresolved: "Unresolved",
 };
 
-/** A pass is "within guidance" only when the run had guidance; without it the model gave a plain answer (prompt rule 5). */
-export function statusLabel(status: FindingStatus, hasGuidance: boolean): string {
-  if (status === "pass") return hasGuidance ? "Within guidance" : "Answered";
+/**
+ * A pass is "within guidance" only when the run had guidance; without it the model gave a plain answer (prompt rule 5).
+ * When the pass is the model's own hint rather than a comparison code made, the label says so: the sweep of
+ * 2026-10-01 found "Within guidance" on findings that said the contract provides no notice period at all.
+ */
+export function statusLabel(status: FindingStatus, hasGuidance: boolean, source: string = "computed_days"): string {
+  if (status === "pass") {
+    if (!hasGuidance) return "Answered";
+    return source === "model_hint" ? "Within guidance (model's view)" : "Within guidance";
+  }
   return STATUS_LABELS[status];
 }
 

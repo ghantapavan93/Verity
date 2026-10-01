@@ -4,9 +4,9 @@ import styles from "../Workbench.module.css";
 import { statusLabel, type FindingStatus } from "@/lib/types";
 
 /** A finding's status as the API decided it, worded by whether its run had guidance. The tone is presentation; the status is not decided here. */
-export function StatusChip({ status, hasGuidance }: { status: FindingStatus; hasGuidance: boolean }) {
+export function StatusChip({ status, hasGuidance, source }: { status: FindingStatus; hasGuidance: boolean; source?: string }) {
   const tone = status === "needs_review" ? styles.statusReview : status === "pass" ? styles.statusPass : styles.statusMuted;
-  return <span className={`${styles.statusChip} ${tone}`}>{statusLabel(status, hasGuidance)}</span>;
+  return <span className={`${styles.statusChip} ${tone}`}>{statusLabel(status, hasGuidance, source)}</span>;
 }
 
 /** The spectral dot that marks model or upload work in progress. */

@@ -262,7 +262,7 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
           <dl className={styles.drawerFacts} data-testid="policy-evaluation">
             <div>
               <dt>Final status</dt>
-              <dd>{statusLabel(f.recordedPolicyEvaluation.status, hasGuidance)}</dd>
+              <dd>{statusLabel(f.recordedPolicyEvaluation.status, hasGuidance, f.recordedPolicyEvaluation.statusSource)}</dd>
             </div>
             <div>
               <dt>Source</dt>
