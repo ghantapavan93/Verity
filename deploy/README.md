@@ -81,3 +81,27 @@ No nginx or Caddy, no second hostname, no rate limiting beyond what Access gives
 directory for the public instance: the store the Ivo engineer opens is the store the measurements
 were made in, so Runs shows the real record. The four commits behind this deployment are local
 until the link has been inspected; pushing is a separate decision.
+
+## Keeping the two servers up (2026-10-01)
+
+On 2026-10-01 the API process ended at 02:37 with no log line and no event in Windows' logs, and the link was down
+until a person noticed. The published stack now runs under two supervisors, one per server, registered as Scheduled
+Tasks that start at logon under the signed-in account (the laptop stays logged in for the outreach window):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Build    # build for the public origin, register "Verity API" and "Verity Web", start both, wait for health
+powershell -ExecutionPolicy Bypass -File deploy\down.ps1                          # write the stop files and stop both servers; the supervisors exit instead of restarting
+powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1           # start again (removes the stop files; no rebuild)
+powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Uninstall
+```
+
+`deploy/supervise.ps1 -Name api|web` is the whole mechanism: start the server with its stdout and stderr in a stamped
+file under `backend/data/logs/deploy/`, wait for it to exit, write the exit code and how long it ran to
+`<name>.supervisor.log`, start it again after a delay that doubles from 5 s to 60 s while it keeps dying within a
+minute. A stop file ends the supervisor. The pid of the running server is in `<name>.pid`. No service manager, no
+wrapper binary: a 70-line script and the task scheduler that ships with Windows. The connector (`cloudflared`) is
+already a Windows service started by the system and is not part of this.
+
+Demonstrated on 2026-10-01 (`<name>.supervisor.log`): a forced exit of the API restarted it within five seconds with
+both the exit and the restart recorded; `down.ps1` stopped it and the supervisor exited on the stop file; a server
+that cannot start (its port held by another process) was retried at 5, 10, 20, 40 and 60 s, never in a tight loop.
