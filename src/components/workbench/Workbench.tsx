@@ -155,7 +155,8 @@ export function Workbench() {
       setEvidence(null);
       setHighlight(null);
       resetMemo();
-      await startRun(doc.id, guidanceRecord?.id ?? null, question);
+      const started = await startRun(doc.id, guidanceRecord?.id ?? null, question);
+      if (!started) setComposerText(text); // the API refused it; the words are the person's, not the error's
     },
     [doc, guidanceRecord, startRun, resetMemo],
   );

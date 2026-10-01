@@ -101,16 +101,19 @@ export function useRunFollower() {
     [stop],
   );
 
+  /** True when the API accepted the question; false when it refused it (the caller keeps the text). */
   const ask = useCallback(
-    async (documentId: string, guidanceId: string | null, question: string) => {
+    async (documentId: string, guidanceId: string | null, question: string): Promise<boolean> => {
       stop();
       dispatch({ type: "start", question, hasGuidance: guidanceId !== null });
       try {
         const created = await createRun({ documentId, guidanceId, question });
         dispatch({ type: "created", run: created });
         if (!TERMINAL.includes(created.stage)) attach(created.id);
+        return true;
       } catch (error) {
         dispatch({ type: "not_started", error: errorMessage(error) });
+        return false;
       }
     },
     [stop, attach],

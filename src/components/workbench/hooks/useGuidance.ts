@@ -11,7 +11,7 @@ export interface GuidanceState {
 }
 
 /** The legal guidance attached to the scope: the saved record, the popover and its draft. */
-export function useGuidance(onError: (message: string) => void) {
+export function useGuidance(onError: (message: string | null) => void) {
   const [guidance, setGuidance] = useState<GuidanceState | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -29,6 +29,7 @@ export function useGuidance(onError: (message: string) => void) {
       const record = await createGuidance(text);
       setGuidance({ id: record.id, text: record.text });
       setOpen(false);
+      onError(null); // an accepted guidance ends the sentence a refused one left on screen (sweep, 2026-10-01)
     } catch (error) {
       onError(errorMessage(error));
     } finally {

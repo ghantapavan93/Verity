@@ -100,7 +100,7 @@ describe("useRunFollower", () => {
     api.followRun.mockReturnValue(vi.fn());
 
     const { result } = renderHook(() => useRunFollower());
-    let asked: Promise<void> = Promise.resolve();
+    let asked: Promise<boolean> = Promise.resolve(false);
     act(() => {
       asked = result.current.ask("doc1", "g1", "Is there a most favoured nation clause?");
     });

@@ -81,6 +81,8 @@ export function CommandPalette({ getCommands, onClose, reduceMotion }: { getComm
             } else if (e.key === "Escape") {
               e.preventDefault();
               onClose();
+            } else if (e.key === "Tab") {
+              e.preventDefault(); // a dialog keeps focus: the list is reached through the arrow keys
             }
           }}
           aria-activedescendant={matches[index] ? `cmd-${matches[index].id}` : undefined}

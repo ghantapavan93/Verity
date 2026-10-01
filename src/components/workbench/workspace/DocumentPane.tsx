@@ -5,6 +5,7 @@ import type { Ref } from "react";
 import styles from "../Workbench.module.css";
 import { transitions } from "../shell/constants";
 import { formatWhen, plural } from "@/lib/format";
+import { codePointLength, splitByCodePoints } from "@/lib/text";
 import type { DocumentView, SectionView, SpanView } from "@/lib/types";
 
 /** The passage to mark: a section, and within it the exact span the API located. */
@@ -85,16 +86,18 @@ export function DocumentPane({
 }
 
 function SectionBlock({ section, lit, span }: { section: SectionView; lit: boolean; span: SpanView | null }) {
-  const body =
-    span && span.verified && span.start >= 0 && span.end <= section.text.length ? (
-      <>
-        {section.text.slice(0, span.start)}
-        <mark className={styles.mark}>{section.text.slice(span.start, span.end)}</mark>
-        {section.text.slice(span.end)}
-      </>
-    ) : (
-      section.text
-    );
+  // Offsets are code points (the API's), so the slice is by code points too (src/lib/text.ts).
+  const located =
+    span && span.verified && span.start >= 0 && span.end <= codePointLength(section.text) ? splitByCodePoints(section.text, span.start, span.end) : null;
+  const body = located ? (
+    <>
+      {located[0]}
+      <mark className={styles.mark}>{located[1]}</mark>
+      {located[2]}
+    </>
+  ) : (
+    section.text
+  );
   return (
     <section data-section={section.id} className={`${styles.clause} ${lit ? styles.clauseLit : ""}`}>
       {section.number ? (

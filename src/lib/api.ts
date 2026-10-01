@@ -50,6 +50,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`The workbench API at ${API_URL} is not reachable.`);
   }
   if (!response.ok) throw new Error(await readError(response));
+  if (!(response.headers.get("content-type") ?? "").includes("json")) {
+    // A sign-in page in place of data: the session in front of the API has expired.
+    throw new Error("The workbench API answered with a page instead of data; your sign-in may have expired. Reload the page.");
+  }
   return (await response.json()) as T;
 }
 
@@ -226,6 +230,19 @@ export function followRun(
       };
       onStage(data.stage, data.detail);
       if (data.final) void finish();
+    });
+    // The server's own `event: error` (an unknown run) carries data; the browser's transport error does not.
+    source.addEventListener("error", (event) => {
+      if (!(event instanceof MessageEvent) || finished) return;
+      finished = true;
+      source?.close();
+      let detail = "run not found";
+      try {
+        detail = (JSON.parse(event.data) as { detail?: string }).detail ?? detail;
+      } catch {
+        // the message is the detail
+      }
+      onError(detail);
     });
     source.onerror = () => {
       source?.close();

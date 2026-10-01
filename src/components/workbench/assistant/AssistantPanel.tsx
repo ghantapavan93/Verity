@@ -30,6 +30,9 @@ export const ASSISTANT_SUGGESTIONS = [
  * API reports it, findings as objects, the memo action and the evidence drawer. It renders what
  * the API decided; it does not decide anything about evidence itself.
  */
+/** The API accepts a question of at most this many characters (RunCreate.question). */
+export const MAX_QUESTION_CHARS = 2000;
+
 export function AssistantPanel({
   doc,
   runs,
@@ -107,6 +110,14 @@ export function AssistantPanel({
         ) : (
           <div className={styles.thread}>
             <div className={styles.userTurn}>{question}</div>
+            {runs.state.phase === "disconnected" && (
+              <p className={styles.errorLine} role="alert">
+                {runs.state.error} The run continues on the server.{" "}
+                <button type="button" className={styles.linkButton} onClick={runs.resume}>
+                  Reconnect
+                </button>
+              </p>
+            )}
             <AnimatePresence mode="wait" initial={false}>
               {stageLabel ? (
                 <motion.div
@@ -192,12 +203,15 @@ export function AssistantPanel({
           className={styles.composerInput}
           placeholder="Ask anything about this contract…"
           rows={1}
+          maxLength={MAX_QUESTION_CHARS}
           value={composerText}
           onChange={(e) => setComposerText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              onAsk(composerText);
+              // The same rule as the Send button: one run at a time. Enter used to start another run and abandon
+              // the one on screen (sweep, 2026-10-01).
+              if (!stageLabel) onAsk(composerText);
             }
           }}
         />
