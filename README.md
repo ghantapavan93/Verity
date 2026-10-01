@@ -1,9 +1,45 @@
-# Contract Workbench
+# Verity
 
-Review contracts against the guidance your team actually uses. Upload a contract and a
-lawyer's instructions, ask a question or run a review, and get findings whose evidence opens
-the exact clause. Runs locally at $0 with Qwen3 8B through Ollama; every citation is verified
-by code before it is shown.
+**A contract workbench that knows what not to trust.**
+
+Upload a contract and the guidance your legal team actually uses, ask a question, and get findings
+whose evidence opens the exact clause. A small local model proposes. Code verifies every quoted
+passage against the document's own text, decides the status, and records enough to rebuild the
+model's input byte for byte. A person confirms. It runs at $0: Qwen3 8B through Ollama on a laptop.
+
+![The evidence drawer on a recorded run: what the model proposed, what the source says, what code decided, what a person decided](docs/img/evidence-drawer.png)
+
+## One run, as recorded
+
+The run in the picture is real and is walked through in [`docs/DEMO-PROOF.md`](docs/DEMO-PROOF.md):
+a reseller agreement the workbench had never seen, checked against "at least 90 days' written notice
+for termination for convenience".
+
+1. **The model proposed** "within guidance", and cited the wrong section.
+2. **The source** was searched for the quote anyway. The words were found verbatim in a different
+   section, and the finding says so.
+3. **Code decided.** The contract gives 60 days, the guidance requires 90: needs review. The model's
+   hint decided nothing.
+4. **A person** confirmed it, and the decision is kept as a record.
+
+The model made a plausible mistake, and the system around it knew what not to trust. "Prove it" in
+the drawer opens the rest: the offsets, the hashes, what retrieval chose, the exact input the model saw.
+
+## Measured, not claimed
+
+| Claim | Measurement | Where |
+|---|---|---|
+| Any answer can be explained from its own record | 789 of 789 runs with a recorded input hash rebuild to the same SHA-256, across 847 runs and two prompt windows | `DECISIONS.md` |
+| The three views of a run agree | 774 of 774 complete runs: the run, its explanation and the findings record match on counts, statuses and verified quotes | `DECISIONS.md` |
+| Quality is a number with its failures named | golden set 37 of 44; the seven that fail are listed, with the rule for keeping a prompt change | `docs/GOLDENS.md` |
+| A crash neither loses nor fakes a result | the API killed mid-run under the real model: on restart the run is failed with the dead process named, and its stream ends | `DECISIONS.md` |
+| It is tested like it matters | 308 backend tests (eight Hypothesis properties, one Schemathesis fuzz), 25 interface unit tests, 21 browser flows | [Checks](#checks) |
+| Ideas are allowed to die | three pre-registered experiments were killed by their own results before this was built; their records are on the Runs surface | `docs/` |
+
+Every decision, with the measurement that earned it or killed it, is in [`DECISIONS.md`](DECISIONS.md).
+The app's own title is Contract Workbench.
+
+## What exists
 
 **Status: the vertical slice works end to end with the local model, and the three surfaces
 exist.** Upload a contract (PDF, DOCX, TXT) → it is parsed into numbered sections → optionally
