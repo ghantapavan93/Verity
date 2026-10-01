@@ -69,6 +69,9 @@ function timingRows(run: RunDetailView): TimingRow[] {
   return rows;
 }
 
+// The commit the interface was built from, set by deploy/install-supervision.ps1 at build time; absent in a dev build.
+const BUILD_SHA = process.env.NEXT_PUBLIC_BUILD_SHA ?? "";
+
 export function RunsView({
   notice,
   currentRunId = null,
@@ -185,6 +188,11 @@ export function RunsView({
               : ""}{" "}
             · {citations.withheldFindings} of {plural(citations.findings, "finding")} withheld
             {citations.firstRunAt ? ` · since ${formatWhen(citations.firstRunAt)}` : ""}
+          </p>
+        )}
+        {BUILD_SHA && (
+          <p className={styles.quiet} data-testid="build-identity">
+            Interface built from commit <code>{BUILD_SHA.slice(0, 12)}</code>; the API record names the reader, verifier, prompt and model of each run.
           </p>
         )}
         {(notice || error) && <p className={styles.notice}>{notice ?? error}</p>}

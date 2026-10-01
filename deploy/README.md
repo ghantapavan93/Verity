@@ -95,6 +95,10 @@ powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1         
 powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Uninstall
 ```
 
+`-Build` also bakes the commit it builds from into the interface (`NEXT_PUBLIC_BUILD_SHA`), which the Runs surface shows
+as "Interface built from commit …", so a reader can check that the deployed interface is the committed HEAD without
+an endpoint for it. Both servers listen on 127.0.0.1 only; the connector is their only client.
+
 `deploy/supervise.ps1 -Name api|web` is the whole mechanism: start the server with its stdout and stderr in a stamped
 file under `backend/data/logs/deploy/`, wait for it to exit, write the exit code and how long it ran to
 `<name>.supervisor.log`, start it again after a delay that doubles from 5 s to 60 s while it keeps dying within a

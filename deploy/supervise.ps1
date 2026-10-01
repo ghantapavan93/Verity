@@ -56,9 +56,10 @@ while ($true) {
       -WorkingDirectory $backend -RedirectStandardOutput $out -RedirectStandardError $err -WindowStyle Hidden -PassThru
   } else {
     # `next start` itself, not `npm run start`: one process, so its exit is the server's exit and its pid is the server's.
+    # Loopback only: the tunnel is the only client; before 2026-10-01 the interface also listened on the LAN address.
     $next = Join-Path $root "node_modules\next\dist\bin\next"
     $process = Start-Process -FilePath "node" `
-      -ArgumentList "`"$next`"", "start", "-p", "$Port" `
+      -ArgumentList "`"$next`"", "start", "-H", "127.0.0.1", "-p", "$Port" `
       -WorkingDirectory $root -RedirectStandardOutput $out -RedirectStandardError $err -WindowStyle Hidden -PassThru
   }
   $null = $process.Handle  # cache the handle now, or Windows PowerShell cannot read the exit code after the exit

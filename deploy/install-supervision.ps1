@@ -31,6 +31,7 @@ if ($Uninstall) {
 if ($Build) {
   $env:NEXT_PUBLIC_API_URL = $Origin
   $env:NEXT_PUBLIC_PROOF_RUN = $ProofRun
+  $env:NEXT_PUBLIC_BUILD_SHA = (git -C $root rev-parse HEAD).Trim()  # the commit this build is made from, shown on the Runs surface
   Push-Location $root
   try {
     & npm run build 2>&1 | Tee-Object -FilePath (Join-Path $logs "build-$((Get-Date).ToString('yyyyMMdd-HHmmss')).log") | Select-Object -Last 2
