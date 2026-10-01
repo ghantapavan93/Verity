@@ -44,19 +44,19 @@ def _record(row: dict[str, object]) -> ExperimentRecord:
 def load_experiments(path: Path) -> ExperimentsOut:
     if not path.exists():
         return ExperimentsOut(
-            available=False, source=str(path), detail="results.json not found; build it with `python -m results_page.build` in ivo-experiments"
+            available=False, source=path.name, detail="results.json not found; build it with `python -m results_page.build` in ivo-experiments"
         )
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
-        return ExperimentsOut(available=False, source=str(path), detail=f"results.json unreadable: {error}")
+        return ExperimentsOut(available=False, source=path.name, detail=f"results.json unreadable: {type(error).__name__}")
     board = data.get("board")
     if not isinstance(board, list) or not board:
-        return ExperimentsOut(available=False, source=str(path), detail="results.json has no board; rebuild it with the current results_page")
+        return ExperimentsOut(available=False, source=path.name, detail="results.json has no board; rebuild it with the current results_page")
     page = data.get("page") or {}
     return ExperimentsOut(
         available=True,
-        source=str(path),
+        source=path.name,
         page_url=settings.experiments_url or page.get("repo_url") or None,
         page=ExperimentPage(**{k: page.get(k) for k in ("title", "subtitle", "author", "period", "repo_url", "branch")}),
         repo_head=data.get("repo_head"),

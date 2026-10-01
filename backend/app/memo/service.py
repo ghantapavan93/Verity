@@ -9,6 +9,7 @@ the prompt version and hash, so the file can be traced to its record from inside
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from html import escape
@@ -31,14 +32,27 @@ from ..config import settings
 from ..hashing import sha256_file
 from ..models import EvidenceSpan, Finding, Run, iso, utcnow
 
+# Characters XML 1.0 cannot carry (control characters other than tab, newline and return). python-docx refuses them
+# with a ValueError; a form feed pasted from a PDF into the guidance made the memo a 500 (hostile review, 2026-10-01).
+_XML_UNSAFE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+
+
+def xml_safe(text: str) -> str:
+    return _XML_UNSAFE.sub("", text)
+
+
 STATUS_LABELS = {"needs_review": "Needs review", "missing": "Not found", "unresolved": "Unresolved"}
 
 
-def status_label(status: str, with_guidance: bool) -> str:
+def status_label(status: str, with_guidance: bool, source: str = "computed_days") -> str:
     """A pass is "within guidance" only when the run had guidance to be within; without it the model gave a plain
-    answer (prompt rule 5). Found while tracing on 2026-09-29: every pass used to be headed "Within guidance"."""
+    answer (prompt rule 5). Found while tracing on 2026-09-29: every pass used to be headed "Within guidance".
+    When the pass is the model's own hint rather than a comparison code made, the label says so: the sweep of
+    2026-10-01 found "Within guidance" on findings that said the contract provides no notice period at all."""
     if status == "pass":
-        return "Within guidance" if with_guidance else "Answered"
+        if not with_guidance:
+            return "Answered"
+        return "Within guidance (model's view)" if source == "model_hint" else "Within guidance"
     return STATUS_LABELS.get(status, status)
 
 
@@ -121,7 +135,7 @@ def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str],
     else:
         parts.append("<p>None. Every finding was within guidance or a plain answer.</p>")
     for f in findings:
-        parts.append(f"<h2>{escape(f.topic)} · {status_label(f.status, run.guidance is not None)}</h2>")
+        parts.append(f"<h2>{escape(f.topic)} · {status_label(f.status, run.guidance is not None, f.status_source)}</h2>")
         parts.append(f"<p>{escape(f.conclusion)}</p>")
         for span in f.spans:
             source = by_span[id(span)]
@@ -174,7 +188,7 @@ def _bookmark(paragraph: Paragraph, name: str, text: str, bookmark_id: int) -> N
     end = OxmlElement("w:bookmarkEnd")
     end.set(qn("w:id"), str(bookmark_id))
     paragraph._p.append(start)
-    paragraph.add_run(text)
+    paragraph.add_run(xml_safe(text))
     paragraph._p.append(end)
 
 
@@ -186,7 +200,7 @@ def _hyperlink_run(text: str) -> etree._Element:
     properties.append(style)
     run.append(properties)
     node = OxmlElement("w:t")
-    node.text = text
+    node.text = xml_safe(text)
     node.set(qn("xml:space"), "preserve")
     run.append(node)
     return run
@@ -226,8 +240,8 @@ def _custom_properties(document: WordDocument, values: dict[str, str]) -> None:
 
 def _properties(document: WordDocument, run: Run, verified: int, total: int, review_head: str = "") -> None:
     core = document.core_properties
-    core.title = f"Contract review memo · {run.document.name}"
-    core.subject = run.question
+    core.title = xml_safe(f"Contract review memo · {run.document.name}")
+    core.subject = xml_safe(run.question)
     core.author = AUTHOR
     core.last_modified_by = AUTHOR
     core.category = "Review memo"
@@ -277,47 +291,47 @@ def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str],
     ):
         row = table.add_row().cells
         row[0].text = label
-        row[1].text = value
+        row[1].text = xml_safe(value)
 
     issues = [f for f in findings if f.status in ("needs_review", "missing")]
     document.add_heading(f"Issues requiring review ({len(issues)})", level=2)
     if issues:
         for f in issues:
-            document.add_paragraph(f.topic, style="List Number")
+            document.add_paragraph(xml_safe(f.topic), style="List Number")
     else:
         document.add_paragraph("None. Every finding was within guidance or a plain answer.")
 
     for f in findings:
-        document.add_heading(f"{f.topic} · {status_label(f.status, run.guidance is not None)}", level=2)
-        document.add_paragraph(f.conclusion)
+        document.add_heading(xml_safe(f"{f.topic} · {status_label(f.status, run.guidance is not None, f.status_source)}"), level=2)
+        document.add_paragraph(xml_safe(f.conclusion))
         for span in f.spans:
             source = by_span[id(span)]
             p = document.add_paragraph()
             p.add_run(f"{_evidence_head(f)} ").bold = True
-            p.add_run(f"({source.title}) ")
+            p.add_run(xml_safe(f"({source.title}) "))
             _internal_link(p, f"src_{source.number}", f"[{source.number}]")
-            quote = document.add_paragraph(span.quote)
+            quote = document.add_paragraph(xml_safe(span.quote))
             quote.paragraph_format.left_indent = Pt(18)
         if f.guidance_reference:
             p = document.add_paragraph()
             p.add_run("Legal guidance. ").bold = True
-            p.add_run(f.guidance_reference)
+            p.add_run(xml_safe(f.guidance_reference))
         if f.observed or f.required:
             p = document.add_paragraph()
             if f.observed:
                 p.add_run("Observed ").bold = True
-                p.add_run(f"{f.observed}   ")
+                p.add_run(xml_safe(f"{f.observed}   "))
             if f.required:
                 p.add_run("Required ").bold = True
-                p.add_run(f.required)
+                p.add_run(xml_safe(f.required))
         if f.suggested_position:
             p = document.add_paragraph()
             p.add_run("Suggested position. ").bold = True
-            p.add_run(f.suggested_position)
+            p.add_run(xml_safe(f.suggested_position))
         if f.review is not None:
             p = document.add_paragraph()
             p.add_run("Reviewed. ").bold = True
-            p.add_run(_review_line(f))
+            p.add_run(xml_safe(_review_line(f)))
 
     document.add_heading("Sources", level=2)
     sources_table = document.add_table(rows=1, cols=4)
@@ -328,7 +342,7 @@ def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str],
     for source in sources:
         row = sources_table.add_row().cells
         _bookmark(row[0].paragraphs[0], f"src_{source.number}", str(source.number), source.number)
-        row[1].text = source.title
+        row[1].text = xml_safe(source.title)
         row[2].text = _located(source.span)
         _external_link(row[3].paragraphs[0], deep_link(run, source.finding), "Open in the workbench")
 

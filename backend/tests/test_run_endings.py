@@ -97,9 +97,14 @@ def test_staleness_recovery_ends_an_open_stream_at_once(client: TestClient, monk
     assert elapsed < 5, f"the stream waited {elapsed:.1f} s for a heartbeat instead of hearing the recovery"
 
 
-def test_a_worker_whose_run_was_ended_by_recovery_leaves_the_recovery_record_and_does_not_raise(client: TestClient) -> None:
+def test_a_worker_whose_run_was_ended_by_recovery_leaves_the_recovery_record_and_does_not_raise(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Twenty concurrent runs on 2026-09-28 met this: recovery in another process ended a live run, the worker's next write hit
-    the immutability trigger, and writing the failure into the same session raised again out of the background task."""
+    the immutability trigger, and writing the failure into the same session raised again out of the background task.
+    Since 2026-10-01 recovery leaves a run alone while its process is alive on this host, so the recovering process here
+    is made unable to see the worker, as a process on another host would be."""
+    from app.application import recover_runs
+
+    monkeypatch.setattr(recover_runs, "owner_is_alive_here", lambda owner: False)
     original: Callable[[str, str, dict[str, Any]], Generation] = client.provider.generate_json
 
     def swept(system: str, user: str, schema: dict[str, Any]) -> Generation:

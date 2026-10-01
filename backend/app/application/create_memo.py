@@ -4,6 +4,8 @@ Asking twice returns the memo already written: the run is immutable, so the proj
 
 from __future__ import annotations
 
+import shutil
+import uuid
 from dataclasses import dataclass
 
 from sqlalchemy.exc import IntegrityError
@@ -48,7 +50,7 @@ def create_memo(session: Session, run_id: str) -> CreatedMemo:
     # Written aside and moved into place once the row is in: a concurrent first request that loses the insert never
     # touches the winner's file (found while tracing, 2026-09-29).
     memos_dir = settings.data_dir / "memos"
-    pending_dir = memos_dir / "pending"
+    pending_dir = memos_dir / "pending" / uuid.uuid4().hex  # one directory per request, so a loser never touches a winner's file
     pending_dir.mkdir(parents=True, exist_ok=True)
     pending, digest = memo_docx(run, findings, titles, pending_dir, review_head=head)
     path = memos_dir / f"memo-{run.id}-{head[:8]}.docx"
@@ -58,10 +60,11 @@ def create_memo(session: Session, run_id: str) -> CreatedMemo:
         session.commit()
     except IntegrityError:
         session.rollback()
-        pending.unlink(missing_ok=True)
+        shutil.rmtree(pending_dir, ignore_errors=True)
         winner = stored_memo(session, run.id, head)
         if winner is None:
             raise
         return CreatedMemo(winner, created=False)
     pending.replace(path)
+    shutil.rmtree(pending_dir, ignore_errors=True)
     return CreatedMemo(memo, created=True)

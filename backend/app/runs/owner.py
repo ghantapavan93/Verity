@@ -88,6 +88,20 @@ def this_process() -> ProcessIdentity:
     return ProcessIdentity(socket.gethostname(), os.getpid(), _start_token(os.getpid()) or "")
 
 
+def owner_is_alive_here(owner: str | None) -> bool:
+    """True when the owner is a process on this host that still exists with the same start time: a run it holds is
+    waiting its turn or on the model, however long, and must not be declared stale (hostile review, 2026-10-01)."""
+    if not owner:
+        return False
+    identity = ProcessIdentity.parse(owner)
+    if identity is None or identity.host != this_process().host:
+        return False
+    if identity.pid == this_process().pid:
+        return True
+    token = _start_token(identity.pid)
+    return token is not None and token == identity.started
+
+
 def owner_is_gone(owner: str | None) -> bool:
     """True only when the owner was a process on this host that provably no longer exists (or was replaced by a
     process with the same pid and a different start time). Unknown owners and other hosts are never "gone"."""

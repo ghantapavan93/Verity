@@ -197,6 +197,8 @@ class FindingRecord(ApiModel):
     # Section labels of the verified citations, e.g. ["§5.4", "§5.3.1"].
     citations: list[str] = []
     has_guidance: bool = False
+    # Who decided the status: code from the day counts, or the model's hint (FindingOut.status_source).
+    status_source: str = "model_hint"
     created_at: str
 
 

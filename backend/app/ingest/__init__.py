@@ -35,6 +35,14 @@ class Ingested:
     coverage: list[PartCoverage]
 
 
+def base_name(filename: str) -> str:
+    """The name a person gave the file, without directories or control characters: it names a stored document, a zip
+    entry in the evidence pack and the CONTRACT line of the prompt, none of which may carry a path (hostile review, 2026-10-01)."""
+    name = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    name = "".join(ch for ch in name if ch >= " " and ch != "\x7f").strip()
+    return name[:255] or "document"
+
+
 def ingest(filename: str, data: bytes) -> Ingested:
     result: ReadResult = read(filename, data)
     sections = build_sections(result.blocks, title=result.title)
@@ -42,7 +50,7 @@ def ingest(filename: str, data: bytes) -> Ingested:
         raise UnsupportedFile("no readable text found in the file")
     suffix = "." + filename.rsplit(".", 1)[-1].lower()
     return Ingested(
-        name=filename,
+        name=base_name(filename),
         media_type=SUPPORTED[suffix],
         sha256=sha256_bytes(data),
         pages=result.pages,

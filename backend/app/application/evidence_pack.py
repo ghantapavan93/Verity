@@ -21,6 +21,7 @@ from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT
 from ..config import settings
 from ..errors import NotFound
 from ..hashing import sha256_bytes
+from ..ingest import base_name
 from ..models import Run, iso, utcnow
 from ..verify import spans as verifier
 from .create_memo import review_head
@@ -156,7 +157,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         pack.writestr("findings.json", json.dumps(findings, ensure_ascii=False, indent=1))
         pack.writestr("verify.py", verify_py)
         if original_bytes is not None:
-            pack.writestr(f"document/{document.name}", original_bytes)
+            pack.writestr(f"document/{base_name(document.name)}", original_bytes)
         if rebuilt.matches and rebuilt.system is not None and rebuilt.user is not None:
             pack.writestr("model_input/system.txt", rebuilt.system)
             pack.writestr("model_input/user.txt", rebuilt.user)

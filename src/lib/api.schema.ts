@@ -1169,6 +1169,11 @@ export interface components {
              * @enum {string}
              */
             status: "pass" | "needs_review" | "missing" | "unresolved";
+            /**
+             * Statussource
+             * @default model_hint
+             */
+            statusSource: string;
             /** Topic */
             topic: string;
             /** Verifiedspans */

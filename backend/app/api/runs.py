@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 from fastapi.responses import StreamingResponse
@@ -147,9 +148,18 @@ def run_summary(run: Run) -> RunSummary:
 # ------------------------------------------------------------------------------ routes
 
 
+# Runs execute on their own threads, not the request threadpool: a run holds its thread through the admission
+# queue and up to four model calls, and forty of them starved every other route (hostile review, 2026-10-01).
+RUN_EXECUTOR = ThreadPoolExecutor(max_workers=64, thread_name_prefix="run")
+
+
 def _worker(run_id: str, provider: ModelProvider) -> None:
     with SessionLocal() as session:
         execute_run(session, run_id, provider_for(session.get(Run, run_id), provider))
+
+
+async def _run_on_own_thread(run_id: str, provider: ModelProvider) -> None:
+    await asyncio.get_running_loop().run_in_executor(RUN_EXECUTOR, _worker, run_id, provider)
 
 
 def provider_for(run: Run | None, default: ModelProvider) -> ModelProvider:
@@ -166,7 +176,7 @@ def create_run(
     """202 with a new run, or 200 with the running or completed run that already has these inputs."""
     started = start_run(session, body.document_id, body.guidance_id, body.question, provider)
     if started.created:
-        background.add_task(_worker, started.run.id, provider)
+        background.add_task(_run_on_own_thread, started.run.id, provider)
     else:
         response.status_code = status.HTTP_200_OK
     out = run_out(started.run)

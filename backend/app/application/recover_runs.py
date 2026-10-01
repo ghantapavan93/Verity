@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..models import Run, RunStage, as_utc, utcnow
 from ..runs.events import TERMINAL, StageEvent, bus
-from ..runs.owner import owner_is_gone
+from ..runs.owner import owner_is_alive_here, owner_is_gone
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +46,10 @@ def recover_interrupted_runs(session: Session, stale_after_s: float | None = Non
         started = as_utc(latest.at) if latest is not None else as_utc(run.created_at)
         gone = latest is not None and owner_is_gone(latest.owner)
         if not gone and now - started < limit:
+            continue
+        if not gone and latest is not None and owner_is_alive_here(latest.owner):
+            # The process is here and alive: the run is queued for the model or on it. Its own handlers end it;
+            # the staleness window is for processes that cannot be seen (another host, a time before owners).
             continue
         minutes = int((now - started).total_seconds() // 60)
         message = (

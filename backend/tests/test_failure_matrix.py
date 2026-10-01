@@ -219,17 +219,23 @@ def test_a_docx_member_named_to_escape_the_archive_is_never_written_anywhere(tmp
     assert not (tmp_path.parent / "escaped.txt").exists() and not list(tmp_path.iterdir())
 
 
-def test_a_two_megabyte_paragraph_ingests_quickly_and_is_cut_for_the_prompt() -> None:
+def test_a_two_megabyte_paragraph_ingests_quickly_into_sections_that_fit_the_prompt() -> None:
+    """Before 2026-10-01 the wall stayed one section and the prompt cut it at its window, so everything past the window
+    was unreadable by the model. Now the wall is split at sentence ends into parts no longer than a section, each of
+    which fits the prompt whole, and nothing is lost."""
     import time
 
     from app.analysis.service import MAX_SECTION_CHARS_IN_PROMPT, SectionForPrompt, build_user_message
     from app.ingest import ingest
+    from app.ingest.sections import MAX_SECTION_CHARS
 
-    data = ("The Provider shall deliver the services under this Agreement and any Order Form. " * 25_000).encode("utf-8")
+    sentence = "The Provider shall deliver the services under this Agreement and any Order Form. "
+    data = (sentence * 25_000).encode()
     started = time.perf_counter()
     parsed = ingest("wall.txt", data)
     assert time.perf_counter() - started < 2.0
-    assert len(parsed.sections) == 1 and len(parsed.sections[0].text) > 2_000_000
+    assert len(parsed.sections) > 300 and all(len(s.text) <= MAX_SECTION_CHARS for s in parsed.sections)
+    assert " ".join(s.text for s in parsed.sections) == (sentence * 25_000).strip()
     message = build_user_message("What must the Provider deliver?", None, "wall.txt", [SectionForPrompt("sec_0", "", "", parsed.sections[0].text)])
     assert len(message) < MAX_SECTION_CHARS_IN_PROMPT + 400
 

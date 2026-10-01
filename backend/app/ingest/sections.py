@@ -15,7 +15,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-HEADING_NUMBER = re.compile(r"^\s*(?:(?:Section|Clause|Article)\s+)?(\d+(?:\.\d+)*)[.)]?\s+(.*\S)\s*$", re.IGNORECASE)
+# Nine digits per part: a "number" longer than that is not a clause number, and Python refuses to parse thousands of digits.
+HEADING_NUMBER = re.compile(r"^\s*(?:(?:Section|Clause|Article)\s+)?(\d{1,9}(?:\.\d{1,9})*)[.)]?\s+(.*\S)\s*$", re.IGNORECASE)
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 LEAD_IN = re.compile(r"^(.{3,80}?[.:])\s+(?=\S)")
 # "Agreement" means …: a definition is labelled by its term and the whole sentence is its body.
 DEFINED_TERM = re.compile(r"^[“\"‘']([^”\"’']{1,60})[”\"’']\s+(?:means|has the meaning|shall mean|shall have the meaning|includes)", re.IGNORECASE)
@@ -127,11 +129,21 @@ def _push(sections: list[ParsedSection], section: ParsedSection) -> None:
     if len(section.text) <= MAX_SECTION_CHARS:
         sections.append(section)
         return
-    # Split an oversized section at paragraph boundaries, keeping the heading on each part.
+    # Split an oversized section at paragraph boundaries, keeping the heading on each part. A paragraph longer than
+    # a section is cut at sentence ends into parts of its own, so no part exceeds the cap (hostile review, 2026-10-01).
     part: list[str] = []
     size = 0
     index = 1
     for paragraph in section.paragraphs:
+        if len(paragraph) > MAX_SECTION_CHARS:
+            if part:
+                sections.append(ParsedSection(section.number, f"{section.heading} (part {index})", part, section.number_computed))
+                index += 1
+                part, size = [], 0
+            for chunk in split_paragraph(paragraph, MAX_SECTION_CHARS):
+                sections.append(ParsedSection(section.number, f"{section.heading} (part {index})", [chunk], section.number_computed))
+                index += 1
+            continue
         if part and size + len(paragraph) > MAX_SECTION_CHARS:
             sections.append(ParsedSection(section.number, f"{section.heading} (part {index})", part, section.number_computed))
             index += 1
@@ -140,6 +152,25 @@ def _push(sections: list[ParsedSection], section: ParsedSection) -> None:
         size += len(paragraph) + len(PARAGRAPH_SEPARATOR)
     if part:
         sections.append(ParsedSection(section.number, f"{section.heading} (part {index})" if index > 1 else section.heading, part, section.number_computed))
+
+
+def split_paragraph(text: str, cap: int) -> list[str]:
+    """A paragraph cut into pieces no longer than ``cap``, at sentence ends where there are any, else at the cap."""
+    pieces: list[str] = []
+    start = 0
+    while len(text) - start > cap:
+        # The last sentence end inside the window, unless that leaves a sliver; then the cap itself.
+        cut = max((m.end() for m in SENTENCE_END.finditer(text, start, start + cap)), default=start)
+        if cut - start < cap // 4:
+            cut = start + cap
+        piece = text[start:cut].strip()
+        if piece:
+            pieces.append(piece)
+        start = cut
+    tail = text[start:].strip()
+    if tail:
+        pieces.append(tail)
+    return pieces
 
 
 def looks_like_heading(line: str) -> bool:

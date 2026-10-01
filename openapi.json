@@ -1873,6 +1873,11 @@
             "title": "Status",
             "type": "string"
           },
+          "statusSource": {
+            "default": "model_hint",
+            "title": "Statussource",
+            "type": "string"
+          },
           "topic": {
             "title": "Topic",
             "type": "string"
