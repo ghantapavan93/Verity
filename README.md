@@ -60,7 +60,7 @@ cd backend
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
 npm test                                                    # Vitest: the run follower, the URL state and the explanation, 13 tests
 npx playwright install chromium                             # once per machine: the browser the flows run in; the npm package alone does not bring it
-npm run e2e                                                 # Playwright: twenty browser flows, real API, the model's recorded answers replayed, faults by marker
+npm run e2e                                                 # Playwright: twenty-one browser flows, real API, the model's recorded answers replayed, faults by marker
 ```
 
 A fresh clone of `main` at `c4dd415` was set up from this file alone on 2026-09-30 and every command
@@ -176,7 +176,7 @@ repository and appear under this product's Runs surface as records.
 | Independent review | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true, recorded as delivered before any fix, with what changed after (`docs/REVIEW-INDEPENDENT.md`) |
 | Validation | what is proven, partial, missing and not justified, capability by capability, with the validator that holds each claim (`docs/VALIDATION.md`) |
 | Browser flows | twenty Playwright flows against the production build and the real API: the seven happy paths (landing, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; and three flows the validation brief named: a review against guidance that ends in a finding with a status and the guidance in the drawer, a malformed upload refused with the reason and nothing opened, a refresh once the run is in the URL brings it back (the run id reaches the URL only when the run has finished, so this reloads after completion; a true mid-run refresh is unproven); traces kept on failure |
-| Checks | backend 308 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter, twenty-four hand mutants killed; interface 25 unit tests and 20 browser flows, tsc, eslint, prettier, production build; results page 23; the CI workflow runs all of it and fails on generated-type drift, and waits on branch `ci` for the token's workflow scope |
+| Checks | backend 308 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter, twenty-four hand mutants killed; interface 25 unit tests and 21 browser flows, tsc, eslint, prettier, production build; results page 23; the CI workflow runs all of it and fails on generated-type drift, and waits on branch `ci` for the token's workflow scope |
 
 ## What is deliberately not here yet
 
