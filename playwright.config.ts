@@ -61,7 +61,7 @@ export default defineConfig({
       url: WEB_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 240_000,
-      env: { NEXT_PUBLIC_API_URL: API_URL },
+      env: { NEXT_PUBLIC_API_URL: API_URL, NEXT_DIST_DIR: ".next-e2e" },
     },
   ],
 });

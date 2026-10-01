@@ -92,6 +92,22 @@ test("a question ends in a finding whose citation opens the document's own text"
   await page.getByRole("button", { name: "Close evidence" }).click();
 });
 
+test("the finished review the landing offers opens as the run it names", async ({ page }) => {
+  // A complete run with findings must exist in this store; the sample question makes one (or finds the same run again).
+  await openSample(page);
+  await ask(page, LIABILITY);
+  await expect(page.getByText(/Evidence · \d+ verified passage/)).toBeVisible();
+
+  await page.goto("/");
+  // The link reads as the run's question; its title names the run it opens.
+  const proof = page.locator('button[title^="Open run "]');
+  await expect(proof).toBeVisible();
+  const named = ((await proof.getAttribute("title")) ?? "").replace("Open run ", "");
+  await proof.click();
+  await expect(page).toHaveURL(new RegExp(`[?&]run=${named}`));
+  await expect(page.getByText(/Evidence · \d+ verified passage|Closest provisions read/).first()).toBeVisible();
+});
+
 test("the most favoured nation question is not answered with an invented clause", async ({ page }) => {
   await openSample(page);
   await ask(page, MFN);
