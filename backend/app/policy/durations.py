@@ -92,13 +92,22 @@ _ONES = {
 _TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
 # Number words only, longest first, so "within thirty (30) days" reads "thirty" and never "within thirty".
 _NUMBER_WORD = "|".join(sorted([*_ONES, *_TENS, "hundred", "thousand"], key=len, reverse=True))
-_WORD = rf"(?:a|an|(?:{_NUMBER_WORD})(?:[\s-]+(?:and[\s-]+)?(?:{_NUMBER_WORD}))*)"
+# Atomic: a run of number words is consumed once and never re-split by backtracking, so a hostile guidance of
+# "one and one and …" is linear in the run, not exponential (hostile review, 2026-10-01).
+_WORD = rf"(?:a|an|(?>(?:{_NUMBER_WORD})(?:[\s-]+(?:and[\s-]+)?(?:{_NUMBER_WORD}))*))"
 _NUMBER = r"\d+(?:\.\d+)?"
-_UNIT = r"(?P<unit>calendar\s+days?|business\s+days?|working\s+days?|days?|weeks?|months?|years?)"
+_UNIT = r"(?P<unit>calendar\s+days?|business\s+days?|working\s+days?|days?|weeks?|fortnights?|months?|years?)"
 # digits, optionally followed by the words in parentheses: "30 days", "30 (thirty) days"
-_DIGITS_FIRST = re.compile(rf"(?<![\w.])(?P<digits>{_NUMBER})\s*(?:\(\s*(?P<words>{_WORD})\s*\))?\s*{_UNIT}\b", re.IGNORECASE)
+# "30 days", "30 (thirty) days", "30-day"
+_DIGITS_FIRST = re.compile(rf"(?<![\w.])(?P<digits>{_NUMBER})[\s-]*(?:\(\s*(?P<words>{_WORD})\s*\))?[\s-]*{_UNIT}\b", re.IGNORECASE)
 # words, optionally followed by the digits in parentheses: "thirty days", "thirty (30) days", "twenty-one (21) days"
-_WORDS_FIRST = re.compile(rf"\b(?P<words>{_WORD})\s*(?:\(\s*(?P<digits>{_NUMBER})\s*\))?\s+{_UNIT}\b", re.IGNORECASE)
+_WORDS_FIRST = re.compile(rf"\b(?P<words>{_WORD})\s*(?:\(\s*(?P<digits>{_NUMBER})\s*\))?[\s-]+{_UNIT}\b", re.IGNORECASE)
+# "not less than 30 nor more than 60 days", "30 to 60 days", "30-60 days": two durations sharing one unit.
+_RANGE = re.compile(rf"(?<![\w.])(?P<lo>{_NUMBER})\s*(?:(?:nor|or|and)\s+(?:more|less)\s+than|to|-|–)\s*(?P<hi>{_NUMBER})\s*{_UNIT}\b", re.IGNORECASE)
+# Termination with no notice at all: a zero-day notice period, so a floor in the guidance can be compared with it.
+_ZERO = re.compile(r"\b(?:immediately|with immediate effect|without (?:prior )?notice|no notice)\b", re.IGNORECASE)
+# The words-first pattern is only worth running when a unit word exists at all.
+_ANY_UNIT = re.compile(_UNIT, re.IGNORECASE)
 _ARTICLE = re.compile(r"^(?:a|an|the)$", re.IGNORECASE)
 
 
@@ -139,13 +148,15 @@ def _mention(match: re.Match[str]) -> DurationMention | None:
     if words_text and words is None and digits is None:
         return None  # "several days", "reasonable days": words that are not a number
     surface = match.group(0)
-    unit = _unit(match.group("unit"))
+    unit_text = match.group("unit")
+    fortnight = unit_text.strip().lower().startswith("fortnight")
+    unit = DurationUnit.WEEK if fortnight else _unit(unit_text)
     if digits is not None and words is not None and digits != words:
         return DurationMention(surface, match.start(), match.end(), None, f"the words say {words} and the digits say {digits}")
     value = digits if digits is not None else words
     if value is None:
         return None
-    return DurationMention(surface, match.start(), match.end(), Duration(value, unit))
+    return DurationMention(surface, match.start(), match.end(), Duration(value * 2 if fortnight else value, unit))
 
 
 def parse_durations(text: str | None) -> list[DurationMention]:
@@ -154,7 +165,15 @@ def parse_durations(text: str | None) -> list[DurationMention]:
     if not text:
         return []
     mentions: dict[int, DurationMention] = {}
-    for pattern in (_DIGITS_FIRST, _WORDS_FIRST):
+    for match in _RANGE.finditer(text):
+        unit = _unit(match.group("unit"))
+        # Both numbers share the unit; each mention ends where the range ends, so the later patterns skip it whole.
+        for name in ("lo", "hi"):
+            start = match.start(name)
+            surface = text[start : match.end()] if name == "lo" else match.group(name) + " " + match.group("unit")
+            mentions[start] = DurationMention(surface, start, match.end(), Duration(Decimal(match.group(name)), unit))
+    patterns = (_DIGITS_FIRST, _WORDS_FIRST) if _ANY_UNIT.search(text) else ()
+    for pattern in patterns:
         for match in pattern.finditer(text):
             mention = _mention(match)
             if mention is None:
@@ -183,33 +202,95 @@ class GuidanceRule:
     operator: Operator
     duration: Duration
     surface: str
+    # A ceiling stated in the same sentence as the floor ("at least 30 but no more than 90 days"): a range.
+    maximum: Duration | None = None
 
 
 _MAXIMUM = re.compile(
-    r"(?:≤|<=|at most|no more than|not more than|maximum of|a maximum|or less|or fewer|or shorter|within"
+    r"(?:≤|<=|at most|no more than|not more than|nor more than|maximum of|a maximum|or less|or fewer|or shorter|within"
     r"|no longer than|not longer than|not to exceed|up to|no later than|not later than)",
     re.IGNORECASE,
 )
-_MINIMUM = re.compile(r"(?:≥|>=|at least|no less than|not less than|minimum of|a minimum|or more|or longer|not shorter than)", re.IGNORECASE)
+_MINIMUM = re.compile(
+    r"(?:≥|>=|at least|no less than|not less than|nor less than|minimum of|a minimum|or more|or longer|not shorter than|no shorter than)", re.IGNORECASE
+)
 _EXACT = re.compile(r"(?:exactly|precisely)", re.IGNORECASE)
+_LATER_THAN = re.compile(r"(?:no|not) later than", re.IGNORECASE)
+_BEFORE = re.compile(r"\b(?:before|prior to|ahead of)\b", re.IGNORECASE)
+_SENTENCE_END = re.compile(r"(?<=[.;!?])\s+|\n+")
+_NOTICE = re.compile(r"\b(?:notice|notif|terminat|cancel)", re.IGNORECASE)
+_WINDOW_BEFORE = 40
+_WINDOW_AFTER = 24
 
 
-def parse_rule(guidance: str | None) -> GuidanceRule | None:
-    """The first duration in the guidance with the comparison the guidance states around it. A notice requirement with no
-    comparison word is a floor ("30 days' notice" means at least 30), which is written down here, not assumed elsewhere."""
-    mentions = [m for m in parse_durations(guidance) if m.duration is not None]
-    if not mentions or guidance is None:
+def _operator_near(text: str, mention: DurationMention) -> Operator:
+    """The comparison word nearest the duration: the closest phrase in the forty characters before it, or a suffix
+    ("or more", "or less") in the characters after it. A duration with no comparison word is a floor: a notice
+    requirement states the least notice that will do (written here once). "No later than 30 days before" is a floor
+    too, because the thirty days are counted back from an event."""
+    before = text[max(0, mention.start - _WINDOW_BEFORE) : mention.start]
+    after = text[mention.end : mention.end + _WINDOW_AFTER]
+    if _EXACT.search(before):
+        return Operator.EXACT
+    candidates: list[tuple[int, Operator]] = []
+    for pattern, operator in ((_MAXIMUM, Operator.MAXIMUM), (_MINIMUM, Operator.MINIMUM)):
+        for match in pattern.finditer(before):
+            distance = len(before) - match.end()
+            if pattern is _MAXIMUM and _LATER_THAN.fullmatch(match.group(0)) and _BEFORE.search(after):
+                operator = Operator.MINIMUM
+            candidates.append((distance, operator))
+        suffix = pattern.match(after.lstrip())
+        if suffix is not None:
+            candidates.append((0, operator))
+    if not candidates:
+        return Operator.MINIMUM
+    return min(candidates, key=lambda c: c[0])[1]
+
+
+def _topic_tokens(topic: str | None) -> set[str]:
+    return set(re.findall(r"[a-z]{4,}", (topic or "").lower()))
+
+
+def parse_rule(guidance: str | None, topic: str | None = None) -> GuidanceRule | None:
+    """The duration the guidance states about the finding's topic, with the comparison the guidance states around it.
+
+    The guidance may carry several durations ("Payment terms are 30 days. Termination needs at least 90 days'
+    notice."). The sentence that names the topic, or a notice period, is the one the rule comes from; the first
+    sentence with a duration otherwise. Within that sentence a floor and a ceiling together are a range. A notice
+    requirement with no comparison word is a floor ("30 days' notice" means at least 30), written down here, not
+    assumed elsewhere."""
+    if not guidance:
         return None
-    mention = mentions[0]
-    window = guidance[max(0, mention.start - 40) : mention.end + 20]
-    if _EXACT.search(window):
-        operator = Operator.EXACT
-    elif _MAXIMUM.search(window):
-        operator = Operator.MAXIMUM
-    elif _MINIMUM.search(window):
-        operator = Operator.MINIMUM
-    else:
-        operator = Operator.MINIMUM
+    mentions = [m for m in parse_durations(guidance) if m.duration is not None]
+    if not mentions:
+        return None
+    sentences: list[tuple[int, int]] = []
+    position = 0
+    for piece in _SENTENCE_END.split(guidance):
+        if piece:
+            start = guidance.index(piece, position)
+            sentences.append((start, start + len(piece)))
+            position = start + len(piece)
+    wanted = _topic_tokens(topic)
+    best: tuple[int, int, list[DurationMention]] | None = None
+    for order, (start, end) in enumerate(sentences):
+        inside = [m for m in mentions if start <= m.start < end]
+        if not inside:
+            continue
+        sentence = guidance[start:end].lower()
+        score = 2 * sum(1 for w in wanted if w in sentence) + (1 if _NOTICE.search(sentence) else 0)
+        if best is None or score > best[0]:
+            best = (score, order, inside)
+    assert best is not None
+    chosen = best[2]
+    operators = [(m, _operator_near(guidance, m)) for m in chosen]
+    floors = [m for m, op in operators if op is Operator.MINIMUM]
+    ceilings = [m for m, op in operators if op is Operator.MAXIMUM]
+    if floors and ceilings:
+        floor, ceiling = floors[0], ceilings[0]
+        assert floor.duration is not None and ceiling.duration is not None
+        return GuidanceRule(Operator.MINIMUM, floor.duration, floor.surface, maximum=ceiling.duration)
+    mention, operator = operators[0]
     assert mention.duration is not None
     return GuidanceRule(operator, mention.duration, mention.surface)
 
@@ -217,10 +298,14 @@ def parse_rule(guidance: str | None) -> GuidanceRule | None:
 def observed_fact(quote: str, stated: str | None = None) -> ObservedFact | None:
     """The notice period a verified quote provides. When the quote carries several durations, the one the model stated
     (``stated``, its own words) selects among them; the model chooses which, the quote decides what it is. A quote
-    with no duration yields no fact; a quote whose only candidate is ambiguous yields an ambiguous fact."""
+    with no duration yields no fact, unless it says the notice is none ("immediately", "without notice"), which is a
+    period of zero days; a quote whose only candidate is ambiguous yields an ambiguous fact."""
     mentions = parse_durations(quote)
     if not mentions:
-        return None
+        zero = _ZERO.search(quote)
+        if zero is None:
+            return None
+        return ObservedFact("notice_period", Duration(Decimal(0), DurationUnit.CALENDAR_DAY), zero.group(0), zero.start(), zero.end())
     chosen = mentions[0]
     if stated and len(mentions) > 1:
         wanted = [m.duration for m in parse_durations(stated) if m.duration is not None]
@@ -256,12 +341,19 @@ def evaluate(observed: ObservedFact | None, rule: GuidanceRule | None) -> Policy
         a, b = left_days, right_days
     else:
         a, b = left.value, right.value
+    left_unit, right_unit = left.unit.value.replace("_", " "), right.unit.value.replace("_", " ")
+    if rule.maximum is not None:
+        top = rule.maximum.in_days() if left.unit != rule.maximum.unit else rule.maximum.value
+        if top is None:
+            return PolicyEvaluation("incomparable", f"{left_unit}s cannot be compared with the ceiling's unit", observed, rule)
+        ok = b <= a <= top
+        reason = f"the contract provides {left.value} {left_unit}s; the guidance requires between {right.value} and {rule.maximum.value} {right_unit}s"
+        return PolicyEvaluation("pass" if ok else "needs_review", reason, observed, rule)
     if rule.operator is Operator.MINIMUM:
         ok, verb = a >= b, "at least"
     elif rule.operator is Operator.MAXIMUM:
         ok, verb = a <= b, "at most"
     else:
         ok, verb = a == b, "exactly"
-    left_unit, right_unit = left.unit.value.replace("_", " "), right.unit.value.replace("_", " ")
     reason = f"the contract provides {left.value} {left_unit}s; the guidance requires {verb} {right.value} {right_unit}s"
     return PolicyEvaluation("pass" if ok else "needs_review", reason, observed, rule)

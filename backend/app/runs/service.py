@@ -247,6 +247,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 all_verified,
                 quotes=[span.quote for span in spans if span.verified],
                 guidance=guidance_text,
+                topic=item.topic,
             )
             decision = check_references(decision, label_handles(item.conclusion, labels), (s.number for s in sections), by_label)
             verified_any = verified_any or all_verified

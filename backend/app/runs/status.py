@@ -37,6 +37,7 @@ def decide(
     all_spans_verified: bool,
     quotes: Sequence[str] = (),
     guidance: str | None = None,
+    topic: str | None = None,
 ) -> Decision:
     if not all_spans_verified:
         return Decision("unresolved", "no_evidence")
@@ -47,7 +48,7 @@ def decide(
     stated_required, in_guidance = _durations(required), _durations(guidance)
     if stated_required and in_guidance and not stated_required & in_guidance:
         return Decision("needs_review", "position_check", "the requirement the model stated is not in the guidance")
-    rule = parse_rule(guidance) if guidance_present else None
+    rule = parse_rule(guidance, topic) if guidance_present else None
     fact = next((f for f in (observed_fact(q, stated=observed) for q in quotes) if f is not None), None)
     if rule is not None and fact is not None:
         evaluation = evaluate(fact, rule)
