@@ -263,7 +263,15 @@ export function Workbench() {
       const target = pane?.querySelector<HTMLElement>(`[data-section="${sectionId}"]`);
       if (!pane || !target) return;
       setHighlight({ sectionId, span });
-      pane.scrollTo({ top: Math.max(0, target.offsetTop - 72), behavior: reduceMotion ? "auto" : "smooth" });
+      const behavior = reduceMotion ? "auto" : "smooth";
+      // Scroll to the passage, not the section: a quote deep in a long section (a 6,000-character part of a
+      // contract read without headings) would otherwise land below the fold. The mark exists only after
+      // the highlight renders, so the measurement waits one frame; without a span, the section's top.
+      window.requestAnimationFrame(() => {
+        const mark = span ? target.querySelector<HTMLElement>("mark") : null;
+        const anchorTop = mark ? mark.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop : target.offsetTop;
+        pane.scrollTo({ top: Math.max(0, anchorTop - 72), behavior });
+      });
       setLit(sectionId);
       if (litTimer.current) window.clearTimeout(litTimer.current);
       litTimer.current = window.setTimeout(() => setLit(null), HIGHLIGHT_MS);
