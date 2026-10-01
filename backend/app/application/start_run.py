@@ -15,12 +15,13 @@ from dataclasses import dataclass
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..analysis.service import load_prompt
+from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, load_prompt
 from ..config import settings
 from ..errors import NotFound
 from ..hashing import fingerprint
 from ..models import Document, Guidance, Run
 from ..providers.base import ModelProvider
+from ..retrieval.aliases import ALIASES_SHA256
 from ..routing.router import ModelRouter, task_for
 
 FINGERPRINT_KIND = "run/v1"
@@ -44,6 +45,13 @@ def run_options(model: str | None = None) -> RunOptions:
         "num_ctx": settings.num_ctx,
         "retrieval_k": settings.retrieval_k,
     }
+    if settings.section_window != MAX_SECTION_CHARS_IN_PROMPT:
+        # A window other than the one every old run was made with enters the identity; a run without the option was made
+        # at that old window, so those runs keep their fingerprints and read back correctly.
+        options["section_window"] = settings.section_window
+    if settings.retrieval_aliases:
+        # The table's hash, so a run's candidates can be reproduced after the table changes.
+        options["retrieval_aliases"] = ALIASES_SHA256[:12]
     if settings.retrieval != "bm25":
         # Only a non-default retriever enters the identity, so runs recorded under BM25 keep theirs.
         options["retrieval"] = settings.retrieval

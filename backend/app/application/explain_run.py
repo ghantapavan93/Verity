@@ -26,7 +26,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..analysis.schema import AnalysisOut
-from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT
+from ..analysis.service import window_of
 from ..errors import NotFound
 from ..models import Finding, Run, RunStage, Section
 from ..schemas import (
@@ -217,13 +217,14 @@ def explain_run(session: Session, run_id: str) -> RunExplanation:
     outside = sum(lengths.get(piece.section_id, 0) - (piece.end - piece.start) for piece in rebuilt.slices)
     checking = next((s for s in run.stages if s.stage == "checking"), None)
     proposals, proposals_problem = _proposals(run, findings)
+    options = json.loads(run.options_json or "{}")
 
     reconstruction = ExplanationReconstruction(
         reconstructable=rebuilt.matches,
         problem=rebuilt.problem,
         recorded_input_sha256=rebuilt.recorded_input_sha256,
         rebuilt_input_sha256=rebuilt.input_sha256,
-        window_chars=MAX_SECTION_CHARS_IN_PROMPT,
+        window_chars=window_of(options),
         characters_outside_context=outside if rebuilt.slices else None,
         question=run.question,
         has_guidance=run.guidance_id is not None,
@@ -231,7 +232,7 @@ def explain_run(session: Session, run_id: str) -> RunExplanation:
         prompt_version=run.prompt_version,
         prompt_hash=run.prompt_hash,
         model=run.model,
-        options=json.loads(run.options_json or "{}"),
+        options=options,
         queue_note=_queue_note(checking),
     )
     return RunExplanation(

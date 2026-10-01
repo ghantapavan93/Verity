@@ -27,7 +27,15 @@ class Settings(BaseModel):
     # Sections handed to the model per run. Six covers a clause, its neighbours and one or two
     # cross-referenced sections without crowding an 8B model's context.
     retrieval_k: int = int(os.environ.get("WORKBENCH_RETRIEVAL_K", "6"))  # part of a run's identity; ten is the measured candidate (docs/RETRIEVAL.md)
+    # Characters of each handed section the prompt carries: the reader's split, so a part is handed whole (before 2026-10-01 it was
+    # 5,000 and 6 of 111 CUAD-30 expert spans lay beyond it in their section). Part of a run's identity.
+    # 6,000 since 2026-10-01: measured on the 44 goldens (37 of 44, no change) and the six beyond-window CUAD cases (4 correct
+    # against 2), see docs/RETRIEVAL.md. Recorded on every run; a run recorded before the option was made at 5,000.
+    section_window: int = int(os.environ.get("WORKBENCH_SECTION_WINDOW", "6000"))
     retrieval: str = os.environ.get("WORKBENCH_RETRIEVAL", "bm25")  # bm25 | hybrid (docs/RETRIEVAL.md)
+    # The legal alias table joins the retrieval query (retrieval/aliases.py); part of a run's identity when on. On since
+    # 2026-10-01: Recall@6 on CUAD 0.85 to 0.97 with no model, 37 of 44 goldens with no regression (docs/RETRIEVAL.md).
+    retrieval_aliases: bool = os.environ.get("WORKBENCH_RETRIEVAL_ALIASES", "1").lower() in ("1", "true", "yes")
     embed_model: str = os.environ.get("WORKBENCH_EMBED_MODEL", "nomic-embed-text")
     prompt_version: str = os.environ.get("WORKBENCH_PROMPT_VERSION", "answer-v2")
     # task → model overrides, each justified by a measurement in docs/ROUTING.md; empty means the default model for every task.

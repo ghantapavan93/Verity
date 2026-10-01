@@ -15,7 +15,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 import app.application.reconstruct_input as reconstruct_module
-from app.analysis.service import MAX_SECTION_CHARS_IN_PROMPT, PromptPackage, load_prompt
+from app import config
+from app.analysis.service import PromptPackage, load_prompt
 from app.application.explain_run import PROPOSAL_NOT_RECONSTRUCTABLE
 from app.db import SessionLocal
 from app.hashing import sha256_text
@@ -55,7 +56,7 @@ def test_the_explanation_is_the_record_layer_by_layer(client: TestClient) -> Non
     rebuilt = out["reconstruction"]
     assert rebuilt["reconstructable"] is True and rebuilt["problem"] is None
     assert rebuilt["recordedInputSha256"] == rebuilt["rebuiltInputSha256"]
-    assert rebuilt["windowChars"] == MAX_SECTION_CHARS_IN_PROMPT and rebuilt["charactersOutsideContext"] == 0
+    assert rebuilt["windowChars"] == config.settings.section_window == 6000 and rebuilt["charactersOutsideContext"] == 0
     assert rebuilt["hasGuidance"] is True and rebuilt["promptVersion"] == "answer-v2" and rebuilt["model"] == "fake-1"
 
     # The proposal is the model's own words, with the hint the model gave, not the finding's status.
@@ -104,8 +105,8 @@ def test_inside_the_model_visible_context_is_decided_by_the_slice_not_by_a_const
     # the window constant says. The slice is the authority; the run itself is untouched.
     original = reconstruct_module.context_slice
 
-    def shorter(label: str, section: Section, rank: int) -> reconstruct_module.ContextSlice:
-        piece = original(label, section, rank)
+    def shorter(label: str, section: Section, rank: int, window: int = 5000) -> reconstruct_module.ContextSlice:
+        piece = original(label, section, rank, window)
         return reconstruct_module.ContextSlice(piece.label, piece.section_id, piece.rank, piece.start, min(piece.end, 10), True, piece.content_sha256)
 
     monkeypatch.setattr(reconstruct_module, "context_slice", shorter)

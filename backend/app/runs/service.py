@@ -14,11 +14,12 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, SectionForPrompt, analyze, build_user_message, load_prompt
+from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, SectionForPrompt, analyze, build_user_message, load_prompt, window_of
 from ..config import settings
 from ..hashing import sha256_text
 from ..models import RUN_STAGES, TERMINAL_STAGES, EvidenceSpan, Finding, Run, RunReasonName, RunStage, RunStageName, Section, as_utc, utcnow
 from ..providers.base import ModelProvider, ProviderError
+from ..retrieval.aliases import expand_query
 from ..retrieval.hybrid import HybridIndex
 from ..retrieval.lexical import LexicalIndex
 from ..verify.spans import Located, locate
@@ -127,6 +128,8 @@ def _retrieve(sections: list[Section], question: str, guidance: str | None, k: i
     pairs = [(s.heading, s.text) for s in sections]
     index: LexicalIndex | HybridIndex = HybridIndex(pairs) if settings.retrieval == "hybrid" else LexicalIndex(pairs)
     query = question if not guidance else f"{question} {guidance}"
+    if settings.retrieval_aliases:
+        query = expand_query(query)
     candidates = index.search(query, k)
     if not candidates and sections:
         # A question with no lexical overlap still gets the opening sections rather than nothing.
@@ -162,11 +165,13 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         )
 
         prompt = load_prompt(run.prompt_version)
+        window = window_of(json.loads(run.options_json or "{}"))
         user_message = build_user_message(
             run.question,
             guidance_text,
             document.name,
             [SectionForPrompt(label, s.number, s.heading, s.text) for label, s in by_label.items()],
+            window=window,
         )
         _set_stage(
             session, run, "checking", "against guidance" if guidance_text else "against the question", input_hash=sha256_text(prompt.sha256 + user_message)
@@ -221,7 +226,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             spans: list[EvidenceSpan] = []
             all_verified = bool(item.evidence)
             for span_ordinal, evidence in enumerate(item.evidence):
-                section, located, method = verify_evidence(evidence.quote, evidence.section_id, by_label, chosen)
+                section, located, method = verify_evidence(evidence.quote, evidence.section_id, by_label, chosen, window=window)
                 verified = located is not None
                 all_verified = all_verified and verified
                 total_count += 1

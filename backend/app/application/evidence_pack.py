@@ -17,7 +17,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT
+from ..analysis.service import window_of
 from ..config import settings
 from ..errors import NotFound
 from ..hashing import sha256_bytes
@@ -100,7 +100,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         "problem": rebuilt.problem,
         "system_file": "model_input/system.txt" if rebuilt.matches else None,
         "user_file": "model_input/user.txt" if rebuilt.matches else None,
-        "prompt_window_chars": 5000,
+        "prompt_window_chars": window_of(json.loads(run.options_json or "{}")),
     }
     context_slices = [
         {"label": s.label, "section_id": s.section_id, "rank": s.rank, "start": s.start, "end": s.end, "truncated": s.truncated, "sha256": s.content_sha256}
@@ -143,7 +143,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
             "ladder": ["exact", "normalized", "casefold", "typed"],
             "label_stripping": True,
             "boundary": "no edge splits a run of letters and digits; a typed match is whole tokens",
-            "window_chars": MAX_SECTION_CHARS_IN_PROMPT,
+            "window_chars": window_of(json.loads(run.options_json or "{}")),
         },
         "workbench_link": f"{settings.app_url}/?document={document.id}&run={run.id}",
     }

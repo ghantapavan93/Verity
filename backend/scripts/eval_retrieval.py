@@ -26,7 +26,14 @@ import httpx  # noqa: E402
 from app.batch.cuad_match import retrieved_carries  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.ingest import ingest  # noqa: E402
+from app.retrieval.aliases import expand_query  # noqa: E402
 from app.retrieval.lexical import LexicalIndex  # noqa: E402
+
+
+def query_text(question: str) -> str:
+    """The query as the run service builds it: the question, through the alias table when the setting is on."""
+    return expand_query(question) if settings.retrieval_aliases else question
+
 
 KS = (1, 3, 5, 6, 8)  # extended by --k, for the question of whether a larger k would reach what k = 6 misses
 EMBED_MODEL = "nomic-embed-text"
@@ -121,7 +128,7 @@ def cosine(a: list[float], b: list[float]) -> float:
 def ranked_indices(case: Case, mode: str, k: int) -> list[int]:
     """Section indices in rank order for BM25, dense embeddings, or their reciprocal-rank fusion."""
     index = LexicalIndex([(heading, text) for _n, heading, text in case.sections])
-    lexical = [c.index for c in index.search(case.question, len(case.sections))] or list(range(len(case.sections)))
+    lexical = [c.index for c in index.search(query_text(case.question), len(case.sections))] or list(range(len(case.sections)))
     if mode == "bm25":
         return lexical[:k]
     query = embed([f"search_query: {case.question}"])[0]

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, PROMPTS_DIR, SectionForPrompt, build_user_message, load_prompt
+from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, PROMPTS_DIR, SectionForPrompt, build_user_message, load_prompt, window_of
 from ..errors import NotFound
 from ..hashing import sha256_text
 from ..models import Run, RunStage, Section
@@ -55,15 +55,15 @@ class Reconstruction:
         return self.problem is None and self.recorded_input_sha256 is not None and self.input_sha256 == self.recorded_input_sha256
 
 
-def context_slice(label: str, section: Section, rank: int) -> ContextSlice:
-    end = min(len(section.text), MAX_SECTION_CHARS_IN_PROMPT)
+def context_slice(label: str, section: Section, rank: int, window: int = MAX_SECTION_CHARS_IN_PROMPT) -> ContextSlice:
+    end = min(len(section.text), window)
     return ContextSlice(
         label=label,
         section_id=section.id,
         rank=rank,
         start=0,
         end=end,
-        truncated=len(section.text) > MAX_SECTION_CHARS_IN_PROMPT,
+        truncated=len(section.text) > window,
         content_sha256=sha256_text(section.text[:end]),
     )
 
@@ -87,6 +87,7 @@ def reconstruct_input(session: Session, run_id: str) -> Reconstruction:
         result.problem = f"prompt file {prompt_path.name} was rewritten since the run: {prompt.sha256[:12]} now, {run.prompt_hash[:12]} then"
         return result
 
+    window = window_of(json.loads(run.options_json or "{}"))
     try:
         candidates = json.loads(run.candidates_json or "[]")
     except ValueError:
@@ -99,11 +100,11 @@ def reconstruct_input(session: Session, run_id: str) -> Reconstruction:
             result.problem = f"candidate section {candidate['section_id']} no longer exists"
             return result
         sections.append(SectionForPrompt(candidate["label"], section.number, section.heading, section.text))
-        result.slices.append(context_slice(candidate["label"], section, rank))
+        result.slices.append(context_slice(candidate["label"], section, rank, window))
 
     guidance_text = run.guidance.text if run.guidance else None
     result.system = prompt.system
-    result.user = build_user_message(run.question, guidance_text, run.document.name, sections)
+    result.user = build_user_message(run.question, guidance_text, run.document.name, sections, window=window)
     result.input_sha256 = sha256_text(prompt.sha256 + result.user)
     if result.input_sha256 != result.recorded_input_sha256:
         result.problem = "the reconstructed input does not hash to what the checking stage recorded"
