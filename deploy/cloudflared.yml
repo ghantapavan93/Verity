@@ -10,9 +10,9 @@
 # Credentials are not here: `cloudflared tunnel run ivo-workbench` finds them under ~/.cloudflared.
 
 ingress:
-  - hostname: ivo.pavan.dev
+  - hostname: ivo.pavankg.dev
     path: ^/api(/.*)?$
     service: http://127.0.0.1:8000
-  - hostname: ivo.pavan.dev
+  - hostname: ivo.pavankg.dev
     service: http://127.0.0.1:3900
   - service: http_status:404

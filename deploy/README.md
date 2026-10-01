@@ -2,7 +2,7 @@
 
 The stack that was measured is the stack that is published: the FastAPI process on this machine, the
 Next production build beside it, Qwen3 8B through Ollama, one SQLite store. A named Cloudflare Tunnel
-connects outward from this machine and answers `https://ivo.pavan.dev`; Cloudflare Access in front of
+connects outward from this machine and answers `https://ivo.pavankg.dev`; Cloudflare Access in front of
 it decides who may open the page. Nothing in the application changes for this: the API reads its
 origin settings from the environment, the interface bakes the API origin in at build time, and access
 control lives at the deployment boundary, not in the product.
@@ -11,10 +11,10 @@ control lives at the deployment boundary, not in the product.
 person with an allowed email
         │
         ▼
-https://ivo.pavan.dev            Cloudflare Access (email allowlist), then the named tunnel
+https://ivo.pavankg.dev            Cloudflare Access (email allowlist), then the named tunnel
         │
-        ├── /api/*     → 127.0.0.1:8000   FastAPI (uvicorn), WORKBENCH_APP_URL=https://ivo.pavan.dev
-        └── /*         → 127.0.0.1:3900   Next production build, NEXT_PUBLIC_API_URL=https://ivo.pavan.dev
+        ├── /api/*     → 127.0.0.1:8000   FastAPI (uvicorn), WORKBENCH_APP_URL=https://ivo.pavankg.dev
+        └── /*         → 127.0.0.1:3900   Next production build, NEXT_PUBLIC_API_URL=https://ivo.pavankg.dev
                                 │
                                 └── 127.0.0.1:11434   Ollama, qwen3:8b
 ```
@@ -30,13 +30,13 @@ used: it does not carry server-sent events, and the run follower depends on them
 
 ```powershell
 $cf = "$env:LOCALAPPDATA\Programs\cloudflared\cloudflared.exe"    # cloudflared 2026.9.1, portable
-& $cf tunnel login                                                   # opens the browser; choose the pavan.dev zone
+& $cf tunnel login                                                   # opens the browser; choose the pavankg.dev zone
 & $cf tunnel create ivo-workbench                                    # writes ~/.cloudflared/<id>.json
-& $cf tunnel route dns ivo-workbench ivo.pavan.dev                   # the CNAME, proxied
+& $cf tunnel route dns ivo-workbench ivo.pavankg.dev                   # the CNAME, proxied
 ```
 
 Then, in the Cloudflare dashboard, Zero Trust → Access → Applications → add a self-hosted
-application for `ivo.pavan.dev` (every path), with one policy, action Allow, include Emails:
+application for `ivo.pavankg.dev` (every path), with one policy, action Allow, include Emails:
 Pavan's address and the addresses the link is sent to; or Emails ending in `@ivo.ai` if any Ivo
 employee should be able to open it. Session duration: a day is enough. Nothing else on the account
 needs to change; the tunnel opens no inbound port and the machine's address is not published.
@@ -58,7 +58,7 @@ desktop app's keep-awake).
 
 ## Before the link is sent: the smoke test, from a device that is not the development browser
 
-1. Open `https://ivo.pavan.dev` in a private window or on a phone.
+1. Open `https://ivo.pavankg.dev` in a private window or on a phone.
 2. Authenticate at the Access page with an allowed email.
 3. Load a licensed agreement: "try a sample agreement" (Common Paper CSA, CC BY 4.0), or upload one.
 4. Add guidance and ask the Phase 1 question (`docs/DEMO-PROOF.md`).
