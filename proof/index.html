@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verity, one run explained</title>
+<meta name="description" content="A contract workbench whose answers carry their evidence: one real run on a never-seen contract, walked down from the status to the exact model input, with every measurement behind the product and its denominator.">
+<style>
+  :root {
+    --bg: #0f1016; --panel: #171822; --panel-2: #1d1f2b; --border: #2a2c3a; --border-strong: #3a3d50;
+    --text: #e8e9f0; --text-2: #b4b7c6; --text-3: #7f8396; --accent: #8ddcff; --accent-2: #776bff;
+    --pass: #6fd3a0; --review: #f0c56a; --paper: #f6f1e4; --ink: #1d1b16;
+    --serif: Georgia, "Times New Roman", serif; --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 -apple-system, "Segoe UI", Inter, system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1 { font-size: 34px; line-height: 1.15; margin: 0 0 10px; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); margin: 48px 0 14px; }
+  h3 { font-size: 18px; margin: 0 0 6px; }
+  p { margin: 0 0 12px; color: var(--text-2); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .kicker { color: var(--text-3); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+  .lede { font-size: 18px; color: var(--text); max-width: 760px; }
+  .links { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 18px 0 0; font-size: 15px; }
+  .mono { font-family: var(--mono); font-size: 0.92em; color: var(--text-2); overflow-wrap: anywhere; }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
+  .chip.review { background: rgba(240,197,106,0.14); color: var(--review); border: 1px solid rgba(240,197,106,0.35); }
+  .chip.pass { background: rgba(111,211,160,0.12); color: var(--pass); border: 1px solid rgba(111,211,160,0.3); }
+  .ladder { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--border-strong); }
+  .ladder li { position: relative; padding: 10px 0 10px 22px; }
+  .ladder li::before { content: ""; position: absolute; left: -6px; top: 18px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent-2); }
+  .ladder .what { color: var(--text-3); font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; display: block; margin-bottom: 2px; }
+  .ladder .say { color: var(--text); }
+  .ladder .label { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 4px; font-size: 11px; color: var(--text-2); letter-spacing: 0.04em; vertical-align: middle; }
+  .quote { margin: 8px 0 0; padding: 10px 14px; border-left: 2px solid var(--border-strong); background: var(--panel); font-family: var(--serif); font-size: 15px; color: var(--text); }
+  figure { margin: 18px 0 0; }
+  figure img { width: 100%; height: auto; display: block; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+  figcaption { font-size: 13px; color: var(--text-3); margin-top: 8px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
+  @media (min-width: 760px) { .grid.two { grid-template-columns: 1fr 1fr; } }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 10px 9px 0; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-3); font-weight: 500; font-size: 12.5px; letter-spacing: 0.04em; text-transform: uppercase; }
+  td { color: var(--text-2); }
+  td strong { color: var(--text); font-weight: 600; }
+  .note { padding: 14px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); font-size: 14.5px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; color: var(--text-2); }
+  footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 13.5px; }
+  @media (prefers-color-scheme: light) { :root { } }
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Verity · contract workbench · the record of one run</div>
+  <h1>The model said pass. The code said needs review. Here is why, from the record.</h1>
+  <p class="lede">
+    Verity reviews a contract against a lawyer's instructions with a local 8-billion-parameter model, and
+    shows nothing the code has not located in the document first. This page walks down one real run on
+    a contract the system had never seen, then lists every measurement behind the product with its own
+    denominator. Everything here is read from the run record; nothing is a mock-up.
+  </p>
+  <div class="links">
+    <a href="https://ivo.pavankg.dev">Open the live workbench</a>
+    <a href="https://github.com/ghantapavan93/Verity">Repository</a>
+    <a href="https://github.com/ghantapavan93/Verity/blob/main/docs/DEMO-PROOF.md">The run, written up</a>
+    <a href="https://github.com/ghantapavan93/Verity/blob/main/docs/SYSTEM_TRUTH.md">What the system does and does not do</a>
+  </div>
+
+  <h2>The run</h2>
+  <div class="row">
+    <span>Document: a 2004 reseller agreement from CUAD (CC BY 4.0), 32,744 characters, uploaded as a plain DOCX</span>
+    <span class="mono">sha256 d510d1d71a7b…</span>
+    <span>Run <span class="mono">e5a20e2283e8416e</span> · qwen3:8b · prompt answer-v2 · 69 s</span>
+  </div>
+  <p style="margin-top:10px"><strong style="color:var(--text)">Guidance:</strong> "We require at least 90 days' written notice for termination for convenience. Anything shorter needs review."<br>
+  <strong style="color:var(--text)">Question:</strong> May either party terminate this agreement for convenience, and on what notice?</p>
+
+  <figure>
+    <img src="img/finding.png" alt="The workspace: the contract on paper, the Assistant with one finding marked Needs review">
+    <figcaption>The finding as a person sees it: a status, a conclusion, one verified passage, and the buttons that open the evidence.</figcaption>
+  </figure>
+
+  <h2>Walking down</h2>
+  <ol class="ladder">
+    <li><span class="what">Final status</span><span class="say"><span class="chip review">Needs review</span> Either party may terminate this agreement for convenience with 60 days' written notice.</span></li>
+    <li><span class="what">Why this answer?</span><span class="say">One read-only projection of the record, assembled by the API. The interface renders it and decides nothing.</span></li>
+    <li><span class="what">What the model proposed</span><span class="say">Hint <span class="chip pass">pass</span>. Observed, in its words: "60 days' written notice". Required, in its words: "at least 90 days".<span class="label">ModelProposal</span></span></li>
+    <li><span class="what">What the model cited</span><span class="say">Section handle <span class="mono">sec_4</span>, the fifth part of the contract.</span></li>
+    <li><span class="what">What code found</span><span class="say">The quote is not in <span class="mono">sec_4</span>. It is in <span class="mono">sec_0</span>, characters 4136 to 4284, an exact match, occurring once, inside the slice of text the model was actually shown.<span class="label">SourceMatch</span>
+      <div class="quote">"4.1 TERMINATION WITHOUT CAUSE. Either party may terminate this Agreement without cause upon sixty (60) days prior written notice to the other party."</div></span></li>
+    <li><span class="what">What policy code established</span><span class="say">The contract provides 60 calendar days; the guidance requires at least 90 calendar days. Source <span class="mono">computed_days</span>. The model's hint was discarded.<span class="label">PolicyEvaluation</span></span></li>
+    <li><span class="what">What the model saw</span><span class="say">Six candidate sections in retrieval order; five cut at 5,000 characters; 4,375 characters of the contract never reached the model. The exact system and user messages rebuild from the record and hash to what the checking stage recorded: <span class="mono">f5991f589759</span>.</span></li>
+    <li><span class="what">Can it be checked without this service</span><span class="say">The evidence pack is a zip with the original bytes, the sections, every located span and a <span class="mono">verify.py</span> that needs nothing but Python. On this run: every check passed, zero failures.</span></li>
+    <li><span class="what">Then</span><span class="say">Runs: the golden set under every prompt version, the CUAD-30 measurement, the batch, the families, and the three experiments that were killed before this product was built.</span></li>
+  </ol>
+
+  <div class="grid two">
+    <figure>
+      <img src="img/why-drawer.png" alt="The evidence drawer with Why this answer? open: reading, retrieval, the model's proposal, the SourceMatch and the recorded policy evaluation">
+      <figcaption>"Why this answer?", as rendered. Cited sec_4, located in sec_0, relocated:exact, inside the model-visible context: yes.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/highlight.png" alt="The contract scrolled to the quoted passage, marked in the text">
+      <figcaption>"View in document": the highlight is the stored offsets, character for character, not a page number.</figcaption>
+    </figure>
+  </div>
+
+  <h2>What the system is</h2>
+  <p>
+    Bytes are hashed and stored once. A reader turns the file into numbered sections and records what it did
+    with each of seventeen parts of a DOCX, so the paper can say what was not read. BM25 picks six sections.
+    One schema-constrained call to Qwen3 8B through Ollama, at temperature 0, proposes up to five findings,
+    each with quotes. Code then locates every quote in the stored text through a fixed ladder (exact,
+    normalised, case-folded, typed tokens), bounded to the characters the model was shown; a finding whose
+    quotes are not found is withheld and shown as withheld. The status is computed from the duration in the
+    verified quote and the rule in the guidance when both parse, otherwise taken from the model's hint and
+    labelled so. The run is immutable once finished, and the database enforces it.
+  </p>
+  <p>
+    It is not an agent: no tools, no memory, no iteration, one model call (up to four with retries). It does
+    not edit contracts, does not search across documents, and does not claim scale it has not measured.
+  </p>
+
+  <h2>Measurements, each with its denominator</h2>
+  <table>
+    <thead><tr><th>Question</th><th>Experiment</th><th>Measurement</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td>Does the answer path hold on labels that are not ours?</td><td>CUAD-30: 30 lawyer-annotated contracts, 7 clause questions, 210 runs, pre-registered floors</td><td><strong>citation precision 0.85, recall 0.67</strong> against floors 0.80 and 0.50; non-compete 0.20 and uncapped liability 0.60 named unfit</td><td>fit to draft a review of five categories; two named as not</td></tr>
+      <tr><td>Does a prompt or retrieval change help?</td><td>44 golden questions on one contract, judged by code, under every candidate</td><td>answer-v2 at k=6: <strong>37 of 44</strong>; answer-v3: 37 with one regression; k=10: 38 with two regressions and +57% latency; hybrid retrieval: 40 with one regression</td><td>none adopted; the rule asks about regressions, not totals</td></tr>
+      <tr><td>Does retrieval hand the model the right section?</td><td>Recall@6 against 164 expert-labelled CUAD cases and 38 goldens</td><td><strong>0.85 and 0.92</strong>; hybrid 0.95 and 0.97</td><td>BM25 stays until a change shows no golden regression</td></tr>
+      <tr><td>Would a smaller model do?</td><td>qwen3:4b on 42 goldens, same parse and options</td><td>36 of 42 versus 34, four times faster, two regressions</td><td>routing policy stays empty</td></tr>
+      <tr><td>Does a verifier change lose evidence?</td><td>replay of verification over every recorded span, no model call</td><td>v5 over <strong>1,299 spans: +10 verified, 0 lost</strong></td><td>typed-token tier adopted</td></tr>
+      <tr><td>Do the tests hold the evidence boundary?</td><td>24 one-line mutants applied by hand to the verifier, the run service and the database triggers</td><td><strong>24 of 24 killed</strong>; two survived once and got their tests</td><td>the mutants stay as a script</td></tr>
+      <tr><td>Would a richer document reader earn its place?</td><td>Docling against reader v4 on 20 licensed contracts, five pre-registered criteria</td><td>256 of 292 exact quotes kept, 30 to 419 times slower</td><td>rejected; coverage is declared instead</td></tr>
+      <tr><td>What happens under load?</td><td>1, 5, 10 and 20 concurrent questions against the live model</td><td>API queue under 2 s at twenty; the model is the only bottleneck; two defects found and fixed</td><td>no queue, no second process</td></tr>
+      <tr><td>Should a person wait behind a corpus job?</td><td>admission control, first-come versus weighted, same work twice</td><td>person's median wait <strong>103 s to 46 s</strong> for 6% on the batch</td><td>weighted admission kept</td></tr>
+      <tr><td>Can a stranger's document go through?</td><td>a never-seen contract through every step, read back from the record</td><td>the run above; two reader facts exposed and written down, not fixed</td><td>the hero run</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:12px">These numbers are not added together. The sets overlap and a span, a question and a contract are not one unit. The audit that keeps them apart, by SHA-256, source and licence, is <a href="https://github.com/ghantapavan93/Verity/blob/main/docs/DATA-EVIDENCE.md">docs/DATA-EVIDENCE.md</a>.</p>
+
+  <h2>Checks</h2>
+  <div class="note">
+    Backend 277 tests, Hypothesis properties of the verifier, a Schemathesis fuzz of every route, ruff, mypy strict,
+    three import contracts; interface 13 unit tests, 20 Playwright flows against the real API with recorded model
+    answers, tsc, eslint, prettier; types generated from the API's OpenAPI document; twenty-four hand mutants.
+    A fresh clone was set up from the README alone and every command passed.
+  </div>
+
+  <figure>
+    <img src="img/runs.png" alt="The Runs record: hashes, prompt and model, stage timeline, the sections handed to the model, and Why this answer?">
+    <figcaption>The run record under Runs: document and guidance hashes, prompt version and hash, options, tokens, the stage timeline with its hashes, the sections handed to the model, the raw output, and the same explanation.</figcaption>
+  </figure>
+
+  <h2>Where it falls short, said plainly</h2>
+  <p>
+    Headings in a DOCX are recognised by style only, so a contract with typed numbering becomes 6,000-character
+    parts; the paper says so. Those parts are longer than the 5,000-character prompt window, so part of a long
+    contract never reaches the model; the record says exactly how much. The 8B model reaches for cover pages,
+    drops clauses from lists, and once asserted a false premise it was handed; the golden set records each.
+    Headers, footers and footnotes are not read, and the reader that would read them lost the tournament.
+    None of these is hidden, and none was fixed to make a number look better.
+  </p>
+
+  <footer>
+    Verity is built and run by Pavan Kalyan Ghanta. The sample agreement in the live workbench is Common Paper's
+    Cloud Service Agreement, CC BY 4.0; the contract above is from CUAD v1, The Atticus Project, CC BY 4.0.
+    The live workbench runs on one machine with one GPU; if it is not reachable, this page is the record.
+  </footer>
+</main>
+</body>
+</html>
