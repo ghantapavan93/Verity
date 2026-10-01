@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..errors import InvalidInput, TooLarge
 from ..hashing import sha256_bytes
-from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, ingest
+from ..ingest import PARSER_VERSION, SUPPORTED, TooLargeToRead, UnsupportedFile, ingest
 from ..ingest.coverage import coverage_report
 from ..ingest.readers import read
 from ..models import Document, Section
@@ -65,8 +65,17 @@ def refuse_if_too_large(size: int | None) -> None:
         raise TooLarge("file larger than 25 MB")
 
 
+def refuse_unsupported_type(filename: str) -> None:
+    """The name's type decides before the bytes are looked up: a known document under a .docm name, or no name, was
+    "reused" without its type ever being checked (sweep, 2026-10-01)."""
+    suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+    if suffix not in SUPPORTED:
+        raise InvalidInput(f"unsupported file type {suffix or '(none)'}; upload .docx, .pdf or .txt")
+
+
 def ingest_document(session: Session, filename: str, data: bytes) -> IngestedDocument:
     refuse_if_too_large(len(data))
+    refuse_unsupported_type(filename)
     existing = stored_document(session, sha256_bytes(data))
     if existing is not None:
         return IngestedDocument(existing, created=False)

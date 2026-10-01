@@ -10,15 +10,17 @@ interface can say which view of the file the model read.
 
 from __future__ import annotations
 
+import codecs
 import io
 import re
 import zipfile
 from dataclasses import dataclass, field
+from typing import cast
 
 from docx import Document as DocxDocument
 from docx.opc.exceptions import PackageNotFoundError
 from docx.oxml.ns import qn
-from docx.table import Table
+from docx.oxml.text.paragraph import CT_P
 from docx.text.paragraph import Paragraph
 from lxml import etree
 from pypdf import PdfReader
@@ -81,6 +83,13 @@ _RUN_BREAKS = {qn("w:tab"): "\t", qn("w:ptab"): "\t", qn("w:br"): "\n", qn("w:cr
 _REVISIONS_XPATH = ".//w:ins | .//w:del | .//w:moveFrom | .//w:moveTo"
 _DELETED_MARK = f"{qn('w:pPr')}/{qn('w:rPr')}/{qn('w:del')}"
 _DELETED_ROW = f"{qn('w:trPr')}/{qn('w:del')}"
+_SDT = qn("w:sdt")
+_SDT_CONTENT = qn("w:sdtContent")
+_ROW = qn("w:tr")
+_CELL = qn("w:tc")
+# A title or a heading is a line, not a page: a paragraph longer than this becomes body text under a shortened heading,
+# so a 100,000-character paragraph no longer rides into every prompt whole as the section's name (sweep, 2026-10-01).
+MAX_TITLE_CHARS = 200
 
 
 @dataclass
@@ -172,7 +181,7 @@ def _docx_pages(data: bytes) -> int | None:
             app_xml = archive.read("docProps/app.xml").decode("utf-8", errors="replace")
     except (KeyError, zipfile.BadZipFile):
         return None
-    match = re.search(r"<Pages>(\d+)</Pages>", app_xml)
+    match = re.search(r"<Pages>(\d{1,9})</Pages>", app_xml)
     return int(match.group(1)) if match else None
 
 
@@ -213,32 +222,69 @@ def read_docx(data: bytes) -> ReadResult:
             blocks.append(Block("heading", text, level))
             return
         if not title and not blocks:
-            title = text
+            title = shorten_title(text)
         blocks.append(Block("text", text))
 
-    for child in body.iterchildren():
-        if child.tag == _PARAGRAPH:
-            text = accepted_text(child, walk)
-            if child.find(_DELETED_MARK) is not None:
-                carry += text
+    def cell_text(cell: etree._Element) -> str:
+        """A cell's paragraphs, the rows of any table nested in it, and the content of any control in it."""
+        parts: list[str] = []
+        for child in cell.iterchildren():
+            if child.tag == _PARAGRAPH:
+                parts.append(accepted_text(child, walk).strip())
+            elif child.tag == _TABLE:
+                parts.extend(table_rows(child))
+            elif child.tag == _SDT:
+                content = child.find(_SDT_CONTENT)
+                if content is not None:
+                    parts.append(cell_text(content))
+        return " ".join(part for part in parts if part)
+
+    def table_rows(table: etree._Element) -> list[str]:
+        """Each row as its cells joined with ' | ': a merged cell once, a deleted row not at all, a row inside a
+        content control like any other. Nested tables were dropped before 2026-10-01; coverage said they were read."""
+        rows: list[str] = []
+        for child in table.iterchildren():
+            if child.tag == _SDT:
+                content = child.find(_SDT_CONTENT)
+                if content is not None:
+                    rows.extend(table_rows(content))
                 continue
-            text = (carry + text).strip()
-            carry = ""
-            if text:
-                add(text, _heading_level(Paragraph(child, document)))
-        elif child.tag == _TABLE:
-            add(carry.strip())
-            carry = ""
-            for row in Table(child, document).rows:
-                if row._tr.find(_DELETED_ROW) is not None:
+            if child.tag != _ROW or child.find(_DELETED_ROW) is not None:
+                continue
+            cells: list[str] = []
+            for cell in child.iterchildren(_CELL):
+                text = cell_text(cell)
+                if text and text not in cells:  # a horizontally merged cell is one cell; a vertical continuation is empty
+                    cells.append(text)
+            if cells:
+                rows.append(" | ".join(cells))
+        return rows
+
+    def walk_container(container: etree._Element) -> None:
+        """Paragraphs and tables in document order, entering block-level content controls (w:sdt), which wrap a
+        heading, a clause or a whole table and were skipped before 2026-10-01 while coverage called them read."""
+        nonlocal carry
+        for child in container.iterchildren():
+            if child.tag == _PARAGRAPH:
+                text = accepted_text(child, walk)
+                if child.find(_DELETED_MARK) is not None:
+                    carry += text
                     continue
-                cells: list[str] = []
-                for cell in row.cells:
-                    cell_text = " ".join(t for t in (accepted_text(p._p, walk).strip() for p in cell.paragraphs) if t)
-                    if cell_text and cell_text not in cells:  # merged cells repeat
-                        cells.append(cell_text)
-                if cells:
-                    add(" | ".join(cells))
+                text = (carry + text).strip()
+                carry = ""
+                if text:
+                    add(text, _heading_level(Paragraph(cast(CT_P, child), document)))
+            elif child.tag == _TABLE:
+                add(carry.strip())
+                carry = ""
+                for row in table_rows(child):
+                    add(row)
+            elif child.tag == _SDT:
+                content = child.find(_SDT_CONTENT)
+                if content is not None:
+                    walk_container(content)
+
+    walk_container(body)
     add(carry.strip())
     tracked = len(body.xpath(_REVISIONS_XPATH))
     return ReadResult(
@@ -270,31 +316,65 @@ def read_pdf(data: bytes) -> ReadResult:
     except (PyPdfError, ValueError, KeyError) as error:
         raise UnsupportedFile("the file is not a readable PDF") from error
     lines: list[str] = []
+    textless = 0
     for page in pages:
         # Layout mode keeps blank lines between paragraphs, which is the only structure most PDFs carry.
         try:
             text = page.extract_text(extraction_mode="layout") or ""
         except Exception:  # noqa: BLE001 - fall back to the plain extractor for odd PDFs
             text = page.extract_text() or ""
+        if not text.strip():
+            textless += 1  # an image-only (scanned) page: the record says so instead of "unknown"
         lines.extend(re.sub(r"[ \t]{2,}", " ", line) for line in text.splitlines())
         lines.append("")
-    return ReadResult(coverage=pdf_coverage(page_count), blocks=_blocks_from_lines(lines), pages=len(pages), title=_first_line(lines))
+    return ReadResult(coverage=pdf_coverage(page_count, textless), blocks=_blocks_from_lines(lines), pages=len(pages), title=_first_line(lines))
 
 
 # ---------------------------------------------------------------------------- TXT
 
 
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def decode_text(data: bytes) -> tuple[str, str]:
+    """The text of a plain-text file and the name of the encoding it was read with. A byte-order mark decides; then
+    UTF-16 when every other byte is a NUL; then strict UTF-8; then Windows-1252, the encoding of text saved from Word
+    on a Western-locale machine. Before 2026-10-01 everything was read as UTF-8 with replacement characters, so a
+    UTF-16 file became NUL-interleaved garbage with a 201 and "€1,500" became "\ufffd1,500"."""
+    if data.startswith(codecs.BOM_UTF8):
+        return data[len(codecs.BOM_UTF8) :].decode("utf-8", errors="replace"), "UTF-8"
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return data.decode("utf-16", errors="replace"), "UTF-16"
+    sample = data[:4096]
+    if sample.count(b"\x00") > len(sample) // 4:
+        # Every other byte a NUL: UTF-16 without its mark, which strict UTF-8 would accept as NUL-interleaved text.
+        little_endian = sample[1:2] == b"\x00"
+        return data.decode("utf-16-le" if little_endian else "utf-16-be", errors="replace"), "UTF-16"
+    try:
+        return data.decode("utf-8"), "UTF-8"
+    except UnicodeDecodeError:
+        return data.decode("cp1252", errors="replace"), "Windows-1252"
+
+
 def read_txt(data: bytes) -> ReadResult:
-    text = data.decode("utf-8", errors="replace")
-    lines = text.splitlines()
-    return ReadResult(coverage=txt_coverage(), blocks=_blocks_from_lines(lines), pages=None, title=_first_line(lines))
+    text, encoding = decode_text(data)
+    lines = _CONTROL_CHARS.sub("", text).splitlines()
+    return ReadResult(coverage=txt_coverage(encoding), blocks=_blocks_from_lines(lines), pages=None, title=_first_line(lines))
 
 
 def _first_line(lines: list[str]) -> str:
     for line in lines:
         if line.strip():
-            return line.strip()
+            return shorten_title(line.strip())
     return ""
+
+
+def shorten_title(text: str) -> str:
+    """The text as a title: whole when it is a line, else its first words and an ellipsis."""
+    if len(text) <= MAX_TITLE_CHARS:
+        return text
+    cut = text.rfind(" ", MAX_TITLE_CHARS // 2, MAX_TITLE_CHARS)
+    return text[: cut if cut > 0 else MAX_TITLE_CHARS].rstrip() + "…"
 
 
 def _blocks_from_lines(lines: list[str]) -> list[Block]:

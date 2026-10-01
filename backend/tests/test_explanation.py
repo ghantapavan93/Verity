@@ -19,6 +19,7 @@ from app.analysis.service import MAX_SECTION_CHARS_IN_PROMPT, PromptPackage, loa
 from app.application.explain_run import PROPOSAL_NOT_RECONSTRUCTABLE
 from app.db import SessionLocal
 from app.hashing import sha256_text
+from app.ingest import PARSER_VERSION
 from app.models import Section
 from tests.support import CONTRACT, upload_and_ask
 
@@ -42,8 +43,8 @@ def test_the_explanation_is_the_record_layer_by_layer(client: TestClient) -> Non
     assert out["runId"] == result["run_id"] and out["stage"] == "complete"
 
     reading = out["reading"]
-    assert reading["readerVersion"] == "v4" and reading["sections"] == 4 and reading["documentSha256"] == sha256_text(CONTRACT)
-    assert reading["coverage"]["source"] == "persisted" and reading["coverage"]["readerVersion"] == "v4"
+    assert reading["readerVersion"] == PARSER_VERSION and reading["sections"] == 4 and reading["documentSha256"] == sha256_text(CONTRACT)
+    assert reading["coverage"]["source"] == "persisted" and reading["coverage"]["readerVersion"] == PARSER_VERSION
     assert reading["notRead"] == [], "a .txt reading has one part, the whole file, and it was read"
     assert reading["recordedSectionsHash"], "the reading stage's output hash names the sections' text"
 

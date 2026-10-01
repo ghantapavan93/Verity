@@ -103,7 +103,7 @@ def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs:
     insertions = len(re.findall(r"<w:ins\b", body_xml))
     deletions = len(re.findall(r"<w:del\b", body_xml))
     moves = len(re.findall(r"<w:move(?:From|To)\b", body_xml))
-    tables = len(re.findall(r"<w:tbl>", body_xml))
+    tables = len(re.findall(r"<w:tbl>", body_xml))  # nested tables included: each is read inside its cell
     # Block-level content controls are children of the body the walk does not enter; inline ones are read through their content.
     block_controls = len(re.findall(r"<w:body>(?:(?!</w:body>).)*?<w:sdt>", body_xml, re.DOTALL)) and len(
         re.findall(r"(?<=</w:p>|<w:body>)\s*<w:sdt>", body_xml)
@@ -120,7 +120,9 @@ def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs:
 
     return [
         PartCoverage("main_body", Status.READ, note="paragraphs and tables of the body, in document order"),
-        counted("tables", tables, Status.READ, "rows as text, cells joined with ' | '; merged cells once; deleted rows skipped"),
+        counted(
+            "tables", tables, Status.READ, "rows as text, cells joined with ' | '; nested tables inside their cell; merged cells once; deleted rows skipped"
+        ),
         counted("tracked_insertions", insertions, Status.ACCEPTED, "kept, as Word shows them once every change is accepted"),
         counted("tracked_deletions", deletions, Status.EXCLUDED, "left out; a deleted paragraph mark joins its paragraphs"),
         counted("move_revisions", moves, Status.ACCEPTED, "text moved to its new place is read there; the old place is left out"),
@@ -131,14 +133,7 @@ def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs:
         counted("footnotes", real_footnotes, Status.OMITTED, "footnote text is not read; the reference marks are not in the sections"),
         counted("endnotes", real_endnotes, Status.OMITTED, "endnote text is not read"),
         counted("comments", real_comments, Status.OMITTED, "comments are not read"),
-        PartCoverage(
-            "content_controls",
-            Status.PARTIAL if block_controls else (Status.READ if inline_controls else Status.ABSENT),
-            block_controls + inline_controls,
-            "inline controls are read through their content; block-level controls are not entered"
-            if block_controls
-            else ("inline controls read through their content" if inline_controls else ""),
-        ),
+        counted("content_controls", block_controls + inline_controls, Status.READ, "controls are read through their content, block-level and inline alike"),
         counted("fields", fields, Status.PARTIAL, "the cached result of a field is read; its instruction is not evaluated"),
         counted("automatic_numbering", numbered, Status.OMITTED, "numbers Word generates are not rendered; headings are numbered from their outline level"),
         counted("embedded_objects", len(embeddings), Status.OMITTED, "embedded objects and drawings are not read"),
@@ -150,17 +145,22 @@ def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs:
     )
 
 
-def pdf_coverage(pages: int | None) -> list[PartCoverage]:
+def pdf_coverage(pages: int | None, textless_pages: int = 0) -> list[PartCoverage]:
+    scanned = (
+        PartCoverage("scanned_pages", Status.OMITTED, textless_pages, "pages with no text layer; nothing is read from them and no OCR is run")
+        if textless_pages
+        else PartCoverage("scanned_pages", Status.ABSENT, 0, "every page has a text layer")
+    )
     return [
         PartCoverage("main_body", Status.READ, pages or 0, "the text layer of every page, in reading order as the PDF gives it"),
         PartCoverage("tables", Status.PARTIAL, note="table cells come out as running text; columns are not reconstructed"),
         PartCoverage("headers", Status.UNKNOWN, note="a PDF does not mark headers; page furniture may be in the text"),
         PartCoverage("footers", Status.UNKNOWN, note="a PDF does not mark footers; page numbers may be in the text"),
         PartCoverage("footnotes", Status.UNKNOWN, note="footnotes are text on the page like any other"),
-        PartCoverage("scanned_pages", Status.UNKNOWN, note="pages without a text layer yield nothing; no OCR is run"),
+        scanned,
         PartCoverage("embedded_objects", Status.OMITTED, note="images and attachments are not read"),
     ]
 
 
-def txt_coverage() -> list[PartCoverage]:
-    return [PartCoverage("main_body", Status.READ, note="the whole file")]
+def txt_coverage(encoding: str = "UTF-8") -> list[PartCoverage]:
+    return [PartCoverage("main_body", Status.READ, note=f"the whole file, decoded as {encoding}")]

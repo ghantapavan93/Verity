@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.hashing import sha256_text
+from app.ingest import PARSER_VERSION
 from tests.support import CONTRACT, upload_and_ask
 
 
@@ -43,7 +44,7 @@ def test_the_audit_keeps_every_denominator_apart_and_names_a_runtime_upload(clie
     # The test contract is a fixture by its text and, once uploaded, a stored reading; it is never counted as evaluation.
     uploaded = result.agreements[sha256_text(CONTRACT)]
     assert "fixture" in uploaded.roles and "evaluation" not in uploaded.roles
-    assert uploaded.readings == ["v4"] and uploaded.runs == 1
+    assert uploaded.readings == [PARSER_VERSION] and uploaded.runs == 1
 
     # The sample is the golden document, under its licence, and never a runtime upload in a fresh store.
     sample = next(a for a in result.agreements.values() if "cloud-service-agreement.docx" in a.names)

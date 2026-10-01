@@ -10,7 +10,7 @@ import zipfile
 from docx import Document as DocxDocument
 from fastapi.testclient import TestClient
 
-from app.ingest import ingest
+from app.ingest import PARSER_VERSION, ingest
 from app.ingest.coverage import PARTS, Status
 from tests.test_ingest import make_redlined_docx
 
@@ -97,7 +97,7 @@ def test_the_document_carries_its_coverage_and_the_pack_records_it(client: TestC
     uploaded = client.post("/api/documents", files={"file": ("agreement.docx", make_docx_with_furniture(), "application/octet-stream")})
     assert uploaded.status_code == 201, uploaded.text
     report = uploaded.json()["coverage"]
-    assert report["schemaVersion"] == 1 and report["readerVersion"] == "v4" and report["source"] == "persisted"
+    assert report["schemaVersion"] == 1 and report["readerVersion"] == PARSER_VERSION and report["source"] == "persisted"
     coverage = {c["part"]: c for c in report["parts"]}
     assert coverage["headers"] == {"part": "headers", "status": "omitted", "count": 1, "note": "header text is not read"}
     assert coverage["main_body"]["status"] == "read"
@@ -124,7 +124,7 @@ def test_a_reading_made_before_coverage_was_recorded_is_described_from_its_bytes
     again = client.get(f"/api/documents/{uploaded['id']}").json()
     assert again["coverage"]["parts"] == uploaded["coverage"]["parts"], "the same reader describes the same bytes the same way, without writing"
     assert uploaded["coverage"]["source"] == "persisted" and again["coverage"]["source"] == "reconstructed", "and says it was described after the fact"
-    assert again["coverage"]["readerVersion"] == "v4" and again["coverage"]["schemaVersion"] == 1
+    assert again["coverage"]["readerVersion"] == PARSER_VERSION and again["coverage"]["schemaVersion"] == 1
     with SessionLocal() as session:
         session.execute(sql("UPDATE documents SET parser_version = 'v3' WHERE id = :id"), {"id": uploaded["id"]})
         session.commit()

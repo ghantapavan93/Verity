@@ -20,7 +20,9 @@ __all__ = ["PARSER_VERSION", "SUPPORTED", "Ingested", "TooLargeToRead", "Unsuppo
 #          term, trailing stops are dropped from headings.
 #   v4     a lead-in is a title only when short (60 characters, 8 words); a sentence ending in a
 #          colon stays body under a short label, so every word of it can be quoted and highlighted.
-PARSER_VERSION = "v4"
+# v5 (2026-10-01): block-level content controls and nested tables are read, UTF-16 and Windows-1252 text files are
+# decoded, a wall of text is split into sections and named by its first words, a textless PDF page is counted.
+PARSER_VERSION = "v5"
 
 
 @dataclass
