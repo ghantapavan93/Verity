@@ -1,0 +1,51 @@
+{
+ "document": "f9d08c0cb7174795",
+ "golden": "g30",
+ "rows": [
+  {
+   "aliases": false,
+   "because": "withheld (citations_unverified) although the contract contains the point",
+   "created": false,
+   "outcome": "fail",
+   "run_id": "298e728fa21d4895",
+   "spans": [
+    {
+     "cited": "sec_24",
+     "quote": "Customer must notify Provider about the dispute within 30 days of an automatic payment.",
+     "verified": false
+    }
+   ],
+   "window": 5000
+  },
+  {
+   "aliases": false,
+   "because": "withheld (citations_unverified) although the contract contains the point",
+   "created": false,
+   "outcome": "fail",
+   "run_id": "58c7617c0dbe4b75",
+   "spans": [
+    {
+     "cited": "sec_24",
+     "quote": "Customer must notify Provider about the dispute within 30 days of an automatic payment.",
+     "verified": false
+    }
+   ],
+   "window": 6000
+  },
+  {
+   "aliases": true,
+   "because": "withheld (citations_unverified) although the contract contains the point",
+   "created": false,
+   "outcome": "fail",
+   "run_id": "9984a803e6df48c2",
+   "spans": [
+    {
+     "cited": "sec_24",
+     "quote": "Customer must notify Provider about the dispute within 30 days of an automatic payment.",
+     "verified": false
+    }
+   ],
+   "window": 5000
+  }
+ ]
+}

@@ -40,9 +40,9 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 
 | sha256 | names | source | licence | readings | runs | measurements |
 |---|---|---|---|---|---|---|
-| `6cdfab95eb5b30c0…` | 01-2themartcominc-19990826-10-12g-ex-10-10-6700288-ex-10-10-co-.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 17 | CUAD-30 clause measurement; batch 'cuad-30' |
+| `6cdfab95eb5b30c0…` | 01-2themartcominc-19990826-10-12g-ex-10-10-6700288-ex-10-10-co-.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4, v5 | 21 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `c757bb1d60075511…` | 01-adianutrition-inc-04-01-2005-ex-10-d2-reseller-agreement.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
-| `3c70a981a2107097…` | 02-alamogordofinancialcorp-12-16-1999-ex-1-agency-agreement.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 15 | CUAD-30 clause measurement; batch 'cuad-30' |
+| `3c70a981a2107097…` | 02-alamogordofinancialcorp-12-16-1999-ex-1-agency-agreement.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4, v5 | 16 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `800a8e3e69cecab8…` | 02-americasshoppingmallinc-12-10-1999-ex-10-2-site-development-.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `28f64048e5b3ba33…` | 03-antares-pharma-inc-manufacturing-agreement.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `f8634e3d4296d325…` | 03-atmosenergycorp-11-22-2002-ex-10-17-transportation-service-a.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 15 | CUAD-30 clause measurement; batch 'cuad-30' |
@@ -66,7 +66,7 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 | `47ee42edcfd94c66…` | 12-hc2holdings-inc-05-14-2020-ex-10-1-cooperation-agreement.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `58a3602dd88ac590…` | 13-herimports-20161018-8-ka-ex-10-14-9765707-ex-10-14-maintenan.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `98ba454bb3ccef1b…` | 13-hpilholding-01-07-2015-ex-99-1-cooperation-agreement.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
-| `7b93d296763d8c74…` | 14-impcotechnologiesinc-04-15-2003-ex-10-65-joint-venture-agree.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
+| `7b93d296763d8c74…` | 14-impcotechnologiesinc-04-15-2003-ex-10-65-joint-venture-agree.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4, v5 | 8 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `1aa2574ca312a72c…` | 14-iovancebiotherapeutics-inc-08-03-2017-ex-10-1-strategic-alli.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `bfb7b9610645dde4…` | 15-imperialgardenresortinc-20161028-drs-on-f-1-ex-10-13-9963189.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `4db68fb78e12cf32…` | 15-invendacorp-20000828-s-1a-ex-10-2-2588206-ex-10-2-co-brandin.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
@@ -83,12 +83,12 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 | `579818d20eb50a9c…` | 21-operaltd-04-30-2020-ex-4-14-service-agreement.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `874eb07ae3632c67…` | 21-paxmedica-inc-07-02-2020-ex-10-12-master-service-agreement.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `9c66eef9725257be…` | 22-pareteumcorp-20081001-8-k-ex-99-1-2654808-ex-99-1-hosting-ag.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
-| `915146be0c3ac149…` | 22-prolonginternationalcorp-03-23-1998-ex-10-16-sponsorship-agr.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
+| `915146be0c3ac149…` | 22-prolonginternationalcorp-03-23-1998-ex-10-16-sponsorship-agr.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4, v5 | 9 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `db39d6c284788dfd…` | 23-phoenixnewmedialtd-20110421-f-1-ex-10-17-6958322-ex-10-17-co.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `c1c3668fe4a3a445…` | 23-quaker-chemical-corporation-non-competition-and-non-solicita.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `a98e1239e03d1dfb…` | 24-raesystemsinc-20001114-10-q-ex-10-57-2631790-ex-10-57-co-bra.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `633730271ed5a6b4…` | 24-remarkholdingsinc-20081114-10-q-ex-10-24-2895649-ex-10-24-co.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
-| `c56352505b46b56b…` | 25-separateaccountiiofagl-05-02-2011-ex-99-j-4-unconditional-ca.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
+| `c56352505b46b56b…` | 25-separateaccountiiofagl-05-02-2011-ex-99-j-4-unconditional-ca.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4, v5 | 8 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `0c1d630fd900445b…` | 25-sparklingspringwaterholdingsltd-07-03-2002-ex-10-13-software.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `78d91abf7c1efc2a…` | 26-scansourceinc-20190822-10-k-ex-10-38-11793958-ex-10-38-distr.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `58356a12396d1fac…` | 26-stwresourcesholdingcorp-08-06-2014-ex-10-1-cooperation-agree.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
@@ -100,7 +100,7 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 | `4b2cb71fad30b513…` | 29-vertexenergyinc-08-14-2014-ex-10-24-operation-and-maintenanc.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `480cfbb8c3b84fd4…` | 30-vertexenergyinc-20200113-8-k-ex-10-1-11943624-ex-10-1-market.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `2e450b492547179d…` | 30-warningmanagementservicesinc-12-10-1999-ex-10-endorsement-ag.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
-| `cb72dad74b3af676…` | CP01.docx, Cloud Service Agreement (Common Paper).docx, cloud-service-agreement.docx | Common Paper (CP01); bundled sample (Common Paper Cloud Service Agreement v2.1) | CC BY 4.0 | unversioned, unversioned, unversioned, unversioned, unversioned, unversioned, v2, v3, v4 | 403 | batch 'public-corpus'; browser flows (replayed answers); document families (hand labels); golden set; interface performance; load envelope; parser tournament; public corpus (batch, families, parser tournament) |
+| `cb72dad74b3af676…` | CP01.docx, Cloud Service Agreement (Common Paper).docx, cloud-service-agreement.docx | Common Paper (CP01); bundled sample (Common Paper Cloud Service Agreement v2.1) | CC BY 4.0 | unversioned, unversioned, unversioned, unversioned, unversioned, unversioned, v2, v3, v4, v5 | 539 | batch 'public-corpus'; browser flows (replayed answers); document families (hand labels); golden set; interface performance; load envelope; parser tournament; public corpus (batch, families, parser tournament) |
 | `d8cc13f589096d1b…` | CP02.docx | Common Paper (CP02) | CC BY 4.0 | v3, v4 | 3 | batch 'public-corpus'; document families (hand labels); parser tournament; public corpus (batch, families, parser tournament) |
 | `18e07001c3ebfc74…` | CP03.docx | Common Paper (CP03) | CC BY 4.0 | v3, v4 | 3 | batch 'public-corpus'; document families (hand labels); parser tournament; public corpus (batch, families, parser tournament) |
 | `cb35f3cc70cb6d24…` | CP04.docx | Common Paper (CP04) | CC BY 4.0 | v3, v4 | 3 | batch 'public-corpus'; document families (hand labels); parser tournament; public corpus (batch, families, parser tournament) |
@@ -125,7 +125,7 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 
 | sha256 | names | source | licence | readings | runs | measurements |
 |---|---|---|---|---|---|---|
-| `cb72dad74b3af676…` | CP01.docx, Cloud Service Agreement (Common Paper).docx, cloud-service-agreement.docx | Common Paper (CP01); bundled sample (Common Paper Cloud Service Agreement v2.1) | CC BY 4.0 | unversioned, unversioned, unversioned, unversioned, unversioned, unversioned, v2, v3, v4 | 403 | batch 'public-corpus'; browser flows (replayed answers); document families (hand labels); golden set; interface performance; load envelope; parser tournament; public corpus (batch, families, parser tournament) |
+| `cb72dad74b3af676…` | CP01.docx, Cloud Service Agreement (Common Paper).docx, cloud-service-agreement.docx | Common Paper (CP01); bundled sample (Common Paper Cloud Service Agreement v2.1) | CC BY 4.0 | unversioned, unversioned, unversioned, unversioned, unversioned, unversioned, v2, v3, v4, v5 | 539 | batch 'public-corpus'; browser flows (replayed answers); document families (hand labels); golden set; interface performance; load envelope; parser tournament; public corpus (batch, families, parser tournament) |
 | `60f9c7eaa5eddc9c…` | agreement.txt (tests.support.CONTRACT) | synthetic test contract | the repository's own | not in the store | 0 | backend tests |
 | `c61812563bbee7b2…` | services-agreement.pdf | test fixture (printed from Chrome) | the repository's own | not in the store | 0 | backend tests |
 
@@ -133,7 +133,7 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 
 | sha256 | names | source | licence | readings | runs | measurements |
 |---|---|---|---|---|---|---|
-| `d510d1d71a7b6629…` | MTI-Reseller-Agreement.docx | uploaded through the API | not recorded | v4 | 1 | none |
+| `d510d1d71a7b6629…` | MTI-Reseller-Agreement.docx | uploaded through the API | not recorded | v4 | 2 | none |
 | `effe1fee8dee4160…` | cloud-service-agreement.pdf | uploaded through the API | not recorded | unversioned, unversioned, unversioned | 0 | none |
 | `7b4ab0a901c9746e…` | large-services-agreement.txt | uploaded through the API | not recorded | v3 | 0 | none |
 | `a60d28ecb4d677b9…` | redlined-msa.docx | uploaded through the API | not recorded | v2 | 0 | none |
@@ -150,20 +150,20 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 | CUAD-30 questions (one per category) | 7 | app/batch/tasks/cuad-clauses.json |
 | batch fields over the public corpus | 3 | app/batch/tasks/core-fields.json |
 | hand-labelled documents for families | 20 | app/families/labels.json |
-| recorded model answers replayed by the browser flows | 3 | e2e/replay.json, all on the sample |
+| recorded model answers replayed by the browser flows | 7 | e2e/replay.json, all on the sample |
 | browser flows | 20 | e2e/*.spec.ts |
 | hand mutants | 24 | scripts/mutate_by_hand.py |
 | distinct agreements in batch 'cuad-30' | 30 | the store's batch_items |
 | distinct agreements in batch 'public-corpus' | 20 | the store's batch_items |
-| evidence spans in the store (a verifier replay's population) | 1351 (1233 verified) | the store's evidence_spans, at the time of the audit |
-| runs in the store | 699 | the store's runs, at the time of the audit |
+| evidence spans in the store (a verifier replay's population) | 1601 (1466 verified) | the store's evidence_spans, at the time of the audit |
+| runs in the store | 845 | the store's runs, at the time of the audit |
 | documents in the parser tournament's baseline record | 21 | data/tournament/current.json (not in git) |
 | admission measurement records | 1 | data/logs/admission-*.json (not in git) |
 | load envelope records | 2 | data/logs/load-envelope-*.json (not in git) |
 
 ### The same bytes, more than once
 
-- 21 agreements are stored as more than one reading (unversioned, v2, v3, v4): one set of bytes, one row per reader version, kept because finished runs read each of them
+- 26 agreements are stored as more than one reading (unversioned, v2, v3, v4, v5): one set of bytes, one row per reader version, kept because finished runs read each of them
 - `cb72dad74b3af676…` is known under 3 names: CP01.docx, Cloud Service Agreement (Common Paper).docx, cloud-service-agreement.docx
 
 ### Not audited here

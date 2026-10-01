@@ -38,16 +38,17 @@ document are reused before the extension is checked.
 
 | Aspect | Mark | What the code does |
 |---|---|---|
-| Representation | PARTIAL | python-docx opens the package; the reader walks only the main body (`w:p`, `w:tbl` directly under `w:body`) plus styles for heading levels, `docProps/app.xml` for the page count, and the zip directory for declared sizes |
+| Representation | PARTIAL | python-docx opens the package; the reader walks the main body (`w:p`, `w:tbl` and block-level `w:sdt`, entering content controls and the cells of nested tables; reader v5, 2026-10-01) plus styles for heading levels, `docProps/app.xml` for the page count, and the zip directory for declared sizes |
 | Tracked changes | SUPPORTED (accepted view) | `w:ins` / `w:moveTo` kept, `w:del` / `w:moveFrom` dropped; a deleted paragraph mark joins paragraphs; a deleted row is skipped; count shown as "accepted view of N tracked changes". Moves and formatting revisions: UNPROVEN / not counted |
 | Hidden runs | PARTIAL | a run's own `w:vanish` is dropped and counted ("N hidden runs left out"); text hidden through a style is kept |
-| Tables | PARTIAL | each row becomes one line of cells joined by " \| "; nested tables dropped; repeated cells de-duplicated; never a heading |
+| Tables | SUPPORTED as text | each row becomes one line of cells joined by " \| "; a table nested in a cell is read inside that cell; a horizontally merged cell once, a vertical continuation not repeated; a deleted row skipped; never a heading (`tests/test_reader_sweep.py`) |
 | Headers, footers, comments, footnotes, endnotes | IGNORED (accepted, not read) | parsed by the library or not at all; never walked |
 | Fields | PARTIAL | cached result text kept; field codes dropped; nothing recomputed |
 | Hyperlinks, external relationships | SUPPORTED, display text only | targets never dereferenced; no network during ingest (tested with sockets blocked) |
-| Content controls, `w:altChunk`, `w:customXml` at block level, auto-numbering (`w:numPr`) | IGNORED | not in the body loop; list numbers never appear in text |
-| Macros | REJECTED by extension | `.docm` → 422 "unsupported file type"; a `.docm` renamed `.docx` fails the content-type check inside python-docx → generic 422 (UNPROVEN) |
-| Malformed ZIP / XML | REJECTED at open | `BadZipFile`, `PackageNotFoundError`, `XMLSyntaxError`, `KeyError`, `ValueError`, `AttributeError`, `TypeError` → 422 "the file is not a readable .docx package". Exceptions during the body walk are not caught → 500 (UNPROVEN) |
+| Content controls | SUPPORTED | block-level and inline `w:sdt` are read through their content, including a control that wraps a whole table (`tests/test_reader_sweep.py`; dropped before reader v5 while coverage called them read) |
+| `w:altChunk`, `w:customXml` at block level, auto-numbering (`w:numPr`) | IGNORED | not in the body loop; list numbers never appear in text (coverage says `automatic_numbering=omitted(N)`) |
+| Macros | REJECTED by extension | `.docm` → 422 "unsupported file type", checked before the bytes are looked up (before 2026-10-01 a known file under a `.docm` name or no name was "reused" past the check); a `.docm` renamed `.docx` fails the content-type check inside python-docx → generic 422 (measured 2026-10-01, sweep file g4b) |
+| Malformed ZIP / XML | REJECTED at open | `BadZipFile`, `PackageNotFoundError`, `XMLSyntaxError`, `KeyError`, `ValueError`, `AttributeError`, `TypeError` → 422 "the file is not a readable .docx package". The sweep of 2026-10-01 (missing style ids, `outlineLvl` 42 and `x`, degenerate tables, corrupt `footnotes.xml`, under-declared members) produced no 500; a body-walk exception remains uncaught in principle |
 | Limits | SUPPORTED | 25 MB upload (checked after the whole body is read into memory); declared unpacked size > 256 MB → 413; sections over 6,000 characters split "(part n)" |
 | Headings and numbers | SUPPORTED | style named Title, style names containing "heading", `w:outlineLvl` (own or inherited); numbers read from heading text or computed from levels; the computed flag is not persisted, so a computed number looks printed |
 
@@ -57,13 +58,13 @@ document are reused before the extension is checked.
 |---|---|---|
 | Extraction | PARTIAL, text only | layout-mode `extract_text`, falling back to plain mode; runs of spaces collapsed; a page ends a paragraph; no font, size or position |
 | Tables, multi-column | UNKNOWN | no table logic; columns interleave as the extractor emits them |
-| Scans, image-only | REJECTED | no OCR; no text → 422 "no readable text found in the file" (UNPROVEN) |
+| Scans, image-only | REJECTED when every page is image-only; OMITTED per page otherwise | no OCR; no text at all → 422 "no readable text found in the file"; an image-only page among text pages contributes nothing and is counted as `scanned_pages=omitted(N)` (reader v5; before, `unknown`) |
 | Encrypted | REJECTED | 422 "the PDF is encrypted; …"; no empty-password attempt, so PDFs that open without a password are refused too |
 | Malformed | REJECTED | `PyPdfError`, `ValueError`, `KeyError` at open → 422 "the file is not a readable PDF"; the plain-mode fallback is unguarded (500, UNPROVEN) |
 | Limits | SUPPORTED | > 2,000 pages → 413 |
-| Headings | PARTIAL | line rules shared with TXT; running headers and footers are not removed (an all-caps footer is a heading on every page, UNPROVEN) |
+| Headings | PARTIAL | line rules shared with TXT; running headers and footers are not removed: measured 2026-10-01, an all-caps running header becomes a heading on every page with computed numbers that collide with real clauses, and the footer text sits inside each clause body (sweep file h2); two-column pages interleave line by line (h1). Not fixed: needs a reader with page geometry, entered against the parser tournament |
 
-**TXT**: decoded as UTF-8 with `errors="replace"` (never fails; a BOM stays as U+FEFF, UNPROVEN);
+**TXT**: decoded by its byte-order mark, else as UTF-16 when every other byte is a NUL, else strict UTF-8, else Windows-1252; the encoding is named in coverage; control characters are dropped (reader v5; before, everything was UTF-8 with replacement characters, so a UTF-16 file was NUL-interleaved garbage and "€1,500" lost its sign);
 the only size limit is 25 MB; blank lines split paragraphs; a line ≤ 90 characters is a heading when
 numbered or all-caps; a line starting "30 days notice" becomes section "30".
 
@@ -77,16 +78,16 @@ rows cannot change.
 | Case | Accepted / rejected → where → state → what the UI shows | Held by |
 |---|---|---|
 | Random bytes named `.docx` | rejected → `read_docx` (`BadZipFile`) → 422 "the file is not a readable .docx package", no rows, no file → the string on the landing | `test_failure_matrix` (PK-prefixed junk), `e2e/critical.spec.ts` |
-| Empty DOCX (0 bytes) | rejected → same branch and string | UNPROVEN (the 0-byte test is `.txt`) |
-| Corrupt DOCX (zip fine, XML broken) | rejected → `XMLSyntaxError` at open → 422 same string; broken parts the library does not parse are not caught | UNPROVEN |
-| ZIP-bomb-like archive | rejected → declared sizes summed before parsing → 413 "the .docx unpacks to N MB; the limit is 256 MB" | `test_failure_matrix` (API level); the UI string UNPROVEN; archives that under-declare sizes UNPROVEN |
+| Empty DOCX (0 bytes) | rejected → same branch and string | measured 2026-10-01 (sweep file g8): 422 "the file is not a readable .docx package" |
+| Corrupt DOCX (zip fine, XML broken) | rejected → `XMLSyntaxError` at open → 422 same string; a broken part the reader never opens (`footnotes.xml`) is not noticed: 201, `footnotes=absent` | measured 2026-10-01 (g12, g13) |
+| ZIP-bomb-like archive | rejected → declared sizes summed before parsing → 413 "the .docx unpacks to N MB; the limit is 256 MB" | `test_failure_matrix` (API level); the UI string UNPROVEN; under-declared members measured 2026-10-01: an unreferenced 300 MB member is never read (201 in 35 ms), an under-declared `document.xml` fails the zip CRC → 422 (g3b, g3c) |
 | Macro-enabled `.docm` | rejected → extension check → 422 "unsupported file type .docm; …" | `test_failure_matrix` |
-| External relationships | accepted → 201, rows written; targets never fetched | `test_failure_matrix` (hyperlink relationship, sockets blocked); linked images and OLE UNPROVEN |
-| Empty PDF | rejected → `EmptyFileError` → 422 "the file is not a readable PDF"; blank pages → 422 "no readable text found in the file" | UNPROVEN |
+| External relationships | accepted → 201, rows written; targets never fetched | `test_failure_matrix` (hyperlink relationship, sockets blocked); a linked picture measured 2026-10-01: not fetched, not counted as an embedded object (g7); OLE UNPROVEN |
+| Empty PDF | rejected → `EmptyFileError` → 422 "the file is not a readable PDF"; blank pages → 422 "no readable text found in the file" | measured 2026-10-01 (h6b, h6) |
 | Encrypted PDF | rejected → 422 "the PDF is encrypted; remove the password and upload it again" | `test_failure_matrix` |
-| Scanned / image-only PDF | rejected → no text → 422 "no readable text found in the file" | UNPROVEN |
+| Scanned / image-only PDF | rejected when every page is image-only → 422 "no readable text found in the file"; a mixed file is accepted and its textless pages counted as `scanned_pages=omitted(N)` | measured 2026-10-01 (h3b); `tests/test_reader_sweep.py` (h3) |
 | Random bytes named `.pdf` | rejected → `PdfStreamError` → 422 "the file is not a readable PDF" | `test_failure_matrix` (a "%PDF-1.4 garbage" case) |
-| 100,000-character paragraph | accepted → one section, stored whole; cut to 5,000 characters + " […]" in the prompt. If it is the file's first text it is also the title, and the heading line is never truncated, so it reaches the prompt whole | `test_failure_matrix` (body cut); the title path UNPROVEN |
+| 100,000-character paragraph | accepted → split at sentence ends into parts no longer than a section, each of which fits the prompt whole; a title or first line longer than 200 characters becomes its first words and an ellipsis (reader v5). Before: one section, cut in the prompt, and as the file's first text also a 100,000-character title that reached the prompt whole and held the GPU 24 minutes until the provider timed out (sweep file f8, run `6d6fbd7ed8dc4889`) | `test_failure_matrix`, `tests/test_hardening.py`, `tests/test_reader_sweep.py` |
 | Prompt injection in the document text | accepted; the text goes into the user message unescaped; no prompt rule addresses it. Defences: schema-constrained decoding, and a finding is shown only when every quote is located in the stored text. Gaps: the injected sentence is document text, so a quote of it verifies; conclusions are never verified; the status is the model's hint unless day counts parse | UNPROVEN (g43 in the golden set covers an instruction inside the question, not the document) |
 | Malicious lawyer guidance | accepted (1–20,000 characters, stripped); into the user message as "LEGAL GUIDANCE: …" and into the retrieval query; no sanitisation. Same defences; in addition `observed` and `required`, which drive the computed status, are model-written and never checked against the quote | UNPROVEN |
 | No legally meaningful clauses | accepted; fewer than 3 numbered sections shows "Little structure was found in this file's text, so sections are approximate…"; the run ends unresolved (`insufficient_evidence`: "No supporting passage found" with "Sections searched: …"), or complete with a `missing` finding ("Closest provisions read · N · none states the point"), or withheld, or failed `invalid_output`, depending on the model | UNPROVEN |
@@ -130,7 +131,7 @@ data directory, which is what the recorded batches did.
 
 **The model receives**, in one user message: `QUESTION: …`; `LEGAL GUIDANCE: …` or `LEGAL GUIDANCE:
 none supplied`; `CONTRACT: <file name>`; then at most k = 6 retrieved sections, each as
-`[sec_<ordinal>] <number> <heading>` plus its body cut at 5,000 characters, in retrieval-rank order.
+`[sec_<ordinal>] <number> <heading>` plus its body cut at the run's window (6,000 characters since 2026-10-01, the reader's split, so a part is handed whole; 5,000 before, recorded as absent), in retrieval-rank order.
 The system message is the prompt file. Never the whole contract.
 
 **The model may decide**: which of the handed sections answer, up to five findings, each with a
@@ -195,7 +196,9 @@ What holds and what does not:
 - **A pass is worded by what it was checked against.** The run (`RunOut.has_guidance`) and the findings
   list (`FindingRecord.has_guidance`) say whether guidance was given; `statusLabel` (`src/lib/types.ts`)
   and the memo's `status_label` write "Within guidance" only then and "Answered" otherwise. Before
-  2026-09-29 every pass read "Within guidance", next to a memo row saying "none supplied".
+  2026-09-29 every pass read "Within guidance", next to a memo row saying "none supplied". Since 2026-10-01 a pass
+  whose status is the model's hint (`status_source = model_hint`) reads "Within guidance (model's view)": the interface
+  sweep found the plain chip on two findings that said the contract provides no notice period at all.
 - Whitespace-only guidance is refused with a 422 (2026-09-29); guidance is text or absent.
 - `observed` and `required` are model-written; since 2026-09-29 a day count in them is checked against
   the verified quotes and the guidance before anything is computed from it (`position_check`). Over
@@ -237,7 +240,7 @@ highlight shows the dropped word.
 - **Can a quote from the wrong section verify?** Yes, if it exists in another section handed to the
   model; it is labelled `relocated:*` and the section where it was found is stored and shown.
   Sections not handed over are never searched. Since verifier v5 the search is bounded to the
-  5,000 characters the prompt carried, so a quote from a tail the model never saw does not verify.
+  characters the prompt carried (the run's recorded window), so a quote from a tail the model never saw does not verify.
 - **Can the model set verified=true?** No.
 - **Unverifiable quote**: span start −1, end −1, verified false, method `none`; the finding becomes
   unresolved (`no_evidence`) even if its other quotes verified; the run is complete if another
@@ -361,7 +364,7 @@ headings, picks six; they go to a local Qwen3 8B with the question, the guidance
 
 **What the model does.** In one call (at most four with retries) it proposes up to five findings:
 topic, conclusion, status hint, and one to three quotes with section ids. It sees only those six
-sections, each cut at 5,000 characters, never the whole contract. No tools, no memory, no second
+sections, each cut at the run's window (6,000 characters since 2026-10-01), never the whole contract. No tools, no memory, no second
 step.
 
 **What code does.** Everything else. It validates the JSON, locates every quote in the stored text
@@ -408,7 +411,7 @@ an item fixed since carries the date and the measurement, and the rest stand.
 
 1. **Verifier, numeric label strip**: a quote beginning with the section's number loses those digits and verifies against a different number (I). **Fixed 2026-09-29, verifier v4:** the number alone is never cut off a quote; a label is recognised only as written, number then heading. Census of the record first: 20 `unprefixed` spans, none cut by the number alone; replay over 847 spans, nothing changed; sixteen hand mutants killed.
 2. **Verifier, alnum tier**: punctuation inside numbers and currency or percent symbols are invisible ("$1,500" vs "$15.00"; "15%" vs "1.5%"). **Fixed 2026-09-29, verifier v4:** a full stop between two digits is kept in the letters-and-digits tier; a thousands separator still is not, because "1500" and "1,500" are one number to a reader. Census first: 24 alnum spans in the record, none with a decimal; replay unchanged.
-3. **Verifier window**: quotes are checked against the full stored text, not the 5,000 characters the prompt showed. **Measured and fixed 2026-09-29:** of 976 verified spans in the record none ended beyond the window (495 handed sections were longer); verifier v5 bounds the search to the first 5,000 characters of each candidate, the slice the prompt carried, and `verify.py` in the evidence pack reports any span beyond it.
+3. **Verifier window**: quotes are checked against the full stored text, not the 5,000 characters the prompt showed. **Measured and fixed 2026-09-29:** of 976 verified spans in the record none ended beyond the window (495 handed sections were longer); verifier v5 bounds the search to the slice the prompt carried (the run's recorded window; 6,000 characters since 2026-10-01, 5,000 before), and `verify.py` in the evidence pack reports any span beyond it.
 4. **Status trusts model text**: `observed` / `required` are never compared with the verified quote; `AT_LEAST` is defined but unused; "no longer than", "up to", "not to exceed" read as minimums; "twenty-one (21) days" parses as no count. **Fixed 2026-09-29, twice:** first `position_check` (a stated day count must be in a verified quote or in the guidance), the ceiling phrases, the parenthesised and working-day forms; then, after the chain, the status computed from typed facts parsed from the quote and the guidance (`policy/durations.py`), with units, ambiguity (`ambiguous_fact`) and the evaluation's sentence on the finding; the model's numbers can no longer be the operand. Census first: 9 computed statuses in the record, none disagreeing with its quote; 14 more recorded day counts parse, all "Working Days".
 5. **"Within guidance" without guidance**: the label and the memo heading say it for any `pass`. **Fixed 2026-09-29:** `has_guidance` on `RunOut` and `FindingRecord`; a pass without guidance reads "Answered" in the chip, the tables and the memo heading (`tests/test_api_flow.py`).
 6. **Whitespace-only guidance** is accepted and stored empty while `decide()` is told guidance is present. **Fixed 2026-09-29:** refused with a 422 that says so; guidance is either text or absent.

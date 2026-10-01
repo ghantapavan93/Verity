@@ -1,0 +1,419 @@
+{
+ "baseline_document": "5f8aa51d55514bf5",
+ "candidate_document": "5f8aa51d55514bf5",
+ "candidate_pass": 37,
+ "gains": [],
+ "judged": 44,
+ "key": "retrieval_aliases",
+ "median_model_latency_s": 78.8,
+ "pending": [],
+ "regressions": [],
+ "rows": [
+  {
+   "base": "pass",
+   "base_run": "39c0c8a51714453f",
+   "because": "answered not found",
+   "candidate": "pass",
+   "candidate_run": "5e4fc54d6bc44a7c",
+   "category": "absence",
+   "golden": "g01"
+  },
+  {
+   "base": "pass",
+   "base_run": "d180d0e09fd44630",
+   "because": "verified citation in \u00a75.3.1 (exact)",
+   "candidate": "pass",
+   "candidate_run": "6fd61fce87064601",
+   "category": "direct_extraction",
+   "golden": "g02"
+  },
+  {
+   "base": "pass",
+   "base_run": "6e3e43e098fa4776",
+   "because": "verified citation in \u00a712.3 (exact)",
+   "candidate": "pass",
+   "candidate_run": "9853adae626a4d4c",
+   "category": "cross_reference",
+   "golden": "g03"
+  },
+  {
+   "base": "pass",
+   "base_run": "f50388a6cf3f446e",
+   "because": "verified citation in \u00a78.1.1 (exact)",
+   "candidate": "pass",
+   "candidate_run": "beaa857e9eb54179",
+   "category": "direct_extraction",
+   "golden": "g04"
+  },
+  {
+   "base": "pass",
+   "base_run": "5409fc43df8c4fa5",
+   "because": "verified citation in \u00a78.2 (exact)",
+   "candidate": "pass",
+   "candidate_run": "63fba337c15a4d59",
+   "category": "direct_extraction",
+   "golden": "g05"
+  },
+  {
+   "base": "pass",
+   "base_run": "1815f25c7a084cd9",
+   "because": "answered not found",
+   "candidate": "pass",
+   "candidate_run": "a01d37aca1d74a62",
+   "category": "absence",
+   "golden": "g06"
+  },
+  {
+   "base": "pass",
+   "base_run": "d73be28df2224fd7",
+   "because": "verified citation in \u00a72.2 (exact)",
+   "candidate": "pass",
+   "candidate_run": "fbafb6e848d849aa",
+   "category": "direct_extraction",
+   "golden": "g07"
+  },
+  {
+   "base": "fail",
+   "base_run": "e8a0512a9dac4bc7",
+   "because": "no verified citation in \u00a74.5/4.2; verified citations were in \u00a75.5.4, \u00a7Cloud Service Agreement (part 1)",
+   "candidate": "fail",
+   "candidate_run": "db21ad2fc50f4adb",
+   "category": "cross_reference",
+   "golden": "g08"
+  },
+  {
+   "base": "pass",
+   "base_run": "f37f8950992e441e",
+   "because": "verified citation in \u00a74.6 (exact)",
+   "candidate": "pass",
+   "candidate_run": "72783519076c4e4a",
+   "category": "negation",
+   "golden": "g09"
+  },
+  {
+   "base": "pass",
+   "base_run": "0a5c82bd7e8c42e6",
+   "because": "verified citation in \u00a71.4 (exact)",
+   "candidate": "pass",
+   "candidate_run": "1c2ce2e308ff47f8",
+   "category": "multi_section",
+   "golden": "g10"
+  },
+  {
+   "base": "fail",
+   "base_run": "4938ab01cccf4af6",
+   "because": "asserted pass for a point the contract does not contain",
+   "candidate": "fail",
+   "candidate_run": "1e673e0c4dc04384",
+   "category": "absence",
+   "golden": "g11"
+  },
+  {
+   "base": "fail",
+   "base_run": "37fb3d3adc164414",
+   "because": "no verified citation in \u00a79.1; verified citations were in \u00a7Cloud Service Agreement (part 2)",
+   "candidate": "fail",
+   "candidate_run": "5a1ceac938ae4d17",
+   "category": "multi_section",
+   "golden": "g12"
+  },
+  {
+   "base": "pass",
+   "base_run": "32ac636ae5d64b2b",
+   "because": "verified citation in \u00a76.4 (exact)",
+   "candidate": "pass",
+   "candidate_run": "cc7cd296594e451d",
+   "category": "direct_extraction",
+   "golden": "g13"
+  },
+  {
+   "base": "pass",
+   "base_run": "814472a950ca4549",
+   "because": "verified citation in \u00a75.5.2 (exact)",
+   "candidate": "pass",
+   "candidate_run": "67bb7437dca04a97",
+   "category": "direct_extraction",
+   "golden": "g14"
+  },
+  {
+   "base": "pass",
+   "base_run": "be667047f7784d99",
+   "because": "verified citation in \u00a75.4 (exact)",
+   "candidate": "pass",
+   "candidate_run": "d77fbca9a52b48c7",
+   "category": "direct_extraction",
+   "golden": "g15"
+  },
+  {
+   "base": "pass",
+   "base_run": "7529fe4306c246a5",
+   "because": "verified citation in \u00a75.2 (exact)",
+   "candidate": "pass",
+   "candidate_run": "ae2e0c0c2dd84492",
+   "category": "direct_extraction",
+   "golden": "g16"
+  },
+  {
+   "base": "pass",
+   "base_run": "0ce7bdb91ef64f6a",
+   "because": "answered not found",
+   "candidate": "pass",
+   "candidate_run": "4fc3bc84a2f14831",
+   "category": "absence",
+   "golden": "g17"
+  },
+  {
+   "base": "pass",
+   "base_run": "9bd14e8c74f34de8",
+   "because": "answered not found",
+   "candidate": "pass",
+   "candidate_run": "ad2bb3b3493f4ce7",
+   "category": "absence",
+   "golden": "g18"
+  },
+  {
+   "base": "pass",
+   "base_run": "788d46aa4c384ace",
+   "because": "verified citation in \u00a713.32 (exact)",
+   "candidate": "pass",
+   "candidate_run": "63bfd36a409747d7",
+   "category": "defined_term",
+   "golden": "g19"
+  },
+  {
+   "base": "pass",
+   "base_run": "9bfe25760d9a4ba3",
+   "because": "verified citation in \u00a713.27 (normalized)",
+   "candidate": "pass",
+   "candidate_run": "170a81ac06c6413b",
+   "category": "defined_term",
+   "golden": "g20"
+  },
+  {
+   "base": "pass",
+   "base_run": "c9411dc037564b57",
+   "because": "verified citation in \u00a713.17 (normalized)",
+   "candidate": "pass",
+   "candidate_run": "306dbe2586fd47c0",
+   "category": "defined_term",
+   "golden": "g21"
+  },
+  {
+   "base": "pass",
+   "base_run": "90761a8aa5ec420f",
+   "because": "verified citation in \u00a713.2 (exact)",
+   "candidate": "pass",
+   "candidate_run": "14fb187a8a4f4b4e",
+   "category": "defined_term",
+   "golden": "g22"
+  },
+  {
+   "base": "pass",
+   "base_run": "66d69b236d0e4d19",
+   "because": "verified citation in \u00a75.6.1 (exact)",
+   "candidate": "pass",
+   "candidate_run": "bc4967d2bbe64bda",
+   "category": "cross_reference",
+   "golden": "g23"
+  },
+  {
+   "base": "pass",
+   "base_run": "dfa2741738084d3f",
+   "because": "verified citation in \u00a75.6.2 (exact)",
+   "candidate": "pass",
+   "candidate_run": "f013aeb2ffee4861",
+   "category": "cross_reference",
+   "golden": "g24"
+  },
+  {
+   "base": "pass",
+   "base_run": "9be7063673934e31",
+   "because": "verified citation in \u00a78.4 (exact)",
+   "candidate": "pass",
+   "candidate_run": "ad21c0bae350459f",
+   "category": "cross_reference",
+   "golden": "g25"
+  },
+  {
+   "base": "fail",
+   "base_run": "476a77e0905042bc",
+   "because": "no verified citation in \u00a79.4/9.1; verified citations were in \u00a712.11",
+   "candidate": "fail",
+   "candidate_run": "29226b2166d34952",
+   "category": "multi_section",
+   "golden": "g26"
+  },
+  {
+   "base": "pass",
+   "base_run": "bffd3af30fe1489c",
+   "because": "verified citation in \u00a71.3 (exact)",
+   "candidate": "pass",
+   "candidate_run": "c1228ab030284675",
+   "category": "multi_section",
+   "golden": "g27"
+  },
+  {
+   "base": "pass",
+   "base_run": "084fec87b3d3468b",
+   "because": "verified citation in \u00a76.4 (exact)",
+   "candidate": "pass",
+   "candidate_run": "8ee6bcba4b4b4bd3",
+   "category": "multi_section",
+   "golden": "g28"
+  },
+  {
+   "base": "pass",
+   "base_run": "d2ebd1c133a346b7",
+   "because": "verified citation in \u00a75.3.1 (exact)",
+   "candidate": "pass",
+   "candidate_run": "522bcda2c79f4096",
+   "category": "guidance_comparison",
+   "golden": "g29"
+  },
+  {
+   "base": "pass",
+   "base_run": "7eab8128292948cd",
+   "because": "verified citation in \u00a74.6 (exact)",
+   "candidate": "pass",
+   "candidate_run": "c5b9d05ce8e6406b",
+   "category": "guidance_comparison",
+   "golden": "g30"
+  },
+  {
+   "base": "pass",
+   "base_run": "2d0c08ae4e084332",
+   "because": "verified citation in \u00a712.6 (exact)",
+   "candidate": "pass",
+   "candidate_run": "ee072aa180c94cc7",
+   "category": "guidance_comparison",
+   "golden": "g31"
+  },
+  {
+   "base": "pass",
+   "base_run": "687f2b341a6042dd",
+   "because": "verified citation in \u00a78.2 (exact)",
+   "candidate": "pass",
+   "candidate_run": "257708d182c34667",
+   "category": "guidance_comparison",
+   "golden": "g32"
+  },
+  {
+   "base": "pass",
+   "base_run": "7aeff198de8047cc",
+   "because": "verified citation in \u00a71.1 (exact)",
+   "candidate": "pass",
+   "candidate_run": "23ae857146324c6a",
+   "category": "ambiguous",
+   "golden": "g33"
+  },
+  {
+   "base": "pass",
+   "base_run": "60795bece0464490",
+   "because": "verified citation in \u00a71.4 (exact)",
+   "candidate": "pass",
+   "candidate_run": "e1ef5392838f495d",
+   "category": "ambiguous",
+   "golden": "g34"
+  },
+  {
+   "base": "fail",
+   "base_run": "6f8c2fc2c302427c",
+   "because": "withheld (citations_unverified) although the contract contains the point",
+   "candidate": "fail",
+   "candidate_run": "f4149dfe70c548f9",
+   "category": "numeric_precision",
+   "golden": "g35"
+  },
+  {
+   "base": "pass",
+   "base_run": "a52380365776443c",
+   "because": "verified citation in \u00a75.3.2 (exact)",
+   "candidate": "pass",
+   "candidate_run": "eac2f63ce1164603",
+   "category": "numeric_precision",
+   "golden": "g36"
+  },
+  {
+   "base": "pass",
+   "base_run": "f94cff5545534b32",
+   "because": "verified citation in \u00a78.2 (exact)",
+   "candidate": "pass",
+   "candidate_run": "82dc44dbff6347ec",
+   "category": "negation",
+   "golden": "g37"
+  },
+  {
+   "base": "pass",
+   "base_run": "a2f84a211fb84035",
+   "because": "verified citation in \u00a72.1.1 (exact)",
+   "candidate": "pass",
+   "candidate_run": "79a53ad60df246cb",
+   "category": "negation",
+   "golden": "g38"
+  },
+  {
+   "base": "pass",
+   "base_run": "4f74211df34042bf",
+   "because": "verified citation in \u00a712.12 (exact)",
+   "candidate": "pass",
+   "candidate_run": "4ecc0191060940fc",
+   "category": "negation",
+   "golden": "g39"
+  },
+  {
+   "base": "pass",
+   "base_run": "9f7effc58dc14c09",
+   "because": "verified citation in \u00a73.1 (exact)",
+   "candidate": "pass",
+   "candidate_run": "43235c1f920142bf",
+   "category": "amendment_conflict",
+   "golden": "g40"
+  },
+  {
+   "base": "pass",
+   "base_run": "d162cef30bd44148",
+   "because": "verified citation in \u00a712.1 (exact)",
+   "candidate": "pass",
+   "candidate_run": "b5a814a4c7f8498d",
+   "category": "amendment_conflict",
+   "golden": "g41"
+  },
+  {
+   "base": "fail",
+   "base_run": "f8898b03710e4e63",
+   "because": "no verified citation in \u00a712.2; verified citations were in \u00a7Cloud Service Agreement (part 1)",
+   "candidate": "fail",
+   "candidate_run": "a497bd68b77f4bb9",
+   "category": "amendment_conflict",
+   "golden": "g42"
+  },
+  {
+   "base": "pass",
+   "base_run": "6ad79fe9983c4c26",
+   "because": "verified citation in \u00a78.1.1 (exact)",
+   "candidate": "pass",
+   "candidate_run": "c82d8dfa8a534169",
+   "category": "adversarial",
+   "golden": "g43"
+  },
+  {
+   "base": "fail",
+   "base_run": "80dd5afc3d05408e",
+   "because": "asserted needs_review for a point the contract does not contain",
+   "candidate": "fail",
+   "candidate_run": "87338cf4800e4389",
+   "category": "adversarial",
+   "golden": "g44"
+  }
+ ],
+ "same_fail": [
+  "g08",
+  "g11",
+  "g12",
+  "g26",
+  "g35",
+  "g42",
+  "g44"
+ ],
+ "same_pass": 37
+}

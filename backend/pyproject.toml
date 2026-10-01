@@ -29,6 +29,7 @@ extend-immutable-calls = ["fastapi.Depends"]
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["T201"] # command-line entry points print
 "experiments/**/*.py" = ["T201"] # experiment runners print
+"experiments/depth_pass/gen_adversarial.py" = ["E501", "E741", "B905"] # the reader sweep's generator: one generated file per line, as it was run
 
 [tool.mypy]
 python_version = "3.13"

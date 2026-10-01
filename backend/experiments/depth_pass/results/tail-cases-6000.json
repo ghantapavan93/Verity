@@ -1,0 +1,61 @@
+{
+ "cases": [
+  {
+   "contract": "01-2themartcominc",
+   "created": false,
+   "document_id": "7f5b0ff85a0d486d",
+   "field": "liability_cap",
+   "outcome": "correct",
+   "run_id": "bc5849e1041c4543",
+   "window": 6000
+  },
+  {
+   "contract": "01-2themartcominc",
+   "created": false,
+   "document_id": "7f5b0ff85a0d486d",
+   "field": "uncapped_liability",
+   "outcome": "not found",
+   "run_id": "d05dd0599e9e4b70",
+   "window": 6000
+  },
+  {
+   "contract": "22-prolonginternationalcorp",
+   "created": false,
+   "document_id": "0afaa8e3b27e4262",
+   "field": "governing_law",
+   "outcome": "correct",
+   "run_id": "9a98c75799844a21",
+   "window": 6000
+  },
+  {
+   "contract": "25-separateaccountiiofagl",
+   "created": false,
+   "document_id": "fc6450ea9ef64bde",
+   "field": "governing_law",
+   "outcome": "correct",
+   "run_id": "c1318b8ef6c34357",
+   "window": 6000
+  },
+  {
+   "contract": "02-alamogordofinancialcorp",
+   "created": false,
+   "document_id": "381524340e2d4ae6",
+   "field": "governing_law",
+   "outcome": "correct",
+   "run_id": "13a10f737dc744fc",
+   "window": 6000
+  },
+  {
+   "contract": "14-impcotechnologiesinc",
+   "created": false,
+   "document_id": "39663f4a8d914e3e",
+   "field": "non_compete",
+   "outcome": "cited elsewhere",
+   "run_id": "00d46fb7dd204711",
+   "window": 6000
+  }
+ ],
+ "correct": 4,
+ "of": 6,
+ "window": 6000
+}

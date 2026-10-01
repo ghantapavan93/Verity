@@ -1,0 +1,71 @@
+{
+ "carried_by_a_section": 111,
+ "carrier_longer_than_window": 45,
+ "cut_by_window": [
+  {
+   "carried": true,
+   "category": "Governing Law",
+   "end": 5048,
+   "file": "02-alamogordofinancialcorp-12-16-1999-ex",
+   "section_len": 5908,
+   "start": 4963
+  },
+  {
+   "carried": true,
+   "category": "Non-Compete",
+   "end": 5185,
+   "file": "14-impcotechnologiesinc-04-15-2003-ex-10",
+   "section_len": 5933,
+   "start": 4451
+  }
+ ],
+ "labelled_spans": 111,
+ "longest_carriers": [
+  5931,
+  5931,
+  5933,
+  5986,
+  5986,
+  5988,
+  5996,
+  5996,
+  5996,
+  5996
+ ],
+ "position_located": 104,
+ "starts_beyond_window": [
+  {
+   "carried": true,
+   "category": "Cap On Liability",
+   "end": 5405,
+   "file": "01-2themartcominc-19990826-10-12g-ex-10-",
+   "section_len": 5811,
+   "start": 5105
+  },
+  {
+   "carried": true,
+   "category": "Uncapped Liability",
+   "end": 5405,
+   "file": "01-2themartcominc-19990826-10-12g-ex-10-",
+   "section_len": 5811,
+   "start": 5105
+  },
+  {
+   "carried": true,
+   "category": "Governing Law",
+   "end": 5252,
+   "file": "22-prolonginternationalcorp-03-23-1998-e",
+   "section_len": 5886,
+   "start": 5093
+  },
+  {
+   "carried": true,
+   "category": "Governing Law",
+   "end": 5361,
+   "file": "25-separateaccountiiofagl-05-02-2011-ex-",
+   "section_len": 5931,
+   "start": 5210
+  }
+ ],
+ "window": 5000
+}

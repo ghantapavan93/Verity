@@ -222,3 +222,34 @@ cd backend && .venv/Scripts/python scripts/run_goldens.py --prompt answer-v1 --p
 guidance 3/4) against the default's 34 of 42, mean model latency 9.8 s against 39.1 s; better on
 g11, g23, g30 and g35, worse on g31 and g37. The routing rule keeps the default because of the
 two regressions; the record and the reasoning are in `docs/ROUTING.md`.
+
+**Recording 6, 2026-10-01 (02:38 to 04:05 local, two recordings sharing the GPU with each other and with the day's
+document and interface sweeps): 44 goldens, reader v4 document, verifier v5, Qwen3 8B, answer-v2, k = 6, one option at
+a time, judged by code against Recording 4/5's answer-v2 at k = 6 (37 of 44).** The goldens' report compares prompt
+versions, so the option recordings were judged by `backend/experiments/depth_pass/judge_options.py` (results in `results/goldens-*.json` beside it), which finds the run by its
+option under the same prompt, document and guidance.
+
+| Run | Result | Against the baseline | Verdict under the rule (`docs/RETRIEVAL.md`) |
+|---|---|---|---|
+| section window 6,000 | 37 of 44 | same seven failures (g08, g11, g12, g26, g35, g42, g44); no gain, no regression; the six beyond-window CUAD cases 4 correct against 2 | **default** (no regression; tail cases answered) |
+| alias table on | 37 of 44 | same seven failures; no gain, no regression | **default** (no regression; the gain is CUAD recall, measured without a model) |
+
+Two window runs were killed mid-flight by the public API, restarted on the old recovery code after it had died, which
+declared them stale while they waited their turn; one had already been re-made by the runner, the other (g05) was re-made
+by hand on the same document and passes. Latencies are not reported: nothing in this recording ran alone.
+
+**Recording 6c, 2026-10-01 (04:02 to 04:35 local, alone on the GPU): 44 goldens, reader v5 document, verifier v5, Qwen3 8B,
+answer-v2, k = 6, window 6,000, alias table on: 37 of 44, mean model latency 41.2 s (Recording 4: 35.0 s).** Fails g08,
+g11, g12, g26, g30, g35, g42: against the baseline one gain (g44, the false premise about a most-favoured-nation clause
+no longer answered as a pass) and one regression (g30, the dispute-window quote paraphrased, "before payment is due, or"
+dropped, and withheld by the verifier as it should be). Read from the record before anything was concluded: for g30 the
+six candidates are the same six sections in the same order under both readings, their text is byte-identical, and the
+two reconstructed model inputs differ in exactly one line, `CONTRACT: CP01.docx` against
+`CONTRACT: cloud-service-agreement.docx`, because every earlier golden document was the corpus copy of the sample and
+reader v5's is the bundled one; g30 withholds on the v5 document under the old window with the table off too (three
+runs, `backend/experiments/depth_pass/isolate_g30.py`, `results/g30-isolation.json`). So the movement is the model's sensitivity to the file's name on one prompt
+line, not the reader, the window or the table. The name is part of the input and the record says so; nothing is
+renamed to make the number look stiller. Reader v5 is held by its own criterion, the one the parser tournament set: it
+retains 377 of 377 exact quotes the record has over the 35 corpus and sample documents
+(`experiments/parser_tournament/run.py --adapters current`, `data/tournament/v5.json`), and by the sweep's fixtures
+(`tests/test_reader_sweep.py`). This recording is the baseline for the next prompt or option question.

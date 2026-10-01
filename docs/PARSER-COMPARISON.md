@@ -62,3 +62,10 @@ contract than the reader does on these files; what it would have added on header
 because the rule had already ended it. Docxodus was not entered: no adapter exists yet, and its runtime is not
 Python. Reader v4 stays. Coverage (what a reading did not read) remains the honest answer for now, and a challenger
 that reads furniture is entered against the same criteria when one is adapted.
+
+**Reader v5 against the same criterion (2026-10-01).** The reader changed for measured reasons (block-level content
+controls and nested tables read, text files decoded, a wall of text split and named by its first words, a textless
+PDF page counted; `DECISIONS.md`), so it was run through the harness as a challenger to itself: 35 documents (the
+twenty licensed contracts, the corpus twins and the sample), every one read, 377 of 377 exact quotes in the record
+retained, the largest contract in 20.2 s and 30.3 MB (`data/tournament/v5.json`). Nothing the record had quoted is lost
+by reading more.
