@@ -69,7 +69,15 @@ function timingRows(run: RunDetailView): TimingRow[] {
   return rows;
 }
 
-export function RunsView({ notice, onOpenRun }: { notice: string | null; onOpenRun: (runId: string) => void }) {
+export function RunsView({
+  notice,
+  currentRunId = null,
+  onOpenRun,
+}: {
+  notice: string | null;
+  currentRunId?: string | null;
+  onOpenRun: (runId: string) => void;
+}) {
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [experiments, setExperiments] = useState<ExperimentsView | null>(null);
   const [goldens, setGoldens] = useState<GoldensView | null>(null);
@@ -193,7 +201,10 @@ export function RunsView({ notice, onOpenRun }: { notice: string | null; onOpenR
               <li key={r.id}>
                 <button type="button" className={styles.row} onClick={() => void select(r.id)} aria-busy={loadingId === r.id}>
                   <div className={styles.rowMain}>
-                    <div className={styles.rowTitle}>{r.question}</div>
+                    <div className={styles.rowTitle}>
+                      {r.question}
+                      {r.id === currentRunId && <span className={`${wb.statusChip} ${wb.statusPass}`}>On screen</span>}
+                    </div>
                     <div className={styles.rowMeta}>
                       <span>{r.documentName}</span>
                       <span>{r.model}</span>

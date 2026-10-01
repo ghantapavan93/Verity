@@ -14,7 +14,7 @@ import { GuidanceScope } from "./GuidanceScope";
 import { RunOutcome, WithheldList } from "./RunOutcome";
 import { StageList } from "./StageList";
 import { absolute } from "@/lib/api";
-import { STAGE_LABELS, type DocumentView, type FindingView, type SectionView, type SpanView, type RunStage } from "@/lib/types";
+import { STAGE_LABELS, type DocumentView, type FindingView, type ReviewView, type SectionView, type SpanView, type RunStage } from "@/lib/types";
 
 // The third question has no answer in the sample; on it the model tends to propose a quote that
 // is not there, and the verifier withholds it. That moment is meant to be one click away.
@@ -46,6 +46,7 @@ export function AssistantPanel({
   evidence,
   onOpenEvidence,
   onCloseEvidence,
+  onReviewed,
   drawerCloseRef,
   sectionsById,
   onJump,
@@ -64,6 +65,7 @@ export function AssistantPanel({
   evidence: FindingView | null;
   onOpenEvidence: (finding: FindingView, trigger: HTMLElement | null) => void;
   onCloseEvidence: () => void;
+  onReviewed: (findingId: string, review: ReviewView | null) => void;
   drawerCloseRef: Ref<HTMLButtonElement>;
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
@@ -227,6 +229,7 @@ export function AssistantPanel({
         sectionsById={sectionsById}
         onJump={onJump}
         onClose={onCloseEvidence}
+        onReviewed={onReviewed}
         closeRef={drawerCloseRef}
         reduceMotion={reduceMotion}
       />

@@ -64,7 +64,7 @@ desktop app's keep-awake).
 4. Add guidance and ask the Phase 1 question (`docs/DEMO-PROOF.md`).
 5. Watch the stages arrive through the event stream, not through polling (the network panel shows
    one `/events` request held open, no `/detail` polling every three seconds).
-6. Open the finding's evidence and "Why this answer?".
+6. Open the finding's evidence: the four layers (Model proposed · Source · Code decided · Human), then "Prove it".
 7. Click the citation: the document scrolls and the passage is marked.
 8. Open Runs, open the run, download the evidence pack, run its `verify.py`.
 9. Ask another question and reload the page while the run is checking: it reattaches.
@@ -89,7 +89,7 @@ until a person noticed. The published stack now runs under two supervisors, one 
 Tasks that start at logon under the signed-in account (the laptop stays logged in for the outreach window):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Build    # build for the public origin, register "Verity API" and "Verity Web", start both, wait for health
+powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Build    # build for the public origin (and the finished review the first screen offers, -ProofRun, default the Phase 1 run), register "Verity API" and "Verity Web", start both, wait for health
 powershell -ExecutionPolicy Bypass -File deploy\down.ps1                          # write the stop files and stop both servers; the supervisors exit instead of restarting
 powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1           # start again (removes the stop files; no rebuild)
 powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Uninstall

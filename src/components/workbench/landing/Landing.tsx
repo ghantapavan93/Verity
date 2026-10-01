@@ -7,9 +7,7 @@ import { IconArrowUp, IconFile, IconPlus } from "../icons";
 import { transitions, type Stage } from "../shell/constants";
 import { Shimmer, UserChip } from "../shell/primitives";
 import type { Health } from "@/lib/api";
-import type { DocumentSummary } from "@/lib/types";
-
-const COMPOSER_SUGGESTIONS = ["Review a contract", "Compare against guidance", "Ask about a clause"];
+import type { DocumentSummary, RunSummary } from "@/lib/types";
 
 /** The first screen: one question and one composer. The composer morphs into the Assistant's when a contract arrives. */
 export function Landing({
@@ -20,6 +18,8 @@ export function Landing({
   setComposerText,
   onPickFile,
   onLoadSample,
+  proof,
+  onOpenProof,
   uploadError,
   apiHealth,
   recent,
@@ -35,6 +35,8 @@ export function Landing({
   setComposerText: Dispatch<SetStateAction<string>>;
   onPickFile: () => void;
   onLoadSample: () => void;
+  proof: RunSummary | null;
+  onOpenProof: (runId: string) => void;
   uploadError: string | null;
   apiHealth: Health | null;
   recent: DocumentSummary[];
@@ -109,13 +111,6 @@ export function Landing({
 
         {stage === "empty" && (
           <>
-            <div className={styles.suggestions}>
-              {COMPOSER_SUGGESTIONS.map((s) => (
-                <button key={s} type="button" className={styles.suggestion} onClick={onPickFile}>
-                  {s}
-                </button>
-              ))}
-            </div>
             <p className={styles.sampleNote}>
               PDF, DOCX or TXT. Or{" "}
               <button type="button" className={styles.linkButton} onClick={onLoadSample}>
@@ -123,6 +118,15 @@ export function Landing({
               </button>
               .
             </p>
+            {proof && (
+              <p className={styles.proofNote}>
+                Or open a finished review:{" "}
+                <button type="button" className={styles.linkButton} onClick={() => onOpenProof(proof.id)} title={`Open run ${proof.id}`}>
+                  “{proof.question}”
+                </button>{" "}
+                on {proof.documentName}, {proof.findings} finding{proof.findings === 1 ? "" : "s"} with verified citations.
+              </p>
+            )}
             {uploadError && (
               <p className={styles.errorLine} role="alert">
                 {uploadError}

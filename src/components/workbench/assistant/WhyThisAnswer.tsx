@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import styles from "../Workbench.module.css";
-import { errorMessage, getRunExplanation } from "@/lib/api";
+import { useRunExplanation } from "../hooks/useRunExplanation";
 import { shortHash } from "@/lib/format";
 import { statusLabel, type RunExplanationView } from "@/lib/types";
 
@@ -12,26 +11,23 @@ import { statusLabel, type RunExplanationView } from "@/lib/types";
  * nothing. The vocabulary is the domain model's: a ModelProposal is what the model wrote, a
  * SourceMatch is where code found a quote in the stored text, and a recorded PolicyEvaluation is
  * the status as it was decided when the run finished. No model is asked to explain itself.
+ *
+ * Given an `explanation` already read (the drawer reads it once for its layers), nothing is fetched;
+ * given only a run id (the Runs record), the explanation is read here.
  */
-export function WhyThisAnswer({ runId, findingId = null }: { runId: string; findingId?: string | null }) {
-  // The last explanation read, keyed by the run it belongs to; a different run id is a fresh read.
-  const [read, setRead] = useState<{ runId: string; explanation: RunExplanationView | null; problem: string | null } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getRunExplanation(runId)
-      .then((explanation) => {
-        if (!cancelled) setRead({ runId, explanation, problem: null });
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) setRead({ runId, explanation: null, problem: errorMessage(error) });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [runId]);
-
-  const current = read && read.runId === runId ? read : null;
+export function WhyThisAnswer({
+  runId,
+  findingId = null,
+  explanation = null,
+  problem = null,
+}: {
+  runId: string;
+  findingId?: string | null;
+  explanation?: RunExplanationView | null;
+  problem?: string | null;
+}) {
+  const read = useRunExplanation(explanation || problem ? null : runId);
+  const current = explanation || problem ? { runId, explanation, problem } : read;
   if (current?.problem) return <p className={styles.whyProblem}>The explanation could not be read: {current.problem}</p>;
   if (!current?.explanation) return <p className={styles.whyLede}>Reading the run&apos;s record…</p>;
   return <Explanation explanation={current.explanation} findingId={findingId} />;

@@ -6,6 +6,12 @@ import { IconClose, IconPlus } from "../icons";
 import { transitions } from "../shell/constants";
 import type { GuidanceController } from "../hooks/useGuidance";
 
+/** The first words of the guidance, so the chip says what the run is checked against rather than that something is. */
+function excerpt(text: string, max = 44): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
+}
+
 /** The scope line under the Assistant title: the document chip and the guidance chip with its popover. */
 export function GuidanceScope({ documentName, guidance, reduceMotion }: { documentName: string; guidance: GuidanceController; reduceMotion: boolean }) {
   const { quick } = transitions(reduceMotion);
@@ -16,8 +22,15 @@ export function GuidanceScope({ documentName, guidance, reduceMotion }: { docume
         <span className={styles.chip}>{documentName}</span>
         {guidance.guidance ? (
           <span className={styles.chip}>
-            <button type="button" className={styles.chipText} onClick={() => guidance.setOpen((o) => !o)} aria-expanded={guidance.open}>
-              Legal instructions
+            <button
+              type="button"
+              className={styles.chipText}
+              onClick={() => guidance.setOpen((o) => !o)}
+              aria-expanded={guidance.open}
+              aria-label={`Legal instructions: ${guidance.guidance.text}`}
+              title={guidance.guidance.text}
+            >
+              {excerpt(guidance.guidance.text)}
             </button>
             <button type="button" className={styles.chipRemove} aria-label="Remove legal instructions" onClick={guidance.remove}>
               <IconClose />

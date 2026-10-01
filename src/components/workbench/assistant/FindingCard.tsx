@@ -45,6 +45,7 @@ export function FindingCard({
             {finding.evidenceKind === "coverage"
               ? `Closest provisions read · ${evidence.length} · none states the point`
               : `Evidence · ${evidence.length} verified passage${evidence.length === 1 ? "" : "s"}`}
+            {finding.review ? ` · ${finding.review.verdict === "confirmed" ? "Confirmed" : "Dismissed"} by ${finding.review.reviewer}` : ""}
           </div>
           {evidence.map(({ span, section }, i) => (
             <button key={i} type="button" className={styles.citationRow} onClick={() => onJump(section.id, span)} title="Show in the document">

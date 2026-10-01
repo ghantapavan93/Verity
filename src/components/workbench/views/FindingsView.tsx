@@ -5,29 +5,11 @@ import wb from "../Workbench.module.css";
 import styles from "./Views.module.css";
 import { errorMessage, listFindings, reviewFinding } from "@/lib/api";
 import { formatWhen, plural } from "@/lib/format";
+import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
 import { statusLabel, type FindingRecord, type FindingStatus, type ReviewVerdict } from "@/lib/types";
 
 export function statusTone(status: FindingStatus): string {
   return status === "needs_review" ? wb.statusReview : status === "pass" ? wb.statusPass : wb.statusMuted;
-}
-
-// The reviewer's name is a per-browser convenience, typed once; the decision itself is a record on the API.
-const REVIEWER_KEY = "workbench.reviewer";
-
-function rememberedReviewer(): string {
-  try {
-    return window.localStorage.getItem(REVIEWER_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function rememberReviewer(name: string): void {
-  try {
-    window.localStorage.setItem(REVIEWER_KEY, name);
-  } catch {
-    // Storage may be unavailable; the review is still recorded by the API.
-  }
 }
 
 type Decision = Exclude<ReviewVerdict, "cleared">;

@@ -30,8 +30,18 @@ import { FindingsView } from "./views/FindingsView";
 import { RunsView } from "./views/RunsView";
 import { Divider } from "./workspace/Divider";
 import { DocumentPane, type Highlight } from "./workspace/DocumentPane";
-import { errorMessage, getDocument, getGuidance, getRun, getRunDetail, health, listDocuments, uploadDocument, type Health } from "@/lib/api";
-import { STAGE_LABELS, citationLabel, isLocated, type DocumentSummary, type DocumentView, type FindingView, type SpanView } from "@/lib/types";
+import { errorMessage, getDocument, getGuidance, getRun, getRunDetail, health, listDocuments, listRuns, uploadDocument, type Health } from "@/lib/api";
+import {
+  STAGE_LABELS,
+  citationLabel,
+  isLocated,
+  type DocumentSummary,
+  type DocumentView,
+  type FindingView,
+  type ReviewView,
+  type RunSummary,
+  type SpanView,
+} from "@/lib/types";
 
 const HIGHLIGHT_MS = 1600;
 const READY_PAUSE_MS = 450;
@@ -40,6 +50,9 @@ const READY_PAUSE_MS = 450;
 // Agreement, CC BY 4.0. Attribution is shown under the document when it is loaded.
 const SAMPLE_PATH = "/samples/cloud-service-agreement.docx";
 const SAMPLE_NAME = "Cloud Service Agreement (Common Paper).docx";
+// The run the first screen offers as a finished review, set at build time for a deployment whose store holds it
+// (the Phase 1 proof run, docs/DEMO-PROOF.md); otherwise the latest complete run with findings.
+const PROOF_RUN_ID = process.env.NEXT_PUBLIC_PROOF_RUN ?? "";
 
 export function Workbench() {
   const reduceMotion = useReducedMotion() ?? false;
@@ -53,6 +66,9 @@ export function Workbench() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [apiHealth, setApiHealth] = useState<Health | null>(null);
   const [evidence, setEvidence] = useState<FindingView | null>(null);
+  // A finished review a visitor can open from the first screen: the run named at build time, else the latest
+  // complete run with findings in this store. A record, never a manufactured example.
+  const [proof, setProof] = useState<RunSummary | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [highlight, setHighlight] = useState<Highlight | null>(null);
   const [lit, setLit] = useState<string | null>(null);
@@ -99,6 +115,13 @@ export function Workbench() {
     listDocuments()
       .then((rows) => !cancelled && setRecent(rows.slice(0, 3)))
       .catch(() => !cancelled && setRecent([]));
+    listRuns()
+      .then((rows) => {
+        if (cancelled) return;
+        const named = PROOF_RUN_ID ? rows.find((r) => r.id === PROOF_RUN_ID) : undefined;
+        setProof(named ?? rows.find((r) => r.stage === "complete" && r.findings > 0) ?? null);
+      })
+      .catch(() => !cancelled && setProof(null));
     return () => {
       cancelled = true;
     };
@@ -285,6 +308,23 @@ export function Workbench() {
     setEvidence(finding);
   }, []);
 
+  /** A decision recorded from the drawer: the run on screen takes the record's review, so the card and the drawer agree. */
+  const reviewed = useCallback(
+    (findingId: string, review: ReviewView | null) => {
+      if (!run) return;
+      const findings = run.findings.map((f) => (f.id === findingId ? { ...f, review } : f));
+      showRun({ ...run, findings });
+      setEvidence((open) => (open && open.id === findingId ? { ...open, review } : open));
+      getRun(run.id)
+        .then((fresh) => {
+          showRun(fresh);
+          setEvidence((open) => (open ? (fresh.findings.find((f) => f.id === open.id) ?? open) : open));
+        })
+        .catch(() => undefined);
+    },
+    [run, showRun],
+  );
+
   const closeEvidence = useCallback(() => {
     setEvidence(null);
     evidenceTriggerRef.current?.focus();
@@ -412,6 +452,8 @@ export function Workbench() {
             setComposerText={setComposerText}
             onPickFile={() => fileInputRef.current?.click()}
             onLoadSample={() => void loadSample()}
+            proof={proof}
+            onOpenProof={(id) => void openRun(id)}
             uploadError={uploadError}
             apiHealth={apiHealth}
             recent={recent}
@@ -439,7 +481,7 @@ export function Workbench() {
                     />
                   )}
                   {view === "findings" && <FindingsView notice={viewError} onOpen={(record) => void openRun(record.runId, record.id)} />}
-                  {view === "runs" && <RunsView notice={viewError} onOpenRun={(id) => void openRun(id)} />}
+                  {view === "runs" && <RunsView notice={viewError} currentRunId={run?.id ?? null} onOpenRun={(id) => void openRun(id)} />}
                 </motion.div>
               ) : (
                 <motion.div key="workspace" className={styles.main} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={quick}>
@@ -462,6 +504,7 @@ export function Workbench() {
                       evidence={evidence}
                       onOpenEvidence={openEvidence}
                       onCloseEvidence={closeEvidence}
+                      onReviewed={reviewed}
                       drawerCloseRef={drawerCloseRef}
                       sectionsById={sectionsById}
                       onJump={jumpTo}

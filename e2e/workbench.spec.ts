@@ -38,12 +38,11 @@ test.afterEach(async ({ page }) => {
   expect((page as Page & { collectedErrors?: string[] }).collectedErrors ?? []).toEqual([]);
 });
 
-test("the landing offers the sample and the three ways in", async ({ page }) => {
+test("the landing offers the sample and a finished review, with no decoy chips", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: "try a sample agreement" })).toBeVisible();
-  for (const way of ["Review a contract", "Compare against guidance", "Ask about a clause"]) {
-    await expect(page.getByRole("button", { name: way })).toBeVisible();
-  }
+  // No decoy chips: the first screen offers the sample, the drop zone and, once the store holds one, a finished review.
+  await expect(page.getByRole("button", { name: "Review a contract" })).toHaveCount(0);
 });
 
 test("the sample opens as numbered sections and the URL carries the document", async ({ page }) => {
@@ -78,8 +77,12 @@ test("a question ends in a finding whose citation opens the document's own text"
     expect(comparable(highlighted)).toBe(comparable(quoted));
   }
 
-  // Why this answer: the run explained from its record by the API, in the drawer, per finding.
-  await drawer.getByRole("button", { name: "Why this answer?" }).click();
+  // The drawer reads top-down: model proposed, source, code decided, human; the machinery sits behind "Prove it".
+  const heads = await drawer.getByRole("heading", { level: 4 }).allTextContents();
+  expect(heads).toEqual(["Model proposed", "Source", "Code decided", "Human"]);
+  await expect(drawer.getByTestId("layer-human")).toContainText(/decided|Confirmed|Dismissed/);
+  // Prove it: the run explained from its record by the API, in the drawer, per finding.
+  await drawer.getByRole("button", { name: "Prove it" }).click();
   const why = drawer.getByTestId("why-this-answer");
   await expect(why).toBeVisible();
   await expect(why.getByText("ModelProposal")).toBeVisible();

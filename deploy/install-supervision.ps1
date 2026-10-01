@@ -10,6 +10,8 @@
 #>
 param(
   [string]$Origin = "https://ivo.pavankg.dev",
+  # The run the first screen offers as a finished review (docs/DEMO-PROOF.md); empty means the latest complete run.
+  [string]$ProofRun = "e5a20e2283e8416e",
   [switch]$Build,
   [switch]$Uninstall
 )
@@ -28,6 +30,7 @@ if ($Uninstall) {
 
 if ($Build) {
   $env:NEXT_PUBLIC_API_URL = $Origin
+  $env:NEXT_PUBLIC_PROOF_RUN = $ProofRun
   Push-Location $root
   try {
     & npm run build 2>&1 | Tee-Object -FilePath (Join-Path $logs "build-$((Get-Date).ToString('yyyyMMdd-HHmmss')).log") | Select-Object -Last 2

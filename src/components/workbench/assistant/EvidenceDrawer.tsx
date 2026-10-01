@@ -3,16 +3,32 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, type Ref } from "react";
 import styles from "../Workbench.module.css";
+import { useRunExplanation } from "../hooks/useRunExplanation";
 import { IconClose } from "../icons";
 import { EASE } from "../shell/constants";
 import { StatusChip } from "../shell/primitives";
 import { WhyThisAnswer } from "./WhyThisAnswer";
+import { errorMessage, reviewFinding } from "@/lib/api";
 import { formatWhen } from "@/lib/format";
-import { citationLabel, type FindingView, type RunView, type SectionView, type SpanView } from "@/lib/types";
+import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
+import {
+  citationLabel,
+  statusLabel,
+  type FindingStatus,
+  type FindingView,
+  type ReviewVerdict,
+  type ReviewView,
+  type RunExplanationView,
+  type RunView,
+  type SectionView,
+  type SpanView,
+} from "@/lib/types";
 
 /**
- * The glass panel that shows where a finding came from: each quoted passage with the API's
- * verification verdict, the guidance it was checked against, the result, and the run record.
+ * The glass panel beside a finding, read top-down in the order a stranger needs: what the model proposed,
+ * what the source says, what code decided, what a person decided. Everything comes from the run's record
+ * (the run itself and `GET /api/runs/{id}/explanation`); the drawer decides nothing. The machinery that
+ * lets an engineer reproduce the run (labels, offsets, hashes, the pack) sits behind one toggle, "Prove it".
  */
 export function EvidenceDrawer({
   finding,
@@ -21,6 +37,7 @@ export function EvidenceDrawer({
   sectionsById,
   onJump,
   onClose,
+  onReviewed,
   closeRef,
   reduceMotion,
 }: {
@@ -30,6 +47,7 @@ export function EvidenceDrawer({
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
   onClose: () => void;
+  onReviewed?: (findingId: string, review: ReviewView | null) => void;
   closeRef: Ref<HTMLButtonElement>;
   reduceMotion: boolean;
 }) {
@@ -50,11 +68,26 @@ export function EvidenceDrawer({
               <IconClose />
             </button>
           </header>
-          <EvidenceBody finding={finding} run={run} guidance={run ? (run.guidanceText ?? null) : guidanceText} sectionsById={sectionsById} onJump={onJump} />
+          <EvidenceBody
+            finding={finding}
+            run={run}
+            guidance={run ? (run.guidanceText ?? null) : guidanceText}
+            sectionsById={sectionsById}
+            onJump={onJump}
+            onReviewed={onReviewed}
+          />
         </motion.aside>
       )}
     </AnimatePresence>
   );
+}
+
+/** The model's proposal for this finding, correlated by ordinal in the explanation; null when the record cannot say. */
+function proposalFor(explanation: RunExplanationView | null, findingId: string) {
+  if (!explanation) return null;
+  const ordinal = explanation.findings.find((f) => f.id === findingId)?.ordinal;
+  if (ordinal === undefined) return null;
+  return explanation.proposals.find((p) => p.ordinal === ordinal) ?? null;
 }
 
 function EvidenceBody({
@@ -63,20 +96,70 @@ function EvidenceBody({
   guidance,
   sectionsById,
   onJump,
+  onReviewed,
 }: {
   finding: FindingView;
   run: RunView | null;
   guidance: string | null;
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
+  onReviewed?: (findingId: string, review: ReviewView | null) => void;
 }) {
-  const [why, setWhy] = useState(false);
+  const [prove, setProve] = useState(false);
+  // Read once when the drawer opens: the first layer needs it, and "Prove it" renders the same read.
+  const read = useRunExplanation(run ? run.id : null);
+  const explanation = read?.explanation ?? null;
+  const explained = explanation?.findings.find((f) => f.id === finding.id) ?? null;
+  const proposal = proposalFor(explanation, finding.id);
+  const hasGuidance = run?.hasGuidance ?? false;
+  const verified = finding.spans.filter((s) => s.verified).length;
+  const withheld = finding.spans.length - verified;
+
   return (
     <>
-      <section className={styles.drawerSection}>
-        <h4>Contract</h4>
+      <section className={styles.drawerSection} data-testid="layer-model">
+        <h4>Model proposed</h4>
+        {!run ? (
+          <p className={styles.drawerRefStatic}>No run on record for this finding.</p>
+        ) : !read ? (
+          <p className={styles.drawerRefStatic}>Reading the run&apos;s record…</p>
+        ) : read.problem ? (
+          <p className={styles.drawerRefStatic}>The record could not be read: {read.problem}</p>
+        ) : explanation?.proposalsProblem || !proposal ? (
+          <p className={styles.drawerRefStatic}>{explanation?.proposalsProblem ?? "Model proposal not reconstructable for this run."}</p>
+        ) : (
+          <dl className={styles.drawerFacts}>
+            <div>
+              <dt>Its hint</dt>
+              <dd>
+                <StatusChip status={proposal.statusHint as FindingStatus} hasGuidance={hasGuidance} source="model_hint" />
+              </dd>
+            </div>
+            {(proposal.observed || proposal.required) && (
+              <div>
+                <dt>In its words</dt>
+                <dd>
+                  {proposal.observed ? `“${proposal.observed}”` : "nothing observed"}
+                  {proposal.required ? ` against “${proposal.required}”` : ""}
+                </dd>
+              </div>
+            )}
+            <div>
+              <dt>It cited</dt>
+              <dd>
+                {proposal.evidence.length} passage{proposal.evidence.length === 1 ? "" : "s"}
+                {finding.spans.length > 0 ? `; ${verified} verified${withheld ? `, ${withheld} withheld` : ""}` : ""}
+              </dd>
+            </div>
+          </dl>
+        )}
+      </section>
+
+      <section className={styles.drawerSection} data-testid="layer-source">
+        <h4>Source</h4>
         {finding.spans.map((span, i) => {
           const section = span.sectionId ? sectionsById.get(span.sectionId) : undefined;
+          const match = explained?.sourceMatches[i] ?? null;
           return (
             <div key={i} className={styles.drawerSpan}>
               {section && span.verified ? (
@@ -86,9 +169,6 @@ function EvidenceBody({
               ) : (
                 <div className={styles.drawerRefStatic}>{section ? citationLabel(section) : "Section not identified"}</div>
               )}
-              {span.verified && span.matchCount != null && span.matchCount > 1 && (
-                <div className={styles.drawerRefStatic}>This passage occurs {span.matchCount} times in the section; the first is highlighted.</div>
-              )}
               <blockquote className={span.verified ? styles.drawerQuote : `${styles.drawerQuote} ${styles.quoteWithheld}`}>“{span.quote}”</blockquote>
               <span className={styles.verifiedTag}>
                 {!span.verified
@@ -97,19 +177,33 @@ function EvidenceBody({
                     ? "Verified verbatim · the closest provision read; it does not state the point"
                     : `Verified verbatim in the document text · ${span.method}`}
               </span>
+              {span.verified && match && (
+                <div className={styles.drawerRefStatic}>
+                  {match.relocated
+                    ? `Found in ${match.locatedHeading ? `“${match.locatedHeading}”` : "another section"}, not in the section the model cited.`
+                    : "Found where the model cited it."}
+                  {match.matchCount != null && match.matchCount > 1 ? ` It occurs ${match.matchCount} times there; the first is highlighted.` : ""}
+                  {match.insideModelVisibleContext === false ? " It lies outside the text the model was shown." : ""}
+                </div>
+              )}
+              {span.verified && !match && span.matchCount != null && span.matchCount > 1 && (
+                <div className={styles.drawerRefStatic}>This passage occurs {span.matchCount} times in the section; the first is highlighted.</div>
+              )}
             </div>
           );
         })}
+        {finding.spans.length === 0 && <p className={styles.drawerRefStatic}>No passage was cited.</p>}
       </section>
-      {(finding.guidanceReference || guidance) && (
-        <section className={styles.drawerSection}>
-          <h4>Guidance</h4>
-          {finding.guidanceReference && <div className={styles.drawerRefStatic}>{finding.guidanceReference}</div>}
-          {guidance && guidance !== finding.guidanceReference && <blockquote className={styles.drawerQuote}>“{guidance}”</blockquote>}
-        </section>
-      )}
-      <section className={styles.drawerSection}>
-        <h4>Result</h4>
+
+      <section className={styles.drawerSection} data-testid="layer-code">
+        <h4>Code decided</h4>
+        {(finding.guidanceReference || guidance) && (
+          <>
+            <h5 className={styles.drawerSubhead}>Guidance</h5>
+            {finding.guidanceReference && <div className={styles.drawerRefStatic}>{finding.guidanceReference}</div>}
+            {guidance && guidance !== finding.guidanceReference && <blockquote className={styles.drawerQuote}>“{guidance}”</blockquote>}
+          </>
+        )}
         <dl className={styles.drawerFacts}>
           {finding.observed && (
             <div>
@@ -123,27 +217,23 @@ function EvidenceBody({
               <dd>{finding.required}</dd>
             </div>
           )}
-          {finding.statusReason && (
-            <div>
-              <dt>Decided by code</dt>
-              <dd>{finding.statusReason}</dd>
-            </div>
-          )}
+          <div>
+            <dt>{finding.statusReason ? "Decided by code" : "Decided"}</dt>
+            <dd>
+              {finding.statusReason ??
+                (finding.statusSource === "model_hint"
+                  ? "No comparable day counts, so the model's hint stands as its view."
+                  : finding.statusSource === "no_evidence"
+                    ? "No verified passage, so no status was given."
+                    : "Lowered by code: " + statusLabel(finding.status, hasGuidance, finding.statusSource).toLowerCase())}
+            </dd>
+          </div>
           <div>
             <dt>Result</dt>
             <dd>
-              <StatusChip status={finding.status} hasGuidance={run?.hasGuidance ?? false} />
+              <StatusChip status={finding.status} hasGuidance={hasGuidance} source={finding.statusSource} />
             </dd>
           </div>
-          {finding.review && (
-            <div>
-              <dt>Reviewed</dt>
-              <dd>
-                {finding.review.verdict === "confirmed" ? "Confirmed" : "Dismissed"} by {finding.review.reviewer} · {formatWhen(finding.review.at)}
-                {finding.review.note ? ` · ${finding.review.note}` : ""}
-              </dd>
-            </div>
-          )}
         </dl>
         {finding.suggestedPosition && (
           <p className={styles.drawerPosition}>
@@ -151,44 +241,137 @@ function EvidenceBody({
           </p>
         )}
       </section>
+
+      <HumanLayer finding={finding} onReviewed={onReviewed} />
+
       {run && (
         <section className={styles.drawerSection}>
-          <h4>Run</h4>
-          <dl className={styles.drawerFacts}>
-            <div>
-              <dt>Model</dt>
-              <dd>{run.model}</dd>
-            </div>
-            <div>
-              <dt>Prompt</dt>
-              <dd>
-                {run.promptVersion} · {run.promptHash.slice(0, 8)}
-              </dd>
-            </div>
-            <div>
-              <dt>Sources</dt>
-              <dd>
-                {finding.spans.filter((s) => s.verified).length} verified
-                {finding.spans.some((s) => !s.verified) ? ` · ${finding.spans.filter((s) => !s.verified).length} withheld` : ""}
-              </dd>
-            </div>
-            {run.latencyMs !== null && (
-              <div>
-                <dt>Latency</dt>
-                <dd>{(run.latencyMs / 1000).toFixed(1)} s</dd>
-              </div>
-            )}
-            <div>
-              <dt>Run ID</dt>
-              <dd>{run.id}</dd>
-            </div>
-          </dl>
-          <button type="button" className={styles.whyToggle} aria-expanded={why} onClick={() => setWhy((open) => !open)}>
-            {why ? "Hide why this answer" : "Why this answer?"}
+          <button type="button" className={styles.whyToggle} aria-expanded={prove} onClick={() => setProve((open) => !open)}>
+            {prove ? "Hide the proof" : "Prove it"}
           </button>
-          {why && <WhyThisAnswer runId={run.id} findingId={finding.id} />}
+          {prove && (
+            <div className={styles.proof}>
+              <dl className={styles.drawerFacts}>
+                <div>
+                  <dt>Model</dt>
+                  <dd>{run.model}</dd>
+                </div>
+                <div>
+                  <dt>Prompt</dt>
+                  <dd>
+                    {run.promptVersion} · {run.promptHash.slice(0, 8)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Sources</dt>
+                  <dd>
+                    {verified} verified{withheld ? ` · ${withheld} withheld` : ""}
+                  </dd>
+                </div>
+                {run.latencyMs !== null && (
+                  <div>
+                    <dt>Latency</dt>
+                    <dd>{(run.latencyMs / 1000).toFixed(1)} s</dd>
+                  </div>
+                )}
+                <div>
+                  <dt>Run ID</dt>
+                  <dd>{run.id}</dd>
+                </div>
+              </dl>
+              <WhyThisAnswer runId={run.id} findingId={finding.id} explanation={explanation} problem={read?.problem ?? null} />
+            </div>
+          )}
         </section>
       )}
     </>
+  );
+}
+
+type Decision = Exclude<ReviewVerdict, "cleared">;
+
+/** The person's decision on the finding, as the API recorded it, and the controls to record one. */
+function HumanLayer({ finding, onReviewed }: { finding: FindingView; onReviewed?: (findingId: string, review: ReviewView | null) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<Decision | null>(null);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const decide = async (verdict: ReviewVerdict, reviewerName?: string) => {
+    const reviewer = reviewerName ?? rememberedReviewer();
+    if (!reviewer) {
+      if (verdict !== "cleared") setPending(verdict);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await reviewFinding(finding.id, { verdict, reviewer, note: null });
+      rememberReviewer(reviewer);
+      setPending(null);
+      onReviewed?.(finding.id, out.review ?? null);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className={styles.drawerSection} data-testid="layer-human">
+      <h4>Human</h4>
+      {finding.review ? (
+        <dl className={styles.drawerFacts}>
+          <div>
+            <dt>{finding.review.verdict === "confirmed" ? "Confirmed" : "Dismissed"}</dt>
+            <dd>
+              by {finding.review.reviewer} · {formatWhen(finding.review.at)}
+              {finding.review.note ? ` · ${finding.review.note}` : ""}
+            </dd>
+          </div>
+        </dl>
+      ) : (
+        <p className={styles.drawerRefStatic}>No one has decided on this finding yet.</p>
+      )}
+      {onReviewed && (
+        <div className={styles.resultActions}>
+          {finding.review ? (
+            <button type="button" className={styles.actionButton} disabled={busy} onClick={() => void decide("cleared")}>
+              Clear the decision
+            </button>
+          ) : (
+            <>
+              <button type="button" className={styles.actionButton} disabled={busy} onClick={() => void decide("confirmed")}>
+                Confirm
+              </button>
+              <button type="button" className={styles.actionButton} disabled={busy} onClick={() => void decide("dismissed")}>
+                Dismiss
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {pending && (
+        <form
+          className={styles.reviewerForm}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const typed = name.trim();
+            if (typed) void decide(pending, typed);
+          }}
+        >
+          <label htmlFor="drawer-reviewer">Your name, recorded with the decision</label>
+          <input id="drawer-reviewer" className={styles.popoverInput} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoFocus />
+          <button type="submit" className={styles.actionButton} disabled={busy || !name.trim()}>
+            {pending === "confirmed" ? "Confirm as" : "Dismiss as"} {name.trim() || "…"}
+          </button>
+        </form>
+      )}
+      {error && (
+        <p className={styles.errorLine} role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
