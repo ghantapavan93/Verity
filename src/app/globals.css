@@ -16,6 +16,8 @@
   --surface: rgba(255, 255, 255, 0.035);
   --surface-2: rgba(255, 255, 255, 0.065);
   --glass: rgba(22, 24, 31, 0.93);
+  /* The same colour with nothing showing through: for a panel that lies over text (the evidence drawer). */
+  --glass-opaque: rgb(22, 24, 31);
   --glass-blur: 20px;
   --border: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.16);

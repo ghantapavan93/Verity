@@ -821,9 +821,9 @@
   bottom: 12px;
   width: min(360px, calc(100% - 24px));
   z-index: 6;
-  background: var(--glass);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  /* Opaque: the drawer lies over the assistant's own text, and at 93% the words behind it showed through its rows
+     (the blur does not reach a sibling's text here). */
+  background: var(--glass-opaque);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-l);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
