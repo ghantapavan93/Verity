@@ -2,7 +2,9 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(6, 7, 10, 0.45);
+  background: rgba(6, 6, 7, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -10,13 +12,11 @@
 }
 
 .palette {
-  width: min(560px, 92vw);
-  background: var(--glass);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  width: min(580px, 92vw);
+  background: var(--glass-opaque);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-l);
-  box-shadow: var(--halo-active);
+  box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.8);
   overflow: hidden;
   transform-origin: top center;
 }
@@ -28,8 +28,8 @@
   border-bottom: 1px solid var(--border);
   outline: none;
   color: var(--text);
-  font: 500 15px/1.4 var(--font-sans);
-  padding: 14px 16px;
+  font: 400 16px/1.4 var(--font-sans);
+  padding: 16px 18px;
 }
 
 .input::placeholder {
@@ -58,12 +58,14 @@
 
 .itemActive {
   background: var(--surface-2);
+  box-shadow: inset 2px 0 0 var(--accent);
   color: var(--text);
 }
 
 .group {
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-3);
 }
@@ -88,9 +90,10 @@
 
 .footer {
   display: flex;
-  gap: 14px;
-  padding: 8px 14px;
-  border-top: 1px solid var(--border);
+  gap: 16px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-3);
 }

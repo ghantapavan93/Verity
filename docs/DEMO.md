@@ -10,8 +10,8 @@ window about 1280 px wide; a fresh tab on `/`.
 
 | Time | On screen | Say |
 |---|---|---|
-| 0–8 s | The composer: "What are you reviewing?" Click **try a sample agreement** (Common Paper's Cloud Service Agreement, CC BY 4.0). | "I wanted the model to be one part of the system. Every answer here has evidence that code verified against the file." |
-| 8–18 s | The composer becomes the file, reads "Reading document → Ready", and the workspace opens: the contract on paper, the Assistant beside it. Click **Add guidance**, keep the default rule (30 days' notice for termination for convenience), click **Use**. | "Guidance is first-class: a lawyer's rule the review is checked against." |
+| 0–8 s | The first screen: Ask about a contract. See who decided each answer. Click **try a sample agreement** (Common Paper's Cloud Service Agreement, CC BY 4.0). | "I wanted the model to be one part of the system. Every answer here has evidence that code verified against the file." |
+| 8–18 s | The composer becomes the file, reads "Reading document → Ready", and the workspace opens: the contract on paper, the questions pane beside it. Click **Add guidance**, keep the default rule (30 days' notice for termination for convenience), click **Use**. | "Guidance is first-class: a lawyer's rule the review is checked against." |
 | 18–25 s | Click the suggestion **What notice is needed to terminate for convenience?** | "Now the run." |
 | 25–75 s | The stage list fills from the API's events: Reading contract (11 pages · 123 sections) → Finding relevant language (6 candidate sections) → Checking against guidance → Verifying citations (3 of 3 quotes verified). | "These are the pipeline's real stages, not a spinner and not chain-of-thought. The wait is the local 8B model." |
 | 75–85 s | The finding appears as an object: topic, status **Not found**, conclusion, and the evidence rows with the quoted passages. | "It did not find a convenience right in the sections it read, and it says so as a statement about what it read." |

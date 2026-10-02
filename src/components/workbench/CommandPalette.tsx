@@ -62,7 +62,7 @@ export function CommandPalette({ getCommands, onClose, reduceMotion }: { getComm
         <input
           ref={inputRef}
           className={styles.input}
-          placeholder="Type a command or a clause…"
+          placeholder="Type a command or a clause"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);

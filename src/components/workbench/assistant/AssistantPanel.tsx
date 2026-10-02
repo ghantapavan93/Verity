@@ -1,9 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import type { Dispatch, Ref, SetStateAction } from "react";
+import { useSyncExternalStore, type Dispatch, type Ref, type SetStateAction } from "react";
 import styles from "../Workbench.module.css";
-import { IconArrowUp, IconCommand } from "../icons";
+import { IconArrowRight, IconArrowUp, IconCheck, IconCommand } from "../icons";
 import { transitions } from "../shell/constants";
 import type { GuidanceController } from "../hooks/useGuidance";
 import type { MemoController } from "../hooks/useMemoAction";
@@ -39,6 +39,9 @@ export const ASSISTANT_SUGGESTIONS = [
  * API reports it, findings as objects, the memo action and the evidence drawer. It renders what
  * the API decided; it does not decide anything about evidence itself.
  */
+const noSubscription = () => () => undefined;
+const isApplePlatform = () => /Mac|iPhone|iPad/.test(navigator.platform);
+
 /** The API accepts a question of at most this many characters (RunCreate.question). */
 export const MAX_QUESTION_CHARS = 2000;
 
@@ -83,6 +86,8 @@ export function AssistantPanel({
 }) {
   const { morph, quick } = transitions(reduceMotion);
   const { run, pending, runError, stageDetails } = runs;
+  // The shortcut as this keyboard writes it. The server render says Ctrl; the client reads the platform once.
+  const apple = useSyncExternalStore(noSubscription, isApplePlatform, () => false);
   // A run being created shows as reading; a run in flight shows the API's stage; a run that could not start shows its error.
   const liveStage: RunStage | null = pending && !runError ? "reading" : run && run.stage in STAGE_LABELS ? run.stage : null;
   const stageLabel = liveStage ? STAGE_LABELS[liveStage as keyof typeof STAGE_LABELS] : null;
@@ -93,9 +98,15 @@ export function AssistantPanel({
     <div className={styles.assistantPane}>
       <header className={styles.assistantHeader}>
         <div className={styles.assistantTitleRow}>
-          <div className={styles.assistantTitle}>Assistant</div>
+          <div className={styles.assistantTitle}>Questions</div>
           <button type="button" className={styles.kbdHint} onClick={onOpenPalette} aria-label="Open commands">
-            <IconCommand /> K
+            {apple ? (
+              <>
+                <IconCommand /> K
+              </>
+            ) : (
+              "Ctrl K"
+            )}
           </button>
         </div>
         <GuidanceScope documentName={doc?.name.replace(/\.[^.]+$/, "") ?? ""} guidance={guidance} reduceMotion={reduceMotion} />
@@ -104,11 +115,18 @@ export function AssistantPanel({
       <div className={styles.assistantBody}>
         {!run && !pending ? (
           <div className={styles.assistantIdle}>
-            <p className={styles.assistantPrompt}>What would you like to know?</p>
+            <div className={styles.assistantKicker}>Ask about this contract</div>
+            <p className={styles.assistantPrompt}>One question at a time, answered from the contract&apos;s own words.</p>
             <div className={styles.actionList}>
-              {ASSISTANT_SUGGESTIONS.map((s) => (
+              {ASSISTANT_SUGGESTIONS.map((s, i) => (
                 <button key={s} type="button" className={styles.actionItem} onClick={() => onAsk(s)}>
-                  {s}
+                  <span className={styles.actionIndex} aria-hidden="true">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span>{s}</span>
+                  <span className={styles.actionArrow} aria-hidden="true">
+                    <IconArrowRight />
+                  </span>
                 </button>
               ))}
             </div>
@@ -165,7 +183,13 @@ export function AssistantPanel({
                     {memo.memo ? (
                       <>
                         <span className={styles.memoDone}>
-                          {memo.memo.reviewHead === run.reviewHead ? "Review memo ready" : "Review memo predates a later review"}
+                          {memo.memo.reviewHead === run.reviewHead ? (
+                            <>
+                              <IconCheck /> Review memo ready
+                            </>
+                          ) : (
+                            "Review memo predates a later review"
+                          )}
                         </span>
                         <a className={styles.actionLink} href={absolute(memo.memo.htmlUrl)} target="_blank" rel="noreferrer">
                           Open
@@ -175,22 +199,25 @@ export function AssistantPanel({
                         </a>
                         {memo.memo.reviewHead !== run.reviewHead && (
                           <button type="button" className={styles.memoButton} onClick={() => void memo.generate(run)} disabled={memo.busy}>
-                            {memo.busy ? "Writing memo…" : "Write a new memo"}
+                            {memo.busy ? "Writing the memo" : "Write a new memo"}
                           </button>
                         )}
                       </>
                     ) : (
                       <button type="button" className={styles.memoButton} onClick={() => void memo.generate(run)} disabled={memo.busy}>
-                        {memo.busy ? "Writing memo…" : "Generate review memo"}
+                        {memo.busy ? "Writing the memo" : "Generate review memo"}
                       </button>
                     )}
                     {memo.error && <span className={styles.errorLine}>{memo.error}</span>}
                   </div>
                   <p className={styles.runMeta}>
-                    {run.reused ? "answered earlier for this exact question · " : ""}
-                    {run.model} · prompt {run.promptVersion} · {run.latencyMs !== null ? `${(run.latencyMs / 1000).toFixed(0)} s` : ""} · every citation
-                    verified against the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}
-                    {run.sectionsRead != null && doc ? ` · ${sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length)}` : ""}
+                    {run.reused && <span>answered earlier for this exact question</span>}
+                    <span>
+                      <code>{run.model}</code> · prompt <code>{run.promptVersion}</code>
+                      {run.latencyMs !== null ? ` · ${(run.latencyMs / 1000).toFixed(0)} s` : ""}
+                    </span>
+                    <span>every citation verified against the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}</span>
+                    {run.sectionsRead != null && doc && <span>{sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length)}</span>}
                   </p>
                 </motion.div>
               ) : (
@@ -213,7 +240,7 @@ export function AssistantPanel({
         <textarea
           ref={inputRef}
           className={styles.composerInput}
-          placeholder="Ask anything about this contract…"
+          placeholder="Ask a question about this contract"
           rows={1}
           maxLength={MAX_QUESTION_CHARS}
           value={composerText}

@@ -1,6 +1,7 @@
 "use client";
 
 import styles from "../Workbench.module.css";
+import { VerityMark } from "../icons";
 import { statusLabel, type FindingStatus } from "@/lib/types";
 
 /** A finding's status as the API decided it, worded by whether its run had guidance. The tone is presentation; the status is not decided here. */
@@ -14,13 +15,12 @@ export function Shimmer() {
   return <span className={styles.shimmer} aria-hidden="true" />;
 }
 
-export function UserChip() {
+/** The product's name and mark, as the landing, the door and the memo show it. */
+export function Brand() {
   return (
-    <div className={styles.user}>
-      <span className={styles.avatar} aria-hidden="true">
-        PG
-      </span>
-      <span className={styles.userName}>Pavan G.</span>
+    <div className={styles.brand}>
+      <VerityMark size={20} />
+      <span className={styles.wordmark}>Verity</span>
     </div>
   );
 }

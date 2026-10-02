@@ -13,6 +13,7 @@ import { WhyThisAnswer } from "../assistant/WhyThisAnswer";
 import { TERMINAL } from "../shell/constants";
 import styles from "./Views.module.css";
 import { statusTone } from "./FindingsView";
+import { Figures, MethodBar } from "./Figures";
 import { absolute, getBatch, getCitations, getExperiments, getFamilies, getGoldens, getRunDetail, listBatches, listRuns } from "@/lib/api";
 import { formatClock, formatDelta, formatLatency, formatWhen, plural, shortHash } from "@/lib/format";
 import {
@@ -36,7 +37,7 @@ import {
 } from "@/lib/types";
 
 function outcomeTone(stage: RunStage): string {
-  return stage === "complete" ? wb.statusPass : stage === "failed" ? wb.statusReview : wb.statusMuted;
+  return stage === "complete" ? wb.statusPass : stage === "failed" ? wb.statusBad : wb.statusMuted;
 }
 
 function message(error: unknown): string {
@@ -179,17 +180,22 @@ export function RunsView({
           output and how each quoted passage was verified. Nothing is summarised away.
         </p>
         {citations && citations.runs > 0 && (
-          <p className={styles.quiet}>
-            Citation record across {plural(citations.runs, "run")} where the model answered: {citations.verifiedSpans} of{" "}
-            {plural(citations.spans, "quoted passage")} verified
-            {Object.keys(citations.byMethod).length > 0
-              ? ` (${Object.entries(citations.byMethod)
-                  .map(([method, count]) => `${count} ${method}`)
-                  .join(", ")})`
-              : ""}{" "}
-            · {citations.withheldFindings} of {plural(citations.findings, "finding")} withheld
-            {citations.firstRunAt ? ` · since ${formatWhen(citations.firstRunAt)}` : ""}
-          </p>
+          <>
+            <Figures
+              label="The citation record"
+              items={[
+                {
+                  label: "Runs where the model answered",
+                  value: citations.runs,
+                  note: citations.firstRunAt ? `since ${formatWhen(citations.firstRunAt)}` : undefined,
+                },
+                { label: "Quoted passages", value: citations.spans },
+                { label: "Found verbatim", value: citations.verifiedSpans },
+                { label: "Findings withheld", value: citations.withheldFindings, note: `of ${citations.findings.toLocaleString("en-US")} findings` },
+              ]}
+            />
+            <MethodBar record={citations} />
+          </>
         )}
         {BUILD_SHA && (
           <p className={styles.quiet} data-testid="build-identity">
@@ -198,20 +204,32 @@ export function RunsView({
         )}
         {(notice || error) && <p className={styles.notice}>{notice ?? error}</p>}
 
+        <nav className={styles.jump} aria-label="On this page">
+          <a href="#runs">Runs</a>
+          {goldens && <a href="#golden-set">Golden set</a>}
+          {batches && <a href="#batches">Batch extraction</a>}
+          {families && <a href="#families">Document families</a>}
+          {experiments && <a href="#experiments">Before this product</a>}
+        </nav>
+
+        <div id="runs" className={styles.anchor} />
         {runs && runs.length === 0 && (
           <div className={styles.empty}>
-            <p>No runs yet. Ask a question about a contract in the Assistant.</p>
+            <p>No runs yet. Open a contract and ask it a question.</p>
           </div>
         )}
 
         {runs && runs.length > 0 && (
           <ul className={styles.list}>
-            {runs.map((r) => (
+            {runs.map((r, i) => (
               <li key={r.id}>
-                <button type="button" className={styles.row} onClick={() => void select(r.id)} aria-busy={loadingId === r.id}>
+                <button type="button" className={`${styles.row} ${styles.indexed}`} onClick={() => void select(r.id)} aria-busy={loadingId === r.id}>
+                  <span className={styles.rowIndex} aria-hidden="true">
+                    {String(runs.length - i).padStart(3, "0")}
+                  </span>
                   <div className={styles.rowMain}>
                     <div className={styles.rowTitle}>
-                      {r.question}
+                      <span className={styles.rowTitleText}>{r.question}</span>
                       {r.id === currentRunId && <span className={`${wb.statusChip} ${wb.statusPass}`}>On screen</span>}
                     </div>
                     <div className={styles.rowMeta}>
@@ -236,10 +254,26 @@ export function RunsView({
           </ul>
         )}
 
-        {goldens && <GoldenSet view={goldens} onOpenRun={(id) => void select(id)} />}
-        {batches && <Batches batches={batches} onOpenRun={(id) => void select(id)} />}
-        {families && <Families view={families} />}
-        {experiments && <Experiments view={experiments} />}
+        {goldens && (
+          <div id="golden-set" className={styles.anchor}>
+            <GoldenSet view={goldens} onOpenRun={(id) => void select(id)} />
+          </div>
+        )}
+        {batches && (
+          <div id="batches" className={styles.anchor}>
+            <Batches batches={batches} onOpenRun={(id) => void select(id)} />
+          </div>
+        )}
+        {families && (
+          <div id="families" className={styles.anchor}>
+            <Families view={families} />
+          </div>
+        )}
+        {experiments && (
+          <div id="experiments" className={styles.anchor}>
+            <Experiments view={experiments} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -247,17 +281,46 @@ export function RunsView({
 
 // ------------------------------------------------------------------------------ record
 
+/** Where the time went, each step drawn to scale against the longest: the model call is the bar that fills the row. */
+function TimingTable({ rows }: { rows: TimingRow[] }) {
+  const longest = Math.max(1, ...rows.map((row) => row.ms));
+  return (
+    <table className={styles.table}>
+      <thead>
+        <tr>
+          <th>Step</th>
+          <th className={styles.timingBarHead}>Share of the wait</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.step}>
+            <td>{row.step}</td>
+            <td className={styles.timingBarCell}>
+              <span className={styles.timingBar} style={{ width: `${Math.max(0.6, (row.ms / longest) * 100)}%` }} aria-hidden="true" />
+            </td>
+            <td>{formatLatency(row.ms)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => void; onOpen: () => void }) {
   const first = run.stages[0]?.at;
   const options = Object.entries(run.options ?? {});
   return (
     <>
       <button type="button" className={styles.back} onClick={onBack}>
-        ← All runs
+        <span aria-hidden="true">←</span> All runs
       </button>
       <div className={styles.recordHead}>
         <div>
-          <div className={styles.kicker}>Run {run.id}</div>
+          <div className={styles.kicker}>
+            Run <span className={styles.kickerId}>{run.id}</span>
+          </div>
           <h1 className={styles.recordTitle}>{run.question}</h1>
         </div>
         <span className={`${wb.statusChip} ${outcomeTone(run.stage)}`}>{OUTCOME_LABELS[run.stage]}</span>
@@ -279,7 +342,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
           <dd>
             {run.model} via {run.provider}
             {run.task ? ` · task ${run.task.replace(/_/g, " ")}` : ""}
-            {run.routingReason ? <div className={styles.quiet}>{run.routingReason}</div> : null}
+            {run.routingReason ? <span className={styles.factNote}>{run.routingReason}</span> : null}
           </dd>
         </div>
         <div>
@@ -304,7 +367,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
         </div>
         <div>
           <dt>Model latency</dt>
-          <dd>{run.latencyMs !== null ? formatLatency(run.latencyMs) : "—"}</dd>
+          <dd>{run.latencyMs !== null ? formatLatency(run.latencyMs) : "not recorded"}</dd>
         </div>
         {run.reason && (
           <div>
@@ -362,22 +425,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
         <h2 className={styles.sectionTitle}>
           Timing <span className={styles.sectionNote}>measured on this run; the model call is the whole wait</span>
         </h2>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>Step</th>
-              <th>Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {timingRows(run).map((row) => (
-              <tr key={row.step}>
-                <td>{row.step}</td>
-                <td>{formatLatency(row.ms)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <TimingTable rows={timingRows(run)} />
       </section>
 
       <section className={styles.section}>
@@ -419,13 +467,13 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
               <div key={i} className={styles.span}>
                 <div className={styles.spanMeta}>
                   <span>
-                    cited <strong className={styles.mono}>{s.citedSectionLabel || "—"}</strong>
+                    cited <strong className={styles.mono}>{s.citedSectionLabel || "no label"}</strong>
                   </span>
                   <span>
-                    located <strong>{s.verified ? `${s.method} · offsets ${s.start}–${s.end}` : "not found"}</strong>
+                    located <strong>{s.verified ? `${s.method} · offsets ${s.start} to ${s.end}` : "not found"}</strong>
                   </span>
                 </div>
-                <p className={styles.quote}>“{s.quote}”</p>
+                <p className={styles.quote}>{s.quote}</p>
               </div>
             ))}
           </article>
@@ -543,13 +591,13 @@ function GoldenSet({ view, onOpenRun }: { view: GoldensView; onOpenRun: (runId: 
                         {g.category ? `${g.category.replace(/_/g, " ")} · ` : ""}
                         {expect}
                         {g.expect.status ? ` with status ${g.expect.status.replace("_", " ")}` : ""} · {g.why}
-                        {g.guidance ? ` · guidance: “${g.guidance}”` : ""}
+                        {g.guidance ? ` · guidance: ${g.guidance}` : ""}
                       </div>
                     </td>
                     {compare ? (
                       <>
-                        <td>{previous ? <VerdictCell run={previous} onOpenRun={onOpenRun} /> : "—"}</td>
-                        <td>{next ? <VerdictCell run={next} onOpenRun={onOpenRun} /> : "—"}</td>
+                        <td>{previous ? <VerdictCell run={previous} onOpenRun={onOpenRun} /> : <span className={styles.mono}>none</span>}</td>
+                        <td>{next ? <VerdictCell run={next} onOpenRun={onOpenRun} /> : <span className={styles.mono}>none</span>}</td>
                         <td className={styles.cellNote}>{whatChanged(previous, next)}</td>
                         <td>
                           {delta && (
@@ -565,7 +613,7 @@ function GoldenSet({ view, onOpenRun }: { view: GoldensView; onOpenRun: (runId: 
                         <td>{g.expect.kind === "present" ? `present · §${sections.join(", §")}` : "absent"}</td>
                         {prompts.map((p) => {
                           const run = runsByVersion.get(p.version)?.get(g.id);
-                          return <td key={p.version}>{run ? <VerdictCell run={run} onOpenRun={onOpenRun} /> : "—"}</td>;
+                          return <td key={p.version}>{run ? <VerdictCell run={run} onOpenRun={onOpenRun} /> : <span className={styles.mono}>none</span>}</td>;
                         })}
                       </>
                     )}
@@ -600,7 +648,7 @@ function whatChanged(previous: GoldenRunView | undefined, next: GoldenRunView | 
   if (!previous || !next) return "not recorded under both versions";
   const parts: string[] = [];
   if (previous.verdict !== next.verdict) parts.push(`${VERDICT_LABELS[previous.verdict]} → ${VERDICT_LABELS[next.verdict]}`);
-  if (previous.stage !== next.stage) parts.push(`${previous.stage ?? "—"} → ${next.stage ?? "—"}`);
+  if (previous.stage !== next.stage) parts.push(`${previous.stage ?? "none"} → ${next.stage ?? "none"}`);
   const statuses = (run: GoldenRunView) => (run.statuses.length ? run.statuses.join("/") : "no finding");
   if (statuses(previous) !== statuses(next)) parts.push(`status ${statuses(previous)} → ${statuses(next)}`);
   if (citedNumbers(previous) !== citedNumbers(next)) parts.push(`cited ${citedNumbers(previous)} → ${citedNumbers(next)}`);
@@ -839,14 +887,14 @@ function Families({ view }: { view: FamiliesView }) {
                     {f.members.join(", ")}
                     <div className={styles.cellNote}>{f.titles.join(" · ")}</div>
                   </td>
-                  <td>{f.minSimilarity != null ? `${f.minSimilarity.toFixed(2)} to ${(f.maxSimilarity ?? f.minSimilarity).toFixed(2)}` : "—"}</td>
+                  <td>{f.minSimilarity != null ? `${f.minSimilarity.toFixed(2)} to ${(f.maxSimilarity ?? f.minSimilarity).toFixed(2)}` : "not measured"}</td>
                 </tr>
               ))}
               {singles.length > 0 && (
                 <tr>
                   <td className={styles.mono}>on their own</td>
                   <td>{singles.map((f) => f.members[0]).join(", ")}</td>
-                  <td>—</td>
+                  <td>none</td>
                 </tr>
               )}
             </tbody>

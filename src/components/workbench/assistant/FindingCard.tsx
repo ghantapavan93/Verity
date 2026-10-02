@@ -50,7 +50,7 @@ export function FindingCard({
           {evidence.map(({ span, section }, i) => (
             <button key={i} type="button" className={styles.citationRow} onClick={() => onJump(section.id, span)} title="Show in the document">
               <span className={styles.citationLabel}>{citationLabel(section)}</span>
-              <span className={styles.citationExcerpt}>“{excerpt(span.quote)}”</span>
+              <span className={styles.citationExcerpt}>{excerpt(span.quote)}</span>
             </button>
           ))}
         </div>
@@ -59,7 +59,7 @@ export function FindingCard({
         <button type="button" className={styles.actionButton} onClick={() => primary && onJump(primary.section.id, primary.span)} disabled={!primary}>
           View in document
         </button>
-        <button type="button" className={styles.actionButton} onClick={(e) => onEvidence(e.currentTarget)}>
+        <button type="button" className={`${styles.actionButton} ${styles.actionPrimary}`} onClick={(e) => onEvidence(e.currentTarget)}>
           Inspect evidence
         </button>
         <button type="button" className={styles.actionButton} onClick={onFollowUp}>

@@ -3,10 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import wb from "../Workbench.module.css";
 import styles from "./Views.module.css";
+import { Figures } from "./Figures";
 import { errorMessage, listFindings, reviewFinding } from "@/lib/api";
 import { formatWhen, plural } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
 import { statusLabel, type FindingRecord, type FindingStatus, type ReviewVerdict } from "@/lib/types";
+
+/** What the figures at the top can narrow the list to. */
+type Filter = "all" | "needs_review" | "pass" | "missing" | "awaiting";
+
+function keep(filter: Filter, r: FindingRecord): boolean {
+  if (filter === "all") return true;
+  if (filter === "awaiting") return !r.review;
+  return r.status === filter;
+}
 
 export function statusTone(status: FindingStatus): string {
   return status === "needs_review" ? wb.statusReview : status === "pass" ? wb.statusPass : wb.statusMuted;
@@ -23,6 +33,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pending, setPending] = useState<{ id: string; verdict: Decision } | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +48,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
   // Grouped by document, newest run first, in the order the API returned them.
   const groups = useMemo(() => {
     const byDocument = new Map<string, { name: string; items: FindingRecord[] }>();
-    for (const r of records ?? []) {
+    for (const r of (records ?? []).filter((row) => keep(filter, row))) {
       const group = byDocument.get(r.documentId) ?? {
         name: r.documentName,
         items: [],
@@ -46,10 +57,12 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
       byDocument.set(r.documentId, group);
     }
     return [...byDocument.entries()];
-  }, [records]);
+  }, [records, filter]);
 
   const reviewed = (records ?? []).filter((r) => r.review).length;
   const awaiting = (records ?? []).length - reviewed;
+  const count = (status: FindingStatus) => (records ?? []).filter((r) => r.status === status).length;
+  const toggle = (next: Filter) => setFilter((current) => (current === next ? "all" : next));
 
   const decide = async (record: FindingRecord, verdict: ReviewVerdict, name?: string) => {
     const reviewer = name ?? rememberedReviewer();
@@ -78,15 +91,31 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
           {records && <span className={styles.count}>{records.length}</span>}
         </h1>
         <p className={styles.lede}>
-          Every finding here cites contract text that code verified verbatim. Open one to see the exact passage highlighted in its document. Where a point was
-          not found, the citations marked <em>searched</em> are the closest provisions that were read, not support for a claim.
+          Every finding here cites contract text that code found verbatim. Open one to see the exact passage marked in its document. Where a point was not
+          found, the citations marked <em>searched</em> are the closest provisions that were read, not support for a claim.
           {records && records.length > 0 && ` ${plural(awaiting, "finding")} awaiting review · ${reviewed} reviewed.`}
         </p>
+        {records && records.length > 0 && (
+          <Figures
+            label="Filter the findings"
+            items={[
+              { label: "Needs review", value: count("needs_review"), onSelect: () => toggle("needs_review"), active: filter === "needs_review" },
+              { label: "Within guidance or answered", value: count("pass"), onSelect: () => toggle("pass"), active: filter === "pass" },
+              { label: "Not found", value: count("missing"), onSelect: () => toggle("missing"), active: filter === "missing" },
+              { label: "Awaiting a person", value: awaiting, onSelect: () => toggle("awaiting"), active: filter === "awaiting" },
+            ]}
+          />
+        )}
         {(notice || error) && <p className={styles.notice}>{notice ?? error}</p>}
 
         {records && records.length === 0 && (
           <div className={styles.empty}>
-            <p>No findings yet. Ask a question about a contract in the Assistant.</p>
+            <p>No findings yet. Open a contract and ask it a question.</p>
+          </div>
+        )}
+        {records && records.length > 0 && groups.length === 0 && (
+          <div className={styles.empty}>
+            <p>Nothing matches this filter.</p>
           </div>
         )}
 
@@ -100,7 +129,10 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
         )}
         {groups.map(([documentId, group]) => (
           <section key={documentId} className={styles.group}>
-            <div className={styles.groupTitle}>{group.name}</div>
+            <div className={styles.groupTitle}>
+              <span>{group.name}</span>
+              <small>{plural(group.items.length, "finding")}</small>
+            </div>
             <ul className={styles.list} style={{ marginTop: 0 }}>
               {group.items.map((r) => (
                 <li key={r.id} className={styles.findingItem}>
@@ -116,7 +148,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                       {r.citations.map((c) => (
                         <span
                           key={c}
-                          className={styles.tag}
+                          className={`${styles.tag} ${r.evidenceKind === "coverage" ? styles.tagSearched : ""}`}
                           title={r.evidenceKind === "coverage" ? "Read while searching; in the model's view it does not state the point" : "Verified passage"}
                         >
                           {r.evidenceKind === "coverage" ? `searched ${c}` : c}

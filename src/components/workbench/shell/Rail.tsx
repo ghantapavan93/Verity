@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import styles from "../Workbench.module.css";
-import { IconAssistant, IconDocuments, IconFindings, IconRuns, IconSearch } from "../icons";
+import { IconAssistant, IconDocuments, IconFindings, IconRuns, IconSearch, VerityMark } from "../icons";
 import type { View } from "./constants";
 
 export function Rail({
@@ -18,11 +18,13 @@ export function Rail({
 }) {
   return (
     <nav className={styles.rail} aria-label="Primary">
-      <span className={`${styles.mark} ${styles.railMark}`} aria-hidden="true" />
+      <span className={styles.railMark} title="Verity">
+        <VerityMark size={20} />
+      </span>
       <RailButton label="Search (Ctrl K)" icon={<IconSearch />} onClick={onSearch} />
       <RailButton label="Documents" icon={<IconDocuments />} active={active === "documents"} onClick={() => onNavigate("documents")} />
       <RailButton
-        label={hasDocument ? "Assistant" : "Assistant · add a contract"}
+        label={hasDocument ? "Review" : "Review · add a contract"}
         icon={<IconAssistant />}
         active={active === "assistant"}
         onClick={() => onNavigate("assistant")}
@@ -30,9 +32,6 @@ export function Rail({
       <RailButton label="Findings" icon={<IconFindings />} active={active === "findings"} onClick={() => onNavigate("findings")} />
       <RailButton label="Runs" icon={<IconRuns />} active={active === "runs"} onClick={() => onNavigate("runs")} />
       <div className={styles.railSpacer} />
-      <span className={styles.railAvatar} aria-label="Pavan G.">
-        PG
-      </span>
     </nav>
   );
 }

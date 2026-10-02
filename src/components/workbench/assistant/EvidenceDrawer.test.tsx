@@ -105,7 +105,10 @@ describe("EvidenceDrawer", () => {
     const model = await within(drawer).findByTestId("layer-model");
     expect(api.getRunExplanation).toHaveBeenCalledWith("e5a20e2283e8416e");
     expect(await within(model).findByText("Within guidance (model's view)")).toBeTruthy();
-    expect(model.textContent).toContain("“60 days' written notice” against “at least 90 days”");
+    // The model's phrases are set apart as its own words, with no quotation marks that could pass them off as the contract's.
+    expect(model.textContent).toContain("60 days' written notice against at least 90 days");
+    const words = [...model.querySelectorAll("span")].map((s) => s.textContent);
+    expect(words).toEqual(expect.arrayContaining(["60 days' written notice", "at least 90 days"]));
     expect(model.textContent).toContain("1 passage; 1 verified");
     // What the model suggested and where it pointed in the guidance are the model's, and sit in its layer.
     expect(model.textContent).toContain("It suggested90 days' written notice");
@@ -115,7 +118,7 @@ describe("EvidenceDrawer", () => {
     const source = within(drawer).getByTestId("layer-source");
     expect(within(source).getByText("EXHIBIT 10.102 (part 1)")).toBeTruthy();
     expect(source.textContent).toContain("Verified verbatim in the document text · relocated:exact");
-    expect(source.textContent).toContain("Found in “EXHIBIT 10.102 (part 1)”, not in the section the model cited.");
+    expect(source.textContent).toContain("Found in EXHIBIT 10.102 (part 1), not in the section the model cited.");
 
     // Code decided: observed against required, the sentence, the final status; the guidance it was checked against.
     const code = within(drawer).getByTestId("layer-code");

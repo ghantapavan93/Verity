@@ -30,7 +30,7 @@ export function RunOutcome({
     <>
       <div className={styles.resultHead}>
         <span className={styles.resultTopic}>{outcomeTitle(run)}</span>
-        <span className={`${styles.statusChip} ${run.stage === "failed" ? styles.statusReview : styles.statusMuted}`}>
+        <span className={`${styles.statusChip} ${run.stage === "failed" ? styles.statusBad : styles.statusMuted}`}>
           {run.stage === "failed" ? "Failed" : "Unresolved"}
         </span>
       </div>
@@ -73,7 +73,7 @@ export function WithheldList({
             const where = section ? citationLabel(section) : span.citedSectionLabel ? `the model's ${span.citedSectionLabel}` : "the sections handed over";
             return (
               <div key={i} className={styles.withheldSpan}>
-                <span className={span.verified ? styles.withheldQuoteKept : `${styles.withheldQuote} ${styles.quoteWithheld}`}>“{span.quote}”</span>
+                <span className={span.verified ? styles.withheldQuoteKept : `${styles.withheldQuote} ${styles.quoteWithheld}`}>{span.quote}</span>
                 <span className={styles.verifiedTag}>{span.verified ? `verified in ${where}` : `not found verbatim in ${where}`}</span>
               </div>
             );

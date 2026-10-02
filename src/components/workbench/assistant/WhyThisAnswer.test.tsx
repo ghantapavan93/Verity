@@ -54,7 +54,7 @@ describe("WhyThisAnswer", () => {
     expect(text).toContain("Hintpass");
     expect(text).toContain("60 days' written notice (the model's words)");
     expect(text).toContain("at least 90 days (the model's words)");
-    expect(text).toContain("cited sec_4: “4.1 TERMINATION WITHOUT CAUSE.");
+    expect(text).toContain("cited sec_4: 4.1 TERMINATION WITHOUT CAUSE.");
 
     // SourceMatch: cited sec_4, located in sec_0, exact, once, at 4136–4284, inside the slice the model saw.
     const match = within(panel).getByTestId("source-match");
@@ -62,7 +62,7 @@ describe("WhyThisAnswer", () => {
     expect(match.textContent).toContain("Located insec_0 · EXHIBIT 10.102 (part 1) (not where the model said)");
     expect(match.textContent).toContain("Matchrelocated:exact");
     expect(match.textContent).toContain("Occurrences1");
-    expect(match.textContent).toContain("Offsets4136–4284");
+    expect(match.textContent).toContain("Offsets4136 to 4284");
     expect(match.textContent).toContain("Inside model-visible contextyes");
 
     // Recorded PolicyEvaluation: needs review, computed by code, with the sentence that says why.

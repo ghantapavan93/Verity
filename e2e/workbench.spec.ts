@@ -20,7 +20,7 @@ async function openSample(page: Page): Promise<void> {
 }
 
 async function ask(page: Page, question: string): Promise<void> {
-  const composer = page.getByPlaceholder("Ask anything about this contract…");
+  const composer = page.getByPlaceholder("Ask a question about this contract");
   await composer.fill(question);
   await composer.press("Enter");
 }

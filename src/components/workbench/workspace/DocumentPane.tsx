@@ -59,9 +59,10 @@ export function DocumentPane({
       transition={{ ...morph, delay: reduceMotion ? 0 : 0.05 }}
     >
       <header className={styles.docHeader}>
+        <div className={styles.docKicker}>Contract</div>
         <div className={styles.docTitle}>{doc?.name}</div>
         <div className={styles.docMeta}>
-          Contract · {docMeta} · Uploaded {doc ? formatWhen(doc.createdAt) : ""}
+          {docMeta} · Uploaded {doc ? formatWhen(doc.createdAt) : ""}
         </div>
         {doc && notRead(doc).length > 0 && (
           <p className={styles.docNote} data-testid="coverage-note">
@@ -79,7 +80,7 @@ export function DocumentPane({
         {doc?.sections.map((section) => (
           <SectionBlock key={section.id} section={section} lit={lit === section.id} span={highlight?.sectionId === section.id ? highlight.span : null} />
         ))}
-        {isSample && <p className={styles.paperNote}>Sample: Common Paper Cloud Service Agreement, CC BY 4.0 · a real standard agreement, unmodified</p>}
+        {isSample && <p className={styles.paperNote}>Sample · Common Paper Cloud Service Agreement · CC BY 4.0 · a real standard agreement, unmodified</p>}
       </article>
     </motion.div>
   );
@@ -92,7 +93,7 @@ function SectionBlock({ section, lit, span }: { section: SectionView; lit: boole
   const body = located ? (
     <>
       {located[0]}
-      <mark className={styles.mark}>{located[1]}</mark>
+      <mark className={styles.passage}>{located[1]}</mark>
       {located[2]}
     </>
   ) : (

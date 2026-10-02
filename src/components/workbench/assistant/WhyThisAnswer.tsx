@@ -29,7 +29,7 @@ export function WhyThisAnswer({
   const read = useRunExplanation(explanation || problem ? null : runId);
   const current = explanation || problem ? { runId, explanation, problem } : read;
   if (current?.problem) return <p className={styles.whyProblem}>The explanation could not be read: {current.problem}</p>;
-  if (!current?.explanation) return <p className={styles.whyLede}>Reading the run&apos;s record…</p>;
+  if (!current?.explanation) return <p className={styles.whyLede}>Reading the run&apos;s record</p>;
   return <Explanation explanation={current.explanation} findingId={findingId} />;
 }
 
@@ -108,7 +108,7 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
                   {c.truncated === null
                     ? "not determined"
                     : c.truncated
-                      ? `characters ${c.sliceStart}–${c.sliceEnd} of ${c.characters}; the rest was cut`
+                      ? `characters ${c.sliceStart} to ${c.sliceEnd} of ${c.characters}; the rest was cut`
                       : `all ${c.characters} characters`}
                 </td>
               </tr>
@@ -197,7 +197,7 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
                 <dd>
                   {p.evidence.map((e, i) => (
                     <div key={i}>
-                      cited <span className={styles.whyMono}>{e.citedLabel}</span>: “{e.quote}”
+                      cited <span className={styles.whyMono}>{e.citedLabel}</span>: <span className={styles.whyQuote}>{e.quote}</span>
                     </div>
                   ))}
                 </dd>
@@ -215,14 +215,14 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
             <dl key={i} className={styles.drawerFacts} data-testid="source-match">
               <div>
                 <dt>Model cited</dt>
-                <dd className={styles.whyMono}>{m.citedLabel || "—"}</dd>
+                <dd className={styles.whyMono}>{m.citedLabel || "no label"}</dd>
               </div>
               <div>
                 <dt>Located in</dt>
                 <dd>
                   {m.verified ? (
                     <>
-                      <span className={styles.whyMono}>{m.locatedLabel ?? "—"}</span>
+                      <span className={styles.whyMono}>{m.locatedLabel ?? "no label"}</span>
                       {m.locatedHeading ? ` · ${m.locatedHeading}` : ""}
                       {m.relocated ? " (not where the model said)" : ""}
                     </>
@@ -244,7 +244,7 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
                   <div>
                     <dt>Offsets</dt>
                     <dd>
-                      {m.start}–{m.end}
+                      {m.start} to {m.end}
                     </dd>
                   </div>
                   <div>
@@ -263,7 +263,7 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
             </div>
             <div>
               <dt>Source</dt>
-              <dd className={styles.whyMono}>{f.recordedPolicyEvaluation.statusSource || "—"}</dd>
+              <dd className={styles.whyMono}>{f.recordedPolicyEvaluation.statusSource || "not recorded"}</dd>
             </div>
             <div>
               <dt>

@@ -33,11 +33,14 @@ export function IconDocuments(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** The review surface: the contract on the left, the questions beside it. */
 export function IconAssistant(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...base} {...props}>
-      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
-      <path d="M18.5 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z" />
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M13 4v16" />
+      <path d="M6 8.5h4M6 12h4M6 15.5h2.5" />
+      <path d="M16 9h2M16 12.5h2" />
     </svg>
   );
 }
@@ -124,6 +127,37 @@ export function IconCheck(props: SVGProps<SVGSVGElement>) {
       {...props}
     >
       <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+    </svg>
+  );
+}
+
+export function IconArrowRight(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} width={14} height={14} strokeWidth={1.8} {...props}>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+export function IconQuote(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} width={14} height={14} {...props}>
+      <path d="M5 6h14M5 10h14M5 14h9" />
+      <path d="M5 18h6" stroke="var(--accent)" strokeWidth={2.4} />
+    </svg>
+  );
+}
+
+/**
+ * The Verity mark: a sheet of paper with one line marked in brass. It is what the product does, drawn at 18 pixels:
+ * a contract, and the one passage that was checked.
+ */
+export function VerityMark({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" aria-hidden="true">
+      <rect x="2.5" y="1" width="13" height="16" rx="2" fill="#f6f2e9" />
+      <path d="M5.5 5h7M5.5 7.6h7M5.5 12.8h4.5" stroke="#8d877b" strokeWidth="1.1" strokeLinecap="round" />
+      <path d="M5.5 10.2h7" stroke="#c0943a" strokeWidth="1.9" strokeLinecap="round" />
     </svg>
   );
 }

@@ -70,7 +70,7 @@ export function GuidanceScope({ documentName, guidance, reduceMotion }: { docume
                   Cancel
                 </button>
                 <button type="button" className={styles.primaryButton} onClick={() => void guidance.apply()} disabled={guidance.busy}>
-                  {guidance.busy ? "Saving…" : "Use"}
+                  {guidance.busy ? "Saving" : "Use"}
                 </button>
               </div>
             </div>

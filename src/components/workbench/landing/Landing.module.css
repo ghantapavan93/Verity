@@ -1,0 +1,717 @@
+/* The first screen and the door before it. An editorial page: a kicker, one serif sentence, the drop zone, and
+   beside it a finished review a stranger can open in one click. Tokens from globals.css. */
+
+.page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px clamp(16px, 4vw, 40px);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.previewDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-pass-text);
+  box-shadow: 0 0 0 3px rgba(126, 186, 150, 0.14);
+}
+
+.body {
+  width: min(1140px, 100%);
+  margin: 0 auto;
+  padding: clamp(32px, 7vh, 88px) clamp(16px, 4vw, 40px) 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+  gap: clamp(32px, 5vw, 72px);
+  align-items: start;
+}
+
+.dimmed .lead,
+.dimmed .aside,
+.dimmed .after {
+  opacity: 0.3;
+}
+
+/* ---- the left column: what this is, and where a contract goes ---- */
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 22px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.kickerRule {
+  width: 36px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  transform-origin: left;
+}
+
+.title {
+  margin: 0;
+  max-width: 15ch;
+  font-family: var(--font-serif);
+  font-size: clamp(36px, 4.6vw, 56px);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  font-optical-sizing: auto;
+}
+
+.titleQuiet {
+  color: var(--text-3);
+}
+
+.lead {
+  margin: 22px 0 0;
+  max-width: 54ch;
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+  transition: opacity var(--dur) var(--ease);
+}
+
+.drop {
+  position: relative;
+  margin-top: 34px;
+  border-radius: var(--radius-l);
+  border: 1px dashed var(--border-strong);
+  background: var(--composer-bg);
+  padding: 22px 22px 20px;
+  transition:
+    border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.dropActive {
+  border-style: solid;
+  border-color: var(--accent-line);
+  background: var(--accent-tint);
+  box-shadow: var(--halo-active);
+}
+
+.dropRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dropIcon {
+  flex: none;
+  width: 42px;
+  height: 50px;
+  border-radius: 5px;
+  background: var(--doc-bg);
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.8);
+}
+
+.dropIcon span {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: #b9b2a4;
+}
+
+.dropIcon span:nth-child(3) {
+  height: 3px;
+  background: #c0943a;
+}
+
+.dropIcon span:last-child {
+  width: 60%;
+}
+
+.dropText {
+  min-width: 0;
+  flex: 1;
+}
+
+.dropTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dropHint {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+
+.primary:hover {
+  background: #fff;
+}
+
+.primary:active {
+  transform: translateY(1px);
+}
+
+.primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.processing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 50px;
+}
+
+.fileName {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.fileName span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stateLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.releaseHint {
+  min-height: 50px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--accent-soft);
+}
+
+.after {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text-3);
+  transition: opacity var(--dur) var(--ease);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 4px;
+  cursor: pointer;
+  transition: text-decoration-color var(--dur-fast) var(--ease);
+}
+
+.link:hover {
+  text-decoration-color: var(--accent);
+}
+
+.error {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--status-review-text);
+}
+
+/* ---- recent documents: a short ledger ---- */
+
+.ledger {
+  margin-top: 40px;
+}
+
+.ledgerHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.ledgerHead .link {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
+}
+
+.ledgerRow {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 0;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ledgerIndex {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-4);
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.ledgerName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+}
+
+.ledgerMeta {
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ledgerRow:hover .ledgerIndex {
+  color: var(--accent);
+}
+
+.ledgerRow:hover .ledgerName {
+  color: #fff;
+}
+
+/* ---- the right column: a finished review, and how a status is set ---- */
+
+.aside {
+  display: grid;
+  gap: 18px;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.receipt {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--bg-raised);
+  overflow: hidden;
+  transition:
+    border-color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.receipt:hover,
+.receipt:focus-within {
+  border-color: var(--border-strong);
+}
+
+.receipt:hover .receiptOpen {
+  color: var(--accent-soft);
+}
+
+.receipt:hover .receiptOpen svg {
+  transform: translateX(3px);
+}
+
+.receiptHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.receiptId {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+}
+
+.receiptBody {
+  padding: 18px 18px 16px;
+}
+
+.receiptQuestion {
+  display: block;
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 21px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.receiptFacts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 18px 0 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  background: var(--hairline);
+}
+
+.receiptFacts div {
+  padding: 10px 12px;
+  background: var(--bg-raised);
+}
+
+.receiptFacts div:first-child {
+  grid-column: 1 / -1;
+}
+
+.receiptFacts dt {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.receiptFacts dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.receiptDecision {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: var(--radius-m);
+  background: var(--bg-sunken);
+  border: 1px solid var(--hairline);
+}
+
+.receiptDecisionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.receiptTopic {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.receiptReason {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.receiptWho {
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.9;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-soft);
+}
+
+.receiptFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.receiptOpen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+/* The whole card answers the click; the button stays the one control a keyboard reaches. */
+.receiptOpen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.receiptOpen:focus-visible {
+  outline: none;
+}
+
+.receipt:has(.receiptOpen:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.receiptOpen svg {
+  transition: transform var(--dur) var(--ease);
+}
+
+.layers {
+  margin: 0;
+  padding: 18px 18px 6px;
+  list-style: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-l);
+}
+
+.layersHead {
+  margin: 0 0 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.layer {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  padding-bottom: 14px;
+}
+
+.layer:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 24px;
+  bottom: 2px;
+  width: 1px;
+  background: var(--border);
+}
+
+.layerNode {
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--bg);
+}
+
+.layerNodeCode {
+  border-color: var(--accent-line);
+  color: var(--accent-soft);
+  background: var(--accent-tint);
+}
+
+.layerName {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.layerText {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding: 16px clamp(16px, 4vw, 40px) 20px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.footer code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+/* ---- the door ---- */
+
+.gate {
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: clamp(40px, 12vh, 140px) clamp(16px, 4vw, 40px) 48px;
+}
+
+.gate .title {
+  max-width: none;
+  font-size: clamp(32px, 4vw, 44px);
+}
+
+.gateForm {
+  display: grid;
+  gap: 8px;
+  margin-top: 30px;
+}
+
+.gateLabel {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.gateInput {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: 13px var(--font-mono);
+  outline: none;
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+.gateInput:focus {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 4px rgba(216, 180, 106, 0.08);
+}
+
+.gateInput::placeholder {
+  font-family: var(--font-sans);
+  color: var(--text-3);
+}
+
+.gateForm .primary {
+  justify-self: start;
+  margin-top: 8px;
+}
+
+.gateNote {
+  margin: 28px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+@media (max-width: 900px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .dropRow {
+    flex-wrap: wrap;
+  }
+
+  .dropRow .primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .receiptFacts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .receiptReason {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .ledgerMeta {
+    display: none;
+  }
+
+  .ledgerRow {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+}

@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import styles from "../Workbench.module.css";
+import door from "../landing/Landing.module.css";
+import { Brand } from "../shell/primitives";
 import { ACCESS_REQUIRED_EVENT, enterWithInvite, errorMessage, getAccess } from "@/lib/api";
 
 /**
@@ -91,24 +93,31 @@ export function AccessGate({ children }: { children: ReactNode }) {
   if (state === "checking") return <div className={styles.root} data-stage="empty" aria-busy="true" />;
   return (
     <div className={styles.root} data-stage="empty">
-      <section className={styles.landing} aria-label="Private preview">
-        <header className={styles.topbar}>
-          <div className={styles.brand}>
-            <span className={styles.mark} aria-hidden="true" />
-            <span className={styles.wordmark}>Verity</span>
-          </div>
+      <section id="main" className={door.page} aria-label="Private preview">
+        <header className={door.topbar}>
+          <Brand />
+          <span className={door.preview}>
+            <span className={door.previewDot} aria-hidden="true" />
+            Private preview
+          </span>
         </header>
-        <div className={styles.landingBody}>
-          <h1 className={styles.prompt}>Private engineering preview</h1>
-          <p className={styles.gateLead}>
-            This workbench runs against the actual local analysis pipeline: real uploads, real model runs, one store. It opens from the invite link you were
-            sent.
+        <div className={door.gate}>
+          <p className={door.kicker}>
+            <span className={door.kickerRule} />
+            By invitation
           </p>
-          <form className={styles.gateForm} onSubmit={enter}>
-            <label htmlFor="invite-link">Invite link</label>
+          <h1 className={door.title}>Private engineering preview</h1>
+          <p className={door.lead}>
+            This is the working system, not a recording of one: real uploads, real model runs on a local model, one store. It opens from the invite link you
+            were sent.
+          </p>
+          <form className={door.gateForm} onSubmit={enter}>
+            <label htmlFor="invite-link" className={door.gateLabel}>
+              Invite link
+            </label>
             <input
               id="invite-link"
-              className={styles.popoverInput}
+              className={door.gateInput}
               value={invite}
               onChange={(e) => setInvite(e.target.value)}
               placeholder="Paste the link from your invitation"
@@ -116,15 +125,18 @@ export function AccessGate({ children }: { children: ReactNode }) {
               spellCheck={false}
               autoFocus
             />
-            <button type="submit" className={styles.memoButton} disabled={busy || !invite.trim()}>
-              {busy ? "Entering…" : "Enter workbench"}
+            <button type="submit" className={door.primary} disabled={busy || !invite.trim()}>
+              {busy ? "Entering" : "Enter workbench"}
             </button>
           </form>
           {problem && (
-            <p className={styles.errorLine} role="alert">
+            <p className={door.error} role="alert">
               {problem}
             </p>
           )}
+          <p className={door.gateNote}>
+            The link signs you in on this browser for seven days. There is no account and no password. Ask for a new link if this one has expired.
+          </p>
         </div>
       </section>
     </div>

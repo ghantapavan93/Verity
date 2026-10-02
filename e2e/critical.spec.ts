@@ -43,7 +43,7 @@ test("a malformed upload is refused with the reason, and nothing is opened", asy
 
 test("a refresh while a run is in flight loses nothing: the page reattaches to the same run and shows its result", async ({ page }) => {
   await openSample(page);
-  const composer = page.getByPlaceholder("Ask anything about this contract…");
+  const composer = page.getByPlaceholder("Ask a question about this contract");
   // The replay provider holds its recorded answer back for eight seconds, so the run is genuinely in flight at the reload.
   await composer.fill(`${LIABILITY} [[zzdelay:${nonce()}]]`);
   const started = page.waitForResponse((r) => r.url().includes("/api/runs") && r.request().method() === "POST");

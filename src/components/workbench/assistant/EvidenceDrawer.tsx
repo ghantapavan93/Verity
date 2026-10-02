@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useState, type Ref } from "react";
 import styles from "../Workbench.module.css";
 import { useRunExplanation } from "../hooks/useRunExplanation";
-import { IconClose } from "../icons";
+import { IconCheck, IconClose } from "../icons";
 import { EASE } from "../shell/constants";
 import { StatusChip } from "../shell/primitives";
 import { WhyThisAnswer } from "./WhyThisAnswer";
@@ -65,19 +65,24 @@ export function EvidenceDrawer({
           aria-label="Evidence"
         >
           <header className={styles.drawerHead}>
-            <span>Evidence</span>
+            <div className={styles.drawerTitle}>
+              <strong>Evidence</strong>
+              <span>{finding.topic}</span>
+            </div>
             <button ref={closeRef} type="button" className={styles.iconButton} aria-label="Close evidence" onClick={onClose}>
               <IconClose />
             </button>
           </header>
-          <EvidenceBody
-            finding={finding}
-            run={run}
-            guidance={run ? (run.guidanceText ?? null) : guidanceText}
-            sectionsById={sectionsById}
-            onJump={onJump}
-            onReviewed={onReviewed}
-          />
+          <div className={styles.drawerBody}>
+            <EvidenceBody
+              finding={finding}
+              run={run}
+              guidance={run ? (run.guidanceText ?? null) : guidanceText}
+              sectionsById={sectionsById}
+              onJump={onJump}
+              onReviewed={onReviewed}
+            />
+          </div>
         </motion.aside>
       )}
     </AnimatePresence>
@@ -118,15 +123,54 @@ function EvidenceBody({
   const withheld = finding.spans.length - verified;
   // The model proposed this pass and code confirmed it: the layer says so, and does not say code decided.
   const confirmed = finding.statusSource === "confirmed_days";
+  // The layer where the status on screen was set: the model's, when its hint stands; otherwise code's.
+  const setByModel = finding.statusSource === "model_hint";
+  const setTag = <span className={styles.layerTag}>{confirmed ? "Confirmed here" : "Status set here"}</span>;
+
+  const relocated = explained?.sourceMatches.some((m) => m?.relocated) ?? false;
+  const overruled = !setByModel && proposal !== null && proposal.statusHint !== finding.status;
 
   return (
     <>
-      <section className={styles.drawerSection} data-testid="layer-model">
-        <h4>Model proposed</h4>
+      <DecisionStrip
+        cells={[
+          {
+            who: "Model",
+            what: proposal ? plainLabel(statusLabel(proposal.statusHint as FindingStatus, hasGuidance, "model_hint")) : "not rebuilt",
+            tone: proposal ? toneOf(proposal.statusHint as FindingStatus) : "muted",
+            note: proposal ? "its proposal" : undefined,
+            struck: overruled,
+          },
+          {
+            who: "Source",
+            what: finding.spans.length ? `${verified} of ${finding.spans.length} found` : "nothing cited",
+            tone: finding.spans.length && verified === finding.spans.length ? "pass" : finding.spans.length ? "review" : "muted",
+            note: relocated ? "in another section" : finding.spans.length ? "where it was cited" : undefined,
+          },
+          {
+            who: "Code",
+            what: setByModel ? "did not decide" : plainLabel(statusLabel(finding.status, hasGuidance, finding.statusSource)),
+            tone: setByModel ? "muted" : toneOf(finding.status),
+            note: overruled ? "changed the model's call" : confirmed ? "confirmed the model's call" : undefined,
+            decisive: !setByModel,
+          },
+          {
+            who: "Person",
+            what: finding.review ? (finding.review.verdict === "confirmed" ? "confirmed" : "dismissed") : "not yet",
+            tone: finding.review ? (finding.review.verdict === "confirmed" ? "pass" : "muted") : "muted",
+            note: finding.review ? `by ${finding.review.reviewer}` : undefined,
+          },
+        ]}
+      />
+      <section className={`${styles.drawerSection} ${styles.layer} ${setByModel ? styles.layerSet : ""}`} data-testid="layer-model">
+        <div className={styles.layerHead}>
+          <h4>Model proposed</h4>
+          {setByModel && setTag}
+        </div>
         {!run ? (
           <p className={styles.drawerRefStatic}>No run on record for this finding.</p>
         ) : !read ? (
-          <p className={styles.drawerRefStatic}>Reading the run&apos;s record…</p>
+          <p className={styles.drawerRefStatic}>Reading the run&apos;s record</p>
         ) : read.problem ? (
           <p className={styles.drawerRefStatic}>The record could not be read: {read.problem}</p>
         ) : explanation?.proposalsProblem || !proposal ? (
@@ -143,8 +187,7 @@ function EvidenceBody({
               <div>
                 <dt>In its words</dt>
                 <dd>
-                  {proposal.observed ? `“${proposal.observed}”` : "nothing observed"}
-                  {proposal.required ? ` against “${proposal.required}”` : ""}
+                  <ModelWords observed={proposal.observed} required={proposal.required} />
                 </dd>
               </div>
             )}
@@ -163,7 +206,9 @@ function EvidenceBody({
           <dl className={styles.drawerFacts} data-testid="model-sentence">
             <div>
               <dt>Its sentence</dt>
-              <dd>“{finding.modelConclusion}”</dd>
+              <dd>
+                <span className={styles.modelPassage}>{finding.modelConclusion}</span>
+              </dd>
             </div>
           </dl>
         )}
@@ -174,15 +219,16 @@ function EvidenceBody({
               <div>
                 <dt>In its words</dt>
                 <dd>
-                  {finding.observed ? `“${finding.observed}”` : "nothing observed"}
-                  {finding.required ? ` against “${finding.required}”` : ""}
+                  <ModelWords observed={finding.observed} required={finding.required} />
                 </dd>
               </div>
             )}
             {finding.guidanceReference && (
               <div>
                 <dt>It pointed at</dt>
-                <dd>“{finding.guidanceReference}”</dd>
+                <dd>
+                  <span className={styles.modelPassage}>{finding.guidanceReference}</span>
+                </dd>
               </div>
             )}
             {finding.suggestedPosition && (
@@ -195,8 +241,10 @@ function EvidenceBody({
         )}
       </section>
 
-      <section className={styles.drawerSection} data-testid="layer-source">
-        <h4>Source</h4>
+      <section className={`${styles.drawerSection} ${styles.layer}`} data-testid="layer-source">
+        <div className={styles.layerHead}>
+          <h4>Source</h4>
+        </div>
         {finding.spans.map((span, i) => {
           const section = span.sectionId ? sectionsById.get(span.sectionId) : undefined;
           const match = explained?.sourceMatches[i] ?? null;
@@ -209,18 +257,21 @@ function EvidenceBody({
               ) : (
                 <div className={styles.drawerRefStatic}>{section ? citationLabel(section) : "Section not identified"}</div>
               )}
-              <blockquote className={span.verified ? styles.drawerQuote : `${styles.drawerQuote} ${styles.quoteWithheld}`}>“{span.quote}”</blockquote>
+              <blockquote className={span.verified ? styles.drawerQuote : `${styles.drawerQuote} ${styles.quoteWithheld}`}>{span.quote}</blockquote>
               <span className={styles.verifiedTag}>
-                {!span.verified
-                  ? `Not found verbatim in the document · withheld${span.citedSectionLabel ? ` · the model cited ${span.citedSectionLabel}` : ""}`
-                  : finding.evidenceKind === "coverage"
-                    ? "Verified verbatim · the closest provision read; in the model's view it does not state the point"
-                    : `Verified verbatim in the document text · ${span.method}`}
+                {span.verified && <IconCheck className={styles.verifiedMark} />}
+                <span>
+                  {!span.verified
+                    ? `Not found verbatim in the document · withheld${span.citedSectionLabel ? ` · the model cited ${span.citedSectionLabel}` : ""}`
+                    : finding.evidenceKind === "coverage"
+                      ? "Verified verbatim · the closest provision read; in the model's view it does not state the point"
+                      : `Verified verbatim in the document text · ${span.method}`}
+                </span>
               </span>
               {span.verified && match && (
                 <div className={styles.drawerRefStatic}>
                   {match.relocated
-                    ? `Found in ${match.locatedHeading ? `“${match.locatedHeading}”` : "another section"}, not in the section the model cited.`
+                    ? `Found in ${match.locatedHeading || "another section"}, not in the section the model cited.`
                     : "Found where the model cited it."}
                   {match.matchCount != null && match.matchCount > 1 ? ` It occurs ${match.matchCount} times there; the first is highlighted.` : ""}
                   {match.insideModelVisibleContext === false ? " It lies outside the text the model was shown." : ""}
@@ -235,15 +286,18 @@ function EvidenceBody({
         {finding.spans.length === 0 && <p className={styles.drawerRefStatic}>No passage was cited.</p>}
       </section>
 
-      <section className={styles.drawerSection} data-testid="layer-code">
+      <section className={`${styles.drawerSection} ${styles.layer} ${setByModel ? "" : styles.layerSet}`} data-testid="layer-code">
         {/* The heading is a claim. It says "Code decided" only under a source where code did; the model's own phrases,
             its pointer into the guidance and its suggestion are in the layer above, never here. */}
-        <h4>{codeRole(finding.statusSource)}</h4>
+        <div className={styles.layerHead}>
+          <h4>{codeRole(finding.statusSource)}</h4>
+          {!setByModel && setTag}
+        </div>
         {guidance && (
-          <>
+          <div className={styles.guidanceBlock}>
             <h5 className={styles.drawerSubhead}>{decidedByCode(finding.statusSource) || confirmed ? "Guidance" : "Guidance given"}</h5>
-            <blockquote className={styles.drawerQuote}>“{guidance}”</blockquote>
-          </>
+            <blockquote className={styles.guidanceQuote}>{guidance}</blockquote>
+          </div>
         )}
         <dl className={styles.drawerFacts}>
           <div>
@@ -269,7 +323,8 @@ function EvidenceBody({
       <HumanLayer finding={finding} onReviewed={onReviewed} />
 
       {run && (
-        <section className={styles.drawerSection}>
+        <section className={`${styles.drawerSection} ${styles.proveSection}`}>
+          <p className={styles.proveLede}>The model&apos;s exact input, rebuilt from the record and checked against the hash taken when it ran.</p>
           <button type="button" className={styles.whyToggle} aria-expanded={prove} onClick={() => setProve((open) => !open)}>
             {prove ? "Hide the proof" : "Prove it"}
           </button>
@@ -300,7 +355,7 @@ function EvidenceBody({
                 )}
                 <div>
                   <dt>Run ID</dt>
-                  <dd>{run.id}</dd>
+                  <dd className={styles.whyMono}>{run.id}</dd>
                 </div>
               </dl>
               <WhyThisAnswer runId={run.id} findingId={finding.id} explanation={explanation} problem={read?.problem ?? null} />
@@ -342,8 +397,10 @@ function HumanLayer({ finding, onReviewed }: { finding: FindingView; onReviewed?
   };
 
   return (
-    <section className={styles.drawerSection} data-testid="layer-human">
-      <h4>Human</h4>
+    <section className={`${styles.drawerSection} ${styles.layer} ${styles.layerLast} ${finding.review ? styles.layerHuman : ""}`} data-testid="layer-human">
+      <div className={styles.layerHead}>
+        <h4>Human</h4>
+      </div>
       {finding.review ? (
         <dl className={styles.drawerFacts}>
           <div>
@@ -387,7 +444,7 @@ function HumanLayer({ finding, onReviewed }: { finding: FindingView; onReviewed?
           <label htmlFor="drawer-reviewer">Your name, recorded with the decision</label>
           <input id="drawer-reviewer" className={styles.popoverInput} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoFocus />
           <button type="submit" className={styles.actionButton} disabled={busy || !name.trim()}>
-            {pending === "confirmed" ? "Confirm as" : "Dismiss as"} {name.trim() || "…"}
+            {pending === "confirmed" ? "Confirm as" : "Dismiss as"} {name.trim() || "you"}
           </button>
         </form>
       )}
@@ -397,5 +454,61 @@ function HumanLayer({ finding, onReviewed }: { finding: FindingView; onReviewed?
         </p>
       )}
     </section>
+  );
+}
+
+/** The model's own phrases, set apart so they are never read as the contract's or the guidance's. */
+function ModelWords({ observed, required }: { observed: string | null | undefined; required: string | null | undefined }) {
+  return (
+    <>
+      {observed ? <span className={styles.modelWords}>{observed}</span> : "nothing observed"}
+      {required ? (
+        <>
+          {" "}
+          against <span className={styles.modelWords}>{required}</span>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+type Tone = "pass" | "review" | "muted";
+
+function toneOf(status: FindingStatus): Tone {
+  return status === "pass" ? "pass" : status === "needs_review" ? "review" : "muted";
+}
+
+/** A status label without its parenthesis: the strip says whose view it is by its column. */
+function plainLabel(label: string): string {
+  return label.replace(/\s*\([^)]*\)$/, "");
+}
+
+interface StripCell {
+  who: string;
+  what: string;
+  tone: Tone;
+  note?: string;
+  /** The model's call, when code changed it. */
+  struck?: boolean;
+  /** The column whose call is the status on screen. */
+  decisive?: boolean;
+}
+
+/**
+ * The finding's trail in one line, read left to right: what the model called it, whether its quotes were found,
+ * what code made of it, what a person decided. Every cell is read from the same record as the layers below it.
+ */
+function DecisionStrip({ cells }: { cells: StripCell[] }) {
+  const tones: Record<Tone, string> = { pass: styles.stripPass, review: styles.stripReview, muted: styles.stripMuted };
+  return (
+    <ol className={styles.strip} aria-label="The finding's trail">
+      {cells.map((cell) => (
+        <li key={cell.who} className={`${styles.stripCell} ${tones[cell.tone]} ${cell.decisive ? styles.stripDecisive : ""}`}>
+          <span className={styles.stripWho}>{cell.who}</span>
+          <span className={`${styles.stripWhat} ${cell.struck ? styles.stripStruck : ""}`}>{cell.what}</span>
+          {cell.note && <span className={styles.stripNote}>{cell.note}</span>}
+        </li>
+      ))}
+    </ol>
   );
 }

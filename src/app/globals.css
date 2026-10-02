@@ -1,63 +1,87 @@
-/* The frozen visual system: dark graphite shell, warm paper for the document, restrained
-   indigo-to-cyan lighting for focus, upload, selection and model-processing states only.
-   Components never name a colour; they use these tokens. */
+/* The visual system. A warm graphite shell, the contract on paper, one brass accent for what a person should look
+   at, and four status tones that always travel with a word. Components never name a colour; they use these tokens.
+
+   Type: Inter for the interface, Source Serif for the contract and for headings that speak about it, JetBrains Mono
+   for anything a person might copy (run ids, hashes, offsets) and for counts.
+   Motion: one curve. Entrances 220 to 320 ms, exits faster, nothing loops except the mark of work in progress. */
 
 :root {
   color-scheme: dark;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-serif: var(--font-source-serif), Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
-  --accent-1: #776bff;
-  --accent-2: #8ddcff;
-  --spectral: linear-gradient(135deg, #776bff, #8ddcff);
+  /* Ground: three steps of warm graphite. Elevation is a step and a hairline, rarely a shadow. */
+  --bg: #0e0e0f;
+  --bg-raised: #141415;
+  --bg-sunken: #0a0a0b;
+  --bg-glow: rgba(214, 180, 106, 0.045);
+  --surface: rgba(255, 255, 255, 0.028);
+  --surface-2: rgba(255, 255, 255, 0.055);
+  --surface-3: rgba(255, 255, 255, 0.08);
+  --glass: rgba(20, 20, 21, 0.96);
+  --glass-opaque: #141415;
+  --glass-blur: 16px;
+  --border: rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --hairline: rgba(255, 255, 255, 0.06);
 
-  --bg: #0e0f13;
-  --bg-glow: rgba(119, 107, 255, 0.12);
-  --surface: rgba(255, 255, 255, 0.035);
-  --surface-2: rgba(255, 255, 255, 0.065);
-  --glass: rgba(22, 24, 31, 0.93);
-  /* The same colour with nothing showing through: for a panel that lies over text (the evidence drawer). */
-  --glass-opaque: rgb(22, 24, 31);
-  --glass-blur: 20px;
-  --border: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --text: #edeef2;
-  --text-2: #a7abb5;
-  --text-3: #6f7481;
+  --text: #ecebe6;
+  --text-2: #a9a69e;
+  /* text-3 is the quietest colour words may use (5:1 on --bg); text-4 is for marks that carry no words. */
+  --text-3: #8d897f;
+  --text-4: #5f5c55;
 
-  --doc-bg: #f6f2ea;
-  --doc-text: #1b1a18;
-  --doc-text-2: #6a655c;
-  --doc-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
-  --doc-lit: rgba(141, 220, 255, 0.35);
-  --doc-mark: rgba(119, 107, 255, 0.18);
-  --doc-mark-line: rgba(119, 107, 255, 0.55);
+  /* The one accent: brass. Focus, the marked passage, the layer where a status was set, primary actions. */
+  --accent: #d8b46a;
+  --accent-soft: #ead09a;
+  --accent-tint: rgba(216, 180, 106, 0.1);
+  --accent-line: rgba(216, 180, 106, 0.38);
+  /* Older names, kept so every component reads the same accent. */
+  --accent-1: var(--accent);
+  --accent-2: var(--accent-soft);
+  --spectral: var(--accent);
 
-  --assistant-bg: linear-gradient(165deg, rgba(119, 107, 255, 0.1), rgba(141, 220, 255, 0.05) 45%, rgba(255, 255, 255, 0.02));
-  --assistant-border: rgba(141, 220, 255, 0.18);
-  --composer-bg: rgba(255, 255, 255, 0.05);
-  --halo: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 24px 60px rgba(0, 0, 0, 0.5);
-  --halo-active: 0 0 0 1px rgba(141, 220, 255, 0.4), 0 0 0 6px rgba(119, 107, 255, 0.14), 0 24px 60px rgba(0, 0, 0, 0.55);
-  --chip-bg: rgba(255, 255, 255, 0.06);
-  --rail-bg: rgba(255, 255, 255, 0.02);
+  /* The contract on paper. */
+  --doc-bg: #f6f2e9;
+  --doc-edge: #e7e0d1;
+  --doc-text: #1d1b17;
+  --doc-text-2: #6d675c;
+  --doc-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 30px 60px -30px rgba(0, 0, 0, 0.7);
+  --doc-lit: rgba(184, 140, 52, 0.07);
+  --doc-lit-line: #b88c34;
+  --doc-mark: rgba(216, 172, 82, 0.3);
+  --doc-mark-line: #b0852c;
 
-  --status-review-bg: rgba(255, 196, 120, 0.14);
-  --status-review-text: #f3c88c;
-  --status-review-border: rgba(255, 196, 120, 0.35);
-  --status-pass-bg: rgba(141, 220, 255, 0.12);
-  --status-pass-text: #a9e3ff;
-  --status-pass-border: rgba(141, 220, 255, 0.35);
-  --status-muted-bg: rgba(255, 255, 255, 0.06);
-  --status-muted-text: #a7abb5;
-  --status-muted-border: rgba(255, 255, 255, 0.18);
+  --assistant-bg: var(--bg-raised);
+  --assistant-border: var(--border);
+  --composer-bg: rgba(255, 255, 255, 0.035);
+  --halo: 0 0 0 1px var(--border);
+  --halo-active: 0 0 0 1px var(--accent-line), 0 0 0 5px rgba(216, 180, 106, 0.08);
+  --chip-bg: rgba(255, 255, 255, 0.045);
+  --rail-bg: var(--bg-sunken);
 
-  --radius-s: 8px;
-  --radius-m: 12px;
-  --radius-l: 16px;
-  --dur-fast: 160ms;
-  --dur: 200ms;
+  /* Status tones. Each is a fill, a word colour and a border; the word always says what the tone means. */
+  --status-review-bg: rgba(232, 164, 72, 0.12);
+  --status-review-text: #f0bf78;
+  --status-review-border: rgba(232, 164, 72, 0.34);
+  --status-pass-bg: rgba(126, 186, 150, 0.12);
+  --status-pass-text: #a6d6b8;
+  --status-pass-border: rgba(126, 186, 150, 0.34);
+  --status-muted-bg: rgba(255, 255, 255, 0.045);
+  --status-muted-text: #aaa79f;
+  --status-muted-border: rgba(255, 255, 255, 0.14);
+  --status-bad-bg: rgba(229, 122, 112, 0.12);
+  --status-bad-text: #eea198;
+  --status-bad-border: rgba(229, 122, 112, 0.34);
+
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 14px;
+  --dur-fast: 140ms;
+  --dur: 220ms;
   --dur-slow: 320ms;
-  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
@@ -71,6 +95,9 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
+  font-feature-settings:
+    "cv11" 1,
+    "ss01" 1;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -80,8 +107,13 @@ button {
   color: inherit;
 }
 
+::selection {
+  background: rgba(216, 180, 106, 0.32);
+  color: inherit;
+}
+
 :focus-visible {
-  outline: 2px solid var(--accent-2);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -92,4 +124,35 @@ button {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* Hidden until a keyboard reaches it: the first stop on every page. */
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 100;
+  padding: 8px 12px;
+  border-radius: var(--radius-s);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+  }
 }

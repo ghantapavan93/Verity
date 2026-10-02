@@ -447,8 +447,6 @@ function WorkbenchSurface() {
             stage={stage}
             processingLabel={processingLabel}
             pendingName={pendingName}
-            composerText={composerText}
-            setComposerText={setComposerText}
             onPickFile={() => fileInputRef.current?.click()}
             onLoadSample={() => void loadSample()}
             proof={proof}
@@ -485,7 +483,7 @@ function WorkbenchSurface() {
               ) : (
                 <motion.div key="workspace" className={styles.main} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={quick}>
                   <div className={styles.narrowNote}>
-                    <p>The document workspace needs a wider window. Documents, Findings and Runs still work at this size.</p>
+                    <p>The contract text needs a wider window. Findings, evidence and the record work at this size.</p>
                   </div>
                   <div className={styles.split} style={{ gridTemplateColumns: `${split.docWidth}% 8px minmax(0, 1fr)` }}>
                     <DocumentPane doc={doc} isSample={isSample} lit={lit} highlight={highlight} reduceMotion={reduceMotion} paneRef={docPaneRef} />
