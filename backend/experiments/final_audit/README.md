@@ -2,7 +2,7 @@
 
 `DECISIONS.md` ("The zero-assumption audit of the published candidate") says what was found and what was changed.
 These are the scripts behind its numbers. Each builds its own store in a temporary directory, or reads a snapshot
-of the store made with SQLite's online backup; none writes to `backend/data`, and none calls the model (the two
+of the store made with SQLite's online backup; none writes to `backend/data`, and only `probe_context_overflow.py` calls the model (the others
 that need one script it). They are probes, not tests: they print PASS, FAIL and INFO lines and are kept as they
 were run. What they found that needed fixing is held by ordinary tests under `backend/tests/`.
 
@@ -19,6 +19,7 @@ Run from `backend/`:
 .venv/Scripts/python experiments/final_audit/census_projections.py      # every complete run: run view, explanation and findings record compared
 .venv/Scripts/python experiments/final_audit/replay_verifier.py         # every verified span looked for again by the verifier as it is now
 .venv/Scripts/python scripts/reconstruct_inputs.py --all                # every recorded model input rebuilt and compared with its recorded hash
+.venv/Scripts/python experiments/final_audit/probe_context_overflow.py  # what the model server does with a prompt larger than its window (one GPU call each way)
 powershell -ExecutionPolicy Bypass -File experiments\final_audit\supervisor_longtail.ps1   # the supervisor on a second instance: port taken, kill, supervisor killed, stop file
 ```
 
@@ -48,6 +49,7 @@ section and quotes the right words.
 | Cross-projection | 776 of 776 complete runs, 1,083 findings, no disagreement |
 | Verifier replay | 7 of 1,479 verified spans (5 runs, none a golden) are not located by v6: the price of the rule |
 | Reconstruction | 792 runs recorded an input hash and 792 rebuild to it; 58 recorded none (all before 2026-09-28 08:05 UTC) |
+| Context window (`probe_context_overflow.py`, calls the model) | a prompt of 20,695 tokens with the answer at its start: by default the server evaluated 8,194 tokens and the model answered "30 days" where the text said 47; asked not to truncate, the server refused in 2 s with the exact counts |
 | Supervisor | port taken: retried at 5, 10, 20, 40 s and up by itself when freed; killed server restarted; supervisor killed: its server keeps answering and is not restarted when it dies |
 
 The deep links, the expired-session wording and the public headers were checked against the deployed build and the
