@@ -173,7 +173,12 @@ export function RunsView({
         <div className={styles.kicker}>Runs</div>
         <h1 className={styles.title}>
           Every model run, as recorded
-          {runs && <span className={styles.count}>{runs.length}</span>}
+          {runs && (
+            <span className={styles.count}>
+              {/* The list is the API's latest page; when the record holds more, the count says which part is shown. */}
+              {citations && citations.runs > runs.length ? `latest ${runs.length}` : runs.length}
+            </span>
+          )}
         </h1>
         <p className={styles.lede}>
           A run stores the document and guidance hashes, the prompt version and hash, the decoding options, the sections handed to the model, the raw structured
