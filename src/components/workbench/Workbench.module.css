@@ -1087,6 +1087,23 @@
   white-space: nowrap;
 }
 
+.stageClock {
+  justify-self: end;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.stageNote {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
 /* The mark of work in progress: the only thing that moves on its own. */
 .shimmer {
   position: relative;

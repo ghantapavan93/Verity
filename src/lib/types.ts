@@ -71,7 +71,7 @@ export const OUTCOME_LABELS: Record<RunStage, string> = {
 export const REASON_TITLES: Record<RunReason, string> = {
   insufficient_evidence: "No supporting passage found",
   citations_unverified: "Evidence could not be verified",
-  invalid_output: "Analysis couldn't complete",
+  invalid_output: "The model's output was not usable",
   provider_error: "The model could not be reached",
   internal_error: "The run did not complete",
 };
