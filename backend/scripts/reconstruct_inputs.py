@@ -17,7 +17,7 @@ sys.path.insert(0, str(BACKEND))
 
 from sqlalchemy import select  # noqa: E402
 
-from app.application.reconstruct_input import reconstruct_input  # noqa: E402
+from app.application.reconstruct_input import NO_RECORDED_HASH, reconstruct_input  # noqa: E402
 from app.db import SessionLocal, init_db  # noqa: E402
 from app.models import Run  # noqa: E402
 
@@ -43,10 +43,11 @@ def main() -> int:
             result = reconstruct_input(session, run_id)
             verdict = "match" if result.matches else (result.problem or "mismatch")
             verdicts[verdict] += 1
-            by_prompt[(result.prompt_version, "match" if result.matches else "mismatch")] += 1
+            outcome = "match" if result.matches else "no recorded hash" if result.problem == NO_RECORDED_HASH else "not rebuilt"
+            by_prompt[(result.prompt_version, outcome)] += 1
             slices += len(result.slices)
             truncated += sum(1 for s in result.slices if s.truncated)
-            if not result.matches or args.show:
+            if (not result.matches and result.problem != NO_RECORDED_HASH) or args.show:
                 print(f"{run_id} {result.prompt_version}: {verdict}")
                 if args.show and result.user:
                     print(result.user)
@@ -57,7 +58,8 @@ def main() -> int:
     for (prompt_version, verdict), count in sorted(by_prompt.items()):
         print(f"{count:5d}  {prompt_version} {verdict}")
     print(f"\n{slices} context slices, {truncated} truncated to the prompt window")
-    return 0 if verdicts and set(verdicts) == {"match"} else 1
+    # A run that recorded no hash cannot fail a comparison; anything else that is not a match is a failure.
+    return 0 if verdicts and set(verdicts) <= {"match", NO_RECORDED_HASH} else 1
 
 
 if __name__ == "__main__":

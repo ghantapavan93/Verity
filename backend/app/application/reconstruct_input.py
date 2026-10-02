@@ -55,6 +55,9 @@ class Reconstruction:
         return self.problem is None and self.recorded_input_sha256 is not None and self.input_sha256 == self.recorded_input_sha256
 
 
+NO_RECORDED_HASH = "the run recorded no input hash (it predates the record of one), so the rebuilt input has nothing to be checked against"
+
+
 def context_slice(label: str, section: Section, rank: int, window: int = MAX_SECTION_CHARS_IN_PROMPT) -> ContextSlice:
     end = min(len(section.text), window)
     return ContextSlice(
@@ -106,6 +109,11 @@ def reconstruct_input(session: Session, run_id: str) -> Reconstruction:
     result.system = prompt.system
     result.user = build_user_message(run.question, guidance_text, run.document.name, sections, window=window)
     result.input_sha256 = sha256_text(prompt.sha256 + result.user)
-    if result.input_sha256 != result.recorded_input_sha256:
+    if result.recorded_input_sha256 is None:
+        # Not a mismatch: there is nothing to match. The checking stage began recording its input hash on
+        # 2026-09-28; the 58 runs before it were being reported as "does not hash to what was recorded", which
+        # said a comparison had failed when none could be made (audit, 2026-10-02).
+        result.problem = NO_RECORDED_HASH
+    elif result.input_sha256 != result.recorded_input_sha256:
         result.problem = "the reconstructed input does not hash to what the checking stage recorded"
     return result
