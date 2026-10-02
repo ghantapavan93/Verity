@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from ..analysis.schema import StatusHint
 from ..models import FindingStatusName
-from ..policy.durations import evaluate, observed_fact, parse_durations, parse_rule
+from ..policy.durations import Duration, ObservedFact, evaluate, observed_fact, parse_durations, parse_rule
 
 
 @dataclass(frozen=True)
@@ -25,8 +25,12 @@ class Decision:
     reason: str = ""
 
 
-def _durations(text: str | None) -> set[object]:
+def _durations(text: str | None) -> set[Duration]:
     return {m.duration for m in parse_durations(text) if m.duration is not None}
+
+
+def _periods(durations: set[Duration]) -> str:
+    return ", ".join(f"{d.value} {d.unit.value.replace('_', ' ')}s" for d in sorted(durations, key=lambda d: (d.unit.value, d.value)))
 
 
 def decide(
@@ -51,6 +55,16 @@ def decide(
     rule = parse_rule(guidance, topic) if guidance_present else None
     fact = next((f for f in (observed_fact(q, stated=observed) for q in quotes) if f is not None), None)
     if rule is not None and fact is not None:
+        # A quote that states more than one period ("90 days' notice, unless …, in which case 10 days") may be decided
+        # by code only when every period it states leads to the same result. Until 2026-10-02 the first period, or the
+        # one the model pointed at, decided alone, and "90 days unless … 10 days" was a computed pass against a 90-day
+        # minimum. Which period governs is a reading of the clause; code does not make it. (No recorded finding rested
+        # on such a quote: 12 computed passes, none with a second period.)
+        outcomes = {evaluate(ObservedFact("notice_period", d, "", 0, 0), rule).outcome for d in in_quotes}
+        if len(outcomes) > 1:
+            return Decision(
+                "needs_review", "ambiguous_fact", f"the quote states more than one period ({_periods(in_quotes)}) and they do not all meet the guidance alike"
+            )
         evaluation = evaluate(fact, rule)
         if evaluation.outcome in ("pass", "needs_review"):
             return Decision("pass" if evaluation.outcome == "pass" else "needs_review", "computed_days", evaluation.reason)

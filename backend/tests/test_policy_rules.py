@@ -71,3 +71,30 @@ def test_the_number_word_pattern_is_linear_on_hostile_guidance() -> None:
     parse_rule(hostile)
     parse_durations(("twenty-one-" * 1800)[:20000])
     assert time.perf_counter() - started < 0.5
+
+
+GUIDANCE_90 = "We require at least 90 days' notice for termination for convenience."
+TOPIC = "Termination for convenience"
+
+
+def _decided(quote: str, observed: str | None = None) -> tuple[str, str]:
+    decision = decide("pass", observed, None, True, True, quotes=[quote], guidance=GUIDANCE_90, topic=TOPIC)
+    return decision.status, decision.source
+
+
+def test_a_quote_with_several_periods_is_decided_by_code_only_when_they_all_agree() -> None:
+    # Hostile cases, 2026-10-02: the first period used to decide alone, and both of these were computed passes.
+    unless = "Either party may terminate upon 90 days' notice, unless the other party is in breach, in which case 10 days."
+    excepted = "Either party may terminate upon 120 days' notice except that Customer may terminate on 5 days' notice."
+    assert _decided(unless) == ("needs_review", "ambiguous_fact")
+    assert _decided(excepted) == ("needs_review", "ambiguous_fact")
+    # The model pointing at the period it prefers does not settle which one governs.
+    assert _decided(unless, observed="90 days' notice") == ("needs_review", "ambiguous_fact")
+    reason = decide("pass", None, None, True, True, quotes=[unless], guidance=GUIDANCE_90, topic=TOPIC).reason
+    assert "10 calendar days" in reason and "90 calendar days" in reason
+    # Periods that all lead to the same result are still decided by code, either way.
+    assert _decided("Either party may terminate upon 90 days' notice, or upon 120 days' notice after the first year.") == ("pass", "computed_days")
+    assert _decided("Customer pays within 30 days; either party may terminate upon 60 days' notice.") == ("needs_review", "computed_days")
+    # One period: unchanged.
+    assert _decided("Either party may terminate upon sixty (60) days' written notice.") == ("needs_review", "computed_days")
+    assert _decided("Either party may terminate upon ninety (90) days' written notice.") == ("pass", "computed_days")
