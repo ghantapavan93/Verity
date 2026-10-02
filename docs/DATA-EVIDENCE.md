@@ -100,7 +100,7 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 | `4b2cb71fad30b513…` | 29-vertexenergyinc-08-14-2014-ex-10-24-operation-and-maintenanc.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
 | `480cfbb8c3b84fd4…` | 30-vertexenergyinc-20200113-8-k-ex-10-1-11943624-ex-10-1-market.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | v4 | 7 | CUAD-30 clause measurement; batch 'cuad-30' |
 | `2e450b492547179d…` | 30-warningmanagementservicesinc-12-10-1999-ex-10-endorsement-ag.txt | CUAD v1 (SEC exhibit) | CC BY 4.0 (CUAD v1, The Atticus Project) | not in the store | 0 | SkillOpt (disjoint CUAD contracts) |
-| `cb72dad74b3af676…` | CP01.docx, Cloud Service Agreement (Common Paper).docx, cloud-service-agreement.docx | Common Paper (CP01); bundled sample (Common Paper Cloud Service Agreement v2.1) | CC BY 4.0 | unversioned, unversioned, unversioned, unversioned, unversioned, unversioned, v2, v3, v4, v5 | 539 | batch 'public-corpus'; browser flows (replayed answers); document families (hand labels); golden set; interface performance; load envelope; parser tournament; public corpus (batch, families, parser tournament) |
+| `cb72dad74b3af676…` | CP01.docx, Cloud Service Agreement (Common Paper).docx, cloud-service-agreement.docx | Common Paper (CP01); bundled sample (Common Paper Cloud Service Agreement v2.1) | CC BY 4.0 | unversioned, unversioned, unversioned, unversioned, unversioned, unversioned, v2, v3, v4, v5 | 541 | batch 'public-corpus'; browser flows (replayed answers); document families (hand labels); golden set; interface performance; load envelope; parser tournament; public corpus (batch, families, parser tournament) |
 | `d8cc13f589096d1b…` | CP02.docx | Common Paper (CP02) | CC BY 4.0 | v3, v4 | 3 | batch 'public-corpus'; document families (hand labels); parser tournament; public corpus (batch, families, parser tournament) |
 | `18e07001c3ebfc74…` | CP03.docx | Common Paper (CP03) | CC BY 4.0 | v3, v4 | 3 | batch 'public-corpus'; document families (hand labels); parser tournament; public corpus (batch, families, parser tournament) |
 | `cb35f3cc70cb6d24…` | CP04.docx | Common Paper (CP04) | CC BY 4.0 | v3, v4 | 3 | batch 'public-corpus'; document families (hand labels); parser tournament; public corpus (batch, families, parser tournament) |
@@ -125,7 +125,7 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 
 | sha256 | names | source | licence | readings | runs | measurements |
 |---|---|---|---|---|---|---|
-| `cb72dad74b3af676…` | CP01.docx, Cloud Service Agreement (Common Paper).docx, cloud-service-agreement.docx | Common Paper (CP01); bundled sample (Common Paper Cloud Service Agreement v2.1) | CC BY 4.0 | unversioned, unversioned, unversioned, unversioned, unversioned, unversioned, v2, v3, v4, v5 | 539 | batch 'public-corpus'; browser flows (replayed answers); document families (hand labels); golden set; interface performance; load envelope; parser tournament; public corpus (batch, families, parser tournament) |
+| `cb72dad74b3af676…` | CP01.docx, Cloud Service Agreement (Common Paper).docx, cloud-service-agreement.docx | Common Paper (CP01); bundled sample (Common Paper Cloud Service Agreement v2.1) | CC BY 4.0 | unversioned, unversioned, unversioned, unversioned, unversioned, unversioned, v2, v3, v4, v5 | 541 | batch 'public-corpus'; browser flows (replayed answers); document families (hand labels); golden set; interface performance; load envelope; parser tournament; public corpus (batch, families, parser tournament) |
 | `60f9c7eaa5eddc9c…` | agreement.txt (tests.support.CONTRACT) | synthetic test contract | the repository's own | not in the store | 0 | backend tests |
 | `c61812563bbee7b2…` | services-agreement.pdf | test fixture (printed from Chrome) | the repository's own | not in the store | 0 | backend tests |
 
@@ -133,7 +133,7 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 
 | sha256 | names | source | licence | readings | runs | measurements |
 |---|---|---|---|---|---|---|
-| `d510d1d71a7b6629…` | MTI-Reseller-Agreement.docx | uploaded through the API | not recorded | v4 | 2 | none |
+| `d510d1d71a7b6629…` | MTI-Reseller-Agreement.docx | uploaded through the API | not recorded | v4 | 4 | none |
 | `effe1fee8dee4160…` | cloud-service-agreement.pdf | uploaded through the API | not recorded | unversioned, unversioned, unversioned | 0 | none |
 | `7b4ab0a901c9746e…` | large-services-agreement.txt | uploaded through the API | not recorded | v3 | 0 | none |
 | `a60d28ecb4d677b9…` | redlined-msa.docx | uploaded through the API | not recorded | v2 | 0 | none |
@@ -151,12 +151,12 @@ Distinct agreements known to this repository, by SHA-256: **87**.
 | batch fields over the public corpus | 3 | app/batch/tasks/core-fields.json |
 | hand-labelled documents for families | 20 | app/families/labels.json |
 | recorded model answers replayed by the browser flows | 7 | e2e/replay.json, all on the sample |
-| browser flows | 20 | e2e/*.spec.ts |
+| browser flows | 21 | e2e/*.spec.ts |
 | hand mutants | 24 | scripts/mutate_by_hand.py |
 | distinct agreements in batch 'cuad-30' | 30 | the store's batch_items |
 | distinct agreements in batch 'public-corpus' | 20 | the store's batch_items |
-| evidence spans in the store (a verifier replay's population) | 1601 (1466 verified) | the store's evidence_spans, at the time of the audit |
-| runs in the store | 845 | the store's runs, at the time of the audit |
+| evidence spans in the store (a verifier replay's population) | 1611 (1475 verified) | the store's evidence_spans, at the time of the audit |
+| runs in the store | 849 | the store's runs, at the time of the audit |
 | documents in the parser tournament's baseline record | 21 | data/tournament/current.json (not in git) |
 | admission measurement records | 1 | data/logs/admission-*.json (not in git) |
 | load envelope records | 2 | data/logs/load-envelope-*.json (not in git) |
