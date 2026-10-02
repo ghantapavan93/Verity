@@ -38,7 +38,10 @@ export function AccessGate({ children }: { children: ReactNode }) {
     const arrive = async () => {
       const carried = takeInviteFromAddress();
       try {
-        if (carried) await enterWithInvite(carried);
+        if (carried) {
+          await enterWithInvite(carried);
+          if (!cancelled) setProblem(null);
+        }
       } catch (error) {
         if (!cancelled) setProblem(errorMessage(error));
       }
@@ -54,9 +57,17 @@ export function AccessGate({ children }: { children: ReactNode }) {
     // A session that ends while the page is open: the next request is refused, and the door closes.
     const close = () => setState("closed");
     window.addEventListener(ACCESS_REQUIRED_EVENT, close);
+    // An invite link opened in a tab that already shows this page changes only the fragment, and a browser does not
+    // reload for that: without this the link did nothing and the invite stayed in the address bar (found by driving
+    // the deployed build, 2026-10-02).
+    const arrivedInPlace = () => {
+      if (INVITE_IN_FRAGMENT.test(window.location.hash)) void arrive();
+    };
+    window.addEventListener("hashchange", arrivedInPlace);
     return () => {
       cancelled = true;
       window.removeEventListener(ACCESS_REQUIRED_EVENT, close);
+      window.removeEventListener("hashchange", arrivedInPlace);
     };
   }, []);
 

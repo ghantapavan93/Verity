@@ -116,6 +116,35 @@ describe("AccessGate", () => {
     expect(screen.queryByText("the workbench")).toBeNull();
   });
 
+  it("exchanges an invite link opened in a tab that already shows the door, where only the fragment changes", async () => {
+    api.getAccess.mockResolvedValueOnce(OUT);
+    render(
+      <AccessGate>
+        <Inside />
+      </AccessGate>,
+    );
+    expect(await screen.findByRole("heading", { name: "Private engineering preview" })).toBeTruthy();
+    // The browser does not reload for a change of fragment; it only says the fragment changed.
+    api.enterWithInvite.mockResolvedValue(IN);
+    api.getAccess.mockResolvedValue(IN);
+    window.history.replaceState(null, "", "/?document=d1&run=r1#invite=v1.abc.def");
+    act(() => {
+      window.dispatchEvent(new Event("hashchange"));
+    });
+    expect(await screen.findByText("the workbench")).toBeTruthy();
+    expect(api.enterWithInvite).toHaveBeenCalledWith("v1.abc.def");
+    expect(window.location.hash).toBe("");
+    expect(window.location.pathname + window.location.search).toBe("/?document=d1&run=r1");
+    // A fragment that carries no invite is nobody's business here.
+    api.enterWithInvite.mockClear();
+    window.history.replaceState(null, "", "/#section-4");
+    act(() => {
+      window.dispatchEvent(new Event("hashchange"));
+    });
+    expect(api.enterWithInvite).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe("#section-4");
+  });
+
   it("closes again when the API refuses a request while the page is open", async () => {
     api.getAccess.mockResolvedValue(IN);
     render(
