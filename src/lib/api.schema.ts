@@ -1569,6 +1569,8 @@ export interface components {
             reviewHead: string;
             /** Routingreason */
             routingReason?: string | null;
+            /** Sectionsread */
+            sectionsRead?: number | null;
             /**
              * Stage
              * @enum {string}
@@ -1667,6 +1669,8 @@ export interface components {
              * @default
              */
             reviewHead: string;
+            /** Sectionsread */
+            sectionsRead?: number | null;
             /**
              * Stage
              * @enum {string}

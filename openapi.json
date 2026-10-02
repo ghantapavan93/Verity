@@ -2997,6 +2997,17 @@
             ],
             "title": "Routingreason"
           },
+          "sectionsRead": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sectionsread"
+          },
           "stage": {
             "enum": [
               "reading",
@@ -3310,6 +3321,17 @@
             "default": "",
             "title": "Reviewhead",
             "type": "string"
+          },
+          "sectionsRead": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sectionsread"
           },
           "stage": {
             "enum": [

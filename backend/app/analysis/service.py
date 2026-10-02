@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from ..config import settings
 from ..hashing import sha256_text
-from ..providers.base import Generation, ModelProvider, ProviderError
+from ..providers.base import ContextOverflow, Generation, ModelProvider, ProviderError
 from .schema import ANALYSIS_SCHEMA, AnalysisOut
 
 PROMPTS_DIR = Path(__file__).with_name("prompts")
@@ -83,6 +83,8 @@ def _generate(provider: ModelProvider, system: str, message: str, retry_delay_s:
     number of calls it took. The second failure propagates."""
     try:
         return provider.generate_json(system, message, ANALYSIS_SCHEMA), 1
+    except ContextOverflow:
+        raise  # the same prompt is the same size the second time
     except ProviderError as error:
         log.warning("provider failed, retrying once in %.0f s: %s", retry_delay_s, error)
         time.sleep(retry_delay_s)

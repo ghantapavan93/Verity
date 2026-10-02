@@ -164,6 +164,9 @@ class RunOut(ApiModel):
     review_head: str = ""
     # The guidance the run was given, as stored; the drawer shows this, never the text in the composer at the time.
     guidance_text: str | None = None
+    # How many of the document's sections were handed to the model (the run's recorded candidates); null before
+    # retrieval has run. Everything the model said, absence included, is about these and no others.
+    sections_read: int | None = None
 
 
 class RunSummary(ApiModel):

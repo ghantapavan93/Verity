@@ -11,6 +11,11 @@ class ProviderError(RuntimeError):
     """The provider could not be reached or returned no usable output."""
 
 
+class ContextOverflow(ProviderError):
+    """The request is larger than the model's context window. Trying again cannot help, and answering from a prompt
+    the server has cut would be an answer about text the model did not read."""
+
+
 @dataclass
 class Generation:
     text: str

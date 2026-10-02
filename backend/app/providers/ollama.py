@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
 import httpx
 
 from ..config import settings
-from .base import Generation, ProviderError
+from .base import ContextOverflow, Generation, ProviderError
+
+
+def _overflow_message(body: str, limit: int) -> str:
+    """What the server said, as a sentence a person can act on. The token count is the server's own."""
+    found = re.search(r"request \((\d+) tokens\)", body)
+    size = f"{int(found.group(1)):,} tokens" if found else "more tokens than the model can hold"
+    return (
+        f"The question, the guidance and the sections handed to the model come to {size}; its context window holds {limit:,}. "
+        "The request was refused rather than answered from a cut prompt. Shorten the guidance or the question and ask again."
+    )
 
 
 class OllamaProvider:
@@ -40,11 +51,20 @@ class OllamaProvider:
             "format": schema,
             "stream": False,
             "think": False,
+            # A prompt larger than the context window is refused, never cut. Left to its default the server drops
+            # text to make room and answers anyway: asked for a notice period stated at the start of a prompt of
+            # 20,695 tokens, it evaluated 8,194 of them and answered "30 days" where the text said 47, with nothing
+            # in the response to say so (measured against Ollama 0.35.0, 2026-10-02). `shift` is the same rule for
+            # the answer: it may not push the prompt out of the window while it is being written.
+            "truncate": False,
+            "shift": False,
             "options": self.options(),
         }
         started = time.perf_counter()
         try:
             response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout_s)
+            if response.status_code == 400 and "exceed" in response.text and "context" in response.text:
+                raise ContextOverflow(_overflow_message(response.text, settings.num_ctx))
             response.raise_for_status()
             body = response.json()
         except httpx.HTTPError as error:

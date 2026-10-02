@@ -81,6 +81,7 @@ def run_out(run: Run) -> RunOut:
         has_guidance=run.guidance_id is not None,
         review_head=review_head(run),
         guidance_text=run.guidance.text if run.guidance else None,
+        sections_read=len(json.loads(run.candidates_json)) if run.candidates_json else None,
     )
 
 

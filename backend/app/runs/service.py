@@ -124,7 +124,9 @@ def verify_evidence(
     return section, None, "none"
 
 
-def _retrieve(sections: list[Section], question: str, guidance: str | None, k: int) -> list[Section]:
+def _retrieve(sections: list[Section], question: str, guidance: str | None, k: int) -> tuple[list[Section], bool]:
+    """The sections handed to the model, and whether any of them was chosen for the question. False means no word of
+    the question or the guidance occurs in the document, and the opening sections were handed over instead."""
     pairs = [(s.heading, s.text) for s in sections]
     index: LexicalIndex | HybridIndex = HybridIndex(pairs) if settings.retrieval == "hybrid" else LexicalIndex(pairs)
     query = question if not guidance else f"{question} {guidance}"
@@ -133,8 +135,8 @@ def _retrieve(sections: list[Section], question: str, guidance: str | None, k: i
     candidates = index.search(query, k)
     if not candidates and sections:
         # A question with no lexical overlap still gets the opening sections rather than nothing.
-        return sections[: min(k, len(sections))]
-    return [sections[c.index] for c in candidates]
+        return sections[: min(k, len(sections))], False
+    return [sections[c.index] for c in candidates], True
 
 
 def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
@@ -150,7 +152,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         _note_stage(session, run, "reading", f"{pages}{len(sections)} sections", output_hash=sha256_text("\x1f".join(s.text for s in sections)))
 
         _set_stage(session, run, "finding_evidence", input_hash=sha256_text(f"{run.question}\x1f{run.guidance_sha256 or ''}"))
-        chosen = _retrieve(sections, run.question, guidance_text, settings.retrieval_k)
+        chosen, matched = _retrieve(sections, run.question, guidance_text, settings.retrieval_k)
         by_label = {SECTION_LABEL.format(ordinal=s.ordinal): s for s in chosen}
         # What a handle reads as once the model's prose reaches a person.
         labels = {label: (f"§{s.number}" if s.number else s.heading) for label, s in by_label.items()}
@@ -160,7 +162,11 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             session,
             run,
             "finding_evidence",
-            f"{len(chosen)} candidate section{'s' if len(chosen) != 1 else ''}",
+            # Said on the record when it happens: over the store on 2026-10-02 it had happened in 32 of 850 runs, and
+            # the stage read "6 candidate sections" all the same, as if they had been chosen for the question.
+            f"{len(chosen)} candidate section{'s' if len(chosen) != 1 else ''}"
+            if matched
+            else f"no section matched the question's words; the opening {len(chosen)} of {len(sections)} were read instead",
             output_hash=sha256_text("\x1f".join(s.id for s in chosen)),
         )
 
