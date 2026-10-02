@@ -75,6 +75,62 @@ If those pass, stop. The hero run is the Phase 1 run in this store
 part, code found the quote elsewhere and decided `needs_review` from sixty days against a ninety-day
 floor. It is not to be replaced by a cleaner one.
 
+## The gate inside the application (built 2026-10-02; switched on only by the steps below)
+
+Cloudflare Access asks a reader for an email and then a one-time code. For someone following a link in a message
+that is two screens too many. The application now has a gate of its own (`backend/app/api/access.py`), so the tunnel
+can publish the host without Access and the store is still not public:
+
+```
+invite link     https://ivo.pavankg.dev/?document=…&run=…#invite=<token>     one per reader, made by scripts/access.py
+on arrival      the page exchanges the token for a session cookie and removes it from the address bar
+session         __Host-verity_session: Secure, HttpOnly, SameSite=Strict, seven days
+every route     401 without the session: /api/documents, /api/runs, the event stream, memos, evidence packs, all of them
+open routes     /api/health (says only up or down, and that an invite is needed) and /api/access (the exchange)
+```
+
+The token is in the fragment, which a browser never sends, so it is in no server log, no Cloudflare log and no
+Referer; a link scanner that fetches the URL exchanges nothing. It is not single-use, on purpose: mail and chat
+clients open links before people do. It expires (14 days by default), names one reader, and that reader can be
+revoked. There is no password, no account and no signup. The exchange is limited to ten attempts in ten minutes per
+address and run creation to twenty in ten minutes per reader.
+
+The gate is on when `backend/data/access.secret` exists (the supervisor reads it into `WORKBENCH_ACCESS_SECRET` at
+every start) and off when it does not, which is how a laptop, the tests and the browser flows run. `/api/health`
+reports `access`: `off`, `required` or `entered`.
+
+### Switching over, in this order, so the store is never open
+
+```powershell
+cd backend
+.venv\Scripts\python scripts\access.py secret                      # 1. writes backend\data\access.secret; never printed
+cd ..
+powershell -ExecutionPolicy Bypass -File deploy\down.ps1
+powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Build   # 2. new build, API restarted with the gate on, Access still in front
+curl.exe -s http://127.0.0.1:8000/api/health                        # 3. must say "access":"required"
+curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8000/api/runs # 4. must say 401; so must /api/documents and a run's /events
+cd backend
+.venv\Scripts\python scripts\access.py invite pavan --path "/?document=7b8ed34fd627491c&run=e5a20e2283e8416e"
+```
+
+5. Open that link in a browser that is already through Access: the hero run opens, the address bar has no
+   `#invite`, a new question runs, the stages arrive over the event stream, the memo and the evidence pack download.
+6. Only now, in the Cloudflare dashboard: remove the Access application for `ivo.pavankg.dev` (or set its policy to
+   Bypass). The tunnel stays as it is.
+7. In a private window, with no invite: the page shows "Private engineering preview" and nothing else.
+8. From anywhere: `curl.exe -s -o NUL -w "%{http_code}" https://ivo.pavankg.dev/api/runs` says 401, and so do
+   `/api/documents` and `/api/runs/<id>/events`.
+9. In that private window, open the invite link: the hero run, an upload and a real run all work.
+10. Make one invite per reader (`scripts\access.py invite <name> --path "…"`), send each to that reader only, and stop.
+
+To take one reader's access away, add the name to `backend\data\access.revoked` (one per line) and restart the API;
+to take everyone's, `scripts\access.py secret --replace` and restart. If anything in steps 3 to 5 is not as written,
+leave Access where it is: with Access on, the gate being on or off exposes nothing.
+
+What the gate does not do: it does not tell the application who a reviewer is (a finding is still confirmed under
+a typed name), it does not add the security headers listed below, and it is a signed link, so whoever holds the
+link holds the access until it expires or is revoked.
+
 ## What is deliberately not done here
 
 No nginx or Caddy, no second hostname, no rate limiting beyond what Access gives, no separate data

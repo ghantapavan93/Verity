@@ -31,3 +31,21 @@ class InvalidInput(WorkbenchError):
 
 class TooLarge(WorkbenchError):
     status_code = 413
+
+
+class AccessRequired(WorkbenchError):
+    """No valid session: the reader has not come through an invite, or the session has ended."""
+
+    status_code = 401
+
+
+class Forbidden(WorkbenchError):
+    status_code = 403
+
+
+class TooManyRequests(WorkbenchError):
+    status_code = 429
+
+    def __init__(self, message: str, retry_after: int) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after

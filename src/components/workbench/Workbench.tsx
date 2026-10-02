@@ -14,6 +14,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommandPalette, type Command } from "./CommandPalette";
 import styles from "./Workbench.module.css";
+import { AccessGate } from "./access/AccessGate";
 import { ASSISTANT_SUGGESTIONS, AssistantPanel } from "./assistant/AssistantPanel";
 import { outcomeTitle } from "./assistant/RunOutcome";
 import { useDocWidth } from "./hooks/useDocWidth";
@@ -54,7 +55,16 @@ const SAMPLE_NAME = "Cloud Service Agreement (Common Paper).docx";
 // (the Phase 1 proof run, docs/DEMO-PROOF.md); otherwise the latest complete run with findings.
 const PROOF_RUN_ID = process.env.NEXT_PUBLIC_PROOF_RUN ?? "";
 
+/** The workbench, behind the gate the API keeps (access/AccessGate.tsx): nothing below mounts, and so nothing asks the API, until the reader is through it. */
 export function Workbench() {
+  return (
+    <AccessGate>
+      <WorkbenchSurface />
+    </AccessGate>
+  );
+}
+
+function WorkbenchSurface() {
   const reduceMotion = useReducedMotion() ?? false;
   const { morph, quick } = transitions(reduceMotion);
 
@@ -101,7 +111,7 @@ export function Workbench() {
     let cancelled = false;
     health()
       .then((h) => !cancelled && setApiHealth(h))
-      .catch((error: unknown) => !cancelled && setApiHealth({ ok: false, provider: "", model: "", detail: errorMessage(error) }));
+      .catch((error: unknown) => !cancelled && setApiHealth({ ok: false, provider: "", model: "", detail: errorMessage(error), access: "off" }));
     return () => {
       cancelled = true;
     };

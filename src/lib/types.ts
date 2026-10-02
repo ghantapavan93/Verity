@@ -14,6 +14,7 @@ export type DocumentSummary = Schemas["DocumentSummary"];
 export type SpanView = Schemas["SpanOut"];
 export type FindingView = Schemas["FindingOut"];
 export type RunView = Schemas["RunOut"];
+export type AccessView = Schemas["AccessOut"];
 export type RunSummary = Schemas["RunSummary"];
 export type RunDetailView = Schemas["RunDetail"];
 export type RunExplanationView = Schemas["RunExplanation"];

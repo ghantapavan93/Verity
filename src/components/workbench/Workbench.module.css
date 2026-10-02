@@ -1425,3 +1425,27 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* The access gate (access/AccessGate.tsx): the landing's own frame, one sentence, one field. */
+.gateLead {
+  margin: -8px 0 20px;
+  max-width: 520px;
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.gateForm {
+  width: min(520px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.gateForm button {
+  align-self: flex-start;
+  margin-top: 4px;
+}

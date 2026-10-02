@@ -1,6 +1,7 @@
 /** The backend as the interface sees it. Every function throws an Error with a readable message. */
 
 import type {
+  AccessView,
   BatchSummary,
   BatchView,
   CitationRecord,
@@ -53,13 +54,21 @@ export function unreachable(apiUrl: string): string {
   return apiUrl.startsWith("https://") ? `${base} If this page has been open for a long time, your sign-in may have expired: reload the page.` : base;
 }
 
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+/** Fired on the window when the API refuses a request for want of a session; the access gate listens for it. */
+export const ACCESS_REQUIRED_EVENT = "verity:access-required";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`, init);
+    // The session cookie travels with every request. Through the tunnel the API is the page's own origin; on a
+    // laptop it is another port, and the API allows credentials from the interface's origins only.
+    response = await fetch(`${API_URL}${path}`, { credentials: "include", ...init });
   } catch {
     throw new Error(unreachable(API_URL));
   }
+  if (response.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event(ACCESS_REQUIRED_EVENT));
   if (!response.ok) throw new Error(await readError(response));
   if (!(response.headers.get("content-type") ?? "").includes("json")) {
     // A sign-in page in place of data: the session in front of the API has expired.
@@ -68,10 +77,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-const JSON_HEADERS = { "Content-Type": "application/json" };
-
 export function health(): Promise<Health> {
   return request<Health>("/api/health");
+}
+
+/** Whether the API has a gate and whether this browser is through it (the API decides both). */
+export function getAccess(): Promise<AccessView> {
+  return request<AccessView>("/api/access");
+}
+
+/** Exchange an invite, the token or the whole link, for a session cookie. The API answers with who entered. */
+export function enterWithInvite(invite: string): Promise<AccessView> {
+  return request<AccessView>("/api/access/session", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ invite }) });
 }
 
 export function uploadDocument(file: File): Promise<DocumentView> {
@@ -232,7 +249,7 @@ export function followRun(
   };
 
   if (typeof EventSource !== "undefined") {
-    source = new EventSource(`${API_URL}/api/runs/${id}/events`);
+    source = new EventSource(`${API_URL}/api/runs/${id}/events`, { withCredentials: true });
     source.addEventListener("stage", (event) => {
       const data = JSON.parse((event as MessageEvent).data) as {
         stage: RunStage;

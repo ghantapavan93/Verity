@@ -1,6 +1,36 @@
 {
   "components": {
     "schemas": {
+      "AccessOut": {
+        "description": "Whether the gate is on and whether this browser is through it.",
+        "properties": {
+          "entered": {
+            "title": "Entered",
+            "type": "boolean"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "required": [
+          "required",
+          "entered"
+        ],
+        "title": "AccessOut",
+        "type": "object"
+      },
       "BatchField": {
         "properties": {
           "key": {
@@ -2494,6 +2524,16 @@
       },
       "HealthOut": {
         "properties": {
+          "access": {
+            "default": "off",
+            "enum": [
+              "off",
+              "required",
+              "entered"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
           "detail": {
             "title": "Detail",
             "type": "string"
@@ -2518,6 +2558,21 @@
           "detail"
         ],
         "title": "HealthOut",
+        "type": "object"
+      },
+      "InviteIn": {
+        "properties": {
+          "invite": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Invite",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invite"
+        ],
+        "title": "InviteIn",
         "type": "object"
       },
       "MemoIn": {
@@ -3935,6 +3990,70 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/access": {
+      "get": {
+        "description": "Whether the gate is on and whether this browser is through it. Open to everyone: it is how the page knows\nto ask for an invite, and it says nothing else.",
+        "operationId": "access_api_access_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Access",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/api/access/session": {
+      "post": {
+        "description": "Exchange an invite for a session. The invite may be the bare token or the whole link it came in.",
+        "operationId": "enter_api_access_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enter",
+        "tags": [
+          "access"
+        ]
+      }
+    },
     "/api/batches": {
       "get": {
         "operationId": "batches_api_batches_get",
@@ -4455,6 +4574,7 @@
     },
     "/api/health": {
       "get": {
+        "description": "Open to everyone, because the supervisor and the page ask before anyone has entered. Past the gate it names\nthe model and its state; before it, only whether the workbench is up and that the gate is on.",
         "operationId": "health_api_health_get",
         "responses": {
           "200": {

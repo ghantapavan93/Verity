@@ -49,6 +49,12 @@ $env:WORKBENCH_RETRIEVAL_K = "6"
 $env:WORKBENCH_PROMPT_VERSION = "answer-v2"
 $env:WORKBENCH_CORS_ORIGINS = if ($Local) { "http://localhost:3900,http://127.0.0.1:3900" } else { $publicOrigin }
 $env:WORKBENCH_APP_URL = $publicOrigin
+# The gate (backend/app/api/access.py): on when a secret has been made (backend/scripts/access.py secret). The secret
+# and the list of revoked readers live under backend/data, outside the repository, and are read at every start.
+$secretFile = Join-Path $backend "data\access.secret"
+$revokedFile = Join-Path $backend "data\access.revoked"
+$env:WORKBENCH_ACCESS_SECRET = if (Test-Path $secretFile) { (Get-Content $secretFile -Raw).Trim() } else { "" }
+$env:WORKBENCH_ACCESS_REVOKED = if (Test-Path $revokedFile) { ((Get-Content $revokedFile) | Where-Object { $_.Trim() } | ForEach-Object { $_.Trim() }) -join "," } else { "" }
 $api = Start-Process -FilePath (Join-Path $backend ".venv\Scripts\python.exe") `
   -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000" `
   -WorkingDirectory $backend -WindowStyle Hidden -PassThru `

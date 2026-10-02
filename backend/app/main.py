@@ -9,12 +9,12 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import batches, documents, engineering, findings, guidance, health, memos, runs
+from .api import access, batches, documents, engineering, findings, guidance, health, memos, runs
 from .application.recover_runs import recover_interrupted_runs
 from .config import settings
 from .db import SessionLocal, init_db
@@ -39,6 +39,7 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         app.state.provider = provider or make_provider()
         yield
 
+    access.check_configuration()
     app = FastAPI(title="Contract Workbench", version="0.1.0", lifespan=lifespan)
     # Responses over 1 KB go out compressed; Starlette leaves text/event-stream alone, so the live
     # run stream is unaffected. Lighthouse found the document JSON going out raw.
@@ -48,11 +49,16 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
+        # The session cookie travels with requests from the interface's own origins, which are listed, never "*".
+        # Through the tunnel the interface and the API are one origin and this is not used; on a laptop they are two ports.
+        allow_credentials=True,
     )
 
     @app.exception_handler(WorkbenchError)
     async def workbench_error(_request: Request, error: WorkbenchError) -> JSONResponse:
-        return JSONResponse({"detail": str(error)}, status_code=error.status_code)
+        retry_after = getattr(error, "retry_after", None)
+        headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
+        return JSONResponse({"detail": str(error)}, status_code=error.status_code, headers=headers)
 
     @app.middleware("http")
     async def request_log(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
@@ -68,8 +74,14 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
             )
         return response
 
-    for router in (health.router, documents.router, guidance.router, runs.router, findings.router, memos.router, batches.router, engineering.router):
-        app.include_router(router)
+    # Health and the gate itself are open; everything else is mounted behind the gate here, in one place, so a route
+    # added to any of these routers is behind it without anyone remembering (a test walks every route to be sure).
+    app.include_router(health.router)
+    app.include_router(access.router)
+    gate = [Depends(access.require_access)]
+    for router in (documents.router, guidance.router, findings.router, memos.router, batches.router, engineering.router):
+        app.include_router(router, dependencies=gate)
+    app.include_router(runs.router, dependencies=[*gate, Depends(access.limit_run_starts)])
     return app
 
 

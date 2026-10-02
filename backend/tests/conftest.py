@@ -20,6 +20,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
     from app import config
 
     monkeypatch.setattr(config.settings, "data_dir", tmp_path)
+    # The gate is off unless a test turns it on, whatever the environment of the machine running the tests holds.
+    monkeypatch.setattr(config.settings, "access_secret", "")
     provider = FakeProvider()
     app = create_app(provider=provider)
     with TestClient(app) as test_client:

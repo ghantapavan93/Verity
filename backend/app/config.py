@@ -46,6 +46,13 @@ class Settings(BaseModel):
     ]
     # Where the interface runs, for links that lead from a memo or an evidence pack back to a run.
     app_url: str = os.environ.get("WORKBENCH_APP_URL", "http://localhost:3900").rstrip("/")
+    # The gate (api/access.py). With a secret, every route but health and the gate itself needs a session that an
+    # invite signed under this secret was exchanged for; without one the gate is off, as on a laptop and in the tests.
+    # The deployment reads it from a file outside the repository (deploy/supervise.ps1); it is never a default.
+    access_secret: str = os.environ.get("WORKBENCH_ACCESS_SECRET", "").strip()
+    access_session_days: int = int(os.environ.get("WORKBENCH_ACCESS_SESSION_DAYS", "7"))
+    # Readers whose invites and sessions no longer open anything, by the name their invite was made for.
+    access_revoked: list[str] = [s.strip() for s in os.environ.get("WORKBENCH_ACCESS_REVOKED", "").split(",") if s.strip()]
     # Optional: the results.json of the ivo-experiments repository, for the Runs surface, and the
     # published page it was built for (links become "Open experiment" → <url>#<id>).
     experiments_results: Path | None = Path(os.environ["WORKBENCH_EXPERIMENTS_RESULTS"]) if os.environ.get("WORKBENCH_EXPERIMENTS_RESULTS") else None

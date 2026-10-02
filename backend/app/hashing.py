@@ -9,6 +9,7 @@ application imports hashlib; a test scans `app/` for it. The evidence pack's sta
 from __future__ import annotations
 
 import hashlib
+import hmac
 from pathlib import Path
 
 ALGORITHM = "sha256"
@@ -25,6 +26,12 @@ def sha256_text(text: str) -> str:
 
 def sha256_file(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
+
+
+def mac_sha256(key: str, message: str) -> str:
+    """HMAC-SHA256 of the message under the key: what makes an invite or a session token one this server issued
+    (api.access). Compare with `hmac.compare_digest`, never with `==`."""
+    return hmac.new(key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def fingerprint(kind: str, *parts: str | None) -> str:

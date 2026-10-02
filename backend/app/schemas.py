@@ -339,6 +339,22 @@ class HealthOut(ApiModel):
     provider: str
     model: str
     detail: str
+    # The gate (api/access.py): off, required (this browser has not entered; provider and model are then left blank), or entered.
+    access: Literal["off", "required", "entered"] = "off"
+
+
+class InviteIn(ApiModel):
+    # The invite token, or the whole link it arrived in.
+    invite: str = Field(min_length=1, max_length=4096)
+
+
+class AccessOut(ApiModel):
+    """Whether the gate is on and whether this browser is through it."""
+
+    required: bool
+    entered: bool
+    # The name the invite was made for; null until entered, and when the gate is off.
+    subject: str | None = None
 
 
 class CitationRecordOut(ApiModel):
