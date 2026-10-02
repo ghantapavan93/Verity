@@ -66,13 +66,19 @@ def test_empty_or_punctuation_only_quotes_match_nothing() -> None:
     assert tokenize("")[0:0] == [] and [t.kind for t in tokenize("—")] == [Kind.PUNCT]
 
 
-def test_words_joined_or_split_by_the_reader_are_forgiven_at_word_boundaries_and_numbers_never_are() -> None:
-    # Four recorded spans on 2026-09-29 were lost only because the reader's text carried "advisedof", "thesame", "speci fying".
-    text = "has been advisedof the possibility of such damages"
-    found = locate_tokens("has been advised of the possibility", text)
-    assert found is not None and text[found.start : found.end] == "has been advisedof the possibility"
-    text = "notice to the defaulting party speci fying the default"
-    found = locate_tokens("party specifying the default", text)
-    assert found is not None and text[found.start : found.end] == "party speci fying the default"
-    assert locate_tokens("not ice", "Notice must be in writing.") is not None, "letters at word boundaries; the space is the reader's"
+def test_a_space_moved_inside_the_letters_is_a_different_text_and_is_never_forgiven() -> None:
+    # Until v6 a run of words was compared as its joined letters, which forgave the reader's "advisedof" and
+    # "speci fying" and, by the same rule, called these pairs the same text (hostile cases, 2026-10-02).
+    assert locate_tokens("the rapist shall attend", "The therapist shall attend the session.") is None
+    assert locate_tokens("therapist shall attend", "Neither the rapist shall attend nor the victim.") is None
+    assert locate_tokens("the party is un able to perform", "If the party is unable to perform its obligations.") is None
+    assert locate_tokens("the party is unable to perform", "If the party is un able to perform its obligations.") is None
+    # The price, stated: a quote that repairs the reader's own join or split is withheld too (7 of 1,475 recorded spans).
+    assert locate_tokens("has been advised of the possibility", "has been advisedof the possibility of such damages") is None
+    assert locate_tokens("party specifying the default", "notice to the defaulting party speci fying the default") is None
+    assert locate_tokens("not ice", "Notice must be in writing.") is None
     assert locate_tokens("1 5 days", "within 15 days") is None and locate_tokens("15 days", "within 1 5 days") is None
+    # What is still forgiven carries no letters: punctuation, quotation marks, a hyphen's spacing, case.
+    text = "the licence is non- exclusive and the fee is 1,500 dollars"
+    found = locate_tokens("Non-exclusive and the fee is 1500 dollars", text)
+    assert found is not None and text[found.start : found.end] == "non- exclusive and the fee is 1,500 dollars"

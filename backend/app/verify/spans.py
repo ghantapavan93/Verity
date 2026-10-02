@@ -9,9 +9,9 @@ that matched is stored on the span and shown in the interface:
 3. casefold    the same, case-insensitively;
 4. typed       (verifier v5, in place of the letters-and-digits tier) the quote and the text as typed tokens:
                a number is a value ("1,500" is "1500", "15.00" is not), an amount keeps its currency, a
-               percentage its sign, a section identifier its dots; a run of letters is a word compared at word
-               boundaries, so a space the reader lost or added between words is forgiven while a word may never
-               begin inside another; punctuation and quotation marks carry nothing (verify/tokens.py).
+               percentage its sign, a section identifier its dots; a run of letters is a word, compared whole
+               (v6: a space moved inside the letters is no longer forgiven, so "the rapist" is not "therapist");
+               punctuation and quotation marks carry nothing (verify/tokens.py).
 
 A quote that begins with the section's own label ("13.1 Defining Variables Variables have …") or
 its heading alone is retried without it, and the tier is reported as ``unprefixed:<tier>``. The
@@ -37,7 +37,7 @@ from dataclasses import dataclass
 
 from .tokens import locate_tokens
 
-VERIFIER_VERSION = "v5"
+VERIFIER_VERSION = "v6"
 
 # A section number as the reader writes it: "12", "8.1.2". Anything else in front of a label is heading text.
 _SECTION_NUMBER = re.compile(r"\d+(?:\.\d+)*")

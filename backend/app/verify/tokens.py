@@ -3,9 +3,10 @@
 The letters-and-digits tier compared two texts by their letters and digits alone, which made "$1,500" and
 "$15.00" the same six characters and "15%" the same as "1.5%". Under typed tokens a number is a number:
 "1,500" and "1500" are one value (Decimal, never float), "15.00" and "1,500" are two, "15%" and "1.5%" are
-two, and a run of letters is a word. Punctuation, quotation marks, dashes and whitespace carry no meaning
-and are dropped, so "days’ written" still meets "days written" and "non- exclusive" still meets
-"non-exclusive", while a changed digit or a moved decimal point can never be forgiven.
+two, and a run of letters is a word, compared whole. Punctuation, quotation marks, dashes and whitespace carry
+no meaning and are dropped, so "days’ written" still meets "days written" and "non- exclusive" still meets
+"non-exclusive", while a changed digit or a moved decimal point can never be forgiven, and neither can a space
+moved inside the letters: "the rapist" is not "therapist" (verifier v6).
 
 Every token keeps the offsets of its surface in the original text, so a match is reported as exact
 character offsets and the interface highlights what was found.
@@ -102,117 +103,26 @@ class TokenMatch:
     count: int  # how many places in the text the token sequence occurs; 1 means the location is unambiguous
 
 
-@dataclass(frozen=True)
-class Item:
-    """A rigid token (number, currency, percent, section) or a run of consecutive words. Words in a run are joined,
-    because the reader's own text carries joins and splits ("advisedof", "speci fying": four spans in the record on
-    2026-09-29) that a reader forgives; the run remembers where its words began so a match still starts and ends
-    at a word boundary. Numbers are never joined: "1 5" is not "15"."""
-
-    kind: Kind
-    canonical: str
-    start: int
-    end: int
-    boundaries: tuple[int, ...]  # for a word run: the offset into `canonical` where each word begins, and its length at the end
-    starts: tuple[int, ...]  # the original offset of each word in the run
-    ends: tuple[int, ...]
-
-
-def items(tokens: list[Token]) -> list[Item]:
-    result: list[Item] = []
-    run: list[Token] = []
-
-    def flush() -> None:
-        if run:
-            joined = "".join(t.canonical for t in run)
-            bounds = [0]
-            for t in run:
-                bounds.append(bounds[-1] + len(t.canonical))
-            result.append(Item(Kind.WORD, joined, run[0].start, run[-1].end, tuple(bounds), tuple(t.start for t in run), tuple(t.end for t in run)))
-            run.clear()
-
-    for token in tokens:
-        if not token.significant:
-            continue
-        if token.kind is Kind.WORD:
-            run.append(token)
-        else:
-            flush()
-            result.append(Item(token.kind, token.canonical, token.start, token.end, (0, len(token.canonical)), (token.start,), (token.end,)))
-    flush()
-    return result
-
-
-def _suffix_start(hay: Item, needle: str) -> int | None:
-    """The original offset where ``needle`` begins as a word-boundary-aligned suffix of the run, else None."""
-    if not hay.canonical.endswith(needle):
-        return None
-    at = len(hay.canonical) - len(needle)
-    return hay.starts[hay.boundaries.index(at)] if at in hay.boundaries else None
-
-
-def _prefix_end(hay: Item, needle: str) -> int | None:
-    """The original offset where ``needle`` ends as a word-boundary-aligned prefix of the run, else None."""
-    if not hay.canonical.startswith(needle):
-        return None
-    at = len(needle)
-    return hay.ends[hay.boundaries.index(at) - 1] if at in hay.boundaries else None
-
-
-def _spans_within(hay: Item, needle: str) -> list[tuple[int, int]]:
-    """``needle`` as a word-boundary-aligned substring of one run: every such place, in order."""
-    found: list[tuple[int, int]] = []
-    for i, at in enumerate(hay.boundaries[:-1]):
-        if hay.canonical.startswith(needle, at) and (at + len(needle)) in hay.boundaries:
-            found.append((hay.starts[i], hay.ends[hay.boundaries.index(at + len(needle)) - 1]))
-    return found
-
-
-def _matches_at(hay: list[Item], i: int, needle: list[Item]) -> list[tuple[int, int]]:
-    """The original offsets of every match of ``needle`` starting at haystack item ``i`` (several only when a one-run
-    quote occurs more than once inside one run of words)."""
-    first, last = needle[0], needle[-1]
-    if len(needle) == 1:
-        if first.kind is not Kind.WORD:
-            return [(hay[i].start, hay[i].end)] if (hay[i].kind, hay[i].canonical) == (first.kind, first.canonical) else []
-        return _spans_within(hay[i], first.canonical) if hay[i].kind is Kind.WORD else []
-    if i + len(needle) > len(hay):
-        return []
-    if first.kind is Kind.WORD:
-        if hay[i].kind is not Kind.WORD:
-            return []
-        start = _suffix_start(hay[i], first.canonical)
-    else:
-        start = hay[i].start if (hay[i].kind, hay[i].canonical) == (first.kind, first.canonical) else None
-    if start is None:
-        return []
-    for offset in range(1, len(needle) - 1):
-        if (hay[i + offset].kind, hay[i + offset].canonical) != (needle[offset].kind, needle[offset].canonical):
-            return []
-    tail = hay[i + len(needle) - 1]
-    if last.kind is Kind.WORD:
-        end = _prefix_end(tail, last.canonical) if tail.kind is Kind.WORD else None
-    else:
-        end = tail.end if (tail.kind, tail.canonical) == (last.kind, last.canonical) else None
-    return [] if end is None else [(start, end)]
-
-
 def locate_tokens(quote: str, text: str) -> TokenMatch | None:
-    """The first occurrence of the quote's tokens, in order, among the text's, with the number of occurrences. Rigid
-    tokens (numbers, amounts, percentages, section identifiers) must be identical; words must be identical letters at
-    word boundaries, joins and splits between them forgiven. A match therefore never starts or ends inside a word or a
-    number, and never forgives a changed digit."""
-    needle = items(tokenize(quote))
-    haystack = items(tokenize(text))
-    if not needle or not haystack:
+    """The first place the quote's tokens occur, in order and next to each other, among the text's, with the number of
+    such places. Every token must be identical: a number its value, an amount its currency, a percentage its sign, a
+    section identifier its dots, a word its letters. A match therefore never starts or ends inside a word or a number,
+    never forgives a changed digit, and never forgives a space moved inside the letters.
+
+    Until v6 a run of consecutive words was compared as its joined letters, so that a space the reader lost or added
+    ("advisedof", "speci fying") was forgiven. The same rule made "the rapist" equal to "therapist" and "un able" to
+    "unable": two different texts called the same. Replayed over the record on 2026-10-02, 7 of 1,475 verified spans
+    (5 runs, none a golden) had needed the forgiveness; from v6 such a quote is withheld instead."""
+    needle = [(t.kind, t.canonical) for t in significant(tokenize(quote))]
+    hay = significant(tokenize(text))
+    if not needle or len(needle) > len(hay):
         return None
+    keys = [(t.kind, t.canonical) for t in hay]
     first: tuple[int, int] | None = None
     count = 0
-    for i in range(len(haystack)):
-        for found in _matches_at(haystack, i, needle):
+    for i in range(len(hay) - len(needle) + 1):
+        if keys[i : i + len(needle)] == needle:
             count += 1
             if first is None:
-                first = found
-    if first is None:
-        return None
-    return TokenMatch(first[0], first[1], count)
+                first = (hay[i].start, hay[i + len(needle) - 1].end)
+    return None if first is None else TokenMatch(first[0], first[1], count)
