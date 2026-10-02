@@ -42,12 +42,23 @@ async function readError(response: Response): Promise<string> {
   return `${response.status} ${response.statusText}`;
 }
 
+/**
+ * What a request that failed outright says. Behind an access gate (an https origin) the usual cause is not the
+ * network: the gate answers an expired sign-in with a redirect to its own origin, the browser refuses to follow it
+ * for a data request, and the request simply fails. Saying only "not reachable" sent the reader looking at the
+ * wrong thing (2026-10-02).
+ */
+export function unreachable(apiUrl: string): string {
+  const base = `The workbench API at ${apiUrl} is not reachable.`;
+  return apiUrl.startsWith("https://") ? `${base} If this page has been open for a long time, your sign-in may have expired: reload the page.` : base;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, init);
   } catch {
-    throw new Error(`The workbench API at ${API_URL} is not reachable.`);
+    throw new Error(unreachable(API_URL));
   }
   if (!response.ok) throw new Error(await readError(response));
   if (!(response.headers.get("content-type") ?? "").includes("json")) {
