@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -78,6 +79,7 @@ def ingest_document(session: Session, filename: str, data: bytes) -> IngestedDoc
     refuse_unsupported_type(filename)
     existing = stored_document(session, sha256_bytes(data))
     if existing is not None:
+        keep_original(existing, data)  # the same bytes by hash: a row whose file is not there is completed here
         return IngestedDocument(existing, created=False)
 
     started = time.perf_counter()
@@ -101,6 +103,10 @@ def ingest_document(session: Session, filename: str, data: bytes) -> IngestedDoc
         coverage_json=json.dumps(coverage_report(parsed.coverage, PARSER_VERSION, "persisted")),
     )
     document.sections = [Section(ordinal=i, number=s.number, heading=s.heading, text=s.text) for i, s in enumerate(parsed.sections)]
+    # The bytes are on disk before the row exists. The row used to be committed first: a write that failed after it
+    # left a document with no original, and every later upload of the same bytes was handed that row without the
+    # write being tried again (fault injection, 2026-10-02). A file with no row is harmless: it is named by its hash.
+    keep_original(document, data)
     session.add(document)
     try:
         session.commit()
@@ -113,7 +119,6 @@ def ingest_document(session: Session, filename: str, data: bytes) -> IngestedDoc
         keep_original(winner, data)
         return IngestedDocument(winner, created=False)
     session.refresh(document)
-    keep_original(document, data)
     return IngestedDocument(document, created=True)
 
 
@@ -122,4 +127,10 @@ def keep_original(document: Document, data: bytes) -> None:
     path = original_path(document)
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
-        path.write_bytes(data)
+        # Written aside and renamed, so a write cut short never leaves half a file under the hash's name.
+        partial = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.part")
+        try:
+            partial.write_bytes(data)
+            partial.replace(path)
+        finally:
+            partial.unlink(missing_ok=True)

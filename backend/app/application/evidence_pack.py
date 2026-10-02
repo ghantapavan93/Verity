@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +55,19 @@ have now checked yourself.
 class EvidencePack:
     filename: str
     data: bytes
+
+
+# Characters a file name may not carry on Windows, and the device names it reserves. A document is stored under the name
+# a person gave it; inside the pack its file must be one every system can create. A document named "<img onerror=…>.txt"
+# made a pack that could not be unpacked on Windows at all (hostile content, 2026-10-02).
+_UNPORTABLE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_RESERVED = re.compile(r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$", re.IGNORECASE)
+
+
+def pack_name(name: str) -> str:
+    """The document's file name inside the pack. run.json keeps the name as given (`document.name`)."""
+    safe = _UNPORTABLE.sub("_", base_name(name)).rstrip(" .") or "document"
+    return f"_{safe}" if _RESERVED.match(safe) else safe
 
 
 def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
@@ -119,7 +133,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
             "sha256": document.sha256,
             "parser_version": document.parser_version,
             "parse_coverage": coverage_of(document),
-            "file": f"document/{document.name}" if original_bytes is not None else None,
+            "file": f"document/{pack_name(document.name)}" if original_bytes is not None else None,
         },
         "sections_sha256": sha256_bytes(sections_json.encode("utf-8")),
         # What the run itself recorded when it read the document (the reading stage's output hash), so the pack
@@ -138,11 +152,14 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         "created_at": iso(run.created_at),
         "finished_at": iso(run.finished_at),
         "packed_at": iso(utcnow()),
+        # The verifier of the build that wrote this pack. A run made under an earlier verifier keeps what that one
+        # recorded: each span in findings.json carries the tier that matched it (`method`), and that is the record.
         "verifier": {
+            "describes": "the verifier of the build that wrote this pack; each span's own `method` is what verified it",
             "version": verifier.VERIFIER_VERSION,
             "ladder": ["exact", "normalized", "casefold", "typed"],
             "label_stripping": True,
-            "boundary": "no edge splits a run of letters and digits; a typed match is whole tokens",
+            "boundary": "no edge splits a run of letters and digits; a typed match is whole tokens, words compared whole",
             "window_chars": window_of(json.loads(run.options_json or "{}")),
         },
         "workbench_link": f"{settings.app_url}/?document={document.id}&run={run.id}",
@@ -157,7 +174,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         pack.writestr("findings.json", json.dumps(findings, ensure_ascii=False, indent=1))
         pack.writestr("verify.py", verify_py)
         if original_bytes is not None:
-            pack.writestr(f"document/{base_name(document.name)}", original_bytes)
+            pack.writestr(f"document/{pack_name(document.name)}", original_bytes)
         if rebuilt.matches and rebuilt.system is not None and rebuilt.user is not None:
             pack.writestr("model_input/system.txt", rebuilt.system)
             pack.writestr("model_input/user.txt", rebuilt.user)

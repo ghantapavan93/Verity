@@ -3,11 +3,14 @@
 
 Checks, in order:
   1. the document file's sha256 is the one the run recorded;
-  2. the canonical sections file's sha256 is the one the run recorded;
+  2. the canonical sections file's sha256 is the one the run recorded, and the guidance file's, when the
+     run had guidance;
   3. every span the workbench marked verified is found again: the characters at the stored
      offsets of the stored section text match the quoted passage under the same ladder the
      workbench used (exact, normalized, casefold, typed tokens; letters-and-digits on records made
-     before verifier v5; label stripping when the workbench recorded it);
+     before verifier v5; label stripping when the workbench recorded it). Since verifier v6 the workbench
+     compares words whole; the typed check here joins neighbouring words, as v5 did, so it holds for
+     records of both and is never stricter than what was recorded;
   4. spans the workbench marked unverified are listed, with nothing to check: the workbench
      withheld them;
   5. when the pack carries the rebuilt model input, its hash is the one the run recorded when it
@@ -143,6 +146,8 @@ def main():
         report(hashlib.sha256(joined.encode("utf-8")).hexdigest() == recorded, f"sections are what the run read: recorded {recorded[:16]}...")
     else:
         print("NOTE the run recorded no reading hash (older record); the sections hash above ties the pack to itself only")
+    if run.get("guidance_file"):
+        report(sha256(HERE / run["guidance_file"]) == run.get("guidance_sha256"), f"guidance: sha256 {str(run.get('guidance_sha256'))[:16]}...")
 
     checked = withheld = 0
     for finding in findings:
