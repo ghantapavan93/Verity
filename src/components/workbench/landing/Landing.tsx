@@ -6,9 +6,10 @@ import styles from "./Landing.module.css";
 import { IconArrowRight, IconFile } from "../icons";
 import { transitions, type Stage } from "../shell/constants";
 import { Brand, Shimmer, StatusChip } from "../shell/primitives";
-import { getRun, type Health } from "@/lib/api";
+import { OneRun, RecordPipeline, Refusals } from "./LandingStory";
+import { getCitations, getRun, listDocuments, type Health } from "@/lib/api";
 import { plural } from "@/lib/format";
-import { decidedByCode, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
+import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
 /** How a status is set, in the order the evidence drawer reads it. Static: it describes the product, not one run. */
 const LAYERS = [
@@ -74,6 +75,22 @@ export function Landing({
       cancelled = true;
     };
   }, [proofId]);
+  // The record's counts for the pipeline below the fold: read once per visit to the first screen, never estimated.
+  const [citations, setCitations] = useState<CitationRecord | null>(null);
+  const [documents, setDocuments] = useState<DocumentSummary[] | null>(null);
+  useEffect(() => {
+    if (stage !== "empty") return;
+    let cancelled = false;
+    getCitations()
+      .then((record) => !cancelled && setCitations(record))
+      .catch(() => !cancelled && setCitations(null));
+    listDocuments()
+      .then((rows) => !cancelled && setDocuments(rows))
+      .catch(() => !cancelled && setDocuments(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [stage]);
   const rise = (delay: number) =>
     reduceMotion
       ? {}
@@ -292,6 +309,14 @@ export function Landing({
           </motion.aside>
         )}
       </div>
+
+      {stage === "empty" && (
+        <div className={styles.below}>
+          <RecordPipeline citations={citations} documents={documents} reduceMotion={reduceMotion} />
+          {proof && <OneRun proof={proof} lead={lead} onOpen={onOpenProof} reduceMotion={reduceMotion} />}
+          <Refusals reduceMotion={reduceMotion} />
+        </div>
+      )}
 
       <footer className={styles.footer}>
         <span>

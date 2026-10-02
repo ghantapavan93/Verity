@@ -4,7 +4,7 @@
 .page {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr auto auto;
 }
 
 .topbar {
@@ -639,6 +639,240 @@
   color: var(--text-3);
 }
 
+/* ---- below the fold: the record as a pipeline, one run told in four steps, what it refuses to do ---- */
+
+.below {
+  width: min(1140px, 100%);
+  margin: 0 auto;
+  padding: 8px clamp(16px, 4vw, 40px) 40px;
+}
+
+.story {
+  padding: clamp(40px, 7vh, 80px) 0 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.story + .story {
+  margin-top: clamp(40px, 7vh, 80px);
+}
+
+.storyTitle {
+  margin: 0;
+  max-width: 26ch;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+
+.storyLead {
+  margin: 14px 0 0;
+  max-width: 60ch;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+  margin: 34px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.node {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 22px 16px 20px 0;
+  border-top: 1px solid var(--border);
+}
+
+.nodeLink {
+  position: absolute;
+  top: -1px;
+  left: -16px;
+  width: 16px;
+  height: 1px;
+  background: var(--accent);
+  transform-origin: left;
+}
+
+.nodeIcon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  color: var(--text-2);
+  background: var(--bg-raised);
+}
+
+.nodeAccent .nodeIcon {
+  border-color: var(--accent-line);
+  color: var(--accent-soft);
+  background: var(--accent-tint);
+}
+
+.nodeBad .nodeIcon {
+  border-color: var(--status-bad-border);
+  color: var(--status-bad-text);
+  background: var(--status-bad-bg);
+}
+
+.nodePass .nodeIcon {
+  border-color: var(--status-pass-border);
+  color: var(--status-pass-text);
+  background: var(--status-pass-bg);
+}
+
+.nodeValue {
+  display: flex;
+  align-items: baseline;
+  min-height: 34px;
+  font-family: var(--font-mono);
+  font-size: clamp(22px, 2.2vw, 30px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.nodeValue > span {
+  display: block;
+  line-height: 1;
+}
+
+.nodeWaiting {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-3);
+}
+
+.nodeLabel {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.nodeNote {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 34px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-l);
+  overflow: hidden;
+  background: var(--hairline);
+}
+
+.step {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  align-content: start;
+  gap: 10px;
+  padding: 22px 20px 20px;
+  background: var(--bg);
+}
+
+.stepIndex {
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-style: italic;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.stepTitle {
+  margin: 4px 0 0;
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.stepText {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.stepLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 4px;
+}
+
+.stepLink:hover {
+  text-decoration-color: var(--accent);
+}
+
+.stepLink svg {
+  transition: transform var(--dur) var(--ease);
+}
+
+.stepLink:hover svg {
+  transform: translateX(3px);
+}
+
+.refusals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 40px;
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.refusal {
+  padding: 18px 0 18px 20px;
+  border-left: 2px solid var(--accent-line);
+}
+
+.refusalHead {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.refusalText {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
 /* ---- the door ---- */
 
 .gate {
@@ -708,6 +942,22 @@
   .body {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .pipeline {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .node:nth-child(4) .nodeLink {
+    display: none;
+  }
+
+  .steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .refusals {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 520px) {
@@ -731,6 +981,22 @@
 
   .ledgerMeta {
     display: none;
+  }
+
+  .pipeline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .node:nth-child(odd) .nodeLink {
+    display: none;
+  }
+
+  .node:nth-child(4) .nodeLink {
+    display: block;
+  }
+
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .ledgerRow {
