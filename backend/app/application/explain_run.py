@@ -51,10 +51,14 @@ PROPOSAL_NOT_RECONSTRUCTABLE = "Model proposal not reconstructable for this run.
 # What each recorded status source means, in one sentence, so the interface repeats it rather than deciding it.
 SOURCE_SUMMARIES: dict[str, str] = {
     "computed_days": "the status was computed by code from the duration in the verified quote and the rule in the guidance",
+    "confirmed_days": "the model proposed a pass and code confirmed it: the duration in the verified quote meets the rule in the guidance, and code "
+    "found nothing in the source text against it; had the model asked for review, this would not be a pass",
     "position_check": "lowered to needs review by code: the day count the model stated is not in the verified quote or the guidance",
     "ambiguous_fact": "lowered to needs review by code: the verified quote does not state one period (its words and digits disagree, or its periods differ)",
     "reference_check": "lowered to needs review by code: the conclusion names a section this document does not have",
-    "model_hint": "no deterministic policy evaluation: the status is the model's hint; no comparable durations were found in the quote and the guidance",
+    # Shown only when the finding recorded no reason; a recorded reason says why code stayed out (a point reported as
+    # not found, guidance with several periods).
+    "model_hint": "no deterministic policy evaluation: the status is the model's hint; code did not decide it",
     "no_evidence": "no deterministic policy evaluation: no status was given, because a quoted passage could not be verified",
 }
 DETERMINISTIC_SOURCES = frozenset({"computed_days", "position_check", "ambiguous_fact", "reference_check"})
@@ -172,7 +176,7 @@ def _findings(run: Run, findings: list[Finding], slices: dict[str, ContextSlice]
                 id=finding.id,
                 ordinal=finding.ordinal,
                 topic=finding.topic,
-                conclusion=finding.conclusion,
+                conclusion=finding.shown_conclusion,  # the model's own sentence is in `proposals`, as the model's
                 status=finding.status,
                 shown=run.stage == "complete" and finding.status != "unresolved",
                 source_matches=matches,
@@ -242,6 +246,7 @@ def explain_run(session: Session, run_id: str) -> RunExplanation:
         reason=run.reason,
         reading=_reading(run),
         retrieval=retrieval,
+        retrieval_mode=run.retrieval_mode,
         reconstruction=reconstruction,
         proposals=proposals,
         proposals_problem=proposals_problem,

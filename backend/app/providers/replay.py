@@ -15,6 +15,7 @@ import json
 import re
 import threading
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypedDict
@@ -121,6 +122,10 @@ class RecordingProvider:
     def healthy(self) -> tuple[bool, str]:
         ok, detail = self.inner.healthy()
         return ok, f"{detail} (recording to {self.path.name})"
+
+    def with_options(self, options: Mapping[str, Any]) -> RecordingProvider:
+        bind = getattr(self.inner, "with_options", None)
+        return RecordingProvider(bind(options) if bind is not None else self.inner, self.path)
 
     def generate_json(self, system: str, user: str, schema: dict[str, Any]) -> Generation:
         generation = self.inner.generate_json(system, user, schema)

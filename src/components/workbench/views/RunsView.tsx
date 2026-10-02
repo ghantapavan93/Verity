@@ -20,6 +20,7 @@ import {
   REASON_TITLES,
   statusLabel,
   STATUS_SOURCE_LABELS,
+  retrievalNote,
   type BatchSummary,
   type BatchValue,
   type BatchView,
@@ -381,7 +382,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>
-          Sections handed to the model <span className={styles.sectionNote}>lexical retrieval, in rank order: the first row was ranked first</span>
+          Sections handed to the model <span className={styles.sectionNote}>{retrievalNote(run.retrievalMode)}</span>
         </h2>
         <table className={styles.table}>
           <thead>

@@ -14,6 +14,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -123,6 +124,11 @@ class AdmittedProvider:
     def healthy(self) -> tuple[bool, str]:
         ok, detail = self.inner.healthy()
         return ok, f"{detail} · admission limit {self.controller.limit}, {self.controller.depth} waiting"
+
+    def with_options(self, options: Mapping[str, Any]) -> AdmittedProvider:
+        """The same queue and workload over the inner provider bound to a run's recorded options, when it can be bound."""
+        bind = getattr(self.inner, "with_options", None)
+        return AdmittedProvider(bind(options) if bind is not None else self.inner, self.controller, self.workload)
 
     def generate_json(self, system: str, user: str, schema: dict[str, Any]) -> Generation:
         waited_ms, depth = self.controller.acquire(self.workload)

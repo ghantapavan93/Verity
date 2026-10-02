@@ -1706,6 +1706,11 @@
             "title": "Id",
             "type": "string"
           },
+          "modelConclusion": {
+            "default": "",
+            "title": "Modelconclusion",
+            "type": "string"
+          },
           "observed": {
             "anyOf": [
               {
@@ -1767,9 +1772,26 @@
             "title": "Statusreason"
           },
           "statusSource": {
+            "anyOf": [
+              {
+                "enum": [
+                  "computed_days",
+                  "confirmed_days",
+                  "model_hint",
+                  "no_evidence",
+                  "reference_check",
+                  "position_check",
+                  "ambiguous_fact"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "",
+                "type": "string"
+              }
+            ],
             "default": "",
-            "title": "Statussource",
-            "type": "string"
+            "title": "Statussource"
           },
           "suggestedPosition": {
             "anyOf": [
@@ -1874,9 +1896,26 @@
             "type": "string"
           },
           "statusSource": {
+            "anyOf": [
+              {
+                "enum": [
+                  "computed_days",
+                  "confirmed_days",
+                  "model_hint",
+                  "no_evidence",
+                  "reference_check",
+                  "position_check",
+                  "ambiguous_fact"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "",
+                "type": "string"
+              }
+            ],
             "default": "model_hint",
-            "title": "Statussource",
-            "type": "string"
+            "title": "Statussource"
           },
           "topic": {
             "title": "Topic",
@@ -2976,6 +3015,22 @@
             ],
             "title": "Reason"
           },
+          "retrievalMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lexical_match",
+                  "hybrid_match",
+                  "opening_fallback"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrievalmode"
+          },
           "reused": {
             "default": false,
             "title": "Reused",
@@ -3007,6 +3062,17 @@
               }
             ],
             "title": "Sectionsread"
+          },
+          "sectionsRequested": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sectionsrequested"
           },
           "stage": {
             "enum": [
@@ -3150,6 +3216,22 @@
             },
             "title": "Retrieval",
             "type": "array"
+          },
+          "retrievalMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lexical_match",
+                  "hybrid_match",
+                  "opening_fallback"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrievalmode"
           },
           "runId": {
             "title": "Runid",
@@ -3312,6 +3394,22 @@
             ],
             "title": "Reason"
           },
+          "retrievalMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lexical_match",
+                  "hybrid_match",
+                  "opening_fallback"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrievalmode"
+          },
           "reused": {
             "default": false,
             "title": "Reused",
@@ -3332,6 +3430,17 @@
               }
             ],
             "title": "Sectionsread"
+          },
+          "sectionsRequested": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sectionsrequested"
           },
           "stage": {
             "enum": [

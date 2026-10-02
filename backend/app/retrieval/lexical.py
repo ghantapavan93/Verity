@@ -57,6 +57,10 @@ STOPWORDS = frozenset(
     ]
 )
 HEADING_WEIGHT = 3
+# What "the sections handed to the model" means: this tokenizer and stopword list, BM25 with the heading counted three
+# times, only sections scored above zero, and the opening sections when none is (runs.service). Part of a run's
+# identity (runs.versions); changed by hand when any of that changes.
+RETRIEVAL_VERSION = "retrieval-v1"
 
 
 @dataclass(frozen=True)

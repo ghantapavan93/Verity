@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from .models import FindingStatusName, ReviewVerdictName, RunReasonName, RunStageName
+from .models import FindingStatusName, RetrievalModeName, ReviewVerdictName, RunReasonName, RunStageName, StatusSourceName
 
 
 class ApiModel(BaseModel):
@@ -124,8 +124,8 @@ class FindingOut(ApiModel):
     id: str
     topic: str
     status: FindingStatusName
-    # computed_days | model_hint | no_evidence | reference_check | position_check | ambiguous_fact: who decided the status.
-    status_source: str = ""
+    # Who decided the status (models.StatusSourceName). Empty only on a finding recorded before the source was.
+    status_source: StatusSourceName | Literal[""] = ""
     # The policy evaluation's sentence when the status was computed ("the contract provides 15 calendar days; the guidance requires at least 30 calendar days").
     status_reason: str | None = None
     # passage: the spans support the conclusion. coverage: the point was not found and the spans are
@@ -133,7 +133,11 @@ class FindingOut(ApiModel):
     evidence_kind: Literal["passage", "coverage"] = "passage"
     # A person's decision, when one has been recorded and not cleared.
     review: ReviewOut | None = None
+    # What the product says. For a point the model reported as not found it is the product's own sentence, about the
+    # sections the model was given; otherwise it is the model's conclusion.
     conclusion: str
+    # The model's own sentence, as recorded. Shown as the model's, never as the finding.
+    model_conclusion: str = ""
     spans: list[SpanOut]
     guidance_reference: str | None
     observed: str | None
@@ -167,6 +171,11 @@ class RunOut(ApiModel):
     # How many of the document's sections were handed to the model (the run's recorded candidates); null before
     # retrieval has run. Everything the model said, absence included, is about these and no others.
     sections_read: int | None = None
+    # How those sections were chosen: ranked for the question, or the opening sections because the retriever ranked
+    # none. Null before retrieval has run and on every run recorded before 2026-10-02.
+    retrieval_mode: RetrievalModeName | None = None
+    # How many sections the run asked the retriever for (its recorded retrieval_k); null when the run recorded none.
+    sections_requested: int | None = None
 
 
 class RunSummary(ApiModel):
@@ -201,7 +210,7 @@ class FindingRecord(ApiModel):
     citations: list[str] = []
     has_guidance: bool = False
     # Who decided the status: code from the day counts, or the model's hint (FindingOut.status_source).
-    status_source: str = "model_hint"
+    status_source: StatusSourceName | Literal[""] = "model_hint"
     created_at: str
 
 
@@ -618,7 +627,8 @@ class RecordedPolicyEvaluation(ApiModel):
     status: FindingStatusName
     status_source: str
     status_reason: str | None
-    # True when code decided the status (computed_days, position_check, ambiguous_fact, reference_check).
+    # True when code decided the status (computed_days, position_check, ambiguous_fact, reference_check). False for
+    # `confirmed_days`: there the model proposed the pass and code confirmed it, which is not code's decision alone.
     deterministic: bool
     summary: str
 
@@ -655,6 +665,8 @@ class RunExplanation(ApiModel):
     reason: RunReasonName | None
     reading: ExplanationReading
     retrieval: list[ExplanationCandidate]
+    # Whether `retrieval` is a ranking for the question or the opening sections handed over because nothing ranked.
+    retrieval_mode: RetrievalModeName | None = None
     reconstruction: ExplanationReconstruction
     proposals: list[ModelProposal]
     # "Model proposal not reconstructable for this run." when the stored raw output does not parse under the

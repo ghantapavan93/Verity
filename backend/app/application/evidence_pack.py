@@ -39,7 +39,9 @@ README_TXT = """Evidence pack for one Contract Workbench run.
 
   run.json        the run: question, stage, hashes of the document, sections, prompt and options, model
   sections.json   the canonical sections the run read, exactly as stored (offsets index into these texts)
-  findings.json   every finding the model proposed with its status and every quoted span, located or withheld
+  findings.json   every finding the model proposed with its status and every quoted span, located or withheld;
+                  `conclusion` is the model's own sentence as recorded, `shown_conclusion` what the workbench shows
+                  (for a point the model reported as not found, only that it was not found in the sections given)
   document/       the original uploaded bytes, when they were kept
   model_input/    the exact system and user messages the model was given, rebuilt from the record (when the
                   record still allows it); run.json carries the hash the run recorded when it made the call
@@ -85,6 +87,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
             "status": f.status,
             "status_source": f.status_source,
             "conclusion": f.conclusion,
+            "shown_conclusion": f.shown_conclusion,
             "review": (
                 {"verdict": f.review.verdict, "reviewer": f.review.reviewer, "note": f.review.note, "at": iso(f.review.created_at)} if f.review else None
             ),
@@ -108,6 +111,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
     original = original_path(document)
     original_bytes = original.read_bytes() if original.exists() else None
     rebuilt = reconstruct_input(session, run.id)
+    options = json.loads(run.options_json or "{}")
     model_input = {
         "input_sha256_recorded": rebuilt.recorded_input_sha256,
         "reconstructable": rebuilt.matches,
@@ -144,6 +148,8 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         "review_head": review_head(run),
         "model_input": model_input,
         "context_slices": context_slices,
+        # How the sections handed to the model were chosen. `mode` is null on a run recorded before it was a field.
+        "retrieval": {"mode": run.retrieval_mode, "requested_k": options.get("retrieval_k"), "returned": len(context_slices) if rebuilt.slices else None},
         "provider": run.provider,
         "model": run.model,
         "prompt_version": run.prompt_version,

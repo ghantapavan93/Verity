@@ -14,7 +14,16 @@ import { GuidanceScope } from "./GuidanceScope";
 import { RunOutcome, WithheldList } from "./RunOutcome";
 import { StageList } from "./StageList";
 import { absolute } from "@/lib/api";
-import { STAGE_LABELS, type DocumentView, type FindingView, type ReviewView, type SectionView, type SpanView, type RunStage } from "@/lib/types";
+import {
+  STAGE_LABELS,
+  sectionsReadNote,
+  type DocumentView,
+  type FindingView,
+  type ReviewView,
+  type SectionView,
+  type SpanView,
+  type RunStage,
+} from "@/lib/types";
 
 // The third question has no answer in the sample; on it the model tends to propose a quote that
 // is not there, and the verifier withholds it. That moment is meant to be one click away.
@@ -181,7 +190,7 @@ export function AssistantPanel({
                     {run.reused ? "answered earlier for this exact question · " : ""}
                     {run.model} · prompt {run.promptVersion} · {run.latencyMs !== null ? `${(run.latencyMs / 1000).toFixed(0)} s` : ""} · every citation
                     verified against the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}
-                    {run.sectionsRead != null && doc ? ` · the model was handed ${run.sectionsRead} of this document's ${doc.sections.length} sections` : ""}
+                    {run.sectionsRead != null && doc ? ` · ${sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length)}` : ""}
                   </p>
                 </motion.div>
               ) : (

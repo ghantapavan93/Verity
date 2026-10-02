@@ -1,7 +1,8 @@
 """Use case: start an analysis run, or hand back the run that already answers the same question.
 
-Identity of a run's inputs is the fingerprint: document, guidance, question, prompt hash and
-decoding options. A repeated request with the same fingerprint reuses the running or completed
+Identity of a run's inputs is the fingerprint: document, guidance, question, prompt hash,
+decoding and retrieval options, and the versions of the rules that decide the answer (runs.versions).
+A repeated request with the same fingerprint reuses the running or completed
 run instead of spending another model call; a failed run is not reused, so it can be retried.
 The database enforces the same rule with a unique index over non-failed runs, so two requests
 racing each other cannot both create one.
@@ -23,6 +24,7 @@ from ..models import Document, Guidance, Run
 from ..providers.base import ModelProvider
 from ..retrieval.aliases import ALIASES_SHA256
 from ..routing.router import ModelRouter, task_for
+from ..runs.versions import SEMANTIC_VERSIONS
 
 FINGERPRINT_KIND = "run/v1"
 
@@ -56,6 +58,9 @@ def run_options(model: str | None = None) -> RunOptions:
         # Only a non-default retriever enters the identity, so runs recorded under BM25 keep theirs.
         options["retrieval"] = settings.retrieval
         options["embed_model"] = settings.embed_model
+    # The rules that will decide the answer. A run made under other rules is another run (found 2026-10-02: after the
+    # status decision was fixed, the same request was still handed the run the old decision had made).
+    options.update(SEMANTIC_VERSIONS)
     return options
 
 

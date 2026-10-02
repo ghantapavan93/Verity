@@ -13,6 +13,7 @@ import { formatWhen } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
 import {
   citationLabel,
+  codeRole,
   decidedByCode,
   statusLabel,
   type FindingStatus,
@@ -115,6 +116,8 @@ function EvidenceBody({
   const hasGuidance = run?.hasGuidance ?? false;
   const verified = finding.spans.filter((s) => s.verified).length;
   const withheld = finding.spans.length - verified;
+  // The model proposed this pass and code confirmed it: the layer says so, and does not say code decided.
+  const confirmed = finding.statusSource === "confirmed_days";
 
   return (
     <>
@@ -151,6 +154,16 @@ function EvidenceBody({
                 {proposal.evidence.length} passage{proposal.evidence.length === 1 ? "" : "s"}
                 {finding.spans.length > 0 ? `; ${verified} verified${withheld ? `, ${withheld} withheld` : ""}` : ""}
               </dd>
+            </div>
+          </dl>
+        )}
+        {/* Where the product does not repeat the model's sentence (a point reported as not found), it is kept here,
+            as the model's: it may word the absence as a fact about the agreement, which the sections read cannot show. */}
+        {finding.modelConclusion && finding.modelConclusion !== finding.conclusion && (
+          <dl className={styles.drawerFacts} data-testid="model-sentence">
+            <div>
+              <dt>Its sentence</dt>
+              <dd>“{finding.modelConclusion}”</dd>
             </div>
           </dl>
         )}
@@ -225,16 +238,16 @@ function EvidenceBody({
       <section className={styles.drawerSection} data-testid="layer-code">
         {/* The heading is a claim. It says "Code decided" only under a source where code did; the model's own phrases,
             its pointer into the guidance and its suggestion are in the layer above, never here. */}
-        <h4>{decidedByCode(finding.statusSource) ? "Code decided" : finding.statusSource === "no_evidence" ? "Code withheld" : "Code did not decide"}</h4>
+        <h4>{codeRole(finding.statusSource)}</h4>
         {guidance && (
           <>
-            <h5 className={styles.drawerSubhead}>{decidedByCode(finding.statusSource) ? "Guidance" : "Guidance given"}</h5>
+            <h5 className={styles.drawerSubhead}>{decidedByCode(finding.statusSource) || confirmed ? "Guidance" : "Guidance given"}</h5>
             <blockquote className={styles.drawerQuote}>“{guidance}”</blockquote>
           </>
         )}
         <dl className={styles.drawerFacts}>
           <div>
-            <dt>{decidedByCode(finding.statusSource) ? "Decided by code" : "Status"}</dt>
+            <dt>{decidedByCode(finding.statusSource) ? "Decided by code" : confirmed ? "Confirmed by code" : "Status"}</dt>
             <dd>
               {finding.statusReason ??
                 (finding.statusSource === "model_hint"

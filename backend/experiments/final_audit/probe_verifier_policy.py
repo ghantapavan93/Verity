@@ -105,8 +105,8 @@ CASES = [
     (
         "at least 90, contract 90",
         "We require at least 90 days' written notice for termination for convenience.",
-        "terminate upon ninety (90) days' written notice",
-        {("pass", "computed_days")},
+        "terminate for convenience upon ninety (90) days' written notice",  # names the subject: a pass by code needs that since policy-v2
+        {("pass", "confirmed_days")},
     ),
     (
         "not less than 90, contract 60",
@@ -117,8 +117,8 @@ CASES = [
     (
         "no fewer than 90, contract 120",
         "Termination for convenience requires no fewer than 90 days' notice.",
-        "terminate upon 120 days' written notice",
-        {("pass", "computed_days")},
+        "terminate for convenience upon 120 days' written notice",
+        {("pass", "confirmed_days")},
     ),
     (
         "at most 30, contract 60",
@@ -129,8 +129,8 @@ CASES = [
     (
         "no more than 30, contract 15",
         "Termination for convenience notice must be no more than 30 days.",
-        "terminate upon 15 days' written notice",
-        {("pass", "computed_days")},
+        "terminate for convenience upon 15 days' written notice",
+        {("pass", "confirmed_days")},
     ),
     (
         "prior written notice of 90",
@@ -148,7 +148,7 @@ CASES = [
         "business vs calendar: 90 business days against 90 calendar",
         "We require at least 90 calendar days' notice for termination for convenience.",
         "terminate upon 90 business days' notice",
-        {("pass", "computed_days"), HINT} | SAFE,
+        {("pass", "confirmed_days"), HINT} | SAFE,
     ),
     (
         "one month against 30 days",
@@ -160,7 +160,7 @@ CASES = [
         "three months against 90 days",
         "We require at least 90 days' notice for termination for convenience.",
         "terminate upon three (3) months' written notice",
-        SAFE | {HINT, ("pass", "computed_days")},
+        SAFE | {HINT, ("pass", "confirmed_days")},
     ),
     (
         "range in the contract: 30 to 60 days",
@@ -237,7 +237,7 @@ for name, guidance, quote, acceptable in CASES:
     ok = (d.status, d.source) in acceptable
     # The dangerous outcome is a confident code-owned pass where the contract is not clearly within the guidance.
     r.check(name, ok, f"{d.status} / {d.source}" + (f" · {d.reason}" if d.reason else ""))
-    if not ok and d.status == "pass" and d.source == "computed_days":
+    if not ok and d.status == "pass" and d.source in ("computed_days", "confirmed_days"):
         dangerous += 1
 r.note("confident code-owned passes outside the acceptable set", "INFO", str(dangerous))
 

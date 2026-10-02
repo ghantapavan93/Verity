@@ -94,6 +94,9 @@ def test_a_question_that_matches_nothing_is_said_to_have_matched_nothing(client:
     result = upload_and_ask(client, "zzqx wvvk", with_guidance=False)
     detail = client.get(f"/api/runs/{result['run_id']}/detail").json()
     stages = {s["stage"]: s["detail"] for s in detail["stages"]}
-    assert stages["finding_evidence"].startswith("no section matched the question's words; the opening ")
+    assert stages["finding_evidence"].startswith("retrieval ranked no section for this question; the opening ")
     assert "candidate section" not in stages["finding_evidence"]
+    # And as a field, so no projection has to read the sentence to know.
+    assert detail["retrievalMode"] == "opening_fallback" and detail["sectionsRequested"] == 6
+    assert client.get(f"/api/runs/{result['run_id']}/explanation").json()["retrievalMode"] == "opening_fallback"
     assert result["run"]["stage"] != "complete", "sections that were not chosen for the question produced no answer"

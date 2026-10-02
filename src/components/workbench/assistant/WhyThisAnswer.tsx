@@ -3,7 +3,7 @@
 import styles from "../Workbench.module.css";
 import { useRunExplanation } from "../hooks/useRunExplanation";
 import { shortHash } from "@/lib/format";
-import { statusLabel, type RunExplanationView } from "@/lib/types";
+import { retrievalNote, statusLabel, type RunExplanationView } from "@/lib/types";
 
 /**
  * Why this answer: the run explained from its record. The API assembles the explanation
@@ -87,7 +87,8 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
       </section>
 
       <section className={styles.drawerSection}>
-        <h4>What retrieval chose</h4>
+        <h4>{explanation.retrievalMode === "opening_fallback" ? "What was handed over: retrieval ranked no section" : "What retrieval chose"}</h4>
+        <p className={styles.verifiedTag}>{retrievalNote(explanation.retrievalMode)}</p>
         <table className={styles.whyTable}>
           <thead>
             <tr>
@@ -265,7 +266,13 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
               <dd className={styles.whyMono}>{f.recordedPolicyEvaluation.statusSource || "—"}</dd>
             </div>
             <div>
-              <dt>{f.recordedPolicyEvaluation.deterministic ? "Decided by code" : "Not decided by code"}</dt>
+              <dt>
+                {f.recordedPolicyEvaluation.deterministic
+                  ? "Decided by code"
+                  : f.recordedPolicyEvaluation.statusSource === "confirmed_days"
+                    ? "Proposed by the model, confirmed by code"
+                    : "Not decided by code"}
+              </dt>
               <dd>{f.recordedPolicyEvaluation.statusReason ?? f.recordedPolicyEvaluation.summary}</dd>
             </div>
           </dl>

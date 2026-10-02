@@ -41,7 +41,8 @@ def finding_out(finding: Finding) -> FindingOut:
         status_reason=finding.status_reason,
         evidence_kind="coverage" if finding.status == "missing" else "passage",
         review=review_out(finding.review),
-        conclusion=finding.conclusion,
+        conclusion=finding.shown_conclusion,
+        model_conclusion=finding.conclusion,
         spans=[
             SpanOut(
                 section_id=s.section_id,
@@ -82,6 +83,8 @@ def run_out(run: Run) -> RunOut:
         review_head=review_head(run),
         guidance_text=run.guidance.text if run.guidance else None,
         sections_read=len(json.loads(run.candidates_json)) if run.candidates_json else None,
+        retrieval_mode=run.retrieval_mode,
+        sections_requested=json.loads(run.options_json or "{}").get("retrieval_k"),
     )
 
 

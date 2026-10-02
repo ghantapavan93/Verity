@@ -30,7 +30,15 @@ def test_status_is_computed_from_the_quote_and_the_guidance_never_from_the_model
     decision = decide("pass", "15 days", "at least 30 days", True, True, quotes=[quote], guidance=guidance)
     assert (decision.status, decision.source) == ("needs_review", "computed_days")
     assert decision.reason == "the contract provides 15 calendar days; the guidance requires at least 30 calendar days"
-    assert decide("needs_review", "45 days", "at least 30 days", True, True, quotes=["forty-five (45) days' notice"], guidance=guidance).status == "pass"
+    # A pass is code's only when the model called it one too and the quote names what the guidance is about (policy-v2).
+    enough = "Customer may terminate on forty-five (45) days' written notice."
+    assert decide("pass", "45 days", "at least 30 days", True, True, quotes=[enough], guidance=guidance) == Decision(
+        "pass", "confirmed_days", "the contract provides 45 calendar days; the guidance requires at least 30 calendar days"
+    )
+    doubted = decide("needs_review", "45 days", "at least 30 days", True, True, quotes=[enough], guidance=guidance)
+    assert (doubted.status, doubted.source) == ("needs_review", "model_hint") and "the model asked for review" in doubted.reason
+    bare = decide("pass", "45 days", "at least 30 days", True, True, quotes=["forty-five (45) days' notice"], guidance=guidance)
+    assert (bare.status, bare.source) == ("pass", "model_hint") and "share too few words" in bare.reason
     assert decide("pass", "60 days", "no more than 30 days", True, True, quotes=["sixty (60) days"], guidance="Cure within 30 days.").status == "needs_review"
     # The model's own numbers, with no quote to ground them, compute nothing: the hint stands and says so.
     assert decide("pass", "15 days", "at least 30 days", True, True) == Decision("pass", "model_hint")
@@ -111,13 +119,13 @@ def test_only_a_pass_is_lowered_by_an_unknown_reference() -> None:
 def test_a_stated_position_the_quote_does_not_carry_lowers_the_status() -> None:
     """Found while tracing (docs/SYSTEM_TRUTH.md H): `observed` and `required` were never compared with the record."""
     quote = "Customer may terminate on thirty (30) days' written notice."
-    guidance = "We accept 30 days' notice or more."
+    guidance = "We accept termination on 30 days' notice or more."
     # The model says 90 days; the verified quote says 30. Code refuses to compute a pass from 90.
     assert decide("pass", "90 days' notice", "at least 30 days", True, True, quotes=[quote], guidance=guidance).source == "position_check"
     # The model's required count is not in the guidance either.
     assert decide("pass", "30 days' notice", "at least 45 days", True, True, quotes=[quote], guidance=guidance).source == "position_check"
     # Both positions are in the record: computed as before.
-    assert decide("needs_review", "30 days' notice", "at least 30 days", True, True, quotes=[quote], guidance=guidance).source == "computed_days"
+    assert decide("pass", "30 days' notice", "at least 30 days", True, True, quotes=[quote], guidance=guidance).source == "confirmed_days"
     # A quote without a duration grounds nothing: the model's numbers compute nothing, and the hint stands as a hint.
     assert decide(
         "pass", "30 days' notice", "at least 30 days", True, True, quotes=["Either party may terminate for convenience."], guidance=guidance

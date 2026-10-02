@@ -157,7 +157,9 @@ class Outcome:
 
 def run_suite() -> tuple[int, str]:
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"],
+        # The fingerprint test fails on any edit to the files it names, so it would "kill" every mutant of them without
+        # a single behaviour being tested. A mutant has to be killed by a test of what the code does.
+        [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--deselect", "tests/test_semantic_versions.py"],
         cwd=BACKEND,
         capture_output=True,
         text=True,

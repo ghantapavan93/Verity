@@ -22,6 +22,7 @@ from ..config import BACKEND_DIR
 from ..hashing import sha256_bytes, sha256_text
 from ..ingest import PARSER_VERSION
 from ..models import TERMINAL_STAGES, Document, FindingStatusName, Run
+from ..runs.versions import without_versions
 from ..schemas import (
     GoldenCategoryCount,
     GoldenCompareOut,
@@ -163,8 +164,15 @@ def run_for(session: Session, document: Document, golden: Golden, prompt: Prompt
     guidance_id = guidance_id_for(session, golden)
     if golden.guidance is not None and guidance_id is None:
         return None
-    key = compute_fingerprint(document.id, guidance_id, golden.question, prompt.sha256, run_options(model))
+    options = run_options(model)
+    key = compute_fingerprint(document.id, guidance_id, golden.question, prompt.sha256, options)
     runs = session.query(Run).filter(Run.fingerprint == key).order_by(Run.created_at.desc()).all()
+    if not runs:
+        # No recording under today's rules: the report shows the recording made before the rules were versioned
+        # (to 2026-10-02), which is what the set's published numbers are. It is superseded the first time the set is
+        # recorded again, and never reused as the answer to a request (application.start_run looks up today's key only).
+        legacy = compute_fingerprint(document.id, guidance_id, golden.question, prompt.sha256, without_versions(options))
+        runs = session.query(Run).filter(Run.fingerprint == legacy).order_by(Run.created_at.desc()).all()
     return next((r for r in runs if r.stage != "failed"), runs[0] if runs else None)
 
 

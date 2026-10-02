@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import time
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
@@ -25,13 +26,23 @@ def _overflow_message(body: str, limit: int) -> str:
 class OllamaProvider:
     name = "ollama"
 
-    def __init__(self, model: str | None = None, base_url: str | None = None, timeout_s: float | None = None) -> None:
+    def __init__(
+        self, model: str | None = None, base_url: str | None = None, timeout_s: float | None = None, decoding: Mapping[str, Any] | None = None
+    ) -> None:
         self.model = model or settings.model
         self.base_url = (base_url or settings.ollama_url).rstrip("/")
         self.timeout_s = timeout_s or settings.model_timeout_s
+        self._decoding = dict(decoding) if decoding is not None else None
 
     def options(self) -> dict[str, Any]:
-        return {"temperature": settings.temperature, "seed": settings.seed, "num_ctx": settings.num_ctx}
+        """The decoding settings of this provider: the ones it was bound to, or the process's defaults."""
+        defaults = {"temperature": settings.temperature, "seed": settings.seed, "num_ctx": settings.num_ctx}
+        return defaults if self._decoding is None else {name: self._decoding.get(name, default) for name, default in defaults.items()}
+
+    def with_options(self, options: Mapping[str, Any]) -> OllamaProvider:
+        """This provider bound to the model and decoding settings a run recorded when it was created, so the call is
+        made with those and not with whatever the process's settings have since become."""
+        return OllamaProvider(model=str(options.get("model") or self.model), base_url=self.base_url, timeout_s=self.timeout_s, decoding=options)
 
     def healthy(self) -> tuple[bool, str]:
         try:
@@ -64,7 +75,7 @@ class OllamaProvider:
         try:
             response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout_s)
             if response.status_code == 400 and "exceed" in response.text and "context" in response.text:
-                raise ContextOverflow(_overflow_message(response.text, settings.num_ctx))
+                raise ContextOverflow(_overflow_message(response.text, int(self.options()["num_ctx"])))
             response.raise_for_status()
             body = response.json()
         except httpx.HTTPError as error:

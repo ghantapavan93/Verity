@@ -30,10 +30,40 @@ StageStatusName = Literal["running", "ok", "failed"]
 STAGE_STATUSES: tuple[StageStatusName, ...] = get_args(StageStatusName)
 ReviewVerdictName = Literal["confirmed", "dismissed", "cleared"]
 REVIEW_VERDICTS: tuple[ReviewVerdictName, ...] = get_args(ReviewVerdictName)
+# Who decided a finding's status, and the statuses each may decide. A pair outside this table is not a decision the
+# system can make: code computes a pass or a shortfall, lowers to needs review, or withholds; "missing" is only ever
+# the model's own report. `runs.status.Decision` refuses any other pair, and so does a database created from here on.
+StatusSourceName = Literal["computed_days", "confirmed_days", "model_hint", "no_evidence", "reference_check", "position_check", "ambiguous_fact"]
+STATUS_SOURCES: tuple[StatusSourceName, ...] = get_args(StatusSourceName)
+STATUSES_BY_SOURCE: dict[StatusSourceName, tuple[FindingStatusName, ...]] = {
+    # Code decided, whatever the model hinted: a shortfall. (A pass under this source is a record made before
+    # policy-v2, when code passed a quote on the arithmetic alone and the model's hint had no part in it.)
+    "computed_days": ("pass", "needs_review"),
+    # The model proposed a pass and code confirmed it. Not code's decision alone: had the model asked for review,
+    # the same quote and guidance would not be a pass (policy-v2). Named for what it is, so no label has to guess.
+    "confirmed_days": ("pass",),
+    "model_hint": ("pass", "needs_review", "missing"),
+    "no_evidence": ("unresolved",),
+    "reference_check": ("needs_review",),
+    "position_check": ("needs_review",),
+    "ambiguous_fact": ("needs_review",),
+}
+# How a run chose the sections it handed to the model: ranked for the question, or, when the retriever ranked none,
+# the opening sections of the document. NULL on a run recorded before this was a field (2026-10-02).
+RetrievalModeName = Literal["lexical_match", "hybrid_match", "opening_fallback"]
+RETRIEVAL_MODES: tuple[RetrievalModeName, ...] = get_args(RetrievalModeName)
+# What the product says of a finding the model reported as not found. The model's own sentence is kept on the record
+# and shown as the model's; of 211 such sentences on record on 2026-10-02, 53 stated the absence as a fact about the
+# whole agreement ("The contract does not provide for termination for convenience"), which six sections cannot show.
+NOT_FOUND_CONCLUSION = "The model did not find this in the sections it was given."
 
 
 def _in_list(column: str, values: tuple[str, ...]) -> str:
     return f"{column} IN ({', '.join(repr(v) for v in values)})"
+
+
+def _status_matches_source() -> str:
+    return " OR ".join(f"(status_source = {source!r} AND {_in_list('status', statuses)})" for source, statuses in STATUSES_BY_SOURCE.items())
 
 
 def utcnow() -> datetime:
@@ -123,6 +153,8 @@ class Run(Base):
     document_sha256: Mapped[str] = mapped_column(String(64))
     guidance_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     candidates_json: Mapped[str] = mapped_column(Text, default="[]")
+    # How those candidates were chosen (RetrievalModeName); NULL before 2026-10-02, when only the stage's sentence said it.
+    retrieval_mode: Mapped[RetrievalModeName | None] = mapped_column(String(32), nullable=True)
     raw_output: Mapped[str | None] = mapped_column(Text, nullable=True)
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -172,14 +204,17 @@ class RunStage(Base):
 
 class Finding(Base):
     __tablename__ = "findings"
-    __table_args__ = (CheckConstraint(_in_list("status", FINDING_STATUSES), name="ck_findings_status"),)
+    __table_args__ = (
+        CheckConstraint(_in_list("status", FINDING_STATUSES), name="ck_findings_status"),
+        CheckConstraint(_status_matches_source(), name="ck_findings_status_source"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
     ordinal: Mapped[int] = mapped_column(Integer, default=0)
     topic: Mapped[str] = mapped_column(String(255))
     status: Mapped[FindingStatusName] = mapped_column(String(32))
-    status_source: Mapped[str] = mapped_column(String(32))
+    status_source: Mapped[StatusSourceName] = mapped_column(String(32))
     # The sentence the policy evaluation gives for a computed status; NULL when the status is the model's hint.
     status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     conclusion: Mapped[str] = mapped_column(Text)
@@ -191,6 +226,12 @@ class Finding(Base):
     run: Mapped[Run] = relationship(back_populates="findings")
     spans: Mapped[list[EvidenceSpan]] = relationship(back_populates="finding", order_by="EvidenceSpan.ordinal", cascade="all, delete-orphan")
     reviews: Mapped[list[FindingReview]] = relationship(back_populates="finding", order_by="FindingReview.id", cascade="all, delete-orphan")
+
+    @property
+    def shown_conclusion(self) -> str:
+        """The sentence the product shows for this finding. `conclusion` is the model's and stays as recorded; where
+        the model reported the point as not found, the product says only that, about the sections it was given."""
+        return NOT_FOUND_CONCLUSION if self.status == "missing" else self.conclusion
 
     @property
     def review(self) -> FindingReview | None:

@@ -164,6 +164,47 @@ describe("EvidenceDrawer", () => {
     await screen.findByText("Its hint");
   });
 
+  it("heads a pass the model proposed and code confirmed as confirmed, not decided", async () => {
+    const confirmed = {
+      ...finding(null),
+      status: "pass",
+      statusSource: "confirmed_days",
+      statusReason: "the contract provides 90 calendar days; the guidance requires at least 90 calendar days",
+    } as unknown as FindingView;
+    renderDrawer(confirmed);
+    const drawer = screen.getByLabelText("Evidence");
+    const heads = within(drawer)
+      .getAllByRole("heading", { level: 4 })
+      .map((h) => h.textContent);
+    expect(heads).toEqual(["Model proposed", "Source", "Code confirmed", "Human"]);
+    const code = within(drawer).getByTestId("layer-code");
+    expect(code.textContent).toContain("Confirmed by code");
+    expect(code.textContent).not.toContain("Decided by code");
+    expect(within(code).getByText("Within guidance (confirmed by code)")).toBeTruthy();
+    await screen.findByText("Its hint");
+  });
+
+  it("keeps the model's own sentence in the model's layer when the product does not repeat it", async () => {
+    const notFound = {
+      ...finding(null),
+      status: "missing",
+      statusSource: "model_hint",
+      statusReason: null,
+      evidenceKind: "coverage",
+      conclusion: "The model did not find this in the sections it was given.",
+      modelConclusion: "The contract does not provide for termination for convenience.",
+    } as unknown as FindingView;
+    renderDrawer(notFound);
+    const model = within(screen.getByLabelText("Evidence")).getByTestId("layer-model");
+    expect(within(model).getByTestId("model-sentence").textContent).toContain("The contract does not provide for termination for convenience.");
+    await screen.findByText("Its hint");
+    cleanup();
+    // Where the product shows the model's conclusion as the finding, it is not said twice.
+    renderDrawer({ ...finding(null), modelConclusion: finding(null).conclusion } as unknown as FindingView);
+    expect(within(screen.getByLabelText("Evidence")).queryByTestId("model-sentence")).toBeNull();
+    await screen.findByText("Its hint");
+  });
+
   it("records a decision from the drawer under a remembered name and hands the review back", async () => {
     window.localStorage.setItem("workbench.reviewer", "Pavan");
     const onReviewed = vi.fn();

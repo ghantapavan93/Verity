@@ -93,8 +93,78 @@ def test_a_quote_with_several_periods_is_decided_by_code_only_when_they_all_agre
     reason = decide("pass", None, None, True, True, quotes=[unless], guidance=GUIDANCE_90, topic=TOPIC).reason
     assert "10 calendar days" in reason and "90 calendar days" in reason
     # Periods that all lead to the same result are still decided by code, either way.
-    assert _decided("Either party may terminate upon 90 days' notice, or upon 120 days' notice after the first year.") == ("pass", "computed_days")
+    assert _decided("Either party may terminate for convenience upon 90 days' notice, or upon 120 days' notice in the second year.") == (
+        "pass",
+        "confirmed_days",
+    )
     assert _decided("Customer pays within 30 days; either party may terminate upon 60 days' notice.") == ("needs_review", "computed_days")
     # One period: unchanged.
     assert _decided("Either party may terminate upon sixty (60) days' written notice.") == ("needs_review", "computed_days")
-    assert _decided("Either party may terminate upon ninety (90) days' written notice.") == ("pass", "computed_days")
+    assert _decided("Either party may terminate for convenience upon ninety (90) days' written notice.") == ("pass", "confirmed_days")
+
+
+def test_a_point_the_model_reported_as_not_found_is_never_decided_by_code() -> None:
+    # Run 5ff255e1c3154792, 2026-09-29: asked for a most favoured nation clause under guidance about termination, the
+    # model answered "missing" and cited the cure period as the closest provision; code computed a pass from its 30 days.
+    guidance = "We can accept termination for convenience at 30 days' notice or more. Anything below 30 days requires review."
+    cure = "if the other party fails to cure a material breach of the Framework Terms or an Order Form following 30 days notice;"
+    decision = decide("missing", None, None, True, True, quotes=[cure], guidance=guidance, topic="Most Favored Nation Clause")
+    assert (decision.status, decision.source) == ("missing", "model_hint")
+    assert "closest provision" in decision.reason
+    # Nor a shortfall, nor an ambiguity: the quote is not the contract's position, whatever periods it carries.
+    assert decide("missing", None, None, True, True, quotes=[cure], guidance=GUIDANCE_90, topic=TOPIC).source == "model_hint"
+    two = "The term is three years and renews unless notice is given 90 days before its end; a breach may be cured within 30 days."
+    assert decide("missing", None, None, True, True, quotes=[two], guidance=GUIDANCE_90, topic=TOPIC).status == "missing"
+    # A point the model did find is still code's to lower: 30 days against a floor of 90.
+    assert decide("needs_review", None, None, True, True, quotes=[cure], guidance=GUIDANCE_90, topic=TOPIC).source == "computed_days"
+    # Without a comparable period nothing changes, and no reason is invented.
+    assert decide("missing", None, None, True, True, quotes=["Provider will make the Product available."], guidance=guidance, topic=TOPIC).reason == ""
+
+
+def test_a_carve_out_with_no_number_is_a_period_too() -> None:
+    # Returned by the live model on 2026-10-02 with a hint of pass, and a computed pass against a 90-day minimum.
+    carve_out = (
+        "Either party may terminate this Agreement for convenience upon ninety (90) days' prior written notice, "
+        "except that Provider may terminate immediately upon written notice."
+    )
+    decision = decide("pass", "ninety (90) days' prior written notice", "at least 90 days", True, True, quotes=[carve_out], guidance=GUIDANCE_90, topic=TOPIC)
+    assert (decision.status, decision.source) == ("needs_review", "ambiguous_fact")
+    assert "0 calendar days" in decision.reason and "90 calendar days" in decision.reason
+    # The same when the carve-out is in a second quote of the same finding.
+    assert _decided_many(["Either party may terminate upon 90 days' notice.", "Provider may terminate without notice."]) == ("needs_review", "ambiguous_fact")
+    # No notice at all, on its own, is still one period and still decided.
+    assert _decided("Either party may terminate this Agreement immediately upon written notice.") == ("needs_review", "computed_days")
+
+
+def _decided_many(quotes: list[str]) -> tuple[str, str]:
+    decision = decide("pass", None, None, True, True, quotes=quotes, guidance=GUIDANCE_90, topic=TOPIC)
+    return decision.status, decision.source
+
+
+def test_code_does_not_pass_a_quote_against_one_of_several_periods_in_the_guidance() -> None:
+    quote_45 = "Either party may terminate upon 45 days' written notice."
+    for guidance in (
+        "Termination requires at least 30 days' notice. Enterprise agreements require 90 days.",
+        "Termination requires at least 30 days' notice, or 90 days for enterprise agreements.",
+    ):
+        decision = decide("pass", "45 days", None, True, True, quotes=[quote_45], guidance=guidance, topic=TOPIC)
+        assert (decision.status, decision.source) == ("pass", "model_hint"), guidance  # shown as the model's view, never as code's
+        assert "30 calendar days" in decision.reason and "90 calendar days" in decision.reason
+        # A quote that meets both periods still does not name the enterprise rule's subject: not code's pass either.
+        assert _rule_of_several(guidance, "Either party may terminate upon 120 days' written notice.") == ("pass", "model_hint")
+        # A shortfall against the rule about the topic is still code's to report: that direction sends it to a person.
+        assert _rule_of_several(guidance, "Either party may terminate upon 10 days' written notice.") == ("needs_review", "computed_days")
+    convenience_45 = "Either party may terminate for convenience upon 45 days' written notice."
+    # A floor and a ceiling are one rule, not two.
+    ranged = "Notice of termination for convenience must be at least 30 days but no more than 90 days."
+    assert _rule_of_several(ranged, convenience_45) == ("pass", "confirmed_days")
+    # The same period said twice is one period, and a sentence that only restates it ("Anything below …") names no subject of its own.
+    twice = "We can accept termination for convenience at 30 days' notice or more. Anything below 30 days requires review."
+    assert _rule_of_several(twice, convenience_45) == ("pass", "confirmed_days")
+    # The same guidance and a quote that never says "convenience": the model's view.
+    assert _rule_of_several(twice, quote_45) == ("pass", "model_hint")
+
+
+def _rule_of_several(guidance: str, quote: str) -> tuple[str, str]:
+    decision = decide("pass", None, None, True, True, quotes=[quote], guidance=guidance, topic=TOPIC)
+    return decision.status, decision.source

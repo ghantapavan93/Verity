@@ -223,13 +223,30 @@ _WINDOW_BEFORE = 40
 _WINDOW_AFTER = 24
 
 
-def _operator_near(text: str, mention: DurationMention) -> Operator:
+def window_before(text: str, mention: DurationMention) -> str:
+    return text[max(0, mention.start - _WINDOW_BEFORE) : mention.start]
+
+
+def window_after(text: str, mention: DurationMention) -> str:
+    return text[mention.end : mention.end + _WINDOW_AFTER]
+
+
+def without_comparisons(text: str) -> str:
+    """The text with its comparison phrases blanked, so the "not" of "not less than" is not read as a negation."""
+    return _MINIMUM.sub(" ", _MAXIMUM.sub(" ", text))
+
+
+def counts_back(text: str, mention: DurationMention) -> bool:
+    """Whether the period is counted back from an event ("90 days before the anniversary"): a deadline, not a length of notice."""
+    return _BEFORE.search(window_after(text, mention)) is not None
+
+
+def explicit_operator(text: str, mention: DurationMention) -> Operator | None:
     """The comparison word nearest the duration: the closest phrase in the forty characters before it, or a suffix
-    ("or more", "or less") in the characters after it. A duration with no comparison word is a floor: a notice
-    requirement states the least notice that will do (written here once). "No later than 30 days before" is a floor
-    too, because the thirty days are counted back from an event."""
-    before = text[max(0, mention.start - _WINDOW_BEFORE) : mention.start]
-    after = text[mention.end : mention.end + _WINDOW_AFTER]
+    ("or more", "or less") in the characters after it; None when the text states none. "No later than 30 days before"
+    is a floor, because the thirty days are counted back from an event."""
+    before = window_before(text, mention)
+    after = window_after(text, mention)
     if _EXACT.search(before):
         return Operator.EXACT
     candidates: list[tuple[int, Operator]] = []
@@ -243,8 +260,33 @@ def _operator_near(text: str, mention: DurationMention) -> Operator:
         if suffix is not None:
             candidates.append((0, operator))
     if not candidates:
-        return Operator.MINIMUM
+        return None
     return min(candidates, key=lambda c: c[0])[1]
+
+
+def _operator_near(text: str, mention: DurationMention) -> Operator:
+    """The comparison a guidance sentence states around its duration. A duration with no comparison word is a floor:
+    a notice requirement states the least notice that will do (written here once)."""
+    return explicit_operator(text, mention) or Operator.MINIMUM
+
+
+def _sentence_spans(text: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    position = 0
+    for piece in _SENTENCE_END.split(text):
+        if piece:
+            start = text.index(piece, position)
+            spans.append((start, start + len(piece)))
+            position = start + len(piece)
+    return spans
+
+
+def period_sentences(guidance: str | None) -> list[str]:
+    """The sentences of the guidance that state a period: what a quote must be about before code compares it with one."""
+    if not guidance:
+        return []
+    starts = [m.start for m in parse_durations(guidance) if m.duration is not None]
+    return [guidance[start:end] for start, end in _sentence_spans(guidance) if any(start <= s < end for s in starts)]
 
 
 def _topic_tokens(topic: str | None) -> set[str]:
@@ -264,13 +306,7 @@ def parse_rule(guidance: str | None, topic: str | None = None) -> GuidanceRule |
     mentions = [m for m in parse_durations(guidance) if m.duration is not None]
     if not mentions:
         return None
-    sentences: list[tuple[int, int]] = []
-    position = 0
-    for piece in _SENTENCE_END.split(guidance):
-        if piece:
-            start = guidance.index(piece, position)
-            sentences.append((start, start + len(piece)))
-            position = start + len(piece)
+    sentences = _sentence_spans(guidance)
     wanted = _topic_tokens(topic)
     best: tuple[int, int, list[DurationMention]] | None = None
     for order, (start, end) in enumerate(sentences):
@@ -293,6 +329,24 @@ def parse_rule(guidance: str | None, topic: str | None = None) -> GuidanceRule |
     mention, operator = operators[0]
     assert mention.duration is not None
     return GuidanceRule(operator, mention.duration, mention.surface)
+
+
+def stated_rules(guidance: str | None) -> list[GuidanceRule]:
+    """Every period the guidance states, each as a rule of its own with the comparison word nearest it. `parse_rule`
+    picks the one about the topic; this is what it picked from, so a caller can see whether the choice mattered
+    ("at least 30 days' notice, or 90 days for enterprise agreements" states two floors, and which applies to this
+    agreement is not something the text of the guidance settles)."""
+    return [GuidanceRule(_operator_near(guidance, m), m.duration, m.surface) for m in parse_durations(guidance) if m.duration is not None] if guidance else []
+
+
+def stated_periods(quote: str) -> set[Duration]:
+    """Every period a quote states: its durations, and a period of zero days when it also says the notice is none
+    ("on 90 days' notice, except that Provider may terminate immediately"). `observed_fact` reads the zero only from a
+    quote with no other duration; here it stands beside them, because a carve-out with no number is still a period."""
+    periods = {m.duration for m in parse_durations(quote) if m.duration is not None}
+    if _ZERO.search(quote):
+        periods.add(Duration(Decimal(0), DurationUnit.CALENDAR_DAY))
+    return periods
 
 
 def observed_fact(quote: str, stated: str | None = None) -> ObservedFact | None:

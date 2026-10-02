@@ -9,6 +9,7 @@ the prompt version and hash, so the file can be traced to its record from inside
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -53,7 +54,10 @@ def status_label(status: str, with_guidance: bool, source: str = "computed_days"
     if status == "pass":
         if not with_guidance:
             return "Answered"
-        return "Within guidance (model's view)" if source == "model_hint" else "Within guidance"
+        if source == "model_hint":
+            return "Within guidance (model's view)"
+        # The model proposed the pass and code confirmed it (policy-v2): not a decision code made, and not headed as one.
+        return "Within guidance (confirmed by code)" if source == "confirmed_days" else "Within guidance"
     return STATUS_LABELS.get(status, status)
 
 
@@ -101,6 +105,19 @@ def _evidence_head(finding: Finding) -> str:
     return "Closest provision read" if finding.status == "missing" else "Observed language"
 
 
+def reading_line(run: Run) -> str:
+    """How much of the agreement the model was given, and whether those sections were chosen for the question. A memo
+    leaves the workbench; until 2026-10-02 it said neither, and "not found" in it read as a search of the agreement."""
+    read = len(json.loads(run.candidates_json or "[]"))
+    total = len(run.document.sections)
+    scope = "Nothing in this memo is a statement about the other sections."
+    if run.retrieval_mode == "opening_fallback":
+        return f"{read} of {total} sections: retrieval ranked no section for this question, so these are the opening sections, not ones chosen for it. {scope}"
+    if run.retrieval_mode is None:  # a run recorded before the mode was a field: how its sections were chosen is not on the record
+        return f"{read} of {total} sections. {scope}"
+    return f"{read} of {total} sections, chosen by retrieval for the question. {scope}"
+
+
 def _sources(findings: list[Finding], section_titles: dict[str, str]) -> list[Source]:
     sources: list[Source] = []
     for finding in findings:
@@ -130,7 +147,8 @@ def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str],
         "</style></head><body>",
         "<h1>Contract Review Memo</h1>",
         f"<dl><dt>Agreement</dt><dd>{escape(run.document.name)}</dd><dt>Date</dt><dd>{date}</dd><dt>Question</dt><dd>{escape(run.question)}</dd>",
-        f"<dt>Guidance</dt><dd>{escape(run.guidance.text) if run.guidance else 'none supplied'}</dd></dl>",
+        f"<dt>Guidance</dt><dd>{escape(run.guidance.text) if run.guidance else 'none supplied'}</dd>"
+        f"<dt>Sections read</dt><dd>{escape(reading_line(run))}</dd></dl>",
         f"<h2>Issues requiring review ({len(issues)})</h2>",
     ]
     if issues:
@@ -139,7 +157,7 @@ def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str],
         parts.append("<p>None. Every finding was within guidance or a plain answer.</p>")
     for f in findings:
         parts.append(f"<h2>{escape(f.topic)} · {status_label(f.status, run.guidance is not None, f.status_source)}</h2>")
-        parts.append(f"<p>{escape(f.conclusion)}</p>")
+        parts.append(f"<p>{escape(f.shown_conclusion)}</p>")
         for span in f.spans:
             source = by_span[id(span)]
             parts.append(
@@ -291,6 +309,7 @@ def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str],
         ("Date", date),
         ("Question", run.question),
         ("Guidance", run.guidance.text if run.guidance else "none supplied"),
+        ("Sections read", reading_line(run)),
     ):
         row = table.add_row().cells
         row[0].text = label
@@ -306,7 +325,7 @@ def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str],
 
     for f in findings:
         document.add_heading(xml_safe(f"{f.topic} · {status_label(f.status, run.guidance is not None, f.status_source)}"), level=2)
-        document.add_paragraph(xml_safe(f.conclusion))
+        document.add_paragraph(xml_safe(f.shown_conclusion))
         for span in f.spans:
             source = by_span[id(span)]
             p = document.add_paragraph()

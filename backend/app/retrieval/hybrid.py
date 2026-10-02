@@ -26,17 +26,17 @@ MAX_EMBED_CHARS = 2000
 Embedder = Callable[[list[str]], list[list[float]]]
 
 
-def ollama_embed(texts: list[str]) -> list[list[float]]:
+def ollama_embed(texts: list[str], model: str | None = None) -> list[list[float]]:
+    """``model`` is the embedding model a run recorded; the setting is only the default for a caller with no run."""
+    name = model or settings.embed_model
     vectors: list[list[float]] = []
     for start in range(0, len(texts), EMBED_BATCH):
         try:
-            response = httpx.post(
-                f"{settings.ollama_url}/api/embed", json={"model": settings.embed_model, "input": texts[start : start + EMBED_BATCH]}, timeout=600.0
-            )
+            response = httpx.post(f"{settings.ollama_url}/api/embed", json={"model": name, "input": texts[start : start + EMBED_BATCH]}, timeout=600.0)
             response.raise_for_status()
             vectors += response.json()["embeddings"]
         except (httpx.HTTPError, KeyError, ValueError) as error:
-            raise ProviderError(f"embedding with {settings.embed_model} failed: {error}") from error
+            raise ProviderError(f"embedding with {name} failed: {error}") from error
     return vectors
 
 

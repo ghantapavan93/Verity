@@ -91,14 +91,18 @@ const STATUS_LABELS: Record<Exclude<FindingStatus, "pass">, string> = {
 export function statusLabel(status: FindingStatus, hasGuidance: boolean, source: string = "model_hint"): string {
   if (status === "pass") {
     if (!hasGuidance) return "Answered";
-    return source === "model_hint" ? "Within guidance (model's view)" : "Within guidance";
+    if (source === "model_hint") return "Within guidance (model's view)";
+    // The model proposed the pass and code confirmed it; had the model asked for review there would be no pass, so
+    // the label does not present it as a decision code made (policy-v2).
+    return source === "confirmed_days" ? "Within guidance (confirmed by code)" : "Within guidance";
   }
   return STATUS_LABELS[status];
 }
 
 export const STATUS_SOURCE_LABELS: Record<string, string> = {
   computed_days: "Status decided by code from the day counts",
-  model_hint: "Status taken from the model's hint; no comparable day counts",
+  confirmed_days: "Pass proposed by the model and confirmed by code from the day counts and the source text",
+  model_hint: "Status taken from the model's hint; code did not decide it",
   no_evidence: "No verified evidence, so no status was given",
   reference_check: "Lowered to needs review by code: the conclusion names a section this document does not have",
   position_check: "Lowered to needs review by code: the day count the model stated is not in the verified quote or the guidance",
@@ -110,6 +114,35 @@ const DECIDED_BY_CODE: ReadonlySet<string> = new Set(["computed_days", "position
 
 export function decidedByCode(source: string | null | undefined): boolean {
   return source != null && DECIDED_BY_CODE.has(source);
+}
+
+/**
+ * What code did about a finding's status, in the two words the interface heads it with. "Code confirmed" is not
+ * "Code decided": the pass was the model's proposal, and without it the same quote and guidance are not a pass.
+ */
+export function codeRole(source: string | null | undefined): "Code decided" | "Code confirmed" | "Code withheld" | "Code did not decide" {
+  if (decidedByCode(source)) return "Code decided";
+  if (source === "confirmed_days") return "Code confirmed";
+  return source === "no_evidence" ? "Code withheld" : "Code did not decide";
+}
+
+/**
+ * How a run's sections were chosen, said beside them. The API records it as a field (`retrievalMode`); a run recorded
+ * before it was one carries null, and nothing is claimed for it.
+ */
+export function retrievalNote(mode: RunView["retrievalMode"]): string {
+  if (mode === "opening_fallback")
+    return "retrieval ranked no section for this question: these are the opening sections, in document order, not ones chosen for it";
+  if (mode === "hybrid_match") return "lexical and embedding retrieval, in rank order: the first row was ranked first";
+  if (mode === "lexical_match") return "lexical retrieval, in rank order: the first row was ranked first";
+  return "in the order they were handed over; how they were chosen was not recorded for this run";
+}
+
+/** What the answer panel says about how much the model was given. */
+export function sectionsReadNote(mode: RunView["retrievalMode"], read: number, total: number): string {
+  return mode === "opening_fallback"
+    ? `retrieval ranked no section for this question, so the model was handed the opening ${read} of this document's ${total} sections`
+    : `the model was handed ${read} of this document's ${total} sections`;
 }
 
 export function citationLabel(section: SectionView): string {

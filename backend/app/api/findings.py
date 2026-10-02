@@ -58,7 +58,7 @@ def list_findings(document_id: str | None = Query(default=None, alias="documentI
                 status=finding.status,
                 evidence_kind="coverage" if finding.status == "missing" else "passage",
                 review=review_out(finding.review),
-                conclusion=finding.conclusion,
+                conclusion=finding.shown_conclusion,
                 verified_spans=count,
                 citations=citations,
                 has_guidance=run.guidance_id is not None,

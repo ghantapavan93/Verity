@@ -167,7 +167,8 @@ def value_for(run: Run) -> BatchValue:
                 return BatchValue(run_id=run.id, outcome="answered", value=finding.conclusion, status=finding.status, citation=citation, method=located.method)
     if any(f.status == "missing" for f in run.findings):
         first = next(f for f in run.findings if f.status == "missing")
-        return BatchValue(run_id=run.id, outcome="not_found", value=first.conclusion, status="missing")
+        # The product's sentence, not the model's: its own may state the absence about the whole agreement (models.NOT_FOUND_CONCLUSION).
+        return BatchValue(run_id=run.id, outcome="not_found", value=first.shown_conclusion, status="missing")
     return BatchValue(run_id=run.id, outcome="withheld", reason=run.reason)
 
 

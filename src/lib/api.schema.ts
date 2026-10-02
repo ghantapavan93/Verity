@@ -1107,6 +1107,11 @@ export interface components {
             guidanceReference: string | null;
             /** Id */
             id: string;
+            /**
+             * Modelconclusion
+             * @default
+             */
+            modelConclusion: string;
             /** Observed */
             observed: string | null;
             /** Required */
@@ -1125,7 +1130,7 @@ export interface components {
              * Statussource
              * @default
              */
-            statusSource: string;
+            statusSource: ("computed_days" | "confirmed_days" | "model_hint" | "no_evidence" | "reference_check" | "position_check" | "ambiguous_fact") | "";
             /** Suggestedposition */
             suggestedPosition: string | null;
             /** Topic */
@@ -1173,7 +1178,7 @@ export interface components {
              * Statussource
              * @default model_hint
              */
-            statusSource: string;
+            statusSource: ("computed_days" | "confirmed_days" | "model_hint" | "no_evidence" | "reference_check" | "position_check" | "ambiguous_fact") | "";
             /** Topic */
             topic: string;
             /** Verifiedspans */
@@ -1557,6 +1562,8 @@ export interface components {
             rawOutput: string | null;
             /** Reason */
             reason?: ("insufficient_evidence" | "citations_unverified" | "invalid_output" | "provider_error" | "internal_error") | null;
+            /** Retrievalmode */
+            retrievalMode?: ("lexical_match" | "hybrid_match" | "opening_fallback") | null;
             /**
              * Reused
              * @default false
@@ -1571,6 +1578,8 @@ export interface components {
             routingReason?: string | null;
             /** Sectionsread */
             sectionsRead?: number | null;
+            /** Sectionsrequested */
+            sectionsRequested?: number | null;
             /**
              * Stage
              * @enum {string}
@@ -1613,6 +1622,8 @@ export interface components {
             reproducibility: components["schemas"]["ExplanationReproducibility"];
             /** Retrieval */
             retrieval: components["schemas"]["ExplanationCandidate"][];
+            /** Retrievalmode */
+            retrievalMode?: ("lexical_match" | "hybrid_match" | "opening_fallback") | null;
             /** Runid */
             runId: string;
             /**
@@ -1659,6 +1670,8 @@ export interface components {
             question: string;
             /** Reason */
             reason?: ("insufficient_evidence" | "citations_unverified" | "invalid_output" | "provider_error" | "internal_error") | null;
+            /** Retrievalmode */
+            retrievalMode?: ("lexical_match" | "hybrid_match" | "opening_fallback") | null;
             /**
              * Reused
              * @default false
@@ -1671,6 +1684,8 @@ export interface components {
             reviewHead: string;
             /** Sectionsread */
             sectionsRead?: number | null;
+            /** Sectionsrequested */
+            sectionsRequested?: number | null;
             /**
              * Stage
              * @enum {string}
