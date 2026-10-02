@@ -207,6 +207,12 @@ function WorkbenchSurface() {
     [setGuidanceOpen],
   );
 
+  /** The first screen: where a contract is added. The mark on the rail and the palette's last command both lead here. */
+  const goHome = useCallback(() => {
+    navigate("assistant");
+    setStage("empty");
+  }, [navigate]);
+
   const openDocument = useCallback(
     async (id: string, show = true) => {
       setViewError(null);
@@ -394,15 +400,7 @@ function WorkbenchSurface() {
     list.push({ id: "go-documents", label: "Documents", group: "Go to", run: () => navigate("documents") });
     list.push({ id: "go-findings", label: "Findings", group: "Go to", run: () => navigate("findings") });
     list.push({ id: "go-runs", label: "Runs", group: "Go to", run: () => navigate("runs") });
-    list.push({
-      id: "go-new",
-      label: "Review another contract",
-      group: "Go to",
-      run: () => {
-        navigate("assistant");
-        setStage("empty");
-      },
-    });
+    list.push({ id: "go-new", label: "Review another contract", group: "Go to", run: goHome });
     for (const s of doc?.sections ?? []) {
       if (!s.number) continue;
       list.push({ id: `jump-${s.id}`, label: citationLabel(s), group: "Jump to", hint: "in document", run: () => jumpTo(s.id) });
@@ -447,10 +445,12 @@ function WorkbenchSurface() {
             stage={stage}
             processingLabel={processingLabel}
             pendingName={pendingName}
+            composerText={composerText}
+            setComposerText={setComposerText}
             onPickFile={() => fileInputRef.current?.click()}
             onLoadSample={() => void loadSample()}
             proof={proof}
-            onOpenProof={(id) => void openRun(id)}
+            onOpenProof={(id, findingId) => void openRun(id, findingId)}
             uploadError={uploadError}
             apiHealth={apiHealth}
             recent={recent}
@@ -461,7 +461,7 @@ function WorkbenchSurface() {
           />
         ) : (
           <motion.section key="shell" className={styles.workspace} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={morph}>
-            <Rail active={view} hasDocument={!!doc} onNavigate={navigate} onSearch={openSearch} />
+            <Rail active={view} hasDocument={!!doc} onNavigate={navigate} onSearch={openSearch} onHome={goHome} />
 
             <AnimatePresence mode="wait" initial={false}>
               {view !== "assistant" ? (

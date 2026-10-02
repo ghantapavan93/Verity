@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import styles from "./Landing.module.css";
 import { IconArrowRight, IconFile } from "../icons";
 import { transitions, type Stage } from "../shell/constants";
@@ -29,6 +29,8 @@ export function Landing({
   stage,
   processingLabel,
   pendingName,
+  composerText,
+  setComposerText,
   onPickFile,
   onLoadSample,
   proof,
@@ -44,10 +46,12 @@ export function Landing({
   stage: Stage;
   processingLabel: string;
   pendingName: string;
+  composerText: string;
+  setComposerText: Dispatch<SetStateAction<string>>;
   onPickFile: () => void;
   onLoadSample: () => void;
   proof: RunSummary | null;
-  onOpenProof: (runId: string) => void;
+  onOpenProof: (runId: string, findingId?: string) => void;
   uploadError: string | null;
   apiHealth: Health | null;
   recent: DocumentSummary[];
@@ -135,21 +139,37 @@ export function Landing({
             ) : stage === "dragging" ? (
               <div className={styles.releaseHint}>Release to add the contract</div>
             ) : (
-              <div className={styles.dropRow}>
-                <span className={styles.dropIcon} aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                </span>
-                <div className={styles.dropText}>
-                  <div className={styles.dropTitle}>Drop a contract here</div>
-                  <div className={styles.dropHint}>PDF, DOCX or TXT. It is read into numbered sections and stored with its SHA-256.</div>
+              <>
+                <textarea
+                  className={styles.dropInput}
+                  aria-label="Your question, asked once the contract is added"
+                  placeholder="Ask a question about the contract, then add it"
+                  rows={2}
+                  value={composerText}
+                  onChange={(e) => setComposerText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      onPickFile();
+                    }
+                  }}
+                />
+                <div className={styles.dropRow}>
+                  <span className={styles.dropIcon} aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                  <div className={styles.dropText}>
+                    <div className={styles.dropTitle}>Drop a contract here</div>
+                    <div className={styles.dropHint}>PDF, DOCX or TXT. It is read into numbered sections and stored with its SHA-256.</div>
+                  </div>
+                  <button type="button" className={styles.primary} aria-label="Add a contract" onClick={onPickFile}>
+                    Add a contract
+                  </button>
                 </div>
-                <button type="button" className={styles.primary} aria-label="Add a contract" onClick={onPickFile}>
-                  Add a contract
-                </button>
-              </div>
+              </>
             )}
           </motion.div>
 
@@ -251,7 +271,7 @@ export function Landing({
                 </div>
                 <div className={styles.receiptFoot}>
                   <span>{proof.hasGuidance ? "Checked against written guidance" : "Answered from the contract alone"}</span>
-                  <button type="button" className={styles.receiptOpen} onClick={() => onOpenProof(proof.id)} title={`Open run ${proof.id}`}>
+                  <button type="button" className={styles.receiptOpen} onClick={() => onOpenProof(proof.id, lead?.id)} title={`Open run ${proof.id}`}>
                     Open the review <IconArrowRight />
                   </button>
                 </div>

@@ -10,17 +10,19 @@ export function Rail({
   hasDocument,
   onNavigate,
   onSearch,
+  onHome,
 }: {
   active: View;
   hasDocument: boolean;
   onNavigate: (view: View) => void;
   onSearch: () => void;
+  onHome: () => void;
 }) {
   return (
     <nav className={styles.rail} aria-label="Primary">
-      <span className={styles.railMark} title="Verity">
+      <button type="button" className={styles.railMark} aria-label="Verity: the first screen" title="Verity" onClick={onHome}>
         <VerityMark size={20} />
-      </span>
+      </button>
       <RailButton label="Search (Ctrl K)" icon={<IconSearch />} onClick={onSearch} />
       <RailButton label="Documents" icon={<IconDocuments />} active={active === "documents"} onClick={() => onNavigate("documents")} />
       <RailButton

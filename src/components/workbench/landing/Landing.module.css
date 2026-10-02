@@ -100,18 +100,40 @@
   border-radius: var(--radius-l);
   border: 1px dashed var(--border-strong);
   background: var(--composer-bg);
-  padding: 22px 22px 20px;
+  padding: 16px 18px 16px;
   transition:
     border-color var(--dur) var(--ease),
     background var(--dur) var(--ease),
     box-shadow var(--dur) var(--ease);
 }
 
-.dropActive {
+.dropActive,
+.drop:focus-within {
   border-style: solid;
   border-color: var(--accent-line);
-  background: var(--accent-tint);
   box-shadow: var(--halo-active);
+}
+
+.dropActive {
+  background: var(--accent-tint);
+}
+
+.dropInput {
+  display: block;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 4px 2px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--text);
+  font: 400 16px/1.5 var(--font-sans);
+  resize: none;
+  outline: none;
+}
+
+.dropInput::placeholder {
+  color: var(--text-3);
 }
 
 .dropRow {
