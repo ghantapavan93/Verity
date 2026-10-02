@@ -97,7 +97,7 @@ def _review_line(finding: Finding) -> str:
 
 def _located(span: EvidenceSpan) -> str:
     if span.verified:
-        return f"verified verbatim · {span.method} · characters {span.start}–{span.end}"
+        return f"verified verbatim · {span.method} · characters {span.start} to {span.end}"
     return "not found in the document; withheld"
 
 
@@ -131,21 +131,36 @@ def _sources(findings: list[Finding], section_titles: dict[str, str]) -> list[So
 
 
 def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str], review_head: str = "") -> str:
-    date = datetime.now().astimezone().strftime("%d %B %Y")
+    now = datetime.now().astimezone()
+    date = f"{now.day} {now.strftime('%B %Y')}"
     issues = [f for f in findings if f.status in ("needs_review", "missing")]
     sources = _sources(findings, section_titles)
     by_span = {id(s.span): s for s in sources}
     parts = [
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'><title>Contract review memo</title>",
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Contract review memo</title>",
+        # The memo is set like the paper in the workbench: a serif page, sans labels, the cited passage on a brass rule.
         "<style>"
-        "body{font:15px/1.55 Georgia,serif;max-width:760px;margin:40px auto;padding:0 20px;color:#1b1a18}"
-        "h1{font-size:22px;letter-spacing:.02em}h2{font-size:16px;margin-top:28px}"
-        "dl{display:grid;grid-template-columns:140px 1fr;gap:6px 14px}dt{color:#6a655c}"
-        "blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #ccc}small{color:#6a655c}"
-        "table{border-collapse:collapse;font-size:13px}td,th{padding:4px 8px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}"
-        "a{color:#0b5cad}"
+        "html{background:#ece7dc}"
+        "body{font:16px/1.65 'Source Serif 4','Source Serif Pro',Georgia,serif;max-width:760px;margin:48px auto;padding:56px 64px 64px;"
+        "background:#f6f2e9;color:#1d1b17;box-shadow:0 0 0 1px #e1d9c8,0 30px 60px -30px rgba(0,0,0,.35);border-radius:3px}"
+        ".kicker{font:600 11px/1 system-ui,'Segoe UI',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#8a7a55}"
+        "h1{font-size:30px;font-weight:500;letter-spacing:-.01em;line-height:1.15;margin:10px 0 26px}"
+        "h2{font-size:18px;font-weight:600;margin:34px 0 8px;padding-top:18px;border-top:1px solid #e1d9c8}"
+        "dl{display:grid;grid-template-columns:140px 1fr;gap:8px 16px;margin:0;font-size:14.5px}"
+        "dt{font:600 11px/1.9 system-ui,'Segoe UI',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#6d675c}"
+        "dd{margin:0}"
+        "blockquote{margin:10px 0 14px;padding:10px 14px;background:#efe8d8;border-left:2px solid #b0852c;border-radius:2px}"
+        "small{color:#6d675c;font-family:system-ui,'Segoe UI',sans-serif;font-size:12.5px}"
+        "strong{font-family:system-ui,'Segoe UI',sans-serif;font-size:13px;font-weight:600}"
+        "table{width:100%;border-collapse:collapse;font:13px/1.5 system-ui,'Segoe UI',sans-serif}"
+        "td,th{padding:7px 8px;border-bottom:1px solid #e1d9c8;text-align:left;vertical-align:top}"
+        "th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#6d675c}"
+        "a{color:#7a5a1c;text-decoration-color:#c9a964;text-underline-offset:3px}"
+        "hr{border:0;border-top:1px solid #e1d9c8;margin:36px 0 14px}"
+        "@media (max-width:700px){body{margin:0;padding:28px 20px;border-radius:0}dl{grid-template-columns:1fr}}"
         "</style></head><body>",
-        "<h1>Contract Review Memo</h1>",
+        "<div class='kicker'>Verity · contract review memo</div><h1>Contract Review Memo</h1>",
         f"<dl><dt>Agreement</dt><dd>{escape(run.document.name)}</dd><dt>Date</dt><dd>{date}</dd><dt>Question</dt><dd>{escape(run.question)}</dd>",
         f"<dt>Guidance</dt><dd>{escape(run.guidance.text) if run.guidance else 'none supplied'}</dd>"
         f"<dt>Sections read</dt><dd>{escape(reading_line(run))}</dd></dl>",
