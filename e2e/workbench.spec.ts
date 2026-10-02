@@ -63,6 +63,8 @@ test("a question ends in a finding whose citation opens the document's own text"
   await page.getByTitle("Show in the document").first().click();
   const mark = page.locator("section[data-section] mark").first();
   await expect(mark).toBeVisible();
+  // On screen, not only in the document: the pane scrolls to the passage itself.
+  await expect(mark).toBeInViewport();
 
   await page.getByRole("button", { name: "Inspect evidence" }).first().click();
   const drawer = page.locator('[aria-label="Evidence"]');

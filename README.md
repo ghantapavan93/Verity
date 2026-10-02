@@ -39,7 +39,7 @@ the drawer opens the rest: the offsets, the hashes, what retrieval chose, the ex
 | Quality is a number with its failures named | golden set 37 of 44; the seven that fail are listed, with the rule for keeping a prompt change | `docs/GOLDENS.md` |
 | A crash neither loses nor fakes a result | the API killed mid-run under the real model: on restart the run is failed with the dead process named, and its stream ends | `DECISIONS.md` |
 | The model answers only about what it was handed, and the answer says how much that was | a prompt larger than the context window is refused, not cut (left to its default the model server evaluated 8,194 of 20,695 tokens and answered "30 days" where the text said 47); each answer states how many of the document's sections the model was handed (median 4.9% over 850 runs), and "not found" reads "not found in the sections read" | `DECISIONS.md` |
-| It is tested like it matters | 429 backend tests (eight Hypothesis properties, one Schemathesis fuzz), 24 hand mutants killed, 43 interface unit tests, 21 browser flows; no CI has run them, every one runs locally | [Checks](#checks) |
+| It is tested like it matters | 429 backend tests (eight Hypothesis properties, one Schemathesis fuzz), 24 hand mutants killed, 49 interface unit tests, 21 browser flows; no CI has run them, every one runs locally | [Checks](#checks) |
 | Ideas are allowed to die | three pre-registered experiments were killed by their own results before this was built; their records are on the Runs surface | `docs/` |
 
 The counts are of the store on 2026-10-02, after the release's own smoke run; every new run moves them, and
@@ -105,7 +105,7 @@ cd backend
 .venv/Scripts/python -m pytest -q                                                       # 429 tests, no model needed; seven Hypothesis properties of the verifier, one stateful property of the run record, one Schemathesis fuzz of every route (WORKBENCH_FUZZ_SCALE=20 for the deep pass)
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
-npm test                                                    # Vitest: the run follower, the API client, the evidence drawer, the explanation and the access gate, 43 tests
+npm test                                                    # Vitest: the run follower, the API client, the evidence drawer, the explanation, the access gate and the scroll to a cited passage, 49 tests
 npx playwright install chromium                             # once per machine: the browser the flows run in; the npm package alone does not bring it
 npm run e2e                                                 # Playwright: twenty-one browser flows, real API, the model's recorded answers replayed, faults by marker
 ```
@@ -234,7 +234,7 @@ repository and appear under this product's Runs surface as records.
 | Independent review | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true, recorded as delivered before any fix, with what changed after (`docs/REVIEW-INDEPENDENT.md`) |
 | Validation | what is proven, partial, missing and not justified, capability by capability, with the validator that holds each claim (`docs/VALIDATION.md`) |
 | Browser flows | twenty-one Playwright flows against the production build and the real API: the eight happy paths (landing, the finished review opened from it, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; and three flows the validation brief named: a review against guidance that ends in a finding with a status and the guidance in the drawer, a malformed upload refused with the reason and nothing opened, a refresh once the run is in the URL brings it back (the run id reaches the URL only when the run has finished, so this reloads after completion; a true mid-run refresh is unproven); traces kept on failure |
-| Checks | backend 429 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter, twenty-four hand mutants killed; interface 43 unit tests and 21 browser flows, tsc, eslint, prettier, production build; results page 23; all run locally. No CI has run: the workflow exists only on a local branch (see Checks) |
+| Checks | backend 429 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter, twenty-four hand mutants killed; interface 49 unit tests and 21 browser flows, tsc, eslint, prettier, production build; results page 23; all run locally. No CI has run: the workflow exists only on a local branch (see Checks) |
 
 ## What is deliberately not here yet
 
