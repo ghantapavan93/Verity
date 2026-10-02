@@ -3,9 +3,12 @@
 **A contract workbench that knows what not to trust.**
 
 Upload a contract and the guidance your legal team actually uses, ask a question, and get findings
-whose evidence opens the exact clause. A small local model proposes. Code verifies every quoted
-passage against the document's own text, decides the status, and records enough to rebuild the
-model's input byte for byte. A person confirms. It runs at $0: Qwen3 8B through Ollama on a laptop.
+whose evidence opens the exact clause. A small local model proposes. Code looks for every quoted
+passage in the document's own text and withholds a finding whose quote it cannot find. Where the
+guidance states a rule code can compare, a notice period against a minimum for example, code
+decides the status; everywhere else the status is the model's own hint, and the record says so.
+A run that recorded its input can be rebuilt from its record to the same hash. A person can confirm
+or dismiss each finding under a name they type. It runs at $0: Qwen3 8B through Ollama on a laptop.
 
 ![The evidence drawer on a recorded run: what the model proposed, what the source says, what code decided, what a person decided](docs/img/evidence-drawer.png)
 
@@ -20,7 +23,8 @@ for termination for convenience".
    section, and the finding says so.
 3. **Code decided.** The contract gives 60 days, the guidance requires 90: needs review. The model's
    hint decided nothing.
-4. **A person** confirmed it, and the decision is kept as a record.
+4. **A person** confirmed it. The decision is kept as a record under the name they typed; the
+   name is a label, not a login.
 
 The model made a plausible mistake, and the system around it knew what not to trust. "Prove it" in
 the drawer opens the rest: the offsets, the hashes, what retrieval chose, the exact input the model saw.
@@ -29,11 +33,12 @@ the drawer opens the rest: the offsets, the hashes, what retrieval chose, the ex
 
 | Claim | Measurement | Where |
 |---|---|---|
-| Any answer can be explained from its own record | 789 of 789 runs with a recorded input hash rebuild to the same SHA-256, across 847 runs and two prompt windows | `DECISIONS.md` |
-| The three views of a run agree | 774 of 774 complete runs: the run, its explanation and the findings record match on counts, statuses and verified quotes | `DECISIONS.md` |
+| A run can be rebuilt from its own record | 791 of 791 runs with a recorded input hash rebuild to the same SHA-256 (849 runs; 58 older ones recorded no hash and are reported as such); each under the prompt window it was made with, 5,000 or 6,000 characters | `DECISIONS.md` |
+| The three views of a run agree | 775 of 775 complete runs: the run, its explanation and the findings record match on counts, statuses, status sources, reviews and verified quotes (1,081 findings) | `DECISIONS.md` |
+| Code decides only what it can compute | of 1,199 recorded findings, code computed the status of 20 from a verified quote and the guidance, lowered 17 for a section reference the document does not have, and withheld 118 whose quotes it could not find; the other 1,044 carry the model's own hint, recorded as that (a pass under guidance then reads "Within guidance (model's view)") | the store, `DECISIONS.md` |
 | Quality is a number with its failures named | golden set 37 of 44; the seven that fail are listed, with the rule for keeping a prompt change | `docs/GOLDENS.md` |
 | A crash neither loses nor fakes a result | the API killed mid-run under the real model: on restart the run is failed with the dead process named, and its stream ends | `DECISIONS.md` |
-| It is tested like it matters | 308 backend tests (eight Hypothesis properties, one Schemathesis fuzz), 25 interface unit tests, 21 browser flows | [Checks](#checks) |
+| It is tested like it matters | 318 backend tests (eight Hypothesis properties, one Schemathesis fuzz), 24 hand mutants killed, 27 interface unit tests, 21 browser flows; no CI has run them, every one runs locally | [Checks](#checks) |
 | Ideas are allowed to die | three pre-registered experiments were killed by their own results before this was built; their records are on the Runs surface | `docs/` |
 
 Every decision, with the measurement that earned it or killed it, is in [`DECISIONS.md`](DECISIONS.md).
@@ -80,21 +85,21 @@ npm run api:types                          # regenerates src/lib/api.schema.ts f
 
 ## Checks
 
-The same commands are wired into `.github/workflows/checks.yml`, which also fails when
-`openapi.json` or `src/lib/api.schema.ts` differ from what the API generates, so the interface
-cannot drift from the backend. That workflow sits on branch `ci` and has not run yet: pushing it
-needs the `workflow` scope on the GitHub token, which has not been granted. Until it lands, every
-check below runs locally, by hand, before a push.
+**There is no CI on this repository. Every check below runs locally, by hand, before a push.**
+A workflow that runs the same commands (and fails when `openapi.json` or `src/lib/api.schema.ts`
+differ from what the API generates) is written, on a branch named `ci` that exists only on the
+development machine: pushing a workflow file needs the `workflow` scope on the GitHub token, which
+has not been granted, so it is not on GitHub and has never run. No badge claims otherwise.
 
 ```bash
 cd backend
 .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check .   # style and lint, pyproject.toml
 .venv/Scripts/python -m mypy                                                            # strict, app + scripts + tests
 .venv/Scripts/lint-imports                                                              # the three import contracts: verifier pure, providers blind, layers downward (.importlinter)
-.venv/Scripts/python -m pytest -q                                                       # 308 tests, no model needed; seven Hypothesis properties of the verifier, one stateful property of the run record, one Schemathesis fuzz of every route (WORKBENCH_FUZZ_SCALE=20 for the deep pass)
+.venv/Scripts/python -m pytest -q                                                       # 318 tests, no model needed; seven Hypothesis properties of the verifier, one stateful property of the run record, one Schemathesis fuzz of every route (WORKBENCH_FUZZ_SCALE=20 for the deep pass)
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
-npm test                                                    # Vitest: the run follower, the URL state and the explanation, 13 tests
+npm test                                                    # Vitest: the run follower, the API client, the evidence drawer and the explanation, 27 tests
 npx playwright install chromium                             # once per machine: the browser the flows run in; the npm package alone does not bring it
 npm run e2e                                                 # Playwright: twenty-one browser flows, real API, the model's recorded answers replayed, faults by marker
 ```
@@ -105,6 +110,11 @@ no drift, the interface checks, 10 unit tests, 20 browser flows. One step failed
 about the environment, not a defect of the application: on Windows, `python -m venv .venv` failed at
 `ensurepip` when the clone sat under a path with a short-name component (`C:\Users\NAME~1\AppData\…`);
 the same clone under `C:\Temp` set up cleanly. Clone to a plain path.
+
+The exercise was repeated on 2026-10-02 against the public `main` of the day before, and it failed: one
+backend test (the data audit still expected 20 browser flows after a twenty-first had been added and
+pushed without the backend suite being rerun). Everything else passed as written. The test is fixed, and
+a fresh clone of the commit about to be published is now a gate of every release (`DECISIONS.md`).
 
 The browser flows run the production build against the API, each on its own port and data
 directory. The model's answers were recorded once from Qwen3 8B (`e2e/replay.json`, written by
@@ -170,7 +180,7 @@ repository and appear under this product's Runs surface as records.
 | Finding, citation verification, citation navigation | work; every shown quote was located by code, offsets stored |
 | Evidence drawer, Findings → document, Runs, run record | work |
 | Memo HTML and DOCX | work, from stored findings, no second model call; the Word file carries the run in its properties (core and custom), links each citation to a bookmarked sources table, and links each source back to the run and finding in the workbench; opens in Word without repair |
-| Evidence pack | one zip per run: original bytes, canonical sections, the run record with hashes, every located span, and a dependency-free `verify.py` that re-checks all of it on any machine; a tampered pack fails |
+| Evidence pack | one zip per run: original bytes, canonical sections, the run record with hashes, every located span, and a dependency-free `verify.py` that re-checks the document bytes, the sections, the guidance, every located span and the rebuilt model input on any machine; a pack edited in any of those fails. The pack is not signed and does not recompute the status: an edited status or question in `run.json` is not something it can detect. The document is stored in the pack under a file name every system can create |
 | No matching evidence | `No supporting passage found`, with the sections searched |
 | Invalid model output | `Analysis couldn't complete` with Try again; the run is `failed`, not a verdict |
 | Citation mismatch | finding withheld; the run says so and keeps the raw output |
@@ -181,20 +191,21 @@ repository and appear under this product's Runs surface as records.
 | Sample licence | Common Paper CSA v2.1, CC BY 4.0; the bundled file's SHA-256 matches the corpus manifest |
 | Repeated request | the same bytes are one document and a run has one memo, by unique index, whatever two concurrent first requests do; same inputs return the existing run (`reused: true`); a failed run is retryable; a run interrupted by a restart is failed with the reason; an open event stream to it ends within a heartbeat, whichever process ended it; a worker that finds its run already ended keeps that record and does not raise |
 | Golden set | 44 questions on the sample in eleven categories (four with guidance and an expected status, two adversarial; the false-premise one fails today and says so in `docs/GOLDENS.md`); 37 of 44 under the current reader (Recording 5: answer-v3 at k = 6 also 37, one gain and one regression; answer-v2 at k = 10 38, three gains and two regressions with latency over the rule; neither adopted), judged by code under each prompt version and model; previous answer / new answer / what changed / better or worse on the Runs surface; `run_goldens.py --report`; the kill rule is `docs/GOLDENS.md` |
-| Verifier | exact → normalized → casefold → typed tokens (v5: numbers as values with their precision, words at word boundaries, punctuation nothing; "$1,500" is never "$15.00"), the search bounded to the characters the model was shown (the run's recorded window: 6,000 since 2026-10-01, 5,000 before), each span carrying how many places its quote occurs; section-label stripping; no similarity ratio (a 0.994 match hid a changed digit); `scripts/reverify.py` replays verification over recorded runs without a model call; v4 (2026-09-29) never cuts a bare number off a quote and keeps decimal points, replayed over 847 recorded spans with nothing changed |
+| Verifier | exact → normalized → casefold → typed tokens (numbers as values with their precision, words compared whole, punctuation nothing; "$1,500" is never "$15.00"; since v6, 2026-10-02, a space moved inside the letters is never forgiven, so "the rapist" is not "therapist", at the price of 7 of 1,475 recorded spans that had repaired the reader's own joins), the search bounded to the characters the model was shown (the run's recorded window: 6,000 since 2026-10-01, 5,000 before), each span carrying how many places its quote occurs; section-label stripping; no similarity ratio (a 0.994 match hid a changed digit); `scripts/reverify.py` replays verification over recorded runs without a model call; v4 (2026-09-29) never cuts a bare number off a quote and keeps decimal points, replayed over 847 recorded spans with nothing changed |
 | Citation record | counted from every answered run, not sampled (`GET /api/engineering/citations`, shown under Runs); at 2026-09-28 across 243 runs: 425 of 469 quoted passages verified (343 exact, 46 normalized, 5 casefold, 6 letters-and-digits, 15 after label stripping, 10 relocated to another candidate section) and 42 of 384 findings withheld |
-| Human review | a finding can be confirmed or dismissed by a named person, undone, and the state survives reload; append-only, idempotent; on the drawer and in the memo; Documents' "reviewed" comes from it |
+| Human review | a finding can be confirmed or dismissed under a typed name, undone, and the state survives reload; every decision is a new row and the latest row is the state, so two people deciding at once are both kept and the later commit stands; on the drawer and in the memo; Documents' "reviewed" comes from it. The name is what the browser sent: the application does not authenticate anyone (Cloudflare Access decides who may enter; the application does not read who that was), so "Confirmed by Pavan" is a recorded label, not proof of who clicked |
 | Reference check | a pass whose conclusion names a section the document does not have becomes needs review, by code, with the source shown; over the 398 recorded asserting findings it fires on 4, all wrong references, and never on the 25 that write a section's id as its number (`docs/GOLDENS.md`) |
 | Status wording | a pass reads "Within guidance" only when the run had guidance and code made the comparison, "Within guidance (model's view)" when the pass is the model's own hint, "Answered" without guidance, in the chip, the tables and the memo heading; the run and the findings list carry `hasGuidance` and `statusSource` |
-| Position check | the notice period is parsed by code from the verified quote and the requirement from the guidance (units, Decimal, "twenty-one (30) days" is ambiguous, a month is not thirty days); the model's numbers only choose among the quote's; a count it states that the evidence does not carry is needs review by code with the source shown, and a computed status carries its sentence; ceiling phrases ("no longer than", "up to", "not to exceed", …) and parenthesised or working-day counts parse; over 595 recorded findings none of the nine computed statuses disagreed with its quote |
-| Model input | the exact system and user messages of any run are rebuilt from the record and hash to what the checking stage wrote (`scripts/reconstruct_inputs.py`: 458 of 458 runs since the message format was fixed; the 57 before it are reported, not repaired); prompt files are frozen by `prompts/manifest.json` |
+| Position check | the notice period is parsed by code from the verified quote and the requirement from the guidance (units, Decimal, "twenty-one (30) days" is ambiguous, a month is not thirty days); the model's numbers only choose among the quote's, and a quote that states several periods ("90 days, unless …, in which case 10 days") is decided by code only when all of them lead to the same result, otherwise it is needs review as an ambiguous fact; a count it states that the evidence does not carry is needs review by code with the source shown, and a computed status carries its sentence; ceiling phrases ("no longer than", "up to", "not to exceed", …) and parenthesised or working-day counts parse; over 595 recorded findings none of the nine computed statuses disagreed with its quote |
+| Model input | the exact system and user messages of any run are rebuilt from the record and hash to what the checking stage wrote (791 of 791 runs that recorded an input hash, on 2026-10-02; the 58 older runs that recorded none are reported, not repaired); prompt files are frozen by `prompts/manifest.json` |
 | Why this answer | one read-only projection of the record (`GET /api/runs/{id}/explanation`); since 2026-10-01 the evidence drawer reads it in four layers (model proposed, source, code decided, human) and keeps the machinery behind "Prove it"; the full projection is rendered there and on the Runs record: what was read (reader, coverage), what retrieval chose (rank, the ContextSlice of each candidate, the characters that never reached the model), what the model saw (the input rebuilt and hashed against the checking stage, or the reason it could not be), what the model proposed (its own words and hint, parsed from the stored output by ordinal, or "not reconstructable"), what code established (each SourceMatch: cited section, located section, method, occurrences, offsets, inside the model-visible slice or not) and the status as recorded with its source and sentence; the interface decides nothing; the Phase 1 run (`docs/DEMO-PROOF.md`) is the acceptance case, as a unit test against its recorded explanation |
 | Stream and refresh | stage events carry ids and a reconnect is replayed from `Last-Event-ID`; the run id is in the URL as soon as the run exists, and the browser flow refreshes while the model is still answering and reattaches to the same run |
 | Not read, said so | a DOCX reading records what it did with each of seventeen parts (headers, footers, footnotes, comments, content controls, fields, numbering, …); the paper says "Not read by this reading: …", the evidence pack carries it; census of the 36 licensed contracts: 32 footers and 12 headers with real text are not read today, and the parser tournament (`docs/PARSER-COMPARISON.md`) decides whether a reader that reads them earns its place: Docling did not (256 of 292 exact quotes kept against the reader's 292, thirty to four hundred times the time) |
 | Admission to the model | calls in flight bounded per process, a person's questions served four to one over a corpus job, every call's queue wait on its stage row; measured against the live model: the person's waits halved (median 103 s to 46 s) for six percent on the batch's total (`docs/SCALE.md`) |
 | Hostile files | an entity bomb and three-thousand-deep nesting are refused as unreadable packages in under a fiftieth of a second; twenty thousand members are read in half a second; an external relationship makes no network call; each reaches the API as a 422 with the reason (`tests/test_hostile_packages.py`, `docs/FAILURE-ENVELOPE.md`) |
 | Memo revisions | a memo records the review state it describes; a later review earns a new memo, the earlier one is kept, and the Assistant says when a memo predates a review |
-| Immutable records | the database refuses any update or delete on a finished run, its stages, findings and spans (SQLite triggers); reviews and memos are separate rows |
+| Immutable records | the database refuses any update or delete on a finished run, its stages, findings and spans (SQLite triggers); reviews and memos are separate rows, appended by the code and not guarded by a trigger |
+| Rows and their files | a memo's DOCX and a document's original bytes are on disk before the row that names them is committed, so a crash leaves at most a file nothing points at, never a row whose file is missing; a failed write removes what it wrote; a store that is copied or restored serves its memos from where it is (fault injection, `tests/test_memo_atomicity.py`, `tests/test_upload_atomicity.py`) |
 | Failure matrix | provider unavailable, transport failure retried once, malformed and empty files, oversized upload, a DOCX that unpacks past 256 MB and a PDF over 2,000 pages (both 413 before parsing), memo asked twice, prompt change, reader version: one test per row in `backend/tests/test_failure_matrix.py`; stale runs in `backend/tests/test_api_flow.py` |
 | Stage record | every stage row has start, end, duration, status, attempt, input and output hashes and an error code; a run that has made no progress for four model timeouts plus a minute (the longest legitimate run: two validation rounds, each with one transport retry) is failed on the next read |
 | Model routing | a run carries its task and why its model answered it; the policy is empty until a smaller model is measured on the golden set (`docs/ROUTING.md`) |
@@ -202,7 +213,7 @@ repository and appear under this product's Runs surface as records.
 | Document families | structural fingerprints, exact Jaccard, single-linkage families, pairwise precision/recall/F1 against hand labels with the threshold sweep; finds the template family, not the suites (`docs/FAMILIES.md`) |
 | Interface performance | 2,001 sections on screen 1.6 s after navigation in the production build, citation jumps within two frames; no virtualisation, and the number that would earn it is written down (`docs/PERFORMANCE.md`) |
 | Lighthouse | landing 100/100/100/100 and workspace with a run 99/100/100/100 on the production build, LCP 0.7 s and 1.0 s; the one real finding, uncompressed API JSON, fixed with gzip and a test (`docs/PERFORMANCE.md`) |
-| Dependencies | every pin moves through Dependabot, weekly, grouped per ecosystem (`.github/dependabot.yml`); CodeQL code scanning is on the CI branch, pending the workflow scope |
+| Dependencies | every pin moves through Dependabot, weekly, grouped per ecosystem (`.github/dependabot.yml`); CodeQL code scanning is written on the local `ci` branch and has never run, for the same reason the checks workflow has not |
 | SkillOpt | Microsoft's skill optimizer run against the production answer path, the seed prompt as the skill, CUAD contracts disjoint from CUAD-30 as data, the goldens as the untouched judge: six steps, twelve analyst calls, zero edits proposed, answer-v2 stands; why, and what would change it, in `docs/SKILLOPT.md` |
 | Retrieval | BM25 scored against labels, 164 CUAD cases with experts' spans and 38 goldens: Recall@6 0.85 and 0.92; a hybrid with a local embedding model measured at 0.95 and 0.97 and built behind a setting; on the 44 goldens BM25 37, hybrid 40 with one regression, so BM25 stays the default by the rule (`docs/RETRIEVAL.md`) |
 | Failure envelope | one table of cases, expected, observed and the test that holds each; writing it found two 422s that were a 500 and a wrong reason (`docs/FAILURE-ENVELOPE.md`) |
@@ -211,8 +222,8 @@ repository and appear under this product's Runs surface as records.
 | Domain review | ten findings packed for a practising lawyer with five questions and room for disagreement, built from the record by document, model, prompt and retrieval (`backend/scripts/domain_review_pack.py`, `docs/DOMAIN-REVIEW.md`); not yet reviewed |
 | Independent review | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true, recorded as delivered before any fix, with what changed after (`docs/REVIEW-INDEPENDENT.md`) |
 | Validation | what is proven, partial, missing and not justified, capability by capability, with the validator that holds each claim (`docs/VALIDATION.md`) |
-| Browser flows | twenty Playwright flows against the production build and the real API: the seven happy paths (landing, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; and three flows the validation brief named: a review against guidance that ends in a finding with a status and the guidance in the drawer, a malformed upload refused with the reason and nothing opened, a refresh once the run is in the URL brings it back (the run id reaches the URL only when the run has finished, so this reloads after completion; a true mid-run refresh is unproven); traces kept on failure |
-| Checks | backend 308 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter, twenty-four hand mutants killed; interface 25 unit tests and 21 browser flows, tsc, eslint, prettier, production build; results page 23; the CI workflow runs all of it and fails on generated-type drift, and waits on branch `ci` for the token's workflow scope |
+| Browser flows | twenty-one Playwright flows against the production build and the real API: the eight happy paths (landing, the finished review opened from it, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; and three flows the validation brief named: a review against guidance that ends in a finding with a status and the guidance in the drawer, a malformed upload refused with the reason and nothing opened, a refresh once the run is in the URL brings it back (the run id reaches the URL only when the run has finished, so this reloads after completion; a true mid-run refresh is unproven); traces kept on failure |
+| Checks | backend 318 tests (eight Hypothesis properties, one Schemathesis fuzz), ruff, mypy strict, import-linter, twenty-four hand mutants killed; interface 27 unit tests and 21 browser flows, tsc, eslint, prettier, production build; results page 23; all run locally. No CI has run: the workflow exists only on a local branch (see Checks) |
 
 ## What is deliberately not here yet
 

@@ -253,3 +253,9 @@ renamed to make the number look stiller. Reader v5 is held by its own criterion,
 retains 377 of 377 exact quotes the record has over the 35 corpus and sample documents
 (`experiments/parser_tournament/run.py --adapters current`, `data/tournament/v5.json`), and by the sweep's fixtures
 (`tests/test_reader_sweep.py`). This recording is the baseline for the next prompt or option question.
+
+**Verifier v6, 2026-10-02: no recording made, and why none was needed.** The typed tier stopped forgiving a space
+moved inside the letters of a quote ("the rapist" had verified against "therapist"). Replayed over every verified
+span in the store, 7 of 1,475 (5 runs) verify today only because of that forgiveness, and none of them belongs to a
+golden question, so the same model outputs judged under v6 give the same 37 of 44. Recording 6c stands as the
+baseline; it was made under verifier v5 and says so. The model was not called.

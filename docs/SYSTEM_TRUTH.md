@@ -96,7 +96,8 @@ rows cannot change.
 ## E. Where the data comes from
 
 **Runtime user data.** Uploaded bytes are written once to `documents/{sha256}{ext}` under the data
-directory, after the commit and only if absent. Identity is the sha256 of the bytes; the document
+directory, only if absent (until 2026-10-02 after the commit; since then before it, written aside
+and renamed, so no document row exists without its bytes). Identity is the sha256 of the bytes; the document
 *id* is a random 16-hex string, not a hash prefix. The same bytes under the current reader version
 return the stored row (200, `reused: true`); an older parse of the same bytes is kept and a new row
 is created when the reader version changes; both share the file. Sections are stored as text rows;
@@ -221,7 +222,7 @@ text, and the interface highlights that slice. There is no similarity or fuzzy t
 | normalized | curly quotes and dashes unified, zero-width and bidi marks removed, whitespace runs collapsed, on both sides | letters, case, digits and all other punctuation identical, in order | quote style, dash style, line breaks, amount of whitespace |
 | casefold | normalized plus Unicode casefold | as normalized, minus case | capitalisation of defined terms |
 | alnum | letters and digits only, casefolded, on both sides; a full stop between two digits is kept as a decimal point (verifier v4) | the same letters and digits in the same order, none inserted or removed; "$15.00" is not "$1,500" and "1.5%" is not "15%" | punctuation and symbols otherwise, including a thousands separator ("1500" matches "1,500"); word splits ("not ice" matches "notice"); parentheses |
-| typed | `verify/tokens.py` (verifier v5, in place of alnum; measured over 1,058 recorded spans before wiring: keeps 52 of the 53 alnum spans, gains 3, moves none; replay over 1,299 after: +10, −0) | numbers as values (Decimal), words as letters at word boundaries, punctuation nothing; a match is whole tokens and carries its count of occurrences | a word join or split between words (the reader's own artefact, four spans in the record); nothing about digits |
+| typed | `verify/tokens.py` (**since verifier v6, 2026-10-02, words are compared whole and the join or split described in this row is no longer forgiven: it made "the rapist" equal to "therapist"; 7 of 1,475 recorded spans had needed it.** As written for verifier v5, in place of alnum; measured over 1,058 recorded spans before wiring: keeps 52 of the 53 alnum spans, gains 3, moves none; replay over 1,299 after: +10, −0) | numbers as values (Decimal), words as letters at word boundaries, punctuation nothing; a match is whole tokens and carries its count of occurrences | a word join or split between words (the reader's own artefact, four spans in the record); nothing about digits |
 | unprefixed:<tier> | the section's label (its number as written, then its heading) or its heading alone (at least two letters or digits) cut off the front of the quote, the remainder through the ladder; the number alone is never cut (verifier v4) | the remainder meets the tier; digits at the front of a quote are always part of what must be found | anything about the cut heading: "12.11 No Third-Party Beneficiary There are no…" is verified from "There are no…" |
 | relocated:<method> | the quote searched in the other handed candidates, in retrieval order | the quote exists in a section the model was given | that it came from the cited section; the found section is what is stored and shown |
 

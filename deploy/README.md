@@ -79,8 +79,25 @@ floor. It is not to be replaced by a cleaner one.
 
 No nginx or Caddy, no second hostname, no rate limiting beyond what Access gives, no separate data
 directory for the public instance: the store the Ivo engineer opens is the store the measurements
-were made in, so Runs shows the real record. The four commits behind this deployment are local
-until the link has been inspected; pushing is a separate decision.
+were made in, so Runs shows the real record.
+
+## What protects it, and what does not (measured 2026-10-02)
+
+At the edge, Cloudflare: HTTPS only (`http://` answers 301; `.dev` is on the browsers' HSTS preload
+list), and Access in front of every path, so a request without a session is a 302 to the sign-in
+page, for the interface and for `/api` alike, and a preflight from another origin is a 403. Nothing
+is cached at the edge (`cf-cache-status: DYNAMIC` on the page, the API and an evidence pack).
+
+In the application: no authentication of its own. Whoever passes Access can do everything, and the
+application does not read who passed (a reviewer's name is what the browser sent). CORS allows the
+one public origin; both servers listen on 127.0.0.1 only. The application sends no
+`Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options` or `Referrer-Policy`, and the
+interface still says `X-Powered-By: Next.js`: known, not fixed here.
+
+Logs under `backend/data/logs/deploy/` carry request ids, paths without query strings, statuses,
+durations, run and document ids, stages and restart events, and no contract text, guidance, prompt,
+model output or credential (searched for each on 2026-10-02). There is no rotation: one file per
+start, 745 KB after two days.
 
 ## Keeping the two servers up (2026-10-01)
 
@@ -101,6 +118,23 @@ an endpoint for it. Both servers listen on 127.0.0.1 only; the connector is thei
 
 Replaying the browser flows on this machine (`npm run e2e`) no longer touches the served bundle: they build into
 `.next-e2e` (playwright.config.ts sets `NEXT_DIST_DIR`), so `.next` stays the build the supervisor started.
+
+What this is, and is not: a laptop that restarts a server that died, while its owner is logged in. It is
+not high availability. Measured on a second instance with its own tag, port and store (2026-10-02): a
+port held by another process was retried at 5, 10, 20 and 40 s and the server came up by itself when
+the port was freed; a killed server was restarted; a stale pid file was overwritten; a stop file kept
+a new supervisor from starting. And the limits: if the supervisor itself is killed, the server it
+started keeps answering and nothing restarts that server when it dies (the tasks have no
+restart-on-failure setting and one trigger, logon). A logoff ends both tasks; after a reboot nothing
+runs until the account logs in, and until then the connector, a system service, answers 502.
+
+Copying the store: the database runs in WAL mode, and on 2026-10-02 the `-wal` file beside it held
+4 MB that a copy of `workbench.db` alone would have missed. A copy that is whole is made with SQLite's
+online backup (`sqlite3 workbench.db ".backup copy.db"`, or `Connection.backup` in Python) plus the
+`documents/` and `memos/` directories. That was tested, not automated: the copy opened under the
+application in another directory, the proof run and its explanation read back, its input rebuilt to
+the recorded hash, all four memos served with matching hashes, and 31 evidence packs from old and new
+runs verified themselves. Nothing schedules a backup.
 
 `deploy/supervise.ps1 -Name api|web` is the whole mechanism: start the server with its stdout and stderr in a stamped
 file under `backend/data/logs/deploy/`, wait for it to exit, write the exit code and how long it ran to
