@@ -349,7 +349,9 @@ Ten questions an Ivo engineer could ask after five minutes, derived from the imp
 
 Also true and quick to find: the CI workflow has never run (it sits on branch `ci`); the batch CLI
 and the API can write the same SQLite file at once, unmeasured; the "refresh mid-run" browser test
-reloads after the run has finished, because the run id reaches the URL only then.
+reloads after the run has finished, because the run id reaches the URL only then. **(Both since corrected:
+the workflow exists only on a local branch and no CI has run, which the README now says; the flow has
+reloaded mid-run since 2026-09-29, item 15 below.)**
 
 ## O. One-page system truth
 

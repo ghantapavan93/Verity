@@ -87,11 +87,13 @@ npm run api:types                          # regenerates src/lib/api.schema.ts f
 
 ## Checks
 
-**There is no CI on this repository. Every check below runs locally, by hand, before a push.**
+**No workflow on this repository runs the checks. Every check below runs locally, by hand, before a push.**
 A workflow that runs the same commands (and fails when `openapi.json` or `src/lib/api.schema.ts`
 differ from what the API generates) is written, on a branch named `ci` that exists only on the
 development machine: pushing a workflow file needs the `workflow` scope on the GitHub token, which
-has not been granted, so it is not on GitHub and has never run. No badge claims otherwise.
+has not been granted, so it is not on GitHub and has never run. No badge claims otherwise. The
+Actions tab is not empty for a different reason: it lists GitHub's own Dependabot update jobs (five
+on 2026-09-29, one of which failed), which open dependency pull requests and run none of these checks.
 
 ```bash
 cd backend
@@ -107,8 +109,9 @@ npm run e2e                                                 # Playwright: twenty
 ```
 
 A fresh clone of `main` at `c4dd415` was set up from this file alone on 2026-09-30 and every command
-above passed: the backend install and checks, 266 tests, the API on port 8000, the generated types with
-no drift, the interface checks, 10 unit tests, 20 browser flows. One step failed once, and it is a note
+passed as the file stood at that commit: the backend install and checks, the 266 tests it had then, the
+API on port 8000, the generated types with no drift, the interface checks, its 10 unit tests and 20
+browser flows. One step failed once, and it is a note
 about the environment, not a defect of the application: on Windows, `python -m venv .venv` failed at
 `ensurepip` when the clone sat under a path with a short-name component (`C:\Users\NAME~1\AppData\…`);
 the same clone under `C:\Temp` set up cleanly. Clone to a plain path.
@@ -116,11 +119,13 @@ the same clone under `C:\Temp` set up cleanly. Clone to a plain path.
 The exercise was repeated on 2026-10-02 against the public `main` of the day before, and it failed: one
 backend test (the data audit still expected 20 browser flows after a twenty-first had been added and
 pushed without the backend suite being rerun). Everything else passed as written. The test is fixed, and
-a fresh clone of the commit about to be published is now a gate of every release (`DECISIONS.md`).
+a fresh clone of the commit about to be published is now a gate of every release that changes code,
+tests or commands (`DECISIONS.md`); a commit that changes only documentation is checked for anything
+that reads the changed files instead.
 
 The browser flows run the production build against the API, each on its own port and data
 directory. The model's answers were recorded once from Qwen3 8B (`e2e/replay.json`, written by
-`WORKBENCH_PROVIDER=record`) and are replayed byte for byte, so CI runs the same flows with no
+`WORKBENCH_PROVIDER=record`) and are replayed byte for byte, so the flows need no
 GPU and no call to Ollama; a changed prompt or retrieval makes the replay refuse rather than
 answer differently, and re-recording is one command. Traces and screenshots are kept for failures only.
 
