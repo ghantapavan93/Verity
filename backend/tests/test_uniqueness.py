@@ -69,4 +69,4 @@ def test_a_concurrent_first_memo_is_handed_the_memo_that_won_with_its_file_intac
         assert memo is not None
         path = Path(memo.docx_path)
         assert path.exists() and sha256_file(path) == memo.docx_sha256, "the loser did not overwrite the winner's file"
-        assert not list(path.parent.joinpath("pending").glob("*.docx")), "the loser's file was removed"
+        assert [p.name for p in path.parent.rglob("*.docx")] == [path.name], "the loser's file was removed, here and under pending"

@@ -30,7 +30,7 @@ from lxml import etree
 
 from ..config import settings
 from ..hashing import sha256_file
-from ..models import EvidenceSpan, Finding, Run, iso, utcnow
+from ..models import EvidenceSpan, Finding, Run, as_utc, iso, utcnow
 
 # Characters XML 1.0 cannot carry (control characters other than tab, newline and return). python-docx refuses them
 # with a ValueError; a form feed pasted from a PDF into the guidance made the memo a 500 (hostile review, 2026-10-01).
@@ -83,7 +83,9 @@ def _review_line(finding: Finding) -> str:
     review = finding.review
     if review is None:
         return ""
-    when = review.created_at.astimezone().strftime("%d %B %Y")
+    # Stored in UTC and read back without a zone: say it is UTC before converting. Read as local time, a review
+    # made in the evening west of Greenwich was dated the next day (2026-10-02).
+    when = as_utc(review.created_at).astimezone().strftime("%d %B %Y")
     note = f": {review.note}" if review.note else ""
     return f"{review.verdict.capitalize()} by {review.reviewer} on {when}{note}"
 

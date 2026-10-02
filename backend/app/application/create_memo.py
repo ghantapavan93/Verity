@@ -7,6 +7,7 @@ from __future__ import annotations
 import shutil
 import uuid
 from dataclasses import dataclass
+from pathlib import Path, PureWindowsPath
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -34,6 +35,12 @@ def stored_memo(session: Session, run_id: str, head: str) -> Memo | None:
     return session.query(Memo).filter(Memo.run_id == run_id, Memo.review_head == head).first()
 
 
+def memo_file(memo: Memo) -> Path:
+    """Where a memo's DOCX is now: in this store's memos directory, under the name it was written with. The row keeps
+    the path it was written to; a store that has been copied or restored is read where it is, not where it was."""
+    return settings.data_dir / "memos" / PureWindowsPath(memo.docx_path).name
+
+
 def create_memo(session: Session, run_id: str) -> CreatedMemo:
     run = session.get(Run, run_id)
     if run is None:
@@ -47,24 +54,36 @@ def create_memo(session: Session, run_id: str) -> CreatedMemo:
     findings = [f for f in run.findings if f.status != "unresolved"]
     titles = {s.id: (f"§{s.number} {s.heading}".strip() if s.number else s.heading) for s in run.document.sections}
     html = memo_html(run, findings, titles, review_head=head)
-    # Written aside and moved into place once the row is in: a concurrent first request that loses the insert never
-    # touches the winner's file (found while tracing, 2026-09-29).
+    # The file is in place before the row exists, under a name no other request can have. The row used to be
+    # committed first and the file moved after it: a process that died between the two left a memo whose DOCX was
+    # never there, and every retry was handed that memo (fault injection, 2026-10-02). In this order the worst a
+    # crash leaves is a file with no row, which nothing points at. The name carries the request's token, so a
+    # concurrent first request that loses the insert removes its own file and never touches the winner's
+    # (found while tracing, 2026-09-29).
     memos_dir = settings.data_dir / "memos"
-    pending_dir = memos_dir / "pending" / uuid.uuid4().hex  # one directory per request, so a loser never touches a winner's file
+    token = uuid.uuid4().hex
+    pending_dir = memos_dir / "pending" / token
     pending_dir.mkdir(parents=True, exist_ok=True)
-    pending, digest = memo_docx(run, findings, titles, pending_dir, review_head=head)
-    path = memos_dir / f"memo-{run.id}-{head[:8]}.docx"
+    try:
+        pending, digest = memo_docx(run, findings, titles, pending_dir, review_head=head)
+        path = memos_dir / f"memo-{run.id}-{head[:8]}-{token[:8]}.docx"
+        pending.replace(path)
+    finally:
+        shutil.rmtree(pending_dir, ignore_errors=True)
     memo = Memo(run_id=run.id, review_head=head, docx_path=str(path), docx_sha256=digest, html=html)
     session.add(memo)
     try:
         session.commit()
     except IntegrityError:
         session.rollback()
-        shutil.rmtree(pending_dir, ignore_errors=True)
+        path.unlink(missing_ok=True)
         winner = stored_memo(session, run.id, head)
         if winner is None:
             raise
         return CreatedMemo(winner, created=False)
-    pending.replace(path)
-    shutil.rmtree(pending_dir, ignore_errors=True)
+    except BaseException:
+        # The row did not go in (the database refused, or the request was cut off): the file must not outlive it.
+        session.rollback()
+        path.unlink(missing_ok=True)
+        raise
     return CreatedMemo(memo, created=True)

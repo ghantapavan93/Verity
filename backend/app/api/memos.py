@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.orm import Session
 
 from ..application.create_memo import create_memo as create_memo_for_run
+from ..application.create_memo import memo_file
 from ..db import get_session
 from ..errors import NotFound
 from ..models import Memo
@@ -47,8 +48,12 @@ def memo_as_docx(memo_id: str, session: Session = Depends(get_session)) -> FileR
     memo = session.get(Memo, memo_id)
     if memo is None:
         raise NotFound("memo", memo_id)
+    path = memo_file(memo)
+    if not path.is_file():
+        # The record is intact and its file is not in this store: say that, rather than fail while opening it.
+        raise NotFound("memo file", memo_id)
     return FileResponse(
-        memo.docx_path,
+        path,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=f"review-memo-{memo.run_id}.docx",
     )
