@@ -9,6 +9,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // The browser flows build here (playwright.config.ts); until this line, linting after the flows had run
+    // linted their build output and failed.
+    ".next-e2e/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
