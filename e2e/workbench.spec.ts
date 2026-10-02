@@ -77,9 +77,10 @@ test("a question ends in a finding whose citation opens the document's own text"
     expect(comparable(highlighted)).toBe(comparable(quoted));
   }
 
-  // The drawer reads top-down: model proposed, source, code decided, human; the machinery sits behind "Prove it".
+  // The drawer reads top-down: the model, the source, code, the person; the machinery sits behind "Prove it".
+  // This question has no guidance, so code decided nothing about the status and the third heading says so.
   const heads = await drawer.getByRole("heading", { level: 4 }).allTextContents();
-  expect(heads).toEqual(["Model proposed", "Source", "Code decided", "Human"]);
+  expect(heads).toEqual(["Model proposed", "Source", "Code did not decide", "Human"]);
   await expect(drawer.getByTestId("layer-human")).toContainText(/decided|Confirmed|Dismissed/);
   // Prove it: the run explained from its record by the API, in the drawer, per finding.
   await drawer.getByRole("button", { name: "Prove it" }).click();
@@ -114,7 +115,7 @@ test("the most favoured nation question is not answered with an invented clause"
   await expect(page.getByText(/Unresolved|Closest provisions read/).first()).toBeVisible();
   const withheld = page.getByText("What the model proposed · withheld by the verifier");
   const nothing = page.getByText("No supporting passage found");
-  const coverage = page.getByText(/Closest provisions read · \d+ · none states the point/);
+  const coverage = page.getByText(/Closest provisions read · \d+ · the model found none that states the point/);
   await expect(withheld.or(nothing).or(coverage).first()).toBeVisible();
   await expect(page.getByText(/Evidence · \d+ verified passage/)).toHaveCount(0);
 });

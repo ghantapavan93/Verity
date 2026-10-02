@@ -77,7 +77,8 @@ export const REASON_TITLES: Record<RunReason, string> = {
 
 const STATUS_LABELS: Record<Exclude<FindingStatus, "pass">, string> = {
   needs_review: "Needs review",
-  missing: "Not found",
+  // About the sections the model was handed, never about the agreement (prompt rule 8).
+  missing: "Not found in the sections read",
   unresolved: "Unresolved",
 };
 
@@ -86,7 +87,8 @@ const STATUS_LABELS: Record<Exclude<FindingStatus, "pass">, string> = {
  * When the pass is the model's own hint rather than a comparison code made, the label says so: the sweep of
  * 2026-10-01 found "Within guidance" on findings that said the contract provides no notice period at all.
  */
-export function statusLabel(status: FindingStatus, hasGuidance: boolean, source: string = "computed_days"): string {
+// A caller that does not say who decided gets the weaker claim, never "code decided".
+export function statusLabel(status: FindingStatus, hasGuidance: boolean, source: string = "model_hint"): string {
   if (status === "pass") {
     if (!hasGuidance) return "Answered";
     return source === "model_hint" ? "Within guidance (model's view)" : "Within guidance";
@@ -100,8 +102,15 @@ export const STATUS_SOURCE_LABELS: Record<string, string> = {
   no_evidence: "No verified evidence, so no status was given",
   reference_check: "Lowered to needs review by code: the conclusion names a section this document does not have",
   position_check: "Lowered to needs review by code: the day count the model stated is not in the verified quote or the guidance",
-  ambiguous_fact: "Lowered to needs review by code: the quote states a duration two ways that disagree",
+  ambiguous_fact: "Lowered to needs review by code: the quote does not state one period (its words and digits disagree, or its periods differ)",
 };
+
+/** The sources under which code, not the model, decided the status (the API's DETERMINISTIC_SOURCES). */
+const DECIDED_BY_CODE: ReadonlySet<string> = new Set(["computed_days", "position_check", "ambiguous_fact", "reference_check"]);
+
+export function decidedByCode(source: string | null | undefined): boolean {
+  return source != null && DECIDED_BY_CODE.has(source);
+}
 
 export function citationLabel(section: SectionView): string {
   return section.number ? `§${section.number} · ${section.heading}` : section.heading;

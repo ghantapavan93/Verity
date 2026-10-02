@@ -52,7 +52,7 @@ PROPOSAL_NOT_RECONSTRUCTABLE = "Model proposal not reconstructable for this run.
 SOURCE_SUMMARIES: dict[str, str] = {
     "computed_days": "the status was computed by code from the duration in the verified quote and the rule in the guidance",
     "position_check": "lowered to needs review by code: the day count the model stated is not in the verified quote or the guidance",
-    "ambiguous_fact": "lowered to needs review by code: the verified quote states a duration two ways that disagree",
+    "ambiguous_fact": "lowered to needs review by code: the verified quote does not state one period (its words and digits disagree, or its periods differ)",
     "reference_check": "lowered to needs review by code: the conclusion names a section this document does not have",
     "model_hint": "no deterministic policy evaluation: the status is the model's hint; no comparable durations were found in the quote and the guidance",
     "no_evidence": "no deterministic policy evaluation: no status was given, because a quoted passage could not be verified",

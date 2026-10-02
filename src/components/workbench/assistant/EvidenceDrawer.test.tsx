@@ -107,6 +107,9 @@ describe("EvidenceDrawer", () => {
     expect(await within(model).findByText("Within guidance (model's view)")).toBeTruthy();
     expect(model.textContent).toContain("“60 days' written notice” against “at least 90 days”");
     expect(model.textContent).toContain("1 passage; 1 verified");
+    // What the model suggested and where it pointed in the guidance are the model's, and sit in its layer.
+    expect(model.textContent).toContain("It suggested90 days' written notice");
+    expect(model.textContent).toContain("It pointed at");
 
     // Source: the quote, how it verified, and where it was found in words.
     const source = within(drawer).getByTestId("layer-source");
@@ -119,6 +122,10 @@ describe("EvidenceDrawer", () => {
     expect(within(code).getByRole("heading", { name: "Guidance" })).toBeTruthy();
     expect(code.textContent).toContain("the contract provides 60 calendar days; the guidance requires at least 90 calendar days");
     expect(within(code).getByText("Needs review")).toBeTruthy();
+    // Nothing the model wrote sits under "Code decided": not its phrase for what it observed, not its suggestion.
+    expect(code.textContent).not.toContain("60 days' written notice");
+    expect(code.textContent).not.toContain("Suggested position");
+    expect(code.textContent).toContain("Decided by code");
 
     // Human: the person's decision, as recorded, with the control to change it.
     const human = within(drawer).getByTestId("layer-human");
@@ -134,6 +141,27 @@ describe("EvidenceDrawer", () => {
     expect(proof.textContent).toContain("ModelProposal");
     expect(proof.textContent).toContain("sec_4");
     expect(api.getRunExplanation).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not head a status the model gave with Code decided", async () => {
+    const hinted = {
+      ...finding(null),
+      status: "pass",
+      statusSource: "model_hint",
+      statusReason: null,
+    } as unknown as FindingView;
+    renderDrawer(hinted);
+    const drawer = screen.getByLabelText("Evidence");
+    const heads = within(drawer)
+      .getAllByRole("heading", { level: 4 })
+      .map((h) => h.textContent);
+    expect(heads).toEqual(["Model proposed", "Source", "Code did not decide", "Human"]);
+    const code = within(drawer).getByTestId("layer-code");
+    expect(code.textContent).toContain("the model's hint stands as its view");
+    expect(code.textContent).not.toContain("Decided by code");
+    expect(within(code).getByText("Within guidance (model's view)")).toBeTruthy();
+    expect(within(code).getByRole("heading", { name: "Guidance given" })).toBeTruthy();
+    await screen.findByText("Its hint");
   });
 
   it("records a decision from the drawer under a remembered name and hands the review back", async () => {

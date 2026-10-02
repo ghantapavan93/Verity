@@ -117,7 +117,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                         <span
                           key={c}
                           className={styles.tag}
-                          title={r.evidenceKind === "coverage" ? "Read while searching; does not state the point" : "Verified passage"}
+                          title={r.evidenceKind === "coverage" ? "Read while searching; in the model's view it does not state the point" : "Verified passage"}
                         >
                           {r.evidenceKind === "coverage" ? `searched ${c}` : c}
                         </span>

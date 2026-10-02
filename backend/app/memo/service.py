@@ -41,7 +41,8 @@ def xml_safe(text: str) -> str:
     return _XML_UNSAFE.sub("", text)
 
 
-STATUS_LABELS = {"needs_review": "Needs review", "missing": "Not found", "unresolved": "Unresolved"}
+# "Not found" is a statement about the sections the model was handed, never about the agreement (prompt rule 8).
+STATUS_LABELS = {"needs_review": "Needs review", "missing": "Not found in the sections read", "unresolved": "Unresolved"}
 
 
 def status_label(status: str, with_guidance: bool, source: str = "computed_days") -> str:

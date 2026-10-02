@@ -13,6 +13,7 @@ import { formatWhen } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
 import {
   citationLabel,
+  decidedByCode,
   statusLabel,
   type FindingStatus,
   type FindingView,
@@ -153,6 +154,32 @@ function EvidenceBody({
             </div>
           </dl>
         )}
+        {/* The model's own fields as the run stored them: shown here whether or not the proposal could be rebuilt. */}
+        {(finding.guidanceReference || finding.suggestedPosition || (!proposal && (finding.observed || finding.required))) && (
+          <dl className={styles.drawerFacts}>
+            {!proposal && (finding.observed || finding.required) && (
+              <div>
+                <dt>In its words</dt>
+                <dd>
+                  {finding.observed ? `“${finding.observed}”` : "nothing observed"}
+                  {finding.required ? ` against “${finding.required}”` : ""}
+                </dd>
+              </div>
+            )}
+            {finding.guidanceReference && (
+              <div>
+                <dt>It pointed at</dt>
+                <dd>“{finding.guidanceReference}”</dd>
+              </div>
+            )}
+            {finding.suggestedPosition && (
+              <div>
+                <dt>It suggested</dt>
+                <dd>{finding.suggestedPosition}</dd>
+              </div>
+            )}
+          </dl>
+        )}
       </section>
 
       <section className={styles.drawerSection} data-testid="layer-source">
@@ -174,7 +201,7 @@ function EvidenceBody({
                 {!span.verified
                   ? `Not found verbatim in the document · withheld${span.citedSectionLabel ? ` · the model cited ${span.citedSectionLabel}` : ""}`
                   : finding.evidenceKind === "coverage"
-                    ? "Verified verbatim · the closest provision read; it does not state the point"
+                    ? "Verified verbatim · the closest provision read; in the model's view it does not state the point"
                     : `Verified verbatim in the document text · ${span.method}`}
               </span>
               {span.verified && match && (
@@ -196,29 +223,18 @@ function EvidenceBody({
       </section>
 
       <section className={styles.drawerSection} data-testid="layer-code">
-        <h4>Code decided</h4>
-        {(finding.guidanceReference || guidance) && (
+        {/* The heading is a claim. It says "Code decided" only under a source where code did; the model's own phrases,
+            its pointer into the guidance and its suggestion are in the layer above, never here. */}
+        <h4>{decidedByCode(finding.statusSource) ? "Code decided" : finding.statusSource === "no_evidence" ? "Code withheld" : "Code did not decide"}</h4>
+        {guidance && (
           <>
-            <h5 className={styles.drawerSubhead}>Guidance</h5>
-            {finding.guidanceReference && <div className={styles.drawerRefStatic}>{finding.guidanceReference}</div>}
-            {guidance && guidance !== finding.guidanceReference && <blockquote className={styles.drawerQuote}>“{guidance}”</blockquote>}
+            <h5 className={styles.drawerSubhead}>{decidedByCode(finding.statusSource) ? "Guidance" : "Guidance given"}</h5>
+            <blockquote className={styles.drawerQuote}>“{guidance}”</blockquote>
           </>
         )}
         <dl className={styles.drawerFacts}>
-          {finding.observed && (
-            <div>
-              <dt>Observed</dt>
-              <dd>{finding.observed}</dd>
-            </div>
-          )}
-          {finding.required && (
-            <div>
-              <dt>Required</dt>
-              <dd>{finding.required}</dd>
-            </div>
-          )}
           <div>
-            <dt>{finding.statusReason ? "Decided by code" : "Decided"}</dt>
+            <dt>{decidedByCode(finding.statusSource) ? "Decided by code" : "Status"}</dt>
             <dd>
               {finding.statusReason ??
                 (finding.statusSource === "model_hint"
@@ -235,11 +251,6 @@ function EvidenceBody({
             </dd>
           </div>
         </dl>
-        {finding.suggestedPosition && (
-          <p className={styles.drawerPosition}>
-            <strong>Suggested position.</strong> {finding.suggestedPosition}
-          </p>
-        )}
       </section>
 
       <HumanLayer finding={finding} onReviewed={onReviewed} />

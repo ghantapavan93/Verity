@@ -181,6 +181,7 @@ export function AssistantPanel({
                     {run.reused ? "answered earlier for this exact question · " : ""}
                     {run.model} · prompt {run.promptVersion} · {run.latencyMs !== null ? `${(run.latencyMs / 1000).toFixed(0)} s` : ""} · every citation
                     verified against the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}
+                    {run.sectionsRead != null && doc ? ` · the model was handed ${run.sectionsRead} of this document's ${doc.sections.length} sections` : ""}
                   </p>
                 </motion.div>
               ) : (
