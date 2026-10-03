@@ -6,7 +6,8 @@ import styles from "../Workbench.module.css";
 import { transitions } from "../shell/constants";
 import { formatWhen, plural } from "@/lib/format";
 import { codePointLength, splitByCodePoints } from "@/lib/text";
-import type { DocumentView, SectionView, SpanView } from "@/lib/types";
+import { EvidenceSpine } from "./EvidenceSpine";
+import type { DocumentView, FindingView, LocatedSpan, SectionView, SpanView } from "@/lib/types";
 
 /** The passage to mark: a section, and within it the exact span the API located. */
 export interface Highlight {
@@ -38,6 +39,8 @@ export function DocumentPane({
   highlight,
   reduceMotion,
   paneRef,
+  findings = [],
+  onJump,
 }: {
   doc: DocumentView | null;
   isSample: boolean;
@@ -45,6 +48,9 @@ export function DocumentPane({
   highlight: Highlight | null;
   reduceMotion: boolean;
   paneRef: Ref<HTMLDivElement>;
+  /** The run on screen's findings, for the spine of marks down the paper's edge. */
+  findings?: FindingView[];
+  onJump?: (sectionId: string, span: LocatedSpan) => void;
 }) {
   const { morph } = transitions(reduceMotion);
   const docMeta = doc ? describe(doc) : "";
@@ -58,6 +64,7 @@ export function DocumentPane({
       animate={{ opacity: 1, x: 0 }}
       transition={{ ...morph, delay: reduceMotion ? 0 : 0.05 }}
     >
+      {doc && onJump && <EvidenceSpine doc={doc} findings={findings} highlight={highlight} onJump={onJump} />}
       <header className={styles.docHeader}>
         <div className={styles.docKicker}>Contract</div>
         <div className={styles.docTitle}>{doc?.name}</div>

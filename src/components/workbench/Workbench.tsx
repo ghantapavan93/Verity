@@ -486,7 +486,16 @@ function WorkbenchSurface() {
                     <p>The contract text needs a wider window. Findings, evidence and the record work at this size.</p>
                   </div>
                   <div className={styles.split} style={{ gridTemplateColumns: `${split.docWidth}% 8px minmax(0, 1fr)` }}>
-                    <DocumentPane doc={doc} isSample={isSample} lit={lit} highlight={highlight} reduceMotion={reduceMotion} paneRef={docPaneRef} />
+                    <DocumentPane
+                      doc={doc}
+                      isSample={isSample}
+                      lit={lit}
+                      highlight={highlight}
+                      reduceMotion={reduceMotion}
+                      paneRef={docPaneRef}
+                      findings={run?.stage === "complete" ? run.findings : []}
+                      onJump={jumpTo}
+                    />
                     <Divider docWidth={split.docWidth} setDocWidth={split.setDocWidth} onPointerDown={split.startDrag} />
                     <AssistantPanel
                       doc={doc}

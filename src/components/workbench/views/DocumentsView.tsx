@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import wb from "../Workbench.module.css";
 import styles from "./Views.module.css";
 import { Figures } from "./Figures";
+import { ListSkeleton, ReadFailed } from "./Skeleton";
 import { IconArrowRight } from "../icons";
 import { listDocuments } from "@/lib/api";
 import { formatWhen, plural } from "@/lib/format";
@@ -22,6 +23,7 @@ export function DocumentsView({
 }) {
   const [documents, setDocuments] = useState<DocumentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +33,7 @@ export function DocumentsView({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
 
   return (
     <div className={styles.pane}>
@@ -57,7 +59,18 @@ export function DocumentsView({
             ]}
           />
         )}
-        {(notice || error) && <p className={styles.notice}>{notice ?? error}</p>}
+        {notice && <p className={styles.notice}>{notice}</p>}
+        {error && (
+          <ReadFailed
+            what="the contracts"
+            error={error}
+            onRetry={() => {
+              setError(null);
+              setAttempt((n) => n + 1);
+            }}
+          />
+        )}
+        {!documents && !error && <ListSkeleton rows={6} label="Contracts" />}
 
         {documents && documents.length === 0 && (
           <div className={styles.empty}>

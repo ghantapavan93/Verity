@@ -7,6 +7,7 @@ import { useRunExplanation } from "../hooks/useRunExplanation";
 import { IconCheck, IconClose } from "../icons";
 import { EASE } from "../shell/constants";
 import { StatusChip } from "../shell/primitives";
+import { DayGauge, readComparison } from "./DayGauge";
 import { WhyThisAnswer } from "./WhyThisAnswer";
 import { errorMessage, reviewFinding } from "@/lib/api";
 import { formatWhen } from "@/lib/format";
@@ -126,6 +127,8 @@ function EvidenceBody({
   // The layer where the status on screen was set: the model's, when its hint stands; otherwise code's.
   const setByModel = finding.statusSource === "model_hint";
   const setTag = <span className={styles.layerTag}>{confirmed ? "Confirmed here" : "Status set here"}</span>;
+  // The comparison code wrote, as a picture, when its sentence parses exactly (DayGauge.tsx).
+  const comparison = readComparison(finding.statusReason);
 
   const relocated = explained?.sourceMatches.some((m) => m?.relocated) ?? false;
   const overruled = !setByModel && proposal !== null && proposal.statusHint !== finding.status;
@@ -299,6 +302,7 @@ function EvidenceBody({
             <blockquote className={styles.guidanceQuote}>{guidance}</blockquote>
           </div>
         )}
+        {(decidedByCode(finding.statusSource) || confirmed) && comparison && <DayGauge comparison={comparison} />}
         <dl className={styles.drawerFacts}>
           <div>
             <dt>{decidedByCode(finding.statusSource) ? "Decided by code" : confirmed ? "Confirmed by code" : "Status"}</dt>

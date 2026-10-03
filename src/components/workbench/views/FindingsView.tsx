@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import wb from "../Workbench.module.css";
 import styles from "./Views.module.css";
 import { Figures } from "./Figures";
+import { ListSkeleton, ReadFailed } from "./Skeleton";
 import { errorMessage, listFindings, reviewFinding } from "@/lib/api";
 import { formatWhen, plural } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
@@ -34,6 +35,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pending, setPending] = useState<{ id: string; verdict: Decision } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +45,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
 
   // Grouped by document, newest run first, in the order the API returned them.
   const groups = useMemo(() => {
@@ -106,7 +108,19 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
             ]}
           />
         )}
-        {(notice || error) && <p className={styles.notice}>{notice ?? error}</p>}
+        {notice && <p className={styles.notice}>{notice}</p>}
+        {error && !records && (
+          <ReadFailed
+            what="the findings"
+            error={error}
+            onRetry={() => {
+              setError(null);
+              setAttempt((n) => n + 1);
+            }}
+          />
+        )}
+        {error && records && <p className={styles.notice}>{error}</p>}
+        {!records && !error && <ListSkeleton rows={6} label="Findings" />}
 
         {records && records.length === 0 && (
           <div className={styles.empty}>

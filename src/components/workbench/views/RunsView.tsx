@@ -14,6 +14,7 @@ import { TERMINAL } from "../shell/constants";
 import styles from "./Views.module.css";
 import { statusTone } from "./FindingsView";
 import { Figures, MethodBar } from "./Figures";
+import { ListSkeleton, ReadFailed } from "./Skeleton";
 import { absolute, getBatch, getCitations, getExperiments, getFamilies, getGoldens, getRunDetail, listBatches, listRuns } from "@/lib/api";
 import { formatClock, formatDelta, formatLatency, formatWhen, plural, shortHash } from "@/lib/format";
 import {
@@ -92,6 +93,7 @@ export function RunsView({
   const [selected, setSelected] = useState<RunDetailView | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +145,7 @@ export function RunsView({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
 
   const select = async (id: string) => {
     setLoadingId(id);
@@ -207,7 +209,19 @@ export function RunsView({
             Interface built from commit <code>{BUILD_SHA.slice(0, 12)}</code>; the API record names the reader, verifier, prompt and model of each run.
           </p>
         )}
-        {(notice || error) && <p className={styles.notice}>{notice ?? error}</p>}
+        {notice && <p className={styles.notice}>{notice}</p>}
+        {error && !runs && (
+          <ReadFailed
+            what="the runs"
+            error={error}
+            onRetry={() => {
+              setError(null);
+              setAttempt((n) => n + 1);
+            }}
+          />
+        )}
+        {error && runs && <p className={styles.notice}>{error}</p>}
+        {!runs && !error && <ListSkeleton rows={8} label="Runs" />}
 
         <nav className={styles.jump} aria-label="On this page">
           <a href="#runs">Runs</a>
