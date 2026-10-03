@@ -271,7 +271,7 @@ function WorkbenchSurface() {
     [doc, stopRun, showRun, setGuidance, setGuidanceDraft, resetMemo, setRunError],
   );
 
-  useUrlState({ view, doc, stage, run, openRun, openDocument, navigate });
+  useUrlState({ view, doc, stage, run, findingId: evidence?.id ?? null, openRun, openDocument, navigate, goHome });
 
   // Reviews are made on the Findings surface; when the Assistant is shown again its finished run is re-read from the
   // record, so the drawer's review state and the memo's review head are the record's, not a stale copy.
@@ -447,6 +447,7 @@ function WorkbenchSurface() {
             pendingName={pendingName}
             composerText={composerText}
             setComposerText={setComposerText}
+            onHome={goHome}
             onPickFile={() => fileInputRef.current?.click()}
             onLoadSample={() => void loadSample()}
             proof={proof}
@@ -460,7 +461,7 @@ function WorkbenchSurface() {
             reduceMotion={reduceMotion}
           />
         ) : (
-          <motion.section key="shell" className={styles.workspace} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={morph}>
+          <motion.section key="shell" id="main" tabIndex={-1} className={styles.workspace} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={morph}>
             <Rail active={view} hasDocument={!!doc} onNavigate={navigate} onSearch={openSearch} onHome={goHome} />
 
             <AnimatePresence mode="wait" initial={false}>

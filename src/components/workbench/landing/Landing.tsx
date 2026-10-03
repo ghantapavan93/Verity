@@ -32,6 +32,7 @@ export function Landing({
   pendingName,
   composerText,
   setComposerText,
+  onHome,
   onPickFile,
   onLoadSample,
   proof,
@@ -49,6 +50,7 @@ export function Landing({
   pendingName: string;
   composerText: string;
   setComposerText: Dispatch<SetStateAction<string>>;
+  onHome: () => void;
   onPickFile: () => void;
   onLoadSample: () => void;
   proof: RunSummary | null;
@@ -99,6 +101,7 @@ export function Landing({
   return (
     <motion.section
       id="main"
+      tabIndex={-1}
       className={styles.page}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -106,7 +109,9 @@ export function Landing({
       transition={quick}
     >
       <header className={styles.topbar}>
-        <Brand />
+        <button type="button" className={styles.home} aria-label="Verity: the first screen" onClick={onHome}>
+          <Brand />
+        </button>
         <span className={styles.preview}>
           <span className={styles.previewDot} aria-hidden="true" />
           Private preview

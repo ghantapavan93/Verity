@@ -93,7 +93,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
   if (state === "checking") return <div className={styles.root} data-stage="empty" aria-busy="true" />;
   return (
     <div className={styles.root} data-stage="empty">
-      <section id="main" className={door.page} aria-label="Private preview">
+      <section id="main" tabIndex={-1} className={door.page} aria-label="Private preview">
         <header className={door.topbar}>
           <Brand />
           <span className={door.preview}>

@@ -16,6 +16,20 @@
   border-bottom: 1px solid var(--hairline);
 }
 
+.home {
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.home:hover {
+  background: var(--surface-2);
+}
+
 .preview {
   display: inline-flex;
   align-items: center;

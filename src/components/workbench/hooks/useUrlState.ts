@@ -9,40 +9,95 @@ interface UrlStateArgs {
   doc: DocumentView | null;
   stage: Stage;
   run: RunView | null;
+  /** The finding whose evidence is open, if any: written as `finding`, so Back reopens it and a link carries it. */
+  findingId: string | null;
   openRun: (runId: string, findingId: string | null, show: boolean) => Promise<void>;
   openDocument: (documentId: string, show: boolean) => Promise<void>;
   navigate: (view: View) => void;
+  goHome: () => void;
+}
+
+/** Moves within this many milliseconds of each other are one move: a click that loads a run passes through several states. */
+const COALESCE_MS = 600;
+
+/** How long a restore may take to arrive before the URL follows the state again. */
+const RESTORE_PATIENCE_MS = 5000;
+
+/** What the address asks for, and the state that answers it. True when the address named something this app has. */
+function apply(search: string, { openRun, openDocument, navigate, goHome }: Pick<UrlStateArgs, "openRun" | "openDocument" | "navigate" | "goHome">): boolean {
+  const params = new URLSearchParams(search);
+  const requested = params.get("view");
+  const wantsView = requested && (VIEWS as readonly string[]).includes(requested) && requested !== "assistant" ? (requested as View) : null;
+  const runId = params.get("run");
+  const documentId = params.get("document");
+  // `finding` opens that finding's evidence: a memo's citation links back to it, and so does Back.
+  if (runId) void openRun(runId, params.get("finding"), !wantsView);
+  else if (documentId) void openDocument(documentId, !wantsView);
+  else if (!wantsView) goHome();
+  if (wantsView) navigate(wantsView);
+  return Boolean(runId || documentId || wantsView);
 }
 
 /**
- * The URL carries `document`, `run` and `view`, so an open document, the run (in flight or finished)
- * and the current surface survive a reload. Restored once on mount; written whenever they change. A run
- * in flight is written as soon as it exists, so a refresh mid-run reattaches to it instead of losing it.
+ * The URL carries `document`, `run` and `view`, so an open document, the run (in flight or finished) and the current
+ * surface survive a reload, and the browser's Back and Forward buttons move between them. Restored once on mount and
+ * again on every popstate; written whenever the state changes. A move writes a history entry; the several states one
+ * click passes through are coalesced into one entry, and a restore writes none. A run in flight is written as soon as
+ * it exists, so a refresh mid-run reattaches to it instead of losing it.
  */
-export function useUrlState({ view, doc, stage, run, openRun, openDocument, navigate }: UrlStateArgs) {
+export function useUrlState({ view, doc, stage, run, findingId, openRun, openDocument, navigate, goHome }: UrlStateArgs) {
   const restored = useRef(false);
+  // The address a restore is heading for, and when it set out. Until the state reaches it the URL is left alone, so a
+  // reload mid-load still has the deep link; a restore that never arrives is given up after a few seconds.
+  const restoring = useRef<{ search: string; at: number } | null>(null);
+  const lastPush = useRef(0);
+  const handlers = useRef({ openRun, openDocument, navigate, goHome });
+  useEffect(() => {
+    handlers.current = { openRun, openDocument, navigate, goHome };
+  }, [openRun, openDocument, navigate, goHome]);
 
   useEffect(() => {
     if (restored.current) return;
     restored.current = true;
-    const params = new URLSearchParams(window.location.search);
-    const requested = params.get("view");
-    const wantsView = requested && (VIEWS as readonly string[]).includes(requested) && requested !== "assistant" ? (requested as View) : null;
-    const runId = params.get("run");
-    const documentId = params.get("document");
-    // `finding` is read, never written: a memo's citation links back to the run and the finding it came from.
-    if (runId) void openRun(runId, params.get("finding"), !wantsView);
-    else if (documentId) void openDocument(documentId, !wantsView);
-    if (wantsView) navigate(wantsView);
-  }, [openRun, openDocument, navigate]);
+    // Whatever the first render writes is a correction of the address, not a move: no history entry for it.
+    lastPush.current = Date.now();
+    const at = Date.now();
+    if (window.location.search && apply(window.location.search, handlers.current)) restoring.current = { search: window.location.search, at };
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => {
+      const at = Date.now();
+      restoring.current = apply(window.location.search, handlers.current) || !window.location.search ? { search: window.location.search, at } : null;
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (view !== "assistant") params.set("view", view);
     if (doc && stage === "workspace") params.set("document", doc.id);
     if (run?.id && doc && stage === "workspace") params.set("run", run.id);
+    if (findingId && run?.id && doc && stage === "workspace" && view === "assistant") params.set("finding", findingId);
     const query = params.toString();
-    const next = `${window.location.pathname}${query ? `?${query}` : ""}`;
-    if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(null, "", next);
-  }, [view, doc, stage, run]);
+    const search = query ? `?${query}` : "";
+    const next = `${window.location.pathname}${search}`;
+    if (restoring.current) {
+      if (search === restoring.current.search) {
+        restoring.current = null;
+        return;
+      }
+      if (Date.now() - restoring.current.at < RESTORE_PATIENCE_MS) return;
+      restoring.current = null;
+    }
+    if (next === `${window.location.pathname}${window.location.search}`) return;
+    const now = Date.now();
+    if (now - lastPush.current < COALESCE_MS) {
+      window.history.replaceState(null, "", next);
+    } else {
+      window.history.pushState(null, "", next);
+      lastPush.current = now;
+    }
+  }, [view, doc, stage, run, findingId]);
 }

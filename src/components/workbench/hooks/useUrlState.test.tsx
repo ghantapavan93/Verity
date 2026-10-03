@@ -1,6 +1,7 @@
 /**
- * The URL is the reload contract: `document`, `run` and `view` are restored once on mount and
- * written back whenever they change, so a finished run can be sent as a link.
+ * The URL is the reload contract: `document`, `run` and `view` are restored once on mount and written back whenever
+ * they change, so a finished run can be sent as a link. It is also the Back button's contract: a move is a history
+ * entry, and popstate restores the screen the address names.
  */
 
 import { renderHook } from "@testing-library/react";
@@ -44,11 +45,20 @@ function handlers() {
     openRun: vi.fn(async () => {}),
     openDocument: vi.fn(async () => {}),
     navigate: vi.fn(),
+    goHome: vi.fn(),
   };
 }
 
-function props(overrides: { view?: View; doc?: DocumentView | null; stage?: Stage; run?: RunView | null } = {}) {
-  return { view: "assistant" as View, doc: null as DocumentView | null, stage: "empty" as Stage, run: null as RunView | null, ...handlers(), ...overrides };
+function props(overrides: { view?: View; doc?: DocumentView | null; stage?: Stage; run?: RunView | null; findingId?: string | null } = {}) {
+  return {
+    view: "assistant" as View,
+    doc: null as DocumentView | null,
+    stage: "empty" as Stage,
+    run: null as RunView | null,
+    findingId: null as string | null,
+    ...handlers(),
+    ...overrides,
+  };
 }
 
 function setUrl(search: string) {
@@ -102,5 +112,61 @@ describe("useUrlState", () => {
 
     rerender({ ...initial, run: finished, view: "runs", stage: "empty" });
     expect(window.location.search).toBe("?view=runs");
+  });
+
+  it("writes the finding whose evidence is open, and only on the review surface", () => {
+    setUrl("");
+    const initial = props({ doc, stage: "workspace", run: finished, findingId: "f9" });
+    const { rerender } = renderHook((p) => useUrlState(p), { initialProps: initial });
+    expect(window.location.search).toBe("?document=doc1&run=run1&finding=f9");
+    rerender({ ...initial, view: "findings" });
+    expect(window.location.search).toBe("?view=findings&document=doc1&run=run1");
+  });
+
+  it("writes a move as a history entry, so Back has somewhere to go; the states one click passes through are one entry", () => {
+    vi.useFakeTimers();
+    try {
+      setUrl("");
+      const before = window.history.length;
+      const initial = props();
+      const { rerender } = renderHook((p) => useUrlState(p), { initialProps: initial });
+      vi.advanceTimersByTime(1000); // the first render's corrections are over
+      rerender({ ...initial, view: "runs" });
+      expect(window.location.search).toBe("?view=runs");
+      expect(window.history.length).toBe(before + 1);
+      rerender({ ...initial, view: "runs", doc, stage: "workspace" }); // the same click, a moment later
+      expect(window.location.search).toBe("?view=runs&document=doc1");
+      expect(window.history.length).toBe(before + 1);
+      vi.advanceTimersByTime(1000);
+      rerender({ ...initial, view: "findings", doc, stage: "workspace" }); // a new move
+      expect(window.history.length).toBe(before + 2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restores the screen the address names when the browser goes back", () => {
+    setUrl("");
+    const initial = props();
+    renderHook((p) => useUrlState(p), { initialProps: initial });
+    setUrl("?document=doc1&run=run1");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(initial.openRun).toHaveBeenCalledWith("run1", null, true);
+    setUrl("?view=findings");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(initial.navigate).toHaveBeenCalledWith("findings");
+    setUrl("");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(initial.goHome).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the address alone while a restore is on its way", () => {
+    setUrl("?document=doc1&run=run1");
+    const initial = props();
+    const { rerender } = renderHook((p) => useUrlState(p), { initialProps: initial });
+    rerender({ ...initial, doc, stage: "workspace" }); // the document has arrived, the run has not
+    expect(window.location.search).toBe("?document=doc1&run=run1");
+    rerender({ ...initial, doc, stage: "workspace", run: running });
+    expect(window.location.search).toBe("?document=doc1&run=run1");
   });
 });

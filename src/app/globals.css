@@ -147,6 +147,11 @@ button {
   transform: none;
 }
 
+/* The main region takes focus from the skip link; it is a landing place, not a control, so it draws no ring. */
+#main:focus {
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
