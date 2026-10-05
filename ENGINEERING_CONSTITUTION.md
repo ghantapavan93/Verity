@@ -41,6 +41,7 @@ at its measurement or its requirement is removed.
 | Document families | structural fingerprints, similarity, clustering and their evaluation against labels | model calls, claims beyond the measured corpus | `backend/app/families/*`, `backend/scripts/cluster_corpus.py`, `docs/FAMILIES.md` |
 | Replay | verifying a recorded run again with the current verifier, without a model call | changing the run | `backend/app/application/reverify_run.py`, `backend/scripts/reverify.py` |
 | Engineering records | the golden set's verdicts and the pre-registered experiments that preceded the product | the production workflow | `backend/app/api/engineering.py`, reading the run records and `ivo-experiments/docs/results.json` |
+| Product evidence export | a recording of one run and one revision, as the HTTP interface gave it, written out as an evidence bundle for the public research repository | rewriting an answer, deciding anything, importing from or depending on another repository | `backend/scripts/export_review_evidence.py`, `backend/scripts/revision_evidence/` |
 
 ## Rules
 
