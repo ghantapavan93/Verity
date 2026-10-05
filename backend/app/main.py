@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import access, batches, documents, engineering, findings, guidance, health, memos, runs
+from .api import access, batches, documents, engineering, findings, guidance, health, memos, runs, trust
 from .application.recover_runs import recover_interrupted_runs
 from .config import settings
 from .db import SessionLocal, init_db
@@ -79,7 +79,7 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(access.router)
     gate = [Depends(access.require_access)]
-    for router in (documents.router, guidance.router, findings.router, memos.router, batches.router, engineering.router):
+    for router in (documents.router, guidance.router, findings.router, memos.router, batches.router, engineering.router, trust.router):
         app.include_router(router, dependencies=gate)
     app.include_router(runs.router, dependencies=[*gate, Depends(access.limit_run_starts)])
     return app

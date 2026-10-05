@@ -140,6 +140,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/supersedes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Supersedes
+         * @description Say that this document is the version after another. 201 when the statement is new, 200 when it was already made.
+         */
+        post: operations["record_supersedes_api_documents__document_id__supersedes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Document Versions
+         * @description The line of versions this document belongs to in this workspace, oldest first; empty when it is in none.
+         */
+        get: operations["document_versions_api_documents__document_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/engineering/citations": {
         parameters: {
             query?: never;
@@ -484,6 +524,48 @@ export interface paths {
          *     SourceMatch and the recorded policy evaluation, all from the record. Read-only; nothing is recomputed as fact.
          */
         get: operations["get_run_explanation_api_runs__run_id__explanation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/trust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run Trust
+         * @description What each finding of a finished run stands on: its quotes, whether each stands once, the typed values they
+         *     state, and the reader and rules it was made under.
+         */
+        get: operations["run_trust_api_runs__run_id__trust_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/trust/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run Trust Diff
+         * @description What a later version of the document does to this run's findings: which are stale and why, which were
+         *     established again, which the revision did not reach. Nothing is changed by asking.
+         */
+        get: operations["run_trust_diff_api_runs__run_id__trust_diff_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -840,6 +922,25 @@ export interface components {
             reviewedFindings: number;
             /** Sections */
             sections: number;
+        };
+        /** DocumentVersionOut */
+        DocumentVersionOut: {
+            /** Documentid */
+            documentId: string;
+            /** Lineageid */
+            lineageId: string;
+            /** Name */
+            name: string;
+            /** Readerversion */
+            readerVersion: string | null;
+            /** Recordedat */
+            recordedAt: string;
+            /** Sha256 */
+            sha256: string;
+            /** Snapshothash */
+            snapshotHash: string;
+            /** Supersedesdocumentid */
+            supersedesDocumentId: string | null;
         };
         /** ExperimentPage */
         ExperimentPage: {
@@ -1922,6 +2023,213 @@ export interface components {
             /** Status */
             status?: ("running" | "ok" | "failed") | null;
         };
+        /** SupersedesIn */
+        SupersedesIn: {
+            /** Previousdocumentid */
+            previousDocumentId: string;
+        };
+        /** TrustDependencyOut */
+        TrustDependencyOut: {
+            /** On */
+            on: string;
+            /**
+             * Ref
+             * @default
+             */
+            ref: string;
+        };
+        /**
+         * TrustDiffOut
+         * @description What a revised document does to a run's findings. The run and its findings are not changed by asking.
+         */
+        TrustDiffOut: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Findings */
+            findings: components["schemas"]["TrustFindingChangeOut"][];
+            /** Fromdocumentid */
+            fromDocumentId: string;
+            /** Fromsnapshot */
+            fromSnapshot: string;
+            /** Manifestid */
+            manifestId: string;
+            /** Runid */
+            runId: string;
+            sections: components["schemas"]["TrustSectionChangesOut"];
+            /** Sectionsreused */
+            sectionsReused: number;
+            /** Sectionssearched */
+            sectionsSearched: number;
+            /** Sectionstotal */
+            sectionsTotal: number;
+            /** Todocumentid */
+            toDocumentId: string;
+            /** Tosnapshot */
+            toSnapshot: string;
+        };
+        /** TrustEvidenceOut */
+        TrustEvidenceOut: {
+            /**
+             * End
+             * @default -1
+             */
+            end: number;
+            /** Located */
+            located: boolean;
+            /**
+             * Method
+             * @default none
+             */
+            method: string;
+            /**
+             * Places
+             * @default 0
+             */
+            places: number;
+            /** Quote */
+            quote: string;
+            /**
+             * Section
+             * @default
+             */
+            section: string;
+            /** Span */
+            span: number;
+            /**
+             * Start
+             * @default -1
+             */
+            start: number;
+        };
+        /** TrustFactOut */
+        TrustFactOut: {
+            /** Kind */
+            kind: string;
+            /** Surface */
+            surface: string;
+            /** Value */
+            value: string;
+        };
+        /** TrustFindingChangeOut */
+        TrustFindingChangeOut: {
+            /** After */
+            after: string;
+            /** Before */
+            before: string;
+            /** Findingid */
+            findingId: string;
+            /** Obligations */
+            obligations: components["schemas"]["TrustObligationChangeOut"][];
+            /** Ordinal */
+            ordinal: number;
+            /** Topic */
+            topic: string;
+            /** Verdict */
+            verdict: string;
+            /** Why */
+            why: string[];
+        };
+        /** TrustFindingOut */
+        TrustFindingOut: {
+            /** Evidence */
+            evidence: components["schemas"]["TrustEvidenceOut"][];
+            /** Findingid */
+            findingId: string;
+            /** Obligations */
+            obligations: components["schemas"]["TrustObligationOut"][];
+            /** Ordinal */
+            ordinal: number;
+            /** Recordedstatus */
+            recordedStatus: string;
+            /** State */
+            state: string;
+            /** Topic */
+            topic: string;
+        };
+        /**
+         * TrustManifestOut
+         * @description Why a run's findings are trusted, as of the document the run read. Derived from the record; never stored.
+         */
+        TrustManifestOut: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Documentid */
+            documentId: string;
+            /** Documentsha256 */
+            documentSha256: string;
+            /** Findings */
+            findings: components["schemas"]["TrustFindingOut"][];
+            /** Manifestid */
+            manifestId: string;
+            /** Readerversion */
+            readerVersion: string;
+            /** Ruleversions */
+            ruleVersions: {
+                [key: string]: string;
+            };
+            /** Runid */
+            runId: string;
+            /** Snapshothash */
+            snapshotHash: string;
+            /** Trustversion */
+            trustVersion: string;
+        };
+        /** TrustObligationChangeOut */
+        TrustObligationChangeOut: {
+            /** After */
+            after: string;
+            /** Before */
+            before: string;
+            /** Id */
+            id: string;
+            /** Need */
+            need: string;
+            /** Placesafter */
+            placesAfter?: number | null;
+            /** Placesbefore */
+            placesBefore?: number | null;
+            /** Reason */
+            reason: string;
+            /** Verdict */
+            verdict: string;
+        };
+        /**
+         * TrustObligationOut
+         * @description One thing a finding needs in order to be relied on, answered on its own, with what the answer depends on.
+         */
+        TrustObligationOut: {
+            /**
+             * Dependson
+             * @default []
+             */
+            dependsOn: components["schemas"]["TrustDependencyOut"][];
+            fact?: components["schemas"]["TrustFactOut"] | null;
+            /** Id */
+            id: string;
+            /** Need */
+            need: string;
+            /** Reason */
+            reason: string;
+            /** Span */
+            span?: number | null;
+            /** Standing */
+            standing: string;
+        };
+        /** TrustSectionChangesOut */
+        TrustSectionChangesOut: {
+            /** Added */
+            added: string[];
+            /** Changed */
+            changed: string[];
+            /** Identical */
+            identical: number;
+            /** Removed */
+            removed: string[];
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -2150,6 +2458,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_supersedes_api_documents__document_id__supersedes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupersedesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentVersionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    document_versions_api_documents__document_id__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentVersionOut"][];
                 };
             };
             /** @description Validation Error */
@@ -2694,6 +3068,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunExplanation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_trust_api_runs__run_id__trust_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustManifestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_trust_diff_api_runs__run_id__trust_diff_get: {
+        parameters: {
+            query: {
+                documentId: string;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustDiffOut"];
                 };
             };
             /** @description Validation Error */

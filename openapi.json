@@ -798,6 +798,68 @@
         "title": "DocumentSummary",
         "type": "object"
       },
+      "DocumentVersionOut": {
+        "properties": {
+          "documentId": {
+            "title": "Documentid",
+            "type": "string"
+          },
+          "lineageId": {
+            "title": "Lineageid",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "readerVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readerversion"
+          },
+          "recordedAt": {
+            "title": "Recordedat",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "snapshotHash": {
+            "title": "Snapshothash",
+            "type": "string"
+          },
+          "supersedesDocumentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedesdocumentid"
+          }
+        },
+        "required": [
+          "lineageId",
+          "documentId",
+          "name",
+          "sha256",
+          "snapshotHash",
+          "readerVersion",
+          "supersedesDocumentId",
+          "recordedAt"
+        ],
+        "title": "DocumentVersionOut",
+        "type": "object"
+      },
       "ExperimentPage": {
         "properties": {
           "author": {
@@ -3973,6 +4035,510 @@
         "title": "StageOut",
         "type": "object"
       },
+      "SupersedesIn": {
+        "properties": {
+          "previousDocumentId": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Previousdocumentid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "previousDocumentId"
+        ],
+        "title": "SupersedesIn",
+        "type": "object"
+      },
+      "TrustDependencyOut": {
+        "properties": {
+          "on": {
+            "title": "On",
+            "type": "string"
+          },
+          "ref": {
+            "default": "",
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "title": "TrustDependencyOut",
+        "type": "object"
+      },
+      "TrustDiffOut": {
+        "description": "What a revised document does to a run's findings. The run and its findings are not changed by asking.",
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/TrustFindingChangeOut"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "fromDocumentId": {
+            "title": "Fromdocumentid",
+            "type": "string"
+          },
+          "fromSnapshot": {
+            "title": "Fromsnapshot",
+            "type": "string"
+          },
+          "manifestId": {
+            "title": "Manifestid",
+            "type": "string"
+          },
+          "runId": {
+            "title": "Runid",
+            "type": "string"
+          },
+          "sections": {
+            "$ref": "#/components/schemas/TrustSectionChangesOut"
+          },
+          "sectionsReused": {
+            "title": "Sectionsreused",
+            "type": "integer"
+          },
+          "sectionsSearched": {
+            "title": "Sectionssearched",
+            "type": "integer"
+          },
+          "sectionsTotal": {
+            "title": "Sectionstotal",
+            "type": "integer"
+          },
+          "toDocumentId": {
+            "title": "Todocumentid",
+            "type": "string"
+          },
+          "toSnapshot": {
+            "title": "Tosnapshot",
+            "type": "string"
+          }
+        },
+        "required": [
+          "manifestId",
+          "runId",
+          "fromDocumentId",
+          "toDocumentId",
+          "fromSnapshot",
+          "toSnapshot",
+          "sections",
+          "sectionsTotal",
+          "sectionsSearched",
+          "sectionsReused",
+          "counts",
+          "findings"
+        ],
+        "title": "TrustDiffOut",
+        "type": "object"
+      },
+      "TrustEvidenceOut": {
+        "properties": {
+          "end": {
+            "default": -1,
+            "title": "End",
+            "type": "integer"
+          },
+          "located": {
+            "title": "Located",
+            "type": "boolean"
+          },
+          "method": {
+            "default": "none",
+            "title": "Method",
+            "type": "string"
+          },
+          "places": {
+            "default": 0,
+            "title": "Places",
+            "type": "integer"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "section": {
+            "default": "",
+            "title": "Section",
+            "type": "string"
+          },
+          "span": {
+            "title": "Span",
+            "type": "integer"
+          },
+          "start": {
+            "default": -1,
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "span",
+          "quote",
+          "located"
+        ],
+        "title": "TrustEvidenceOut",
+        "type": "object"
+      },
+      "TrustFactOut": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "surface": {
+            "title": "Surface",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value",
+          "surface"
+        ],
+        "title": "TrustFactOut",
+        "type": "object"
+      },
+      "TrustFindingChangeOut": {
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "findingId": {
+            "title": "Findingid",
+            "type": "string"
+          },
+          "obligations": {
+            "items": {
+              "$ref": "#/components/schemas/TrustObligationChangeOut"
+            },
+            "title": "Obligations",
+            "type": "array"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          },
+          "why": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Why",
+            "type": "array"
+          }
+        },
+        "required": [
+          "findingId",
+          "ordinal",
+          "topic",
+          "before",
+          "after",
+          "verdict",
+          "why",
+          "obligations"
+        ],
+        "title": "TrustFindingChangeOut",
+        "type": "object"
+      },
+      "TrustFindingOut": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/TrustEvidenceOut"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "findingId": {
+            "title": "Findingid",
+            "type": "string"
+          },
+          "obligations": {
+            "items": {
+              "$ref": "#/components/schemas/TrustObligationOut"
+            },
+            "title": "Obligations",
+            "type": "array"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "recordedStatus": {
+            "title": "Recordedstatus",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "findingId",
+          "ordinal",
+          "topic",
+          "recordedStatus",
+          "state",
+          "evidence",
+          "obligations"
+        ],
+        "title": "TrustFindingOut",
+        "type": "object"
+      },
+      "TrustManifestOut": {
+        "description": "Why a run's findings are trusted, as of the document the run read. Derived from the record; never stored.",
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "documentId": {
+            "title": "Documentid",
+            "type": "string"
+          },
+          "documentSha256": {
+            "title": "Documentsha256",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/TrustFindingOut"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "manifestId": {
+            "title": "Manifestid",
+            "type": "string"
+          },
+          "readerVersion": {
+            "title": "Readerversion",
+            "type": "string"
+          },
+          "ruleVersions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Ruleversions",
+            "type": "object"
+          },
+          "runId": {
+            "title": "Runid",
+            "type": "string"
+          },
+          "snapshotHash": {
+            "title": "Snapshothash",
+            "type": "string"
+          },
+          "trustVersion": {
+            "title": "Trustversion",
+            "type": "string"
+          }
+        },
+        "required": [
+          "manifestId",
+          "trustVersion",
+          "runId",
+          "documentId",
+          "documentSha256",
+          "snapshotHash",
+          "readerVersion",
+          "ruleVersions",
+          "counts",
+          "findings"
+        ],
+        "title": "TrustManifestOut",
+        "type": "object"
+      },
+      "TrustObligationChangeOut": {
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "need": {
+            "title": "Need",
+            "type": "string"
+          },
+          "placesAfter": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placesafter"
+          },
+          "placesBefore": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placesbefore"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "need",
+          "before",
+          "after",
+          "verdict",
+          "reason"
+        ],
+        "title": "TrustObligationChangeOut",
+        "type": "object"
+      },
+      "TrustObligationOut": {
+        "description": "One thing a finding needs in order to be relied on, answered on its own, with what the answer depends on.",
+        "properties": {
+          "dependsOn": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TrustDependencyOut"
+            },
+            "title": "Dependson",
+            "type": "array"
+          },
+          "fact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrustFactOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "need": {
+            "title": "Need",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          },
+          "standing": {
+            "title": "Standing",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "need",
+          "standing",
+          "reason"
+        ],
+        "title": "TrustObligationOut",
+        "type": "object"
+      },
+      "TrustSectionChangesOut": {
+        "properties": {
+          "added": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "identical": {
+            "title": "Identical",
+            "type": "integer"
+          },
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "identical",
+          "changed",
+          "removed",
+          "added"
+        ],
+        "title": "TrustSectionChangesOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -4300,6 +4866,106 @@
         "summary": "Get Document",
         "tags": [
           "documents"
+        ]
+      }
+    },
+    "/api/documents/{document_id}/supersedes": {
+      "post": {
+        "description": "Say that this document is the version after another. 201 when the statement is new, 200 when it was already made.",
+        "operationId": "record_supersedes_api_documents__document_id__supersedes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupersedesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentVersionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Supersedes",
+        "tags": [
+          "trust"
+        ]
+      }
+    },
+    "/api/documents/{document_id}/versions": {
+      "get": {
+        "description": "The line of versions this document belongs to in this workspace, oldest first; empty when it is in none.",
+        "operationId": "document_versions_api_documents__document_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentVersionOut"
+                  },
+                  "title": "Response Document Versions Api Documents  Document Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Document Versions",
+        "tags": [
+          "trust"
         ]
       }
     },
@@ -5023,6 +5689,101 @@
         "summary": "Get Run Explanation",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/api/runs/{run_id}/trust": {
+      "get": {
+        "description": "What each finding of a finished run stands on: its quotes, whether each stands once, the typed values they\nstate, and the reader and rules it was made under.",
+        "operationId": "run_trust_api_runs__run_id__trust_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustManifestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Trust",
+        "tags": [
+          "trust"
+        ]
+      }
+    },
+    "/api/runs/{run_id}/trust/diff": {
+      "get": {
+        "description": "What a later version of the document does to this run's findings: which are stale and why, which were\nestablished again, which the revision did not reach. Nothing is changed by asking.",
+        "operationId": "run_trust_diff_api_runs__run_id__trust_diff_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "documentId",
+            "required": true,
+            "schema": {
+              "title": "Documentid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustDiffOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Trust Diff",
+        "tags": [
+          "trust"
         ]
       }
     }

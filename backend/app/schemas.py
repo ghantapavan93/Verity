@@ -697,3 +697,127 @@ class RunExplanation(ApiModel):
     proposals_problem: str | None
     findings: list[ExplanationFinding]
     reproducibility: ExplanationReproducibility
+
+
+# ----------------------------------------------------------------------------- version-aware trust (app.trust)
+
+
+class TrustDependencyOut(ApiModel):
+    on: str  # section | document | span | code
+    ref: str = ""
+
+
+class TrustFactOut(ApiModel):
+    kind: str  # duration | money | percent | date
+    value: str
+    surface: str
+
+
+class TrustObligationOut(ApiModel):
+    """One thing a finding needs in order to be relied on, answered on its own, with what the answer depends on."""
+
+    id: str
+    need: str  # quote_exists | quote_unique | fact_matches | reader_compatible | rules_compatible
+    standing: str  # established | not_established | contradicted
+    reason: str
+    depends_on: list[TrustDependencyOut] = []
+    span: int | None = None
+    fact: TrustFactOut | None = None
+
+
+class TrustEvidenceOut(ApiModel):
+    span: int
+    quote: str
+    located: bool
+    section: str = ""  # the section as a reader names it
+    start: int = -1
+    end: int = -1
+    method: str = "none"
+    places: int = 0  # how many places the quote stands in the whole document
+
+
+class TrustFindingOut(ApiModel):
+    finding_id: str
+    ordinal: int
+    topic: str
+    recorded_status: str  # the status on the run record; the trust layer never changes it
+    state: str  # supported | needs_review | unsupported
+    evidence: list[TrustEvidenceOut]
+    obligations: list[TrustObligationOut]
+
+
+class TrustManifestOut(ApiModel):
+    """Why a run's findings are trusted, as of the document the run read. Derived from the record; never stored."""
+
+    manifest_id: str
+    trust_version: str
+    run_id: str
+    document_id: str
+    document_sha256: str
+    snapshot_hash: str
+    reader_version: str
+    rule_versions: dict[str, str]
+    counts: dict[str, int]
+    findings: list[TrustFindingOut]
+
+
+class TrustObligationChangeOut(ApiModel):
+    id: str
+    need: str
+    before: str
+    after: str
+    verdict: str  # untouched | held | relocated | changed
+    reason: str
+    # For quote_unique: the places the quote stood in the whole document before, and stands in now.
+    places_before: int | None = None
+    places_after: int | None = None
+
+
+class TrustFindingChangeOut(ApiModel):
+    finding_id: str
+    ordinal: int
+    topic: str
+    before: str
+    after: str
+    verdict: str  # unchanged | revalidated | stale
+    why: list[str]
+    obligations: list[TrustObligationChangeOut]
+
+
+class TrustSectionChangesOut(ApiModel):
+    identical: int
+    changed: list[str]
+    removed: list[str]
+    added: list[str]
+
+
+class TrustDiffOut(ApiModel):
+    """What a revised document does to a run's findings. The run and its findings are not changed by asking."""
+
+    manifest_id: str
+    run_id: str
+    from_document_id: str
+    to_document_id: str
+    from_snapshot: str
+    to_snapshot: str
+    sections: TrustSectionChangesOut
+    sections_total: int
+    sections_searched: int  # every section whose content is new
+    sections_reused: int  # every section carried over unchanged; searched + reused is the whole revision
+    counts: dict[str, int]
+    findings: list[TrustFindingChangeOut]
+
+
+class SupersedesIn(ApiModel):
+    previous_document_id: str = Field(min_length=1, max_length=32)
+
+
+class DocumentVersionOut(ApiModel):
+    lineage_id: str
+    document_id: str
+    name: str
+    sha256: str
+    snapshot_hash: str
+    reader_version: str | None
+    supersedes_document_id: str | None
+    recorded_at: str

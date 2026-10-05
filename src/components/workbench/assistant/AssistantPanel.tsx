@@ -11,6 +11,7 @@ import type { RunController } from "../hooks/useRunFollower";
 import { EvidenceDrawer } from "./EvidenceDrawer";
 import { FindingCard } from "./FindingCard";
 import { GuidanceScope } from "./GuidanceScope";
+import { RevisionCheck } from "./RevisionCheck";
 import { RunOutcome, WithheldList } from "./RunOutcome";
 import { StageList } from "./StageList";
 import { absolute } from "@/lib/api";
@@ -219,6 +220,7 @@ export function AssistantPanel({
                     <span>every citation verified against the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}</span>
                     {run.sectionsRead != null && doc && <span>{sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length)}</span>}
                   </p>
+                  {doc && <RevisionCheck key={run.id} runId={run.id} documentId={doc.id} />}
                 </motion.div>
               ) : (
                 <motion.div key="unresolved" className={styles.unresolved} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={quick}>

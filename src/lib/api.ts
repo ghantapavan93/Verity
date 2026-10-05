@@ -6,6 +6,7 @@ import type {
   BatchView,
   CitationRecord,
   DocumentSummary,
+  DocumentVersionView,
   DocumentView,
   ExperimentsView,
   FamiliesView,
@@ -21,6 +22,8 @@ import type {
   RunStage,
   RunSummary,
   RunView,
+  TrustDiffView,
+  TrustManifestView,
 } from "./types";
 
 export type { GuidanceRecord, Health, MemoRecord } from "./types";
@@ -98,6 +101,25 @@ export function uploadDocument(file: File): Promise<DocumentView> {
     method: "POST",
     body: form,
   });
+}
+
+/** Say that a document is the version after another. The statement is this workspace's own and is never edited. */
+export function recordSupersedes(documentId: string, previousDocumentId: string): Promise<DocumentVersionView> {
+  return request<DocumentVersionView>(`/api/documents/${documentId}/supersedes`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ previousDocumentId }),
+  });
+}
+
+/** What each finding of a finished run stands on. Derived from the record by the API; nothing is stored or changed. */
+export function getRunTrust(runId: string): Promise<TrustManifestView> {
+  return request<TrustManifestView>(`/api/runs/${runId}/trust`);
+}
+
+/** What a later version of the document does to a run's findings. The run is not changed by asking. */
+export function getRunTrustDiff(runId: string, documentId: string): Promise<TrustDiffView> {
+  return request<TrustDiffView>(`/api/runs/${runId}/trust/diff?documentId=${encodeURIComponent(documentId)}`);
 }
 
 export function listDocuments(): Promise<DocumentSummary[]> {

@@ -130,6 +130,28 @@ class DocumentAccess(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class DocumentVersion(Base):
+    """A workspace's statement that one document is a version in a line of versions, and which one it supersedes.
+
+    A filename is never identity, and neither is a document row: a row is one reading of one set of bytes, shared by
+    every workspace that uploaded them. That two rows are versions of the same contract is something a person says,
+    so it is recorded as said, by workspace, appended and never edited. ``lineage_id`` names the line; the first
+    version of a line supersedes nothing. A document belongs to at most one line per workspace.
+    """
+
+    __tablename__ = "document_versions"
+    __table_args__ = (Index("ux_document_versions_workspace_document", "workspace_id", "document_id", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = mapped_column(String(32), index=True)
+    lineage_id: Mapped[str] = mapped_column(String(32), index=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), index=True)
+    supersedes_document_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    document: Mapped[Document] = relationship(foreign_keys=[document_id])
+
+
 class Guidance(Base):
     __tablename__ = "guidance"
 
