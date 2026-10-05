@@ -50,6 +50,13 @@ export function GuidanceScope({ documentName, guidance, reduceMotion }: { docume
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={quick}
+            onKeyDown={(e) => {
+              // Escape closes the popover and keeps the draft, as Cancel does; the drawer and the palette close the same way.
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                guidance.setOpen(false);
+              }
+            }}
           >
             <label className={styles.popoverLabel} htmlFor="guidance">
               Legal guidance

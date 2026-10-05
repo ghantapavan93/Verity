@@ -69,7 +69,7 @@ describe("WhyThisAnswer", () => {
     const policy = within(panel).getByTestId("policy-evaluation");
     expect(policy.textContent).toContain("Final statusNeeds review");
     expect(policy.textContent).toContain("Sourcecomputed_days");
-    expect(policy.textContent).toContain("Decided by codethe contract provides 60 calendar days; the guidance requires at least 90 calendar days");
+    expect(policy.textContent).toContain("Code found a conflictthe contract provides 60 calendar days; the guidance requires at least 90 calendar days");
 
     // Reproduce: the identities a stranger needs, and that the input matches.
     expect(text).toContain("Rune5a20e2283e8416e");

@@ -106,12 +106,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Documents */
+        /**
+         * List Documents
+         * @description This workspace's documents and the curated ones; the counts beside each are of runs it may read.
+         */
         get: operations["list_documents_api_documents_get"];
         put?: never;
         /**
          * Upload Document
-         * @description 201 with a new document, or 200 with the stored document that has exactly these bytes.
+         * @description 201 with a document new to this workspace, or 200 with the one it already holds that has exactly these bytes.
          */
         post: operations["upload_document_api_documents_post"];
         delete?: never;
@@ -146,7 +149,8 @@ export interface paths {
         };
         /**
          * Citations
-         * @description How often the model's quotes were found, by which method, and how often a finding was withheld.
+         * @description How often the model's quotes were found, by which method, and how often a finding was withheld, over the runs
+         *     this workspace may read: its own and the curated record.
          */
         get: operations["citations_api_engineering_citations_get"];
         put?: never;
@@ -221,7 +225,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Findings */
+        /**
+         * List Findings
+         * @description Findings of the runs this workspace may read: its own and the curated ones.
+         */
         get: operations["list_findings_api_findings_get"];
         put?: never;
         post?: never;
@@ -242,7 +249,8 @@ export interface paths {
         put?: never;
         /**
          * Review
-         * @description Record a person's decision. 201 when it changed the state, 200 when it repeated it; `cleared` undoes.
+         * @description Record a person's decision. 201 when it changed the state, 200 when it repeated it; `cleared` undoes. With the gate
+         *     on, the invite's subject is recorded beside the typed name; the name is what the browser sent and is not an identity.
          */
         post: operations["review_api_findings__finding_id__review_post"];
         delete?: never;
@@ -262,7 +270,7 @@ export interface paths {
         put?: never;
         /**
          * Create Guidance
-         * @description 201 with a new guidance record, or 200 with the record that already holds these words.
+         * @description 201 with a new guidance record in this workspace, or 200 with the one it may already use that holds these words.
          */
         post: operations["create_guidance_api_guidance_post"];
         delete?: never;
@@ -371,12 +379,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Runs */
+        /**
+         * List Runs
+         * @description This workspace's runs and the curated ones, newest first, the latest 200.
+         */
         get: operations["list_runs_api_runs_get"];
         put?: never;
         /**
          * Create Run
-         * @description 202 with a new run, or 200 with the running or completed run that already has these inputs.
+         * @description 202 with a new run, or 200 with this workspace's running or completed run that already has these inputs.
          */
         post: operations["create_run_api_runs_post"];
         delete?: never;
@@ -1227,6 +1238,11 @@ export interface components {
             /** Runid */
             runId: string;
             /**
+             * Shared
+             * @default false
+             */
+            shared: boolean;
+            /**
              * Status
              * @enum {string}
              */
@@ -1556,6 +1572,8 @@ export interface components {
          * @description A person's current decision on a finding; absent when unreviewed or cleared.
          */
         ReviewOut: {
+            /** Accesssubject */
+            accessSubject?: string | null;
             /** At */
             at: string;
             /** Note */
@@ -1648,6 +1666,11 @@ export interface components {
             sectionsRead?: number | null;
             /** Sectionsrequested */
             sectionsRequested?: number | null;
+            /**
+             * Shared
+             * @default false
+             */
+            shared: boolean;
             /**
              * Stage
              * @enum {string}
@@ -1755,6 +1778,11 @@ export interface components {
             /** Sectionsrequested */
             sectionsRequested?: number | null;
             /**
+             * Shared
+             * @default false
+             */
+            shared: boolean;
+            /**
              * Stage
              * @enum {string}
              */
@@ -1791,6 +1819,11 @@ export interface components {
             question: string;
             /** Reason */
             reason?: ("insufficient_evidence" | "citations_unverified" | "invalid_output" | "provider_error" | "internal_error") | null;
+            /**
+             * Shared
+             * @default false
+             */
+            shared: boolean;
             /**
              * Stage
              * @enum {string}

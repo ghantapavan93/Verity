@@ -20,7 +20,7 @@ def review_out(review: FindingReview | None) -> ReviewOut | None:
     """The one mapping of a review row to its API shape: the current decision, or nothing when unreviewed or cleared."""
     if review is None or review.verdict == "cleared":
         return None
-    return ReviewOut(verdict=review.verdict, reviewer=review.reviewer, note=review.note, at=iso(review.created_at) or "")
+    return ReviewOut(verdict=review.verdict, reviewer=review.reviewer, note=review.note, at=iso(review.created_at) or "", access_subject=review.access_subject)
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,9 @@ class Reviewed:
     created: bool  # False when the request repeated the current state
 
 
-def review_finding(session: Session, finding_id: str, verdict: ReviewVerdictName, reviewer: str, note: str | None) -> Reviewed:
+def review_finding(
+    session: Session, finding_id: str, verdict: ReviewVerdictName, reviewer: str, note: str | None, access_subject: str | None = None
+) -> Reviewed:
     finding = session.get(Finding, finding_id)
     if finding is None:
         raise NotFound("finding", finding_id)
@@ -45,7 +47,7 @@ def review_finding(session: Session, finding_id: str, verdict: ReviewVerdictName
     if verdict == "cleared" and finding.review is None:
         return Reviewed(finding, None, created=False)
 
-    row = FindingReview(finding_id=finding.id, verdict=verdict, reviewer=reviewer, note=note)
+    row = FindingReview(finding_id=finding.id, verdict=verdict, reviewer=reviewer, note=note, access_subject=access_subject)
     session.add(row)
     session.commit()
     session.refresh(finding)

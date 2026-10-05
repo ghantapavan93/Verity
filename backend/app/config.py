@@ -51,6 +51,8 @@ class Settings(BaseModel):
     # The deployment reads it from a file outside the repository (deploy/supervise.ps1); it is never a default.
     access_secret: str = os.environ.get("WORKBENCH_ACCESS_SECRET", "").strip()
     access_session_days: int = int(os.environ.get("WORKBENCH_ACCESS_SESSION_DAYS", "7"))
+    # Set in a deployment that must never run open: the application refuses to start if the secret is missing.
+    access_required: bool = os.environ.get("WORKBENCH_ACCESS_REQUIRED", "").lower() in ("1", "true", "yes")
     # Readers whose invites and sessions no longer open anything, by the name their invite was made for.
     access_revoked: list[str] = [s.strip() for s in os.environ.get("WORKBENCH_ACCESS_REVOKED", "").split(",") if s.strip()]
     # Optional: the results.json of the ivo-experiments repository, for the Runs surface, and the

@@ -296,6 +296,22 @@ function WorkbenchSurface() {
     return outcomeTitle(run);
   }, [run]);
 
+  // ---- the tab title: where the reader is, in the browser's own chrome -------------------------
+
+  useEffect(() => {
+    const screen =
+      view === "documents"
+        ? "Documents"
+        : view === "findings"
+          ? "Findings"
+          : view === "runs"
+            ? "Runs"
+            : stage === "workspace" && doc
+              ? doc.name.replace(/\.[^.]+$/, "")
+              : null;
+    document.title = screen ? `${screen} · Verity` : "Verity";
+  }, [view, stage, doc]);
+
   // ---- document navigation ---------------------------------------------------------------
 
   const jumpTo = useCallback((sectionId: string, span: SpanView | null = null) => {

@@ -18,6 +18,7 @@ from ..families.service import DEFAULT_THRESHOLD
 from ..families.service import report as families_report
 from ..goldens.service import report
 from ..schemas import CitationRecordOut, ExperimentPage, ExperimentRecord, ExperimentsOut, FamiliesOut, GoldensOut
+from .access import current_workspace
 
 router = APIRouter(prefix="/api/engineering", tags=["engineering"])
 
@@ -72,9 +73,10 @@ def experiments() -> ExperimentsOut:
 
 
 @router.get("/citations", response_model=CitationRecordOut)
-def citations(session: Session = Depends(get_session)) -> CitationRecordOut:
-    """How often the model's quotes were found, by which method, and how often a finding was withheld."""
-    return citation_record(session)
+def citations(session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> CitationRecordOut:
+    """How often the model's quotes were found, by which method, and how often a finding was withheld, over the runs
+    this workspace may read: its own and the curated record."""
+    return citation_record(session, workspace)
 
 
 @router.get("/families", response_model=FamiliesOut)

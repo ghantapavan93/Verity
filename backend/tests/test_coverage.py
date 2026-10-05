@@ -72,7 +72,7 @@ def test_a_docx_reading_declares_what_it_did_with_every_part() -> None:
     assert by_part["comments"].status is Status.OMITTED and by_part["comments"].count == 1
     assert by_part["endnotes"].status is Status.ABSENT and by_part["embedded_objects"].status is Status.ABSENT
     assert by_part["tracked_insertions"].status is Status.ABSENT and by_part["hidden_runs"].status is Status.ABSENT
-    assert by_part["style_hidden_text"].status is Status.UNKNOWN
+    assert by_part["style_hidden_text"].status is Status.ABSENT
     # What was omitted is nowhere in the sections: the reading is honest about the boundary it draws.
     text = " ".join(s.text for s in parsed.sections)
     assert "CONFIDENTIAL" not in text and "England and Wales" not in text and "Section 9 of the Framework" not in text and "Check the start" not in text

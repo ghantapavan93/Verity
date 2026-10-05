@@ -19,8 +19,8 @@ const LAYERS = [
   },
   { name: "Source checked", text: "Code looks for every quote in the document text. A quote it cannot find is withheld, not shown." },
   {
-    name: "Code decided",
-    text: "Where the contract and your guidance both state a period, code compares the days. A shortfall is its call; a pass needs its confirmation.",
+    name: "Code compared",
+    text: "Where the contract and your guidance both state a period, code compares the days. A conflict sends the finding to review. A pass stays the model's, with the numbers checked.",
   },
   { name: "Person reviewed", text: "A reviewer confirms or dismisses each finding. The decision is kept with the run, under their name." },
 ] as const;
@@ -98,6 +98,10 @@ export function Landing({
       ? {}
       : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] as const } };
 
+  // What the API says the door is: off means every record made here is readable by whoever reaches the site, and
+  // the first screen must say so rather than call it private.
+  const openPreview = apiHealth?.access === "off";
+
   return (
     <motion.section
       id="main"
@@ -114,7 +118,7 @@ export function Landing({
         </button>
         <span className={styles.preview}>
           <span className={styles.previewDot} aria-hidden="true" />
-          Private preview
+          {openPreview ? "Open preview" : "Private preview"}
         </span>
       </header>
 
@@ -185,7 +189,10 @@ export function Landing({
                   </span>
                   <div className={styles.dropText}>
                     <div className={styles.dropTitle}>Drop a contract here</div>
-                    <div className={styles.dropHint}>PDF, DOCX or TXT. It is read into numbered sections and stored with its SHA-256.</div>
+                    <div className={styles.dropHint}>
+                      PDF, DOCX or TXT. It is read into numbered sections and stored with its SHA-256 on this machine,{" "}
+                      {openPreview ? "where anyone with this address can open it: this preview is open." : "readable through your invite and no other."}
+                    </div>
                   </div>
                   <button type="button" className={styles.primary} aria-label="Add a contract" onClick={onPickFile}>
                     Add a contract
@@ -278,7 +285,7 @@ export function Landing({
                       </div>
                       {lead.statusReason && (
                         <p className={styles.receiptReason}>
-                          <span className={styles.receiptWho}>{decidedByCode(lead.statusSource) ? "Decided by code" : "Status"}</span>
+                          <span className={styles.receiptWho}>{decidedByCode(lead.statusSource) ? "Code found" : "Status"}</span>
                           {lead.statusReason}
                         </p>
                       )}

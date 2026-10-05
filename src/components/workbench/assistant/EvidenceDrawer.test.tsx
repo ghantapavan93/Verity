@@ -19,6 +19,7 @@ vi.mock("@/lib/api", () => ({
   getRunExplanation: api.getRunExplanation,
   reviewFinding: api.reviewFinding,
   errorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  absolute: (path: string) => `http://api.test${path}`,
 }));
 
 import { EXPLANATION_E5A20E22 } from "./__fixtures__/explanation-e5a20e2283e8416e";
@@ -98,7 +99,7 @@ describe("EvidenceDrawer", () => {
     const heads = within(drawer)
       .getAllByRole("heading", { level: 4 })
       .map((h) => h.textContent);
-    expect(heads).toEqual(["Model proposed", "Source", "Code decided", "Human"]);
+    expect(heads).toEqual(["Model proposed", "Source", "Code found a conflict", "Human"]);
     expect(drawer.textContent).not.toContain("sec_4");
 
     // Model proposed: the model's hint under guidance is its view, in its own words, read from the explanation.
@@ -120,15 +121,15 @@ describe("EvidenceDrawer", () => {
     expect(source.textContent).toContain("Verified verbatim in the document text · relocated:exact");
     expect(source.textContent).toContain("Found in EXHIBIT 10.102 (part 1), not in the section the model cited.");
 
-    // Code decided: observed against required, the sentence, the final status; the guidance it was checked against.
+    // Code found a conflict: observed against required, the sentence, the final status; the guidance it was checked against.
     const code = within(drawer).getByTestId("layer-code");
     expect(within(code).getByRole("heading", { name: "Guidance" })).toBeTruthy();
     expect(code.textContent).toContain("the contract provides 60 calendar days; the guidance requires at least 90 calendar days");
     expect(within(code).getByText("Needs review")).toBeTruthy();
-    // Nothing the model wrote sits under "Code decided": not its phrase for what it observed, not its suggestion.
+    // Nothing the model wrote sits under "Code found a conflict": not its phrase for what it observed, not its suggestion.
     expect(code.textContent).not.toContain("60 days' written notice");
     expect(code.textContent).not.toContain("Suggested position");
-    expect(code.textContent).toContain("Decided by code");
+    expect(code.textContent).toContain("Code found");
 
     // Human: the person's decision, as recorded, with the control to change it.
     const human = within(drawer).getByTestId("layer-human");
@@ -146,7 +147,7 @@ describe("EvidenceDrawer", () => {
     expect(api.getRunExplanation).toHaveBeenCalledTimes(1);
   });
 
-  it("does not head a status the model gave with Code decided", async () => {
+  it("does not head a status the model gave as if code compared anything", async () => {
     const hinted = {
       ...finding(null),
       status: "pass",
@@ -161,7 +162,7 @@ describe("EvidenceDrawer", () => {
     expect(heads).toEqual(["Model proposed", "Source", "Code did not decide", "Human"]);
     const code = within(drawer).getByTestId("layer-code");
     expect(code.textContent).toContain("the model's hint stands as its view");
-    expect(code.textContent).not.toContain("Decided by code");
+    expect(code.textContent).not.toContain("Code found");
     expect(within(code).getByText("Within guidance (model's view)")).toBeTruthy();
     expect(within(code).getByRole("heading", { name: "Guidance given" })).toBeTruthy();
     await screen.findByText("Its hint");
@@ -182,7 +183,7 @@ describe("EvidenceDrawer", () => {
     expect(heads).toEqual(["Model proposed", "Source", "Code confirmed", "Human"]);
     const code = within(drawer).getByTestId("layer-code");
     expect(code.textContent).toContain("Confirmed by code");
-    expect(code.textContent).not.toContain("Decided by code");
+    expect(code.textContent).not.toContain("Code found");
     expect(within(code).getByText("Within guidance (confirmed by code)")).toBeTruthy();
     await screen.findByText("Its hint");
   });

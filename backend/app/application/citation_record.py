@@ -13,17 +13,18 @@ from sqlalchemy.orm import Session
 
 from ..models import EvidenceSpan, Finding, Run, iso
 from ..schemas import CitationRecordOut
+from .workspace import visible_runs
 
 ANSWERED = ("complete", "unresolved")  # runs where the model answered and the verifier had something to check
 
 
-def citation_record(session: Session) -> CitationRecordOut:
-    runs_by_stage = dict(session.execute(select(Run.stage, func.count()).where(Run.stage.in_(ANSWERED)).group_by(Run.stage)).all())
-    first_at, last_at = session.execute(select(func.min(Run.created_at), func.max(Run.created_at)).where(Run.stage.in_(ANSWERED))).one()
+def citation_record(session: Session, workspace: str | None = None) -> CitationRecordOut:
+    """Over every run when ``workspace`` is None (the project's own census); otherwise over the runs it may read."""
+    answered = Run.stage.in_(ANSWERED) if workspace is None else (Run.stage.in_(ANSWERED) & visible_runs(workspace))
+    runs_by_stage = dict(session.execute(select(Run.stage, func.count()).where(answered).group_by(Run.stage)).all())
+    first_at, last_at = session.execute(select(func.min(Run.created_at), func.max(Run.created_at)).where(answered)).one()
 
-    finding_rows = session.execute(
-        select(Finding.status, func.count()).join(Run, Finding.run_id == Run.id).where(Run.stage.in_(ANSWERED)).group_by(Finding.status)
-    ).all()
+    finding_rows = session.execute(select(Finding.status, func.count()).join(Run, Finding.run_id == Run.id).where(answered).group_by(Finding.status)).all()
     findings = sum(count for _status, count in finding_rows)
     withheld = sum(count for status, count in finding_rows if status == "unresolved")
 
@@ -31,7 +32,7 @@ def citation_record(session: Session) -> CitationRecordOut:
         select(EvidenceSpan.method, EvidenceSpan.verified, func.count())
         .join(Finding, EvidenceSpan.finding_id == Finding.id)
         .join(Run, Finding.run_id == Run.id)
-        .where(Run.stage.in_(ANSWERED))
+        .where(answered)
         .group_by(EvidenceSpan.method, EvidenceSpan.verified)
     ).all()
     by_method: dict[str, int] = {}

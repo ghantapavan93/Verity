@@ -15,14 +15,15 @@ from ..application.explain_run import explain_run
 from ..application.recover_runs import recover_interrupted_runs
 from ..application.review_finding import review_out
 from ..application.start_run import start_run
+from ..application.workspace import require_run, visible_runs
 from ..db import SessionLocal, get_session
-from ..errors import NotFound
 from ..models import Finding, Run, iso
 from ..providers import make_provider
 from ..providers.base import ModelProvider
 from ..runs.events import TERMINAL, bus
 from ..runs.service import execute_run
 from ..schemas import CandidateOut, FindingOut, RunDetail, RunExplanation, RunIn, RunOut, RunSummary, SpanOut, StageOut
+from .access import current_workspace
 from .deps import get_provider
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
@@ -69,6 +70,7 @@ def run_out(run: Run) -> RunOut:
     return RunOut(
         id=run.id,
         question=run.question,
+        shared=run.workspace_id is None,
         stage=run.stage,
         findings=shown,
         withheld=[finding_out(f) for f in run.findings if f.status == "unresolved"],
@@ -135,6 +137,7 @@ def run_summary(run: Run) -> RunSummary:
     return RunSummary(
         id=run.id,
         question=run.question,
+        shared=run.workspace_id is None,
         stage=run.stage,
         model=run.model,
         prompt_version=run.prompt_version,
@@ -175,10 +178,15 @@ def provider_for(run: Run | None, default: ModelProvider) -> ModelProvider:
 
 @router.post("", response_model=RunOut, status_code=status.HTTP_202_ACCEPTED)
 def create_run(
-    body: RunIn, response: Response, background: BackgroundTasks, session: Session = Depends(get_session), provider: ModelProvider = Depends(get_provider)
+    body: RunIn,
+    response: Response,
+    background: BackgroundTasks,
+    session: Session = Depends(get_session),
+    provider: ModelProvider = Depends(get_provider),
+    workspace: str = Depends(current_workspace),
 ) -> RunOut:
-    """202 with a new run, or 200 with the running or completed run that already has these inputs."""
-    started = start_run(session, body.document_id, body.guidance_id, body.question, provider)
+    """202 with a new run, or 200 with this workspace's running or completed run that already has these inputs."""
+    started = start_run(session, body.document_id, body.guidance_id, body.question, provider, workspace=workspace)
     if started.created:
         background.add_task(_run_on_own_thread, started.run.id, provider)
     else:
@@ -194,41 +202,38 @@ def create_run(
 
 
 @router.get("", response_model=list[RunSummary])
-def list_runs(session: Session = Depends(get_session)) -> list[RunSummary]:
+def list_runs(session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> list[RunSummary]:
+    """This workspace's runs and the curated ones, newest first, the latest 200."""
     recover_interrupted_runs(session)
-    runs = session.query(Run).order_by(Run.created_at.desc()).limit(200).all()
+    runs = session.query(Run).filter(visible_runs(workspace)).order_by(Run.created_at.desc()).limit(200).all()
     return [run_summary(r) for r in runs]
 
 
 @router.get("/{run_id}", response_model=RunOut)
-def get_run(run_id: str, session: Session = Depends(get_session)) -> RunOut:
+def get_run(run_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> RunOut:
     recover_interrupted_runs(session)
-    run = session.get(Run, run_id)
-    if run is None:
-        raise NotFound("run", run_id)
-    return run_out(run)
+    return run_out(require_run(session, run_id, workspace))
 
 
 @router.get("/{run_id}/detail", response_model=RunDetail)
-def get_run_detail(run_id: str, session: Session = Depends(get_session)) -> RunDetail:
+def get_run_detail(run_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> RunDetail:
     recover_interrupted_runs(session)
-    run = session.get(Run, run_id)
-    if run is None:
-        raise NotFound("run", run_id)
-    return run_detail(run)
+    return run_detail(require_run(session, run_id, workspace))
 
 
 @router.get("/{run_id}/explanation", response_model=RunExplanation)
-def get_run_explanation(run_id: str, session: Session = Depends(get_session)) -> RunExplanation:
+def get_run_explanation(run_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> RunExplanation:
     """Why this answer: what was read, what retrieval chose, the exact model input, the model's proposal, each
     SourceMatch and the recorded policy evaluation, all from the record. Read-only; nothing is recomputed as fact."""
     recover_interrupted_runs(session)
+    require_run(session, run_id, workspace)
     return explain_run(session, run_id)
 
 
 @router.get("/{run_id}/evidence-pack")
-def evidence_pack(run_id: str, session: Session = Depends(get_session)) -> Response:
+def evidence_pack(run_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> Response:
     """A zip with the original bytes, the canonical sections, the run record, every located span and a stdlib verify.py."""
+    require_run(session, run_id, workspace)
     pack = build_evidence_pack(session, run_id)
     return Response(content=pack.data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{pack.filename}"'})
 
@@ -256,6 +261,10 @@ async def run_events(run_id: str, request: Request) -> StreamingResponse:
 
     after_text = request.headers.get("last-event-id") or request.query_params.get("after")
     after = int(after_text) if after_text and after_text.isdigit() else None
+    workspace = current_workspace(request)
+    # Authorised before anything is subscribed to: a run another workspace may not read answers as one that does not exist.
+    with SessionLocal() as session:
+        require_run(session, run_id, workspace)
 
     async def stream() -> AsyncIterator[str]:
         queue = bus.subscribe(run_id)

@@ -93,6 +93,8 @@ class ReviewOut(ApiModel):
     reviewer: str
     note: str | None = None
     at: str
+    # The invite subject the reviewer entered with, when the gate was on; the one identity the application verified.
+    access_subject: str | None = None
 
 
 class FindingReviewOut(ApiModel):
@@ -149,6 +151,8 @@ class RunOut(ApiModel):
     id: str
     question: str
     stage: RunStageName
+    # A curated record: readable by every workspace, changed by none. Every run from before workspaces existed.
+    shared: bool = False
     findings: list[FindingOut]
     # Findings the model proposed whose evidence did not verify: kept and shown as withheld, never as answers.
     withheld: list[FindingOut] = []
@@ -182,6 +186,7 @@ class RunSummary(ApiModel):
     id: str
     question: str
     stage: RunStageName
+    shared: bool = False
     model: str
     prompt_version: str
     prompt_hash: str
@@ -197,6 +202,8 @@ class RunSummary(ApiModel):
 class FindingRecord(ApiModel):
     id: str
     run_id: str
+    # The run is curated: its review is kept as recorded and cannot be changed here.
+    shared: bool = False
     document_id: str
     document_name: str
     question: str

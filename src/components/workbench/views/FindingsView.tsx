@@ -176,7 +176,16 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                     </div>
                   </button>
                   <div className={styles.reviewBar}>
-                    {r.review ? (
+                    {r.shared ? (
+                      <>
+                        {r.review && (
+                          <span className={`${wb.statusChip} ${r.review.verdict === "confirmed" ? wb.statusPass : wb.statusMuted}`}>
+                            {r.review.verdict === "confirmed" ? "Confirmed" : "Dismissed"}
+                          </span>
+                        )}
+                        <span>{r.review ? `by ${r.review.reviewer} · ` : ""}curated record, kept as recorded</span>
+                      </>
+                    ) : r.review ? (
                       <>
                         <span className={`${wb.statusChip} ${r.review.verdict === "confirmed" ? wb.statusPass : wb.statusMuted}`}>
                           {r.review.verdict === "confirmed" ? "Confirmed" : "Dismissed"}

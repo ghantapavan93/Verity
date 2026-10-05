@@ -5,9 +5,10 @@ import styles from "../Workbench.module.css";
 /**
  * The comparison code made, read back from the sentence it wrote. The sentence is code's own template
  * (backend/app/policy/durations.py, `evaluate`), so the parse is exact or it is nothing: a reason that does not
- * match draws no gauge, and a comparison across units draws none either.
+ * match draws no gauge, and a comparison across units draws none either. The sentence may go on after the comparison
+ * (policy v3 adds what code did not establish); the gauge draws the comparison alone.
  */
-const REASON = /^the contract provides (\d+) ([a-z ]+?)s; the guidance requires (at least|at most|exactly|between) (\d+)(?: and (\d+))? ([a-z ]+?)s$/;
+const REASON = /^the contract provides (\d+) ([a-z ]+?)s; the guidance requires (at least|at most|exactly|between) (\d+)(?: and (\d+))? ([a-z ]+?)s(?=;|$)/;
 
 export interface DayComparison {
   provided: number;

@@ -83,7 +83,7 @@ def _text_bearing(members: list[bytes], minimum: int = 1) -> int:
     return sum(1 for data in members if len(_strip_tags(data.decode("utf-8", "replace")).strip()) >= minimum)
 
 
-def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs: int) -> list[PartCoverage]:
+def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs: int, style_hidden_runs: int = 0) -> list[PartCoverage]:
     """The coverage of the accepted-view DOCX reading. ``body_xml`` is the serialised w:body the reader walked."""
     with zipfile.ZipFile(io.BytesIO(data)) as package:
         names = set(package.namelist())
@@ -126,8 +126,13 @@ def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs:
         counted("tracked_insertions", insertions, Status.ACCEPTED, "kept, as Word shows them once every change is accepted"),
         counted("tracked_deletions", deletions, Status.EXCLUDED, "left out; a deleted paragraph mark joins its paragraphs"),
         counted("move_revisions", moves, Status.ACCEPTED, "text moved to its new place is read there; the old place is left out"),
-        counted("hidden_runs", hidden_runs, Status.EXCLUDED, "runs marked hidden directly are left out"),
-        PartCoverage("style_hidden_text", Status.UNKNOWN, note="text hidden through a style is kept; the reader does not resolve styles"),
+        counted("hidden_runs", hidden_runs, Status.EXCLUDED, "runs hidden by their own properties (w:vanish, w:specVanish) are left out"),
+        counted(
+            "style_hidden_text",
+            style_hidden_runs,
+            Status.EXCLUDED,
+            "runs hidden through a character or paragraph style are left out (reader v6); text hidden only in Word's web view (w:webHidden) is read",
+        ),
         counted("headers", _text_bearing(headers), Status.OMITTED, "header text is not read"),
         counted("footers", _text_bearing(footers), Status.OMITTED, "footer text is not read"),
         counted("footnotes", real_footnotes, Status.OMITTED, "footnote text is not read; the reference marks are not in the sections"),

@@ -22,7 +22,10 @@ __all__ = ["PARSER_VERSION", "SUPPORTED", "Ingested", "TooLargeToRead", "Unsuppo
 #          colon stays body under a short label, so every word of it can be quoted and highlighted.
 # v5 (2026-10-01): block-level content controls and nested tables are read, UTF-16 and Windows-1252 text files are
 # decoded, a wall of text is split into sections and named by its first words, a textless PDF page is counted.
-PARSER_VERSION = "v5"
+# v6 (2026-10-02): text hidden through a style is left out. The reader resolves w:vanish through the run's character
+# style, the paragraph's style and their basedOn chains, and treats w:specVanish as hidden; before, only a run's own
+# w:vanish was honoured, so a Word "Hidden" character style carried text to the model that Word never showed.
+PARSER_VERSION = "v6"
 
 
 @dataclass

@@ -101,8 +101,9 @@ export function statusLabel(status: FindingStatus, hasGuidance: boolean, source:
 }
 
 export const STATUS_SOURCE_LABELS: Record<string, string> = {
-  computed_days: "Status decided by code from the day counts",
-  confirmed_days: "Pass proposed by the model and confirmed by code from the day counts and the source text",
+  computed_days: "Needs review: code found the contract's period and the guidance's in conflict; that they concern the same point is the model's reading",
+  confirmed_days:
+    "Pass proposed by the model and confirmed by code from the day counts and the source text (a record made under policy v2; code no longer confirms a pass)",
   model_hint: "Status taken from the model's hint; code did not decide it",
   no_evidence: "No verified evidence, so no status was given",
   reference_check: "Lowered to needs review by code: the conclusion names a section this document does not have",
@@ -118,11 +119,12 @@ export function decidedByCode(source: string | null | undefined): boolean {
 }
 
 /**
- * What code did about a finding's status, in the two words the interface heads it with. "Code confirmed" is not
- * "Code decided": the pass was the model's proposal, and without it the same quote and guidance are not a pass.
+ * What code did about a finding's status, in the words the interface heads it with. "Code found a conflict" is what
+ * a day comparison establishes: two periods that do not agree. Whether they concern the same point is the model's
+ * reading. "Code confirmed" is a record made under policy v2, when code still confirmed a pass; it no longer does.
  */
-export function codeRole(source: string | null | undefined): "Code decided" | "Code confirmed" | "Code withheld" | "Code did not decide" {
-  if (decidedByCode(source)) return "Code decided";
+export function codeRole(source: string | null | undefined): "Code found a conflict" | "Code confirmed" | "Code withheld" | "Code did not decide" {
+  if (decidedByCode(source)) return "Code found a conflict";
   if (source === "confirmed_days") return "Code confirmed";
   return source === "no_evidence" ? "Code withheld" : "Code did not decide";
 }

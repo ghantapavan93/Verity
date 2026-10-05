@@ -9,6 +9,10 @@ SECTIONS = [
     ("Governing Law", "This Agreement is governed by the laws of Delaware."),
 ]
 
+# Policy v3: code reports a comparison and says what it did not establish; it no longer owns a pass.
+SUBJECT = "; that the quoted period and the guidance concern the same point is the model's reading, not code's"
+CONSISTENT = "; code found the day counts consistent, and that the quoted period and the guidance concern the same point is the model's reading, not code's"
+
 
 def test_tokenize_drops_stopwords_and_keeps_numbers() -> None:
     assert tokenize("What is the notice period, 15 days?") == ["notice", "period", "15", "days"]
@@ -29,11 +33,11 @@ def test_status_is_computed_from_the_quote_and_the_guidance_never_from_the_model
     guidance = "We accept termination on 30 days' notice or more."
     decision = decide("pass", "15 days", "at least 30 days", True, True, quotes=[quote], guidance=guidance)
     assert (decision.status, decision.source) == ("needs_review", "computed_days")
-    assert decision.reason == "the contract provides 15 calendar days; the guidance requires at least 30 calendar days"
+    assert decision.reason == "the contract provides 15 calendar days; the guidance requires at least 30 calendar days" + SUBJECT
     # A pass is code's only when the model called it one too and the quote names what the guidance is about (policy-v2).
     enough = "Customer may terminate on forty-five (45) days' written notice."
     assert decide("pass", "45 days", "at least 30 days", True, True, quotes=[enough], guidance=guidance) == Decision(
-        "pass", "confirmed_days", "the contract provides 45 calendar days; the guidance requires at least 30 calendar days"
+        "pass", "model_hint", "the contract provides 45 calendar days; the guidance requires at least 30 calendar days" + CONSISTENT
     )
     doubted = decide("needs_review", "45 days", "at least 30 days", True, True, quotes=[enough], guidance=guidance)
     assert (doubted.status, doubted.source) == ("needs_review", "model_hint") and "the model asked for review" in doubted.reason
@@ -125,7 +129,7 @@ def test_a_stated_position_the_quote_does_not_carry_lowers_the_status() -> None:
     # The model's required count is not in the guidance either.
     assert decide("pass", "30 days' notice", "at least 45 days", True, True, quotes=[quote], guidance=guidance).source == "position_check"
     # Both positions are in the record: computed as before.
-    assert decide("pass", "30 days' notice", "at least 30 days", True, True, quotes=[quote], guidance=guidance).source == "confirmed_days"
+    assert decide("pass", "30 days' notice", "at least 30 days", True, True, quotes=[quote], guidance=guidance).source == "model_hint"
     # A quote without a duration grounds nothing: the model's numbers compute nothing, and the hint stands as a hint.
     assert decide(
         "pass", "30 days' notice", "at least 30 days", True, True, quotes=["Either party may terminate for convenience."], guidance=guidance

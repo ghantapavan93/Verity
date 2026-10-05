@@ -25,6 +25,9 @@ from tests.support import GUIDANCE
 GUIDANCE_90 = "We require at least 90 days' written notice for termination for convenience. Anything shorter needs review."
 # A pass that code decided or confirmed: what a hostile input must never end as.
 PASSES_BY_CODE = {("pass", "computed_days"), ("pass", "confirmed_days")}
+# Policy v3: a pass is the model's; code reports the comparison and says what it did not establish.
+SUBJECT = "; that the quoted period and the guidance concern the same point is the model's reading, not code's"
+CONSISTENT = "; code found the day counts consistent, and that the quoted period and the guidance concern the same point is the model's reading, not code's"
 TOPIC = "Termination for convenience"
 CLEAN = "Either party may terminate this Agreement for convenience upon ninety (90) days' prior written notice."
 HERO = "4.1 TERMINATION WITHOUT CAUSE. Either party may terminate this Agreement without cause upon sixty (60) days prior written notice to the other party."
@@ -35,18 +38,22 @@ def decided(quote: str, hint: StatusHint = "pass", guidance: str = GUIDANCE_90, 
 
 
 def test_a_plain_clause_about_the_same_point_is_a_pass_the_model_proposed_and_code_confirmed() -> None:
-    assert decided(CLEAN) == Decision("pass", "confirmed_days", "the contract provides 90 calendar days; the guidance requires at least 90 calendar days")
+    assert decided(CLEAN) == Decision(
+        "pass", "model_hint", "the contract provides 90 calendar days; the guidance requires at least 90 calendar days" + CONSISTENT
+    )
     assert pass_blockers([CLEAN], GUIDANCE_90, parse_rule(GUIDANCE_90, TOPIC)) == []  # type: ignore[arg-type]
 
 
 def test_a_shortfall_is_still_decided_by_code_whatever_surrounds_it() -> None:
-    assert decided(HERO) == Decision("needs_review", "computed_days", "the contract provides 60 calendar days; the guidance requires at least 90 calendar days")
+    assert decided(HERO) == Decision(
+        "needs_review", "computed_days", "the contract provides 60 calendar days; the guidance requires at least 90 calendar days" + SUBJECT
+    )
     # None of what blocks a pass stands in the way of reporting a shortfall: a person looks either way.
     assert decided(HERO, hint="needs_review").source == "computed_days"
     assert decided(HERO, dependencies=("§14.3",)).source == "computed_days"
     assert decided("Subject to Section 9, Provider may terminate on no more than 60 days' notice.").source == "computed_days"
     assert decided("Customer will pay each invoice within 45 days.") == Decision(
-        "needs_review", "computed_days", "the contract provides 45 calendar days; the guidance requires at least 90 calendar days"
+        "needs_review", "computed_days", "the contract provides 45 calendar days; the guidance requires at least 90 calendar days" + SUBJECT
     )
 
 
@@ -97,7 +104,8 @@ def test_who_owns_each_direction_is_what_the_record_says() -> None:
     it is recorded as the model's pass confirmed by code, never as code's decision. A shortfall does not move with the
     hint, so it is recorded as code's decision."""
     by_hint = {hint: decided(CLEAN, hint=hint) for hint in get_args(StatusHint)}
-    assert (by_hint["pass"].status, by_hint["pass"].source) == ("pass", "confirmed_days")
+    assert (by_hint["pass"].status, by_hint["pass"].source) == ("pass", "model_hint")
+    assert "code found the day counts consistent" in (by_hint["pass"].reason or "")
     assert (by_hint["needs_review"].status, by_hint["needs_review"].source) == ("needs_review", "model_hint")
     assert (by_hint["missing"].status, by_hint["missing"].source) == ("missing", "model_hint")
     assert "pass" not in STATUSES_BY_SOURCE["position_check"] + STATUSES_BY_SOURCE["ambiguous_fact"] + STATUSES_BY_SOURCE["reference_check"]
@@ -107,7 +115,7 @@ def test_who_owns_each_direction_is_what_the_record_says() -> None:
     assert (
         short["pass"]
         == short["needs_review"]
-        == Decision("needs_review", "computed_days", "the contract provides 60 calendar days; the guidance requires at least 90 calendar days")
+        == Decision("needs_review", "computed_days", "the contract provides 60 calendar days; the guidance requires at least 90 calendar days" + SUBJECT)
     )
 
 
@@ -131,7 +139,13 @@ def test_the_models_wording_cannot_earn_a_pass_and_cannot_change_one() -> None:
         assert (refused.status, refused.source) not in PASSES_BY_CODE, refused
         clean = decide(hint, seen, wanted, True, True, quotes=[CLEAN], guidance=GUIDANCE_90, topic=topic)
         lowered_by_the_model = hint != "pass" or seen == "120 days" or wanted == "30 days"
-        assert (clean == Decision("pass", "confirmed_days", clean.reason)) == (not lowered_by_the_model), (topic, seen, wanted, hint, clean)
+        assert (clean == Decision("pass", "model_hint", clean.reason) and "consistent" in (clean.reason or "")) == (not lowered_by_the_model), (
+            topic,
+            seen,
+            wanted,
+            hint,
+            clean,
+        )
         assert (clean.status, clean.source) != ("pass", "computed_days"), "no new decision says code decided a pass"
 
 
@@ -280,7 +294,8 @@ def ask(client: TestClient, monkeypatch: pytest.MonkeyPatch, lead: str) -> dict[
 def test_through_the_run_a_clause_subject_to_an_unseen_section_is_the_models_view(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     plain = ask(client, monkeypatch, lead="")
     finding = plain["findings"][0]
-    assert (finding["status"], finding["statusSource"]) == ("pass", "confirmed_days"), finding
+    assert (finding["status"], finding["statusSource"]) == ("pass", "model_hint"), finding
+    assert "code found the day counts consistent" in finding["statusReason"]
 
     dependent = ask(client, monkeypatch, lead="Subject to Section 8, ")
     assert "8" not in [c["number"] for c in dependent["candidates"]], "section 8 shares no word with the question, so it was not handed over"
@@ -299,7 +314,7 @@ def test_what_the_quote_left_out_of_its_own_sentence_still_blocks_a_pass() -> No
     ):
         decision = decide("pass", None, None, True, True, quotes=[quote], guidance=GUIDANCE_90, topic=TOPIC, passages=[sentence])
         assert (decision.status, decision.source) == ("pass", "model_hint") and why in decision.reason, decision
-    assert decide("pass", None, None, True, True, quotes=[quote], guidance=GUIDANCE_90, topic=TOPIC, passages=[quote + "."]).source == "confirmed_days"
+    assert "consistent" in (decide("pass", None, None, True, True, quotes=[quote], guidance=GUIDANCE_90, topic=TOPIC, passages=[quote + "."]).reason or "")
 
 
 # ---------------------------------------------------------------- pairs that are not decisions
@@ -352,11 +367,11 @@ def grounds(quote: str, section: tuple[str, str], sentence: str | None = None) -
     return Grounds((quote,), (sentence or quote,), (section,))
 
 
-def test_a_shortfall_in_an_unrelated_finding_takes_nothing_from_a_confirmed_pass() -> None:
+def test_a_shortfall_in_an_unrelated_finding_takes_nothing_from_a_consistent_pass() -> None:
     """A question that asks two things: termination, 90 days against a floor of 90, and payment, which code measures
     against the same floor and finds short. Being findings of one run is not a relation between them."""
     confirmed, short = decided(CLEAN), decided(PAYMENT)
-    assert (confirmed.source, short.source) == ("confirmed_days", "computed_days")
+    assert (confirmed.source, short.source) == ("model_hint", "computed_days")
     settled = settle_together([confirmed, short], [grounds(CLEAN, ("s4", "4")), grounds(PAYMENT, ("s2", "2"))], GUIDANCE_90)
     assert settled == [confirmed, short]
     # Nor does a lowering that is about the model's wording, or the model's own hint.
@@ -382,7 +397,7 @@ def test_a_shortfall_in_an_unrelated_finding_takes_nothing_from_a_confirmed_pass
         (PAYMENT, grounds(PAYMENT, ("s4", "4")), "cites the same section"),
     ],
 )
-def test_a_confirmed_pass_does_not_stand_beside_a_shortfall_that_bears_on_it(short_quote: str, short_grounds: Grounds, relation: str) -> None:
+def test_a_consistent_pass_names_a_shortfall_that_bears_on_it(short_quote: str, short_grounds: Grounds, relation: str) -> None:
     confirmed, short = decided(CLEAN), decided(short_quote)
     assert short.status == "needs_review" and short.source in ("computed_days", "ambiguous_fact"), short
     settled = settle_together([confirmed, short], [grounds(CLEAN, ("s4", "4")), short_grounds], GUIDANCE_90)

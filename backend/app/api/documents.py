@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from ..application.ingest_document import coverage_of, ingest_document, refuse_if_too_large
+from ..application.workspace import require_document, visible_documents, visible_runs
 from ..db import get_session
-from ..errors import NotFound
 from ..models import Document, Finding, FindingReview, Run, Section, iso
 from ..schemas import CoverageReport, DocumentOut, DocumentSummary, SectionOut
+from .access import current_workspace
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -33,12 +34,14 @@ def to_document_out(document: Document) -> DocumentOut:
 
 
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
-async def upload_document(file: UploadFile, response: Response, session: Session = Depends(get_session)) -> DocumentOut:
-    """201 with a new document, or 200 with the stored document that has exactly these bytes."""
+async def upload_document(
+    file: UploadFile, response: Response, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)
+) -> DocumentOut:
+    """201 with a document new to this workspace, or 200 with the one it already holds that has exactly these bytes."""
     refuse_if_too_large(file.size)  # the declared size, before a byte is read; the bytes are checked again once read
     data = await file.read()
     # Parsing is CPU work of up to seconds (docs/PARSER-COMPARISON.md: 44 s on a 1.25-million-character contract); it leaves the event loop.
-    ingested = await run_in_threadpool(ingest_document, session, file.filename or "upload", data)
+    ingested = await run_in_threadpool(ingest_document, session, file.filename or "upload", data, workspace)
     if not ingested.created:
         response.status_code = status.HTTP_200_OK
     out = to_document_out(ingested.document)
@@ -47,10 +50,17 @@ async def upload_document(file: UploadFile, response: Response, session: Session
 
 
 @router.get("", response_model=list[DocumentSummary])
-def list_documents(session: Session = Depends(get_session)) -> list[DocumentSummary]:
-    rows = session.execute(select(Document, func.count(Section.id)).outerjoin(Section).group_by(Document.id).order_by(Document.created_at.desc())).all()
-    # Verified findings and the latest complete run, per document.
-    complete = select(Run).where(Run.stage == "complete").subquery()
+def list_documents(session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> list[DocumentSummary]:
+    """This workspace's documents and the curated ones; the counts beside each are of runs it may read."""
+    rows = session.execute(
+        select(Document, func.count(Section.id))
+        .outerjoin(Section)
+        .where(visible_documents(workspace))
+        .group_by(Document.id)
+        .order_by(Document.created_at.desc())
+    ).all()
+    # Verified findings and the latest complete run, per document, among the runs this workspace may read.
+    complete = select(Run).where(Run.stage == "complete", visible_runs(workspace)).subquery()
     finding_counts: dict[str, int] = dict(
         session.execute(
             select(complete.c.document_id, func.count(Finding.id))
@@ -99,8 +109,5 @@ def _iso_any(value: datetime | str | None) -> str | None:
 
 
 @router.get("/{document_id}", response_model=DocumentOut)
-def get_document(document_id: str, session: Session = Depends(get_session)) -> DocumentOut:
-    document = session.get(Document, document_id)
-    if document is None:
-        raise NotFound("document", document_id)
-    return to_document_out(document)
+def get_document(document_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> DocumentOut:
+    return to_document_out(require_document(session, document_id, workspace))

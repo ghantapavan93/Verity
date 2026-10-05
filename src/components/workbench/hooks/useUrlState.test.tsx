@@ -34,6 +34,7 @@ const running: RunView = {
   error: null,
   reason: null,
   reused: false,
+  shared: false,
   hasGuidance: false,
   reviewHead: "",
   guidanceText: null,

@@ -26,6 +26,9 @@ from tests.support import CONTRACT, upload_and_ask
 
 QUESTION = "How much notice does the customer need to give to terminate for convenience?"
 
+# Policy v3: a day comparison says what it did not establish.
+SUBJECT = "; that the quoted period and the guidance concern the same point is the model's reading, not code's"
+
 
 def explanation(client: TestClient, run_id: str) -> dict[str, Any]:
     response = client.get(f"/api/runs/{run_id}/explanation")
@@ -76,7 +79,7 @@ def test_the_explanation_is_the_record_layer_by_layer(client: TestClient) -> Non
     assert match["insideModelVisibleContext"] is True
     policy = finding["recordedPolicyEvaluation"]
     assert policy["status"] == "needs_review" and policy["statusSource"] == "computed_days" and policy["deterministic"] is True
-    assert policy["statusReason"] == "the contract provides 15 calendar days; the guidance requires at least 30 calendar days"
+    assert policy["statusReason"] == "the contract provides 15 calendar days; the guidance requires at least 30 calendar days" + SUBJECT
 
     repro = out["reproducibility"]
     assert repro["inputMatches"] is True and repro["recordedInputSha256"] == rebuilt["recordedInputSha256"]

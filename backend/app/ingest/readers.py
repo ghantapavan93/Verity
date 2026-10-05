@@ -94,15 +94,88 @@ MAX_TITLE_CHARS = 200
 
 @dataclass
 class _Walk:
-    """What the walk over a DOCX body left out."""
+    """What the walk over a DOCX body left out, and the styles that decide what is hidden."""
 
+    styles: _Styles
     hidden_runs: int = 0
+    # Runs hidden only through a style (a character style named Hidden, a paragraph style whose runs vanish) or
+    # through w:specVanish; counted apart so the coverage report can say which door was closed.
+    style_hidden_runs: int = 0
 
 
-def _is_hidden(run: etree._Element) -> bool:
+_STYLE_DEPTH = 12
+
+
+class _Styles:
+    """The document's styles, read once: for each style id, the style it is based on and whether its run
+    properties hide text. Word hides text through styles as readily as through a run's own properties, and a
+    reader that resolves only the run's own w:vanish hands style-hidden text to the model (reader v6)."""
+
+    def __init__(self, styles: etree._Element | None) -> None:
+        self._based_on: dict[str, str | None] = {}
+        self._hidden: dict[str, bool | None] = {}
+        self.default_hidden = False
+        if styles is None:
+            return
+        defaults = styles.find(f"{qn('w:docDefaults')}/{qn('w:rPrDefault')}/{qn('w:rPr')}")
+        self.default_hidden = _vanish_state(defaults) is True
+        for style in styles.iterfind(qn("w:style")):
+            style_id = style.get(qn("w:styleId"))
+            if not style_id:
+                continue
+            based = style.find(qn("w:basedOn"))
+            self._based_on[style_id] = based.get(qn("w:val")) if based is not None else None
+            self._hidden[style_id] = _vanish_state(style.find(qn("w:rPr")))
+
+    def hides(self, style_id: str | None) -> bool | None:
+        """True or False when a style in the chain says; None when none does."""
+        seen = 0
+        while style_id and seen < _STYLE_DEPTH:
+            state = self._hidden.get(style_id)
+            if state is not None:
+                return state
+            style_id = self._based_on.get(style_id)
+            seen += 1
+        return None
+
+
+def _vanish_state(properties: etree._Element | None) -> bool | None:
+    """What a run-properties bag says about hiding: w:vanish (on unless its value is off), or w:specVanish; None when silent."""
+    if properties is None:
+        return None
+    vanish = properties.find(qn("w:vanish"))
+    if vanish is not None:
+        return vanish.get(qn("w:val")) not in ("0", "false")
+    if properties.find(qn("w:specVanish")) is not None:
+        return True
+    return None
+
+
+def _style_id(properties: etree._Element | None, tag: str) -> str | None:
+    style = properties.find(qn(tag)) if properties is not None else None
+    return style.get(qn("w:val")) if style is not None else None
+
+
+def _paragraph_hides(paragraph: etree._Element, styles: _Styles) -> bool:
+    """Whether the paragraph's style chain hides its runs. The paragraph mark's own run properties (w:pPr/w:rPr)
+    speak for the mark alone, not for the runs, and are not consulted."""
+    return styles.hides(_style_id(paragraph.find(qn("w:pPr")), "w:pStyle")) is True
+
+
+def _hidden_by(run: etree._Element, paragraph_hides: bool, styles: _Styles) -> str | None:
+    """How this run is hidden, if it is: "run" by its own properties, "style" by a style or the paragraph's; None when shown.
+    Precedence is Word's: the run's own w:vanish decides either way; then its character style; then the paragraph's style;
+    then the document default."""
     properties = run.find(qn("w:rPr"))
-    vanish = properties.find(qn("w:vanish")) if properties is not None else None
-    return vanish is not None and vanish.get(qn("w:val")) not in ("0", "false")
+    own = _vanish_state(properties)
+    if own is not None:
+        return "run" if own else None
+    by_character_style = styles.hides(_style_id(properties, "w:rStyle"))
+    if by_character_style is not None:
+        return "style" if by_character_style else None
+    if paragraph_hides or styles.default_hidden:
+        return "style"
+    return None
 
 
 def _run_text(run: etree._Element) -> str:
@@ -116,25 +189,30 @@ def _run_text(run: etree._Element) -> str:
     return "".join(parts)
 
 
-def accepted_text(element: etree._Element, walk: _Walk) -> str:
+def accepted_text(element: etree._Element, walk: _Walk, paragraph_hides: bool | None = None) -> str:
     """Text of a paragraph, as Word shows it with all changes accepted.
 
     Runs are collected in document order through every container that can hold them (w:ins,
     w:moveTo, w:hyperlink, w:fldSimple, w:smartTag, w:sdtContent, w:customXml); deleted and
-    moved-away containers and hidden runs are left out.
+    moved-away containers and hidden runs are left out, whether hidden by their own properties or by a style.
     """
+    if paragraph_hides is None:
+        paragraph_hides = element.tag == _PARAGRAPH and _paragraph_hides(element, walk.styles)
     parts: list[str] = []
     for child in element:
         tag = child.tag
         if tag in _DELETED or tag in _PROPERTIES:
             continue
         if tag == _RUN:
-            if _is_hidden(child):
+            hidden = _hidden_by(child, paragraph_hides, walk.styles)
+            if hidden == "run":
                 walk.hidden_runs += 1
+            elif hidden == "style":
+                walk.style_hidden_runs += 1
             else:
                 parts.append(_run_text(child))
         elif len(child):
-            parts.append(accepted_text(child, walk))
+            parts.append(accepted_text(child, walk, paragraph_hides))
     return "".join(parts)
 
 
@@ -208,7 +286,11 @@ def read_docx(data: bytes) -> ReadResult:
         # A valid zip with a broken or hostile package inside: python-docx fails in many shapes, all of them a 422 here.
         raise UnsupportedFile("the file is not a readable .docx package") from error
     body = document.element.body
-    walk = _Walk()
+    try:
+        styles_element: etree._Element | None = document.styles.element
+    except (KeyError, AttributeError):  # a package without a styles part: nothing hides through a style
+        styles_element = None
+    walk = _Walk(styles=_Styles(styles_element))
     blocks: list[Block] = []
     title = ""
     # Text of paragraphs whose mark is deleted: once accepted, they run into the next paragraph.
@@ -292,8 +374,8 @@ def read_docx(data: bytes) -> ReadResult:
         pages=_docx_pages(data),
         title=title,
         tracked_changes=tracked,
-        hidden_runs=walk.hidden_runs,
-        coverage=docx_coverage(data, etree.tostring(body, encoding="unicode"), tracked, walk.hidden_runs),
+        hidden_runs=walk.hidden_runs + walk.style_hidden_runs,
+        coverage=docx_coverage(data, etree.tostring(body, encoding="unicode"), tracked, walk.hidden_runs, walk.style_hidden_runs),
     )
 
 

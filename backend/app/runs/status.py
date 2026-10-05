@@ -41,7 +41,7 @@ from ..policy.proof import pass_blockers, same_point
 # model's, confirmed by code only when every period of the guidance is met and the source text, the sentences around
 # the quote and the run's related findings give no reason against it. Changing what any of this means is a new
 # version: tests/test_semantic_versions.py fails until the version and its fingerprint are recorded together.
-POLICY_VERSION = "policy-v2"
+POLICY_VERSION = "policy-v3"
 
 
 @dataclass(frozen=True)
@@ -116,8 +116,12 @@ def decide(
             )
         evaluation = evaluate(fact, rule)
         if evaluation.outcome == "needs_review":
-            # A shortfall is code's to report: 60 days where the guidance requires 90. A person looks either way.
-            return Decision("needs_review", "computed_days", evaluation.reason)
+            # A shortfall is code's to report: 60 days where the guidance requires 90 sends the finding to a person. What
+            # code established is the conflict between the two periods. That the quoted period is the guidance's subject
+            # (a termination notice, not a payment term) is the model's reading, and the reason says so (policy v3): the
+            # live policy owned "Invoices must be paid within 60 days" as a termination shortfall, numerically right and
+            # about the wrong clause.
+            return Decision("needs_review", "computed_days", f"{evaluation.reason}; {SUBJECT_IS_THE_MODELS}")
         if evaluation.outcome == "pass":
             assert guidance is not None
             blockers: list[str] = []
@@ -131,10 +135,19 @@ def decide(
             blockers += pass_blockers(quotes, guidance, rule, dependencies, passages)
             if blockers:
                 return Decision(status_hint, "model_hint", f"{evaluation.reason}, but code does not confirm that as a pass: {'; '.join(blockers)}")
-            return Decision("pass", "confirmed_days", evaluation.reason)
+            # Policy v3: code no longer owns a pass. The checks above are lexical (shared word stems, operators, negation,
+            # carve-outs), and a lexical check cannot establish that a quote and a guidance sentence concern the same
+            # point: "Following a material breach, Company shall provide 30 days' written notice of an audit" passed every
+            # one of them against "a material breach must allow at least 30 days to cure", and 30 days of audit notice is
+            # not a cure period. The pass stays the model's; code says what it found and what it did not establish.
+            return Decision("pass", "model_hint", f"{evaluation.reason}; code found the day counts consistent, and {SUBJECT_IS_THE_MODELS}")
         if evaluation.outcome == "ambiguous":
             return Decision("needs_review", "ambiguous_fact", evaluation.reason)
     return Decision(status_hint, "model_hint")
+
+
+# The one thing a day comparison cannot establish, said the same way wherever code reports one.
+SUBJECT_IS_THE_MODELS = "that the quoted period and the guidance concern the same point is the model's reading, not code's"
 
 
 @dataclass(frozen=True)
@@ -161,19 +174,20 @@ def _bears_on(short: Grounds, confirmed: Grounds, guidance: str | None) -> str |
 
 
 def settle_together(decisions: Sequence[Decision], grounds: Sequence[Grounds], guidance: str | None) -> list[Decision]:
-    """A pass code confirmed does not stand as confirmed beside a shortfall code found in a finding that bears on it:
-    the live model, handed "60 days" in one section and "notwithstanding Section 4, 10 days" in another, returned the
-    first as a pass and the second as needing review (2026-10-02), and the two sat side by side. Which clause governs
-    is a reading; the pass becomes the model's view, with the reason.
+    """A pass whose day counts code found consistent does not stand unremarked beside a shortfall code found in a
+    finding that bears on it: the live model, handed "60 days" in one section and "notwithstanding Section 4, 10 days"
+    in another, returned the first as a pass and the second as needing review (2026-10-02), and the two sat side by
+    side. Which clause governs is a reading; the pass stays the model's, and its reason names the shortfall.
 
     What bears on it is structural, never "the same run": the two cite the same section, the short one's clause
-    refers to the section the confirmed one cites, or the short one's quote is about the same point of the guidance
-    (`policy.proof.same_point`, the test the confirmation itself had to pass). A shortfall in an unrelated finding,
-    a payment term measured against a termination rule, takes nothing from a pass on termination."""
+    refers to the section the pass cites, or the short one's quote is about the same point of the guidance
+    (`policy.proof.same_point`). A shortfall in an unrelated finding, a payment term measured against a termination
+    rule, takes nothing from a pass on termination. Under policy v2 this lowered a code-confirmed pass to the
+    model's view; under v3 every pass is already the model's, so only the reason changes."""
     settled = list(decisions)
     shorts = [g for d, g in zip(decisions, grounds, strict=True) if d.status == "needs_review" and d.source in ("computed_days", "ambiguous_fact")]
     for index, (decision, own) in enumerate(zip(decisions, grounds, strict=True)):
-        if decision.source != "confirmed_days":
+        if decision.status != "pass" or not (decision.reason or "").startswith("the contract provides"):
             continue
         relation = next((r for r in (_bears_on(short, own, guidance) for short in shorts) if r is not None), None)
         if relation is not None:

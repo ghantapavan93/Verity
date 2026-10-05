@@ -19,6 +19,7 @@ from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, initialize, invariant, rule, run_state_machine_as_test
 
+from app.api import access
 from app.verify.spans import alnum_with_map
 from tests.support import CONTRACT, FUZZ_SCALE, GUIDANCE
 
@@ -45,9 +46,16 @@ def test_operation_sequences_keep_the_record_s_invariants(client: TestClient) ->
             self.runs: dict[str, dict[str, Any]] = {}  # run id -> snapshot when first seen finished
             self.by_inputs: dict[tuple[str, str | None, str], str] = {}
             self.memos: dict[str, tuple[str, str]] = {}  # run id -> (memo id, review head it was written under)
+            self.starts = 0  # requests to start a run made by this sequence's reader
 
         @initialize()
         def upload(self) -> None:
+            # Each generated sequence is its own reader. The run-start limit is per reader and is emptied once per test
+            # (conftest); this one test runs many sequences, and without this their starts add up until a sequence is
+            # refused with 429 for runs it never started. Found on 2026-10-04: one failure in nine ordinary runs, and
+            # every run at twenty times the budget.
+            access.run_starts.reset()
+            self.starts = 0
             for name, text in (("a.txt", CONTRACT), ("b.txt", SECOND_CONTRACT)):
                 response = client.post("/api/documents", files={"file": (name, text.encode("utf-8"), "text/plain")})
                 assert response.status_code in (200, 201), response.text
@@ -71,6 +79,12 @@ def test_operation_sequences_keep_the_record_s_invariants(client: TestClient) ->
             document_id = self.documents[document]
             guidance_id = self.guidance_id if with_guidance else None
             response = client.post("/api/runs", json={"documentId": document_id, "guidanceId": guidance_id, "question": question})
+            self.starts += 1
+            if self.starts > access.RUN_LIMIT:
+                # The limit is one of the record's invariants: a reader past it is refused, whatever was asked, and
+                # nothing is started. A long sequence (WORKBENCH_FUZZ_SCALE) reaches it; an ordinary one does not.
+                assert response.status_code == 429, response.text
+                return
             assert response.status_code in (200, 202), response.text
             run_id = response.json()["id"]
             key = (document_id, guidance_id, question)

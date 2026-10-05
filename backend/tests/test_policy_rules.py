@@ -95,12 +95,12 @@ def test_a_quote_with_several_periods_is_decided_by_code_only_when_they_all_agre
     # Periods that all lead to the same result are still decided by code, either way.
     assert _decided("Either party may terminate for convenience upon 90 days' notice, or upon 120 days' notice in the second year.") == (
         "pass",
-        "confirmed_days",
+        "model_hint",
     )
     assert _decided("Customer pays within 30 days; either party may terminate upon 60 days' notice.") == ("needs_review", "computed_days")
     # One period: unchanged.
     assert _decided("Either party may terminate upon sixty (60) days' written notice.") == ("needs_review", "computed_days")
-    assert _decided("Either party may terminate for convenience upon ninety (90) days' written notice.") == ("pass", "confirmed_days")
+    assert _decided("Either party may terminate for convenience upon ninety (90) days' written notice.") == ("pass", "model_hint")
 
 
 def test_a_point_the_model_reported_as_not_found_is_never_decided_by_code() -> None:
@@ -157,10 +157,10 @@ def test_code_does_not_pass_a_quote_against_one_of_several_periods_in_the_guidan
     convenience_45 = "Either party may terminate for convenience upon 45 days' written notice."
     # A floor and a ceiling are one rule, not two.
     ranged = "Notice of termination for convenience must be at least 30 days but no more than 90 days."
-    assert _rule_of_several(ranged, convenience_45) == ("pass", "confirmed_days")
+    assert _rule_of_several(ranged, convenience_45) == ("pass", "model_hint")
     # The same period said twice is one period, and a sentence that only restates it ("Anything below …") names no subject of its own.
     twice = "We can accept termination for convenience at 30 days' notice or more. Anything below 30 days requires review."
-    assert _rule_of_several(twice, convenience_45) == ("pass", "confirmed_days")
+    assert _rule_of_several(twice, convenience_45) == ("pass", "model_hint")
     # The same guidance and a quote that never says "convenience": the model's view.
     assert _rule_of_several(twice, quote_45) == ("pass", "model_hint")
 

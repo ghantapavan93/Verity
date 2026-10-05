@@ -205,3 +205,33 @@ def test_a_short_secret_is_refused_when_the_application_is_created(monkeypatch: 
     monkeypatch.setattr(config.settings, "access_secret", "short")
     with pytest.raises(RuntimeError, match="shorter than 32 characters"):
         create_app()
+
+
+def test_the_gate_may_be_required_and_then_a_missing_secret_stops_the_start(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config.settings, "access_secret", "")
+    monkeypatch.setattr(config.settings, "access_required", True)
+    with pytest.raises(RuntimeError, match="Refusing to start open"):
+        create_app()
+
+
+def test_run_starts_are_limited_by_address_with_the_gate_off(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An open site is still not a free model: the same limit applies, keyed by the address the tunnel passes on."""
+    monkeypatch.setattr(access, "run_starts", SlidingWindow(2, 600))
+    document = client.post("/api/documents", files={"file": ("agreement.txt", CONTRACT.encode("utf-8"), "text/plain")}).json()
+    body = {"documentId": document["id"], "guidanceId": None}
+    statuses = [client.post("/api/runs", json=body | {"question": f"What notice ends the agreement, part {n}?"}).status_code for n in range(3)]
+    assert statuses == [202, 202, 429]
+    other = client.post("/api/runs", json=body | {"question": "What notice ends the agreement, part 9?"}, headers={"CF-Connecting-IP": "203.0.113.9"})
+    assert other.status_code == 202, "another address is not held up"
+
+
+def test_a_review_made_through_the_gate_records_the_invite_subject_beside_the_typed_name(gated: TestClient) -> None:
+    """The typed name is what the browser sent; the invite's subject is the one identity the application verified."""
+    assert gated.post("/api/access/session", json={"invite": invite("didier")}).status_code == 200
+    document = gated.post("/api/documents", files={"file": ("agreement.txt", CONTRACT.encode("utf-8"), "text/plain")}).json()
+    run = gated.post(
+        "/api/runs", json={"documentId": document["id"], "guidanceId": None, "question": "How is the agreement terminated for convenience?"}
+    ).json()
+    finding = gated.get(f"/api/runs/{run['id']}/detail").json()["findings"][0]
+    review = gated.post(f"/api/findings/{finding['id']}/review", json={"verdict": "confirmed", "reviewer": "Pavan", "note": None}).json()["review"]
+    assert (review["reviewer"], review["accessSubject"]) == ("Pavan", "didier"), "the name shown is the typed one; the subject recorded is the invite's"

@@ -9,7 +9,7 @@ import { EASE } from "../shell/constants";
 import { StatusChip } from "../shell/primitives";
 import { DayGauge, readComparison } from "./DayGauge";
 import { WhyThisAnswer } from "./WhyThisAnswer";
-import { errorMessage, reviewFinding } from "@/lib/api";
+import { absolute, errorMessage, reviewFinding } from "@/lib/api";
 import { formatWhen } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
 import {
@@ -154,7 +154,7 @@ function EvidenceBody({
             who: "Code",
             what: setByModel ? "did not decide" : plainLabel(statusLabel(finding.status, hasGuidance, finding.statusSource)),
             tone: setByModel ? "muted" : toneOf(finding.status),
-            note: overruled ? "changed the model's call" : confirmed ? "confirmed the model's call" : undefined,
+            note: overruled ? "the day counts conflict" : confirmed ? "confirmed the model's call" : undefined,
             decisive: !setByModel,
           },
           {
@@ -290,8 +290,8 @@ function EvidenceBody({
       </section>
 
       <section className={`${styles.drawerSection} ${styles.layer} ${setByModel ? "" : styles.layerSet}`} data-testid="layer-code">
-        {/* The heading is a claim. It says "Code decided" only under a source where code did; the model's own phrases,
-            its pointer into the guidance and its suggestion are in the layer above, never here. */}
+        {/* The heading is a claim. It says "Code found a conflict" only under a source where code compared two periods; the
+            model's own phrases, its pointer into the guidance and its suggestion are in the layer above, never here. */}
         <div className={styles.layerHead}>
           <h4>{codeRole(finding.statusSource)}</h4>
           {!setByModel && setTag}
@@ -305,7 +305,7 @@ function EvidenceBody({
         {(decidedByCode(finding.statusSource) || confirmed) && comparison && <DayGauge comparison={comparison} />}
         <dl className={styles.drawerFacts}>
           <div>
-            <dt>{decidedByCode(finding.statusSource) ? "Decided by code" : confirmed ? "Confirmed by code" : "Status"}</dt>
+            <dt>{decidedByCode(finding.statusSource) ? "Code found" : confirmed ? "Confirmed by code" : "Status"}</dt>
             <dd>
               {finding.statusReason ??
                 (finding.statusSource === "model_hint"
@@ -324,7 +324,7 @@ function EvidenceBody({
         </dl>
       </section>
 
-      <HumanLayer finding={finding} onReviewed={onReviewed} />
+      <HumanLayer finding={finding} onReviewed={run?.shared ? undefined : onReviewed} curated={run?.shared ?? false} />
 
       {run && (
         <section className={`${styles.drawerSection} ${styles.proveSection}`}>
@@ -361,6 +361,18 @@ function EvidenceBody({
                   <dt>Run ID</dt>
                   <dd className={styles.whyMono}>{run.id}</dd>
                 </div>
+                <div>
+                  <dt>Take it away</dt>
+                  <dd>
+                    <a
+                      className={styles.actionLink}
+                      href={absolute(`/api/runs/${run.id}/evidence-pack`)}
+                      title="The original bytes, the sections, every located span and a verify.py that checks them without this service"
+                    >
+                      Download evidence pack
+                    </a>
+                  </dd>
+                </div>
               </dl>
               <WhyThisAnswer runId={run.id} findingId={finding.id} explanation={explanation} problem={read?.problem ?? null} />
             </div>
@@ -374,7 +386,16 @@ function EvidenceBody({
 type Decision = Exclude<ReviewVerdict, "cleared">;
 
 /** The person's decision on the finding, as the API recorded it, and the controls to record one. */
-function HumanLayer({ finding, onReviewed }: { finding: FindingView; onReviewed?: (findingId: string, review: ReviewView | null) => void }) {
+function HumanLayer({
+  finding,
+  onReviewed,
+  curated = false,
+}: {
+  finding: FindingView;
+  onReviewed?: (findingId: string, review: ReviewView | null) => void;
+  /** A curated record: the review is kept as recorded, and no control to change it is offered. */
+  curated?: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Decision | null>(null);
   const [name, setName] = useState("");
@@ -418,6 +439,7 @@ function HumanLayer({ finding, onReviewed }: { finding: FindingView; onReviewed?
       ) : (
         <p className={styles.drawerRefStatic}>No one has decided on this finding yet.</p>
       )}
+      {curated && <p className={styles.drawerRefStatic}>A curated record: the review above is kept as it was made and is not changed here.</p>}
       {onReviewed && (
         <div className={styles.resultActions}>
           {finding.review ? (

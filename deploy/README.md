@@ -93,7 +93,7 @@ The token is in the fragment, which a browser never sends, so it is in no server
 Referer; a link scanner that fetches the URL exchanges nothing. It is not single-use, on purpose: mail and chat
 clients open links before people do. It expires (14 days by default), names one reader, and that reader can be
 revoked. There is no password, no account and no signup. The exchange is limited to ten attempts in ten minutes per
-address and run creation to twenty in ten minutes per reader.
+address and run creation to twenty in ten minutes per reader (per address when the gate is off).
 
 The gate is on when `backend/data/access.secret` exists (the supervisor reads it into `WORKBENCH_ACCESS_SECRET` at
 every start) and off when it does not, which is how a laptop, the tests and the browser flows run. `/api/health`
@@ -127,9 +127,47 @@ To take one reader's access away, add the name to `backend\data\access.revoked` 
 to take everyone's, `scripts\access.py secret --replace` and restart. If anything in steps 3 to 5 is not as written,
 leave Access where it is: with Access on, the gate being on or off exposes nothing.
 
-What the gate does not do: it does not tell the application who a reviewer is (a finding is still confirmed under
-a typed name), it does not add the security headers listed below, and it is a signed link, so whoever holds the
-link holds the access until it expires or is revoked.
+What the gate does not do: it does not add the security headers listed below, and it is a signed link, so whoever
+holds the link holds the access until it expires or is revoked. What it does do since 2026-10-02: it gives each
+invite a workspace, and a review made through it records the invite's subject beside the typed name.
+
+### What a reviewer uploads, and who sees it
+
+An invite's subject, with the secret, derives a workspace id (`ws-` and sixteen hex characters: opaque, stable,
+chosen by no request, naming no one in the record). Every request made through that invite works in that workspace.
+
+| Record | Who may read it |
+|---|---|
+| a document | the workspaces that uploaded it; a document no workspace uploaded (everything from before 2026-10-02) is curated and readable by all |
+| a run, its findings, its stage stream, its explanation, its evidence pack | the workspace that asked; a run with no workspace (the hero, the goldens, the batches) is curated and readable by all |
+| guidance | the workspace that saved it, or curated |
+| a review, a memo | follow their run |
+
+A record a workspace may not read answers exactly as a record that does not exist: the same 404, the same
+sentence, for every route. Lists (Documents, Runs, Findings, the citation record) show the workspace's own
+records and the curated ones. A curated record is read only for everyone: a review on the hero finding answers 403
+and the review stands as recorded.
+
+Deduplication is unchanged and is by bytes and reader version: a second workspace uploading the same file is
+granted the one stored reading and learns nothing it did not already hold, since it had the bytes. Guidance with the
+same words is a record per workspace. A run's fingerprint includes the workspace, so the same question from two
+reviewers is two runs, each handed back only to its asker; within one workspace, the same inputs under the same
+rules still return the existing run.
+
+With the gate off there is one workspace, `open`, and every record made through it is readable by whoever reaches
+the site. That is what an open deployment means.
+
+Retention: nothing is deleted. A reviewer's contract, guidance, question, run, review and memo stay in
+`backend/data` until the owner removes them, and the immutability triggers refuse a delete on a finished run from
+the application itself. No cleanup is built, because none has been earned by a measurement or asked for by a
+reviewer; the honest statement for a preview is this one. If a retention period is wanted, the shape is a
+`WORKBENCH_RETENTION_DAYS` setting applied at startup to workspace records only, never curated ones, with the
+triggers dropped and recreated around the delete and a test that the curated count is unchanged after it.
+
+The two-reviewer check: `backend/tests/test_workspaces.py` (two invites against every route, reuse across
+workspaces, the curated record, the gate off, and that no contract text, guidance, question, session or secret is
+in the log). The same was run on 2026-10-02 against a sandbox copy of this deployment with the gate on and the
+local model, two browsers entering by two invites: twenty-three checks, all passed.
 
 ## What is deliberately not done here
 

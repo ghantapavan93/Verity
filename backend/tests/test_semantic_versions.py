@@ -48,6 +48,7 @@ BOUNDARIES: dict[str, tuple[str | tuple[str, str], ...]] = {
 # version -> fingerprint of the code it names. One line per version that ever recorded a run.
 RECORDED: dict[str, str] = {
     "policy-v2": "f680f205d5dca0c0",
+    "policy-v3": "157d0c3d7711b18b",
     "v6": "d73590a20b16ec34",
     "retrieval-v1": "b516d553ecc4c228",
 }

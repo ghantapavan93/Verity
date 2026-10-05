@@ -19,20 +19,22 @@ class SavedGuidance:
     created: bool
 
 
-def stored_guidance(session: Session, sha256: str) -> Guidance | None:
-    return session.query(Guidance).filter(Guidance.sha256 == sha256).order_by(Guidance.created_at).first()
+def stored_guidance(session: Session, sha256: str, workspace: str | None = None) -> Guidance | None:
+    """The guidance with these words that this workspace may use: its own, or a curated one (no workspace)."""
+    rows = session.query(Guidance).filter(Guidance.sha256 == sha256).order_by(Guidance.created_at).all()
+    return next((g for g in rows if g.workspace_id is None or g.workspace_id == workspace), None)
 
 
-def save_guidance(session: Session, text: str, source: str = "pasted") -> SavedGuidance:
+def save_guidance(session: Session, text: str, source: str = "pasted", workspace: str | None = None) -> SavedGuidance:
     text = text.strip()
     if not text:
         # Found while tracing (2026-09-29): whitespace was stored as empty guidance and the status logic was told guidance existed.
         raise InvalidInput("guidance is empty once whitespace is removed; paste a rule, a note or an instruction, or ask without guidance")
     digest = sha256_text(text)
-    existing = stored_guidance(session, digest)
+    existing = stored_guidance(session, digest, workspace)
     if existing is not None:
         return SavedGuidance(existing, created=False)
-    guidance = Guidance(text=text, sha256=digest, source=source)
+    guidance = Guidance(text=text, sha256=digest, source=source, workspace_id=workspace)
     session.add(guidance)
     session.commit()
     return SavedGuidance(guidance, created=True)

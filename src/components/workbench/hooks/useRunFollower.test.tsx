@@ -37,6 +37,7 @@ function runView(overrides: Partial<RunView> = {}): RunView {
     error: null,
     reason: null,
     reused: false,
+    shared: false,
     hasGuidance: false,
     reviewHead: "",
     guidanceText: null,

@@ -23,6 +23,7 @@ from ..ingest import PARSER_VERSION, SUPPORTED, TooLargeToRead, UnsupportedFile,
 from ..ingest.coverage import coverage_report
 from ..ingest.readers import read
 from ..models import Document, Section
+from .workspace import document_is_curated, grant_document
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
@@ -74,13 +75,17 @@ def refuse_unsupported_type(filename: str) -> None:
         raise InvalidInput(f"unsupported file type {suffix or '(none)'}; upload .docx, .pdf or .txt")
 
 
-def ingest_document(session: Session, filename: str, data: bytes) -> IngestedDocument:
+def ingest_document(session: Session, filename: str, data: bytes, workspace: str | None = None) -> IngestedDocument:
+    """``workspace`` is the uploader's; it is granted the document. Deduplication stays by bytes and reader version: a
+    second workspace uploading the same bytes gets a grant on the one stored reading, and learns nothing it did not
+    already hold, since it had the bytes. "created" is from that workspace's side: new to it, or already its."""
     refuse_if_too_large(len(data))
     refuse_unsupported_type(filename)
     existing = stored_document(session, sha256_bytes(data))
     if existing is not None:
         keep_original(existing, data)  # the same bytes by hash: a row whose file is not there is completed here
-        return IngestedDocument(existing, created=False)
+        new_to_workspace = _grant(session, existing, workspace, new=False)
+        return IngestedDocument(existing, created=new_to_workspace)
 
     started = time.perf_counter()
     try:
@@ -117,9 +122,25 @@ def ingest_document(session: Session, filename: str, data: bytes) -> IngestedDoc
         if winner is None:
             raise
         keep_original(winner, data)
+        _grant(session, winner, workspace, new=False)
         return IngestedDocument(winner, created=False)
     session.refresh(document)
+    _grant(session, document, workspace, new=True)
     return IngestedDocument(document, created=True)
+
+
+def _grant(session: Session, document: Document, workspace: str | None, new: bool) -> bool:
+    """Grant the workspace the document. A document this upload created is always granted to its uploader; one already
+    stored is granted unless it is curated (no grants at all, readable by every workspace) or already the workspace's.
+    True when the grant is new."""
+    if workspace is None:
+        return False
+    if not new and document_is_curated(session, document.id):
+        return False
+    if not grant_document(session, document, workspace):
+        return False
+    session.commit()
+    return True
 
 
 def keep_original(document: Document, data: bytes) -> None:

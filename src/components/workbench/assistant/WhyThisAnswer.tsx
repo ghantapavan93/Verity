@@ -268,7 +268,7 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
             <div>
               <dt>
                 {f.recordedPolicyEvaluation.deterministic
-                  ? "Decided by code"
+                  ? "Code found a conflict"
                   : f.recordedPolicyEvaluation.statusSource === "confirmed_days"
                     ? "Proposed by the model, confirmed by code"
                     : "Not decided by code"}

@@ -36,7 +36,7 @@ REVIEW_VERDICTS: tuple[ReviewVerdictName, ...] = get_args(ReviewVerdictName)
 StatusSourceName = Literal["computed_days", "confirmed_days", "model_hint", "no_evidence", "reference_check", "position_check", "ambiguous_fact"]
 STATUS_SOURCES: tuple[StatusSourceName, ...] = get_args(StatusSourceName)
 STATUSES_BY_SOURCE: dict[StatusSourceName, tuple[FindingStatusName, ...]] = {
-    # Code decided, whatever the model hinted: a shortfall. (A pass under this source is a record made before
+    # Code found the day counts in conflict, whatever the model hinted: a shortfall. (A pass under this source is a record made before
     # policy-v2, when code passed a quote on the arithmetic alone and the model's hint had no part in it.)
     "computed_days": ("pass", "needs_review"),
     # The model proposed a pass and code confirmed it. Not code's decision alone: had the model asked for review,
@@ -118,6 +118,18 @@ class Section(Base):
     document: Mapped[Document] = relationship(back_populates="sections")
 
 
+class DocumentAccess(Base):
+    """A workspace may read a document. Documents stay deduplicated by bytes and reader version; who may read one is
+    this relation, not a column on the document. A document with no row here is curated: readable by every workspace,
+    which is what every document from before 2026-10-02 is. An upload grants the uploading workspace."""
+
+    __tablename__ = "document_access"
+
+    workspace_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Guidance(Base):
     __tablename__ = "guidance"
 
@@ -126,6 +138,8 @@ class Guidance(Base):
     sha256: Mapped[str] = mapped_column(String(64), index=True)
     source: Mapped[str] = mapped_column(String(32), default="pasted")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # The workspace that wrote it; null for a curated record (everything before 2026-10-02), which every workspace may read.
+    workspace_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
 
 
 class Run(Base):
@@ -155,6 +169,10 @@ class Run(Base):
     candidates_json: Mapped[str] = mapped_column(Text, default="[]")
     # How those candidates were chosen (RetrievalModeName); NULL before 2026-10-02, when only the stage's sentence said it.
     retrieval_mode: Mapped[RetrievalModeName | None] = mapped_column(String(32), nullable=True)
+    # The workspace the run belongs to; null for a curated record (every run before 2026-10-02, the goldens and the
+    # batches), which every workspace may read and none may change. Part of the fingerprint, so one workspace's
+    # question never hands back another's run.
+    workspace_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     raw_output: Mapped[str | None] = mapped_column(Text, nullable=True)
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -274,6 +292,10 @@ class FindingReview(Base):
     reviewer: Mapped[str] = mapped_column(String(80))
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # The subject of the invite the reviewer entered with, when the gate was on: the one identity the application
+    # verified. `reviewer` is the name they typed and is shown; this is recorded beside it, never in its place. Null
+    # for a review made with the gate off, and for every review before 2026-10-02.
+    access_subject: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
     finding: Mapped[Finding] = relationship(back_populates="reviews")
 
@@ -330,3 +352,5 @@ class Memo(Base):
     docx_sha256: Mapped[str] = mapped_column(String(64))
     html: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    run: Mapped[Run] = relationship()

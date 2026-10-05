@@ -69,9 +69,12 @@ def enabled() -> bool:
 
 
 def check_configuration() -> None:
-    """A secret that is set must be one worth having. Called when the application is created."""
+    """A secret that is set must be one worth having, and a deployment that says the gate is required must have one.
+    Called when the application is created, so a missing secret stops the process instead of opening the site."""
     if settings.access_secret and len(settings.access_secret) < MIN_SECRET_CHARS:
         raise RuntimeError(f"WORKBENCH_ACCESS_SECRET is shorter than {MIN_SECRET_CHARS} characters; make one with scripts/access.py secret")
+    if settings.access_required and not settings.access_secret:
+        raise RuntimeError("WORKBENCH_ACCESS_REQUIRED is set but WORKBENCH_ACCESS_SECRET is empty; the gate would be off. Refusing to start open.")
 
 
 def _encode(data: bytes) -> str:
@@ -126,9 +129,20 @@ def _same_origin(request: Request) -> bool:
     return origin is None or origin.rstrip("/") in {settings.app_url, *settings.cors_origins}
 
 
+OPEN_WORKSPACE = "open"
+
+
+def workspace_for(subject: str) -> str:
+    """The workspace an invite subject works in: opaque, stable, derived from the verified subject and the secret, so it
+    names no one in the record and cannot be chosen by a request. The typed reviewer name is never an identity."""
+    return "ws-" + mac_sha256(settings.access_secret, f"workspace:{subject}")[:16]
+
+
 def require_access(request: Request) -> None:
-    """Mounted on every router but this one and health. With the gate off it lets everything through."""
+    """Mounted on every router but this one and health. With the gate off it lets everything through, into one open
+    workspace; with it on, the session's subject gives the request its workspace."""
     if not enabled():
+        request.state.workspace = OPEN_WORKSPACE
         return
     session = current_session(request)
     if session is None:
@@ -136,6 +150,15 @@ def require_access(request: Request) -> None:
     if request.method not in ("GET", "HEAD", "OPTIONS") and not _same_origin(request):
         raise Forbidden("This request did not come from the workbench.")
     request.state.subject = session.subject
+    request.state.workspace = workspace_for(session.subject)
+
+
+def current_workspace(request: Request) -> str:
+    """The workspace of this request, set by require_access; the open workspace when the gate is off."""
+    workspace: str | None = getattr(request.state, "workspace", None)
+    if workspace is None:
+        return OPEN_WORKSPACE if not enabled() else workspace_for(getattr(request.state, "subject", ""))
+    return workspace
 
 
 class SlidingWindow:
@@ -145,6 +168,11 @@ class SlidingWindow:
         self.limit, self.window_s = limit, window_s
         self._events: dict[str, deque[float]] = {}
         self._lock = threading.Lock()
+
+    def reset(self) -> None:
+        """Forget every event: a new deployment, or a test that is its own reader."""
+        with self._lock:
+            self._events.clear()
 
     def take(self, key: str, now: float | None = None) -> float | None:
         current = time.monotonic() if now is None else now
@@ -171,10 +199,12 @@ def client_address(request: Request) -> str:
 
 
 def limit_run_starts(request: Request) -> None:
-    """Mounted on the runs router: a reader may start so many runs in a while, and is told when to come back."""
-    if not enabled() or request.method != "POST":
+    """Mounted on the runs router: a reader may start so many runs in a while, and is told when to come back. With the
+    gate on the reader is the invite's subject; with it off, the address. Until 2026-10-02 the limit applied only with
+    the gate on, so an open site had none, and the deployed site was open."""
+    if request.method != "POST":
         return
-    wait = run_starts.take(getattr(request.state, "subject", client_address(request)))
+    wait = run_starts.take(getattr(request.state, "subject", None) or client_address(request))
     if wait is not None:
         raise TooManyRequests(
             f"Too many runs were started in the last {RUN_WINDOW_S // 60} minutes. Try again in {int(wait) + 1} seconds.", retry_after=int(wait) + 1

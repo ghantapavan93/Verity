@@ -25,6 +25,7 @@ from ..providers.base import ModelProvider
 from ..retrieval.aliases import ALIASES_SHA256
 from ..routing.router import ModelRouter, task_for
 from ..runs.versions import SEMANTIC_VERSIONS
+from .workspace import require_document, require_guidance
 
 FINGERPRINT_KIND = "run/v1"
 
@@ -68,8 +69,12 @@ def router() -> ModelRouter:
     return ModelRouter(default_model=settings.model, policy=settings.routing_policy)
 
 
-def compute_fingerprint(document_id: str, guidance_id: str | None, question: str, prompt_hash: str, options: RunOptions) -> str:
-    return fingerprint(FINGERPRINT_KIND, document_id, guidance_id, question, prompt_hash, json.dumps(options, sort_keys=True))
+def compute_fingerprint(document_id: str, guidance_id: str | None, question: str, prompt_hash: str, options: RunOptions, workspace: str | None = None) -> str:
+    """A curated run (no workspace) keeps the fingerprint it always had; a workspace's run carries the workspace, so the
+    same question from another workspace is another run and is never handed this one."""
+    if workspace is None:
+        return fingerprint(FINGERPRINT_KIND, document_id, guidance_id, question, prompt_hash, json.dumps(options, sort_keys=True))
+    return fingerprint(FINGERPRINT_KIND, document_id, guidance_id, question, prompt_hash, json.dumps(options, sort_keys=True), workspace)
 
 
 def start_run(
@@ -80,20 +85,29 @@ def start_run(
     provider: ModelProvider,
     prompt_version: str | None = None,
     model: str | None = None,
+    workspace: str | None = None,
 ) -> StartedRun:
-    document = session.get(Document, document_id)
-    if document is None:
-        raise NotFound("document", document_id)
-    guidance = session.get(Guidance, guidance_id) if guidance_id else None
-    if guidance_id and guidance is None:
-        raise NotFound("guidance", guidance_id)
+    """``workspace`` is the asker's: it must be able to read the document and the guidance, and the run is its. None is
+    the project itself (goldens, batches), whose runs are curated."""
+    document: Document | None
+    guidance: Guidance | None
+    if workspace is not None:
+        document = require_document(session, document_id, workspace)
+        guidance = require_guidance(session, guidance_id, workspace) if guidance_id else None
+    else:
+        document = session.get(Document, document_id)
+        if document is None:
+            raise NotFound("document", document_id)
+        guidance = session.get(Guidance, guidance_id) if guidance_id else None
+        if guidance_id and guidance is None:
+            raise NotFound("guidance", guidance_id)
 
     question = question.strip()
     prompt = load_prompt(prompt_version)
     task = task_for(guidance is not None)
     decision = router().select(task, model)
     options = run_options(decision.model)
-    key = compute_fingerprint(document.id, guidance.id if guidance else None, question, prompt.sha256, options)
+    key = compute_fingerprint(document.id, guidance.id if guidance else None, question, prompt.sha256, options, workspace)
 
     existing = active_run(session, key)
     if existing is not None:
@@ -114,6 +128,7 @@ def start_run(
         document_sha256=document.sha256,
         guidance_sha256=guidance.sha256 if guidance else None,
         fingerprint=key,
+        workspace_id=workspace,
     )
     session.add(run)
     try:

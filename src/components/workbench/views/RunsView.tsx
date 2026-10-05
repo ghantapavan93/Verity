@@ -250,6 +250,7 @@ export function RunsView({
                     <div className={styles.rowTitle}>
                       <span className={styles.rowTitleText}>{r.question}</span>
                       {r.id === currentRunId && <span className={`${wb.statusChip} ${wb.statusPass}`}>On screen</span>}
+                      {r.shared && <span className={styles.fileType}>curated</span>}
                     </div>
                     <div className={styles.rowMeta}>
                       <span>{r.documentName}</span>

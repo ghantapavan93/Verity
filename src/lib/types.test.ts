@@ -33,7 +33,7 @@ describe("statusLabel", () => {
   it("never says code decided a pass the model had to propose", () => {
     expect(statusLabel("pass", true, "confirmed_days")).toBe("Within guidance (confirmed by code)");
     expect(codeRole("confirmed_days")).toBe("Code confirmed");
-    expect(codeRole("computed_days")).toBe("Code decided");
+    expect(codeRole("computed_days")).toBe("Code found a conflict");
     expect(codeRole("model_hint")).toBe("Code did not decide");
     expect(codeRole("no_evidence")).toBe("Code withheld");
     expect(codeRole(undefined)).toBe("Code did not decide");
