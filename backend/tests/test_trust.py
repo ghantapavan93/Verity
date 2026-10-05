@@ -7,6 +7,18 @@ The invariants, in the order the tests take them:
     a revision that does not reach a finding's evidence never makes it stale;
     counting a quote again by searching only the new sections gives what searching every section gives;
     nothing here changes a run, and one workspace's versions are not another's.
+
+The seams. Every test here goes through one of four public interfaces and none reaches behind them:
+
+    facts_in(text)                 the typed values a passage states
+    compile_manifest(...)          a run's record in, its trust manifest out
+    trust_diff(manifest, ...)      a manifest and a revision in, the account of every finding out
+    the HTTP API                   /runs/{id}/trust, /runs/{id}/trust/diff, /documents/{id}/supersedes, /versions
+
+How sections are aligned, how a place is found again, how a count is carried over and how a state is derived are
+the implementation. They are observed in what a manifest or a diff says: its states, its reasons, the sections it
+names, and its account of sections searched and reused. Expected values are literals written here, or a search of
+every section with the verifier, which is what "the quote stands there" means; never the code's own arithmetic.
 """
 
 from __future__ import annotations
@@ -18,15 +30,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.application.ingest_document as ingest_module
+from app import config
 from app.application.trust_run import manifest_of
-from app.db import SessionLocal
 from app.errors import Conflict
 from app.ingest import PARSER_VERSION
-from app.models import Document, Run
+from app.models import Run
 from app.trust.compile import FindingRecord, SpanRecord, compile_manifest
-from app.trust.diff import Verdict, align, full_recount, trust_diff
+from app.trust.diff import Verdict, trust_diff
 from app.trust.facts import facts_in
-from app.trust.model import FactKind, Need, Obligation, SectionText, Standing, TrustManifest, TrustState, derive, snapshot_hash
+from app.trust.model import FactKind, Need, SectionText, Standing, TrustManifest, TrustState, snapshot_hash
 from app.verify.spans import locate
 from tests.support import CONTRACT, upload_and_ask
 from tests.test_workspaces import Reviewer, two  # noqa: F401  (the fixture)
@@ -87,6 +99,12 @@ def manifest(
         run_id="run", document_id="doc", document_sha256="0" * 64, reader_version=reader, current_reader="v6",
         rule_versions={"policy_version": "policy-v3"}, stale_rules=stale_rules, sections=document, findings=findings, current_reading=current_reading,
     )  # fmt: skip
+
+
+def places_everywhere(quote: str, document: list[SectionText]) -> int:
+    """How many places the verifier finds the quote, searching every section: the definition the diff's own count,
+    which searches only what is new, is held to."""
+    return sum(located.count for section in document if (located := locate(quote, section.text, section.label)) is not None)
 
 
 def standing(m: TrustManifest, topic: str) -> dict[str, Standing]:
@@ -230,23 +248,6 @@ def test_earlier_rules_under_which_todays_verifier_would_not_find_the_quote_need
     rules = next(o for o in proof.obligations if o.need is Need.RULES_COMPATIBLE)
     assert proof.state is TrustState.NEEDS_REVIEW and rules.standing is N
     assert "today's verifier does not find 1 of this finding's 1 quote(s) where the record located them" in rules.reason
-
-
-@pytest.mark.parametrize(
-    ("standings", "expected"),
-    [
-        ((E, E, E), TrustState.SUPPORTED),
-        ((E, N, E), TrustState.NEEDS_REVIEW),
-        ((E, E, N), TrustState.NEEDS_REVIEW),
-        ((N, N, E), TrustState.UNSUPPORTED),
-        ((C, N, E), TrustState.UNSUPPORTED),
-        ((E, E, C), TrustState.UNSUPPORTED),
-    ],
-)
-def test_the_state_is_derived_from_the_obligations(standings: tuple[Standing, Standing, Standing], expected: TrustState) -> None:
-    needs = (Need.QUOTE_EXISTS, Need.QUOTE_UNIQUE, Need.FACT_MATCHES)
-    assert derive(tuple(Obligation(f"0.0/{need.value}", need, s, "") for need, s in zip(needs, standings, strict=True))) is expected
-    assert derive(()) is TrustState.UNSUPPORTED
 
 
 def test_the_manifest_id_is_the_same_for_the_same_record_and_different_for_any_other() -> None:
@@ -413,58 +414,40 @@ def test_a_place_is_read_only_when_its_surroundings_mark_one_place() -> None:
     assert {o.obligation_id.split("/")[1]: o.after for o in suspend.obligations}["fact_matches#0"] is N and suspend.verdict is Verdict.STALE
 
 
-def test_a_number_alone_never_aligns_two_sections() -> None:
-    """Inserting a clause moves every number after it. §3 before and §3 after are different clauses."""
-    old = sections([("Term", "Twelve months."), ("Fees", "USD 10 per seat."), ("Law", "Delaware law governs.")])
-    new = sections(
-        [("Term", "Twelve months."), ("Audit", "Provider may audit once a year."), ("Charges", "USD 12 per seat."), ("Law", "Delaware law governs.")]
-    )
-    alignment = align(old, new)
-    assert old[1].key not in alignment.counterpart, "§2 Fees is not §2 Audit"
-    assert (
-        alignment.counterpart[old[2].key].heading == "Law"
-        and alignment.changes.removed == ("§2 Fees",)
-        and alignment.changes.added == ("§2 Audit", "§3 Charges")
-    )
+def test_a_number_alone_never_makes_two_sections_the_same_section() -> None:
+    """Inserting a clause moves every number after it. §2 before and §2 after are different clauses, so a finding that
+    quoted the old §2 is not read against the new one."""
+    old = [("Term", "Twelve months."), ("Fees", "USD 10 per seat."), ("Law", "Delaware law governs.")]
+    new = [("Term", "Twelve months."), ("Audit", "Provider may audit once a year."), ("Charges", "USD 12 per seat."), ("Law", "Delaware law governs.")]
+    diff = trust_diff(manifest(old, {"fees": (1, "USD 10 per seat.")}), sections(old), sections(new), "v6")
+    assert diff.sections.removed == ("§2 Fees",) and diff.sections.added == ("§2 Audit", "§3 Charges") and diff.sections.changed == ("§3 Law",)
+    fees = diff.findings[0]
+    assert fees.verdict is Verdict.STALE and "§2 Fees is not in the revision" in fees.why[0]
+    assert not any("Audit" in sentence or "→" in sentence for sentence in fees.why), "nothing was read from the clause that took its number"
 
 
 def test_a_section_retitled_and_revised_at_once_is_still_found_by_what_it_says() -> None:
     """Heading and text both changed: no label and no hash connects the two versions. Most of the wording does."""
     clause = "Provider may suspend the Services on ten (10) days' notice if any undisputed invoice remains unpaid after its due date."
-    old = sections([("Term", "Twelve months from the Effective Date."), ("Suspension", clause), ("Law", "Delaware law governs.")])
-    new = sections(
-        [
-            ("Term", "Twelve months from the Effective Date."),
-            ("Suspension of Services", clause.replace("ten (10)", "five (5)")),
-            ("Law", "Delaware law governs."),
-        ]
-    )
-    alignment = align(old, new)
-    assert alignment.counterpart[old[1].key].heading == "Suspension of Services" and alignment.changes.changed == ("§2 Suspension",)
-    quote = "Provider may suspend the Services on ten (10) days' notice"
-    located = locate(quote, old[1].text, old[1].label)
-    assert located is not None
-    record = FindingRecord("f", 0, "suspension", "pass", (SpanRecord(0, quote, "sec_1", True, located.method, 1, located.start, located.end),))
-    before = compile_manifest(
-        run_id="r",
-        document_id="d",
-        document_sha256="0" * 64,
-        reader_version="v6",
-        current_reader="v6",
-        rule_versions={},
-        stale_rules=(),
-        sections=old,
-        findings=[record],
-    )
-    change = trust_diff(before, old, new, "v6").findings[0]
+    old = [("Term", "Twelve months from the Effective Date."), ("Suspension", clause), ("Law", "Delaware law governs.")]
+    new = [
+        ("Term", "Twelve months from the Effective Date."),
+        ("Suspension of Services", clause.replace("ten (10)", "five (5)")),
+        ("Law", "Delaware law governs."),
+    ]
+    before = manifest(old, {"suspension": (1, "Provider may suspend the Services on ten (10) days' notice")})
+    diff = trust_diff(before, sections(old), sections(new), "v6")
+    assert diff.sections.changed == ("§2 Suspension",) and not diff.sections.removed and not diff.sections.added
+    change = diff.findings[0]
     assert change.verdict is Verdict.STALE and any("10 calendar days → 5 calendar days" in sentence for sentence in change.why)
 
 
 def test_two_sections_that_share_little_wording_are_never_called_one_section() -> None:
-    old = sections([("Fees", "Customer shall pay Provider USD 250,000 per year in quarterly instalments.")])
-    new = sections([("Audit", "Provider may audit Customer's records once in any period of twelve months.")])
-    alignment = align(old, new)
-    assert not alignment.counterpart and alignment.changes.removed == ("§1 Fees",) and alignment.changes.added == ("§1 Audit",)
+    old = [("Fees", "Customer shall pay Provider USD 250,000 per year in quarterly instalments.")]
+    new = [("Audit", "Provider may audit Customer's records once in any period of twelve months.")]
+    diff = trust_diff(manifest(old, {"fee": (0, "Customer shall pay Provider USD 250,000 per year")}), sections(old), sections(new), "v6")
+    assert diff.sections.removed == ("§1 Fees",) and diff.sections.added == ("§1 Audit",) and not diff.sections.changed
+    assert diff.findings[0].verdict is Verdict.STALE and "§1 Fees is not in the revision" in diff.findings[0].why[0]
 
 
 def test_only_the_sections_whose_content_is_new_are_searched() -> None:
@@ -624,7 +607,7 @@ def test_uniqueness_accounts_for_every_section_of_the_revision(name: str) -> Non
     before = termination_manifest(old)
     diff = trust_diff(before, old, case.to, "v6")
     unique = next(o for o in diff.findings[0].obligations if o.need is Need.QUOTE_UNIQUE)
-    everywhere = sum(located.count for section in case.to if (located := locate(TERMINATION, section.text, section.label)) is not None)
+    everywhere = places_everywhere(TERMINATION, case.to)
 
     assert before.findings[0].evidence[0].places == unique.places_before == case.before, "old global occurrence count"
     assert diff.sections_searched == case.searched, "changed sections searched"
@@ -690,7 +673,7 @@ def test_counting_by_searching_only_new_sections_gives_what_searching_every_sect
     old, new = manifest(), sections(parts)
     diff = trust_diff(old, sections(BASE), new, "v6")
     for proof, change in zip(old.findings, diff.findings, strict=True):
-        places = full_recount(proof, new)[0]
+        places = places_everywhere(proof.evidence[0].quote, new)
         unique = next(o for o in change.obligations if o.need is Need.QUOTE_UNIQUE)
         found = any(locate(proof.evidence[0].quote, s.text, s.label) for s in new)
         assert (unique.after is E) == (found and places == 1), (proof.topic, places, unique.reason)
@@ -735,7 +718,7 @@ def test_a_section_carried_over_more_than_once_counts_as_often_as_it_stands(copi
     termination = next(f for f in diff.findings if f.topic == "termination")
     assert diff.sections_searched == 0, "an identical section is never searched again"
     assert termination.verdict is Verdict.STALE and f"{copies + 1} places" in termination.why[0]
-    assert full_recount(manifest().findings[0], new)[0] == copies + 1
+    assert places_everywhere(TERMINATION, new) == copies + 1
 
 
 # ---------------------------------------------------------------- through the API
@@ -834,10 +817,8 @@ def test_a_run_read_by_an_earlier_reader_is_supported_when_todays_reader_finds_i
 
 def test_a_run_read_by_an_earlier_reader_needs_review_when_the_document_cannot_be_read_again(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     result = run_under_an_earlier_reader(client, monkeypatch)
-    with SessionLocal() as session:
-        document = session.get(Document, result["document"]["id"])  # type: ignore[index]
-        assert document is not None
-        ingest_module.original_path(document).unlink()
+    # The original bytes are a file named by their hash: the one thing outside the application this test touches.
+    (config.settings.data_dir / "documents" / f"{result['document']['sha256']}.txt").unlink()  # type: ignore[index]
     trust = client.get(f"/api/runs/{result['run_id']}/trust").json()
     reader = next(o for o in trust["findings"][0]["obligations"] if o["need"] == "reader_compatible")
     assert trust["counts"] == {"supported": 0, "needs_review": 1, "unsupported": 0}

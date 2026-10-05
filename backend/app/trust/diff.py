@@ -39,7 +39,7 @@ from enum import StrEnum
 from ..verify.spans import locate
 from .compile import unique_obligation
 from .facts import facts_in
-from .model import Evidence, FindingProof, Need, Obligation, SectionText, Standing, TrustManifest, TrustState, derive, snapshot_hash
+from .model import Evidence, Need, Obligation, SectionText, Standing, TrustManifest, TrustState, derive, snapshot_hash
 
 SHOWN_PASSAGE = 240  # characters of a changed passage carried in a reason
 
@@ -348,10 +348,4 @@ def trust_diff(manifest: TrustManifest, old: Sequence[SectionText], new: Sequenc
     )  # fmt: skip
 
 
-def full_recount(proof: FindingProof, new: Sequence[SectionText]) -> dict[int, int]:
-    """Every quote of a finding counted across the whole revision, searching every section. The control for the
-    incremental count above: the two must agree, and a test holds them to it."""
-    return {e.span: sum(located.count for s in new if (located := locate(e.quote, s.text, s.label)) is not None) for e in proof.evidence if e.located}
-
-
-__all__ = ["Alignment", "FindingChange", "ObligationChange", "SectionChanges", "TrustDiff", "Verdict", "align", "full_recount", "passage_now", "trust_diff"]
+__all__ = ["FindingChange", "ObligationChange", "SectionChanges", "TrustDiff", "Verdict", "trust_diff"]
