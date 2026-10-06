@@ -1,5 +1,14 @@
 /* One contract changes: the three panes (family, effective state, context), the recompute plan, the work avoided. */
 
+.headline {
+  margin: 14px 0 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
 .panes {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);

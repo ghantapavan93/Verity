@@ -35,6 +35,17 @@ function count(byKind: Record<string, number> | undefined, kind: string): number
   return byKind?.[kind] ?? 0;
 }
 
+/** What moved in the family's effective state: the admitted facts that changed, else the instructions read. */
+function effectiveChange(arrival: StateArrivalView): string {
+  if (!count(arrival.changed.byKind, "EFFECTIVE")) return "no";
+  const before = arrival.effective.before ?? {};
+  const after = arrival.effective.after ?? {};
+  const moved = Object.keys(FACT_LABELS).filter((f) => arrival.effective.before && before[f] !== after[f]);
+  if (moved.length) return `yes: ${moved.map((f) => FACT_LABELS[f].toLowerCase()).join(", ")}`;
+  const e = arrival.effective;
+  return `yes: its instructions (${e.applied} applied, ${e.needsReview} left for review); no admitted fact moved`;
+}
+
 function EffectiveFacts({ arrival }: { arrival: StateArrivalView }) {
   const after = arrival.effective.after ?? {};
   const before = arrival.effective.before;
@@ -48,9 +59,7 @@ function EffectiveFacts({ arrival }: { arrival: StateArrivalView }) {
         return (
           <div key={field} style={{ display: "contents" }}>
             <dt>{FACT_LABELS[field]}</dt>
-            <dd className={moved ? local.moved : undefined}>
-              {moved ? `${factText(was)} → ${factText(now)}` : factText(now)}
-            </dd>
+            <dd className={moved ? local.moved : undefined}>{moved ? `${factText(was)} → ${factText(now)}` : factText(now)}</dd>
           </div>
         );
       })}
@@ -92,9 +101,16 @@ export function ContractState({ view }: { view: ContractStateView }) {
         One contract changes. What else must change with it?
       </h2>
       <p className={styles.lede}>
-        {view.whatThisIs} Replayed here from the result file{view.sourceCommit ? ` of commit ${shortHash(view.sourceCommit, 7)}` : ""}; nothing on this
-        surface is live.
+        {view.whatThisIs} Replayed here from the result file{view.sourceCommit ? ` of commit ${shortHash(view.sourceCommit, 7)}` : ""}; nothing on this surface
+        is live.
       </p>
+      {arrival && (
+        <p className={local.headline} aria-label="This arrival in one line">
+          {grouped.format(arrival.documentsBefore)} documents → {arrival.plan.documentsExamined} examined →{" "}
+          {arrival.edge?.proof === "ACCEPTED" ? "1 family joined" : "no family joined"} → {arrival.changed.total} of {grouped.format(arrival.objectsBefore)}{" "}
+          derived objects changed; the rest untouched.
+        </p>
+      )}
       <Figures
         label="The portfolio, and what every arrival was held to"
         items={[
@@ -177,7 +193,9 @@ export function ContractState({ view }: { view: ContractStateView }) {
                   <dt>Deviations</dt>
                   <dd>
                     {arrival.context.deviationsFromExemplar.length
-                      ? arrival.context.deviationsFromExemplar.map((d) => `${FACT_LABELS[d.field] ?? d.field}: ${factText(d.before)} → ${factText(d.after)}`).join("; ")
+                      ? arrival.context.deviationsFromExemplar
+                          .map((d) => `${FACT_LABELS[d.field] ?? d.field}: ${factText(d.before)} → ${factText(d.after)}`)
+                          .join("; ")
                       : "none established from the exemplar"}
                   </dd>
                 </div>
@@ -187,7 +205,9 @@ export function ContractState({ view }: { view: ContractStateView }) {
           <ol className={local.plan} aria-label="The recompute plan for this arrival">
             <li className={local.step}>
               <span className={local.stepName}>Portfolio</span>
-              <span className={local.stepValue}>{grouped.format(arrival.documentsBefore)} documents, {grouped.format(arrival.objectsBefore)} derived objects</span>
+              <span className={local.stepValue}>
+                {grouped.format(arrival.documentsBefore)} documents, {grouped.format(arrival.objectsBefore)} derived objects
+              </span>
             </li>
             <li className={local.step}>
               <span className={local.stepName}>Candidates examined</span>
@@ -206,12 +226,15 @@ export function ContractState({ view }: { view: ContractStateView }) {
             <li className={local.step}>
               <span className={local.stepName}>Planned before recompute</span>
               <span className={local.stepValue}>
-                {arrival.plan.planned} objects <em>· {count(arrival.plan.plannedByKind, "FAMILY")} families, {count(arrival.plan.plannedByKind, "FINDING")} findings</em>
+                {arrival.plan.planned} objects{" "}
+                <em>
+                  · {count(arrival.plan.plannedByKind, "FAMILY")} families, {count(arrival.plan.plannedByKind, "FINDING")} findings
+                </em>
               </span>
             </li>
             <li className={local.step}>
               <span className={local.stepName}>Effective state changed</span>
-              <span className={local.stepValue}>{count(arrival.changed.byKind, "EFFECTIVE") ? "yes" : "no"}</span>
+              <span className={local.stepValue}>{effectiveChange(arrival)}</span>
             </li>
             <li className={local.step}>
               <span className={local.stepName}>Deviations reached</span>
@@ -224,7 +247,9 @@ export function ContractState({ view }: { view: ContractStateView }) {
             <li className={local.step}>
               <span className={local.stepName}>Findings</span>
               <span className={local.stepValue}>
-                {arrival.findings.changed} stale or new · {arrival.findings.inFamilyAfter - arrival.findings.changed >= 0 ? arrival.findings.inFamilyAfter - arrival.findings.changed : 0} in the family kept
+                {arrival.findings.changed} stale or new ·{" "}
+                {arrival.findings.inFamilyAfter - arrival.findings.changed >= 0 ? arrival.findings.inFamilyAfter - arrival.findings.changed : 0} in the family
+                kept
               </span>
             </li>
             <li className={local.step}>
@@ -251,7 +276,11 @@ export function ContractState({ view }: { view: ContractStateView }) {
                 value: Math.max(0, Math.round((naive.findings_recomputed ?? 0) - arrival.work.modelCallsIfFindingsWereModelMade)),
                 note: "each a model call, were findings model-made",
               },
-              { label: "Changed but not planned", value: arrival.verified ? arrival.verified.changedNotPlanned : "not checked", note: arrival.verified ? "checked against a rebuild" : undefined },
+              {
+                label: "Changed but not planned",
+                value: arrival.verified ? arrival.verified.changedNotPlanned : "not checked",
+                note: arrival.verified ? "checked against a rebuild" : undefined,
+              },
             ]}
           />
         </>
@@ -261,7 +290,10 @@ export function ContractState({ view }: { view: ContractStateView }) {
         {audit
           ? `on a second blind-read audit of real document pairs, the relationship engine's precision was ${audit.precision ?? "–"} and its recall ${audit.recall ?? "–"} (it leaves the rest UNKNOWN), with every accepted direction right`
           : "no relationship audit record"}
-        {leakage ? `; a viewer of one room observed ${leakage.cross_scope_leakage_observations} changes from ${leakage.changes_in_room_0} arrivals in the other` : ""}.
+        {leakage
+          ? `; a viewer of one room observed ${leakage.cross_scope_leakage_observations} changes from ${leakage.changes_in_room_0} arrivals in the other`
+          : ""}
+        .
       </p>
       <p className={styles.quiet}>
         Source: {view.source}

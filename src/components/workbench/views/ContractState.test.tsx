@@ -24,7 +24,16 @@ const AMEND = doc("edgar:a-1", "AMENDMENT NO. 1 TO CREDIT AGREEMENT", "2023-07-1
 
 const BOUND: StateArrivalView = {
   document: AMEND,
-  edge: { state: "bound", relation: "AMENDS", proof: "ACCEPTED", source: AMEND.recordId, target: BASE, evidence: "that certain Credit Agreement, dated as of May 17, 2023", candidates: 4, leftForModel: false },
+  edge: {
+    state: "bound",
+    relation: "AMENDS",
+    proof: "ACCEPTED",
+    source: AMEND.recordId,
+    target: BASE,
+    evidence: "that certain Credit Agreement, dated as of May 17, 2023",
+    candidates: 4,
+    leftForModel: false,
+  },
   family: {
     id: "Fabc",
     review: [],
@@ -33,7 +42,15 @@ const BOUND: StateArrivalView = {
       { ...AMEND, actsOn: BASE.recordId, relation: "AMENDS", arrived: true },
     ],
   },
-  effective: { asOf: "2030-01-01", before: { GOVERNING_LAW: "New York", MATURITY_DATE: "2027-05-17" }, after: { GOVERNING_LAW: "New York", MATURITY_DATE: "2028-05-17" }, operations: 2, applied: 1, needsReview: 1, unsupportedMutations: 0 },
+  effective: {
+    asOf: "2030-01-01",
+    before: { GOVERNING_LAW: "New York", MATURITY_DATE: "2027-05-17" },
+    after: { GOVERNING_LAW: "New York", MATURITY_DATE: "2028-05-17" },
+    operations: 2,
+    applied: 1,
+    needsReview: 1,
+    unsupportedMutations: 0,
+  },
   context: {
     template: { type: "CREDIT AGREEMENT", clusterSize: 3, exemplar: BASE, baseIsExemplar: true },
     cohort: { type: "CREDIT AGREEMENT", governingLaw: "New York", comparable: 43, maturityDateStated: 12 },
@@ -42,7 +59,16 @@ const BOUND: StateArrivalView = {
   findings: { inFamilyAfter: 12, changed: 1, staleExamples: ["2.2"] },
   plan: { planned: 9, plannedByKind: { EDGE: 1, FAMILY: 1, EFFECTIVE: 1, FINDING: 4 }, documentsExamined: 4, movedKeys: 31, planSeconds: 0.002 },
   changed: { total: 5, byKind: { EDGE: 1, FAMILY: 1, EFFECTIVE: 1, FINDING: 1, MEMBER: 1 } },
-  work: { textReads: 7, adjudications: 4, pairScores: 0, computed: 6, keptByInputCheck: 3, disturbedWithoutDependencyChange: 0, modelCallsIfFindingsWereModelMade: 1, charactersAModelWouldRead: 900 },
+  work: {
+    textReads: 7,
+    adjudications: 4,
+    pairScores: 0,
+    computed: 6,
+    keptByInputCheck: 3,
+    disturbedWithoutDependencyChange: 0,
+    modelCallsIfFindingsWereModelMade: 1,
+    charactersAModelWouldRead: 900,
+  },
   latencyMs: 41.5,
   documentsBefore: 5414,
   objectsBefore: 48000,
@@ -95,7 +121,10 @@ const VIEW: ContractStateView = {
     naiveRebuildPerChange: { objects_recomputed: 48000, findings_recomputed: 31000 },
     workAvoidedPerArrivalMean: {},
   },
-  evidence: { relationship_audit: { metrics: { precision: 1, recall: 0.6364 } }, authorization: { cross_scope_leakage_observations: 0, changes_in_room_0: 30 } },
+  evidence: {
+    relationship_audit: { metrics: { precision: 1, recall: 0.6364 } },
+    authorization: { cross_scope_leakage_observations: 0, changes_in_room_0: 30 },
+  },
   arrivals: [BOUND, AMBIGUOUS],
 };
 
@@ -106,7 +135,11 @@ describe("ContractState", () => {
     render(<ContractState view={VIEW} />);
     expect(screen.getByRole("heading", { name: /One contract changes\. What else must change with it\?/ })).toBeTruthy();
     expect(screen.getByText("1 of 1")).toBeTruthy();
+    expect(screen.getByLabelText("This arrival in one line").textContent).toBe(
+      "5,414 documents → 4 examined → 1 family joined → 5 of 48,000 derived objects changed; the rest untouched.",
+    );
     expect(screen.getByText("2027-05-17 → 2028-05-17")).toBeTruthy();
+    expect(screen.getByText("yes: maturity date")).toBeTruthy();
     expect(screen.getByText("AMENDS → CREDIT AGREEMENT")).toBeTruthy();
     expect(screen.getByText(/AMENDS: this amendment no\. 1 to credit agreement → CREDIT AGREEMENT, 2023-05-17/)).toBeTruthy();
     expect(screen.getByText(/43 comparable credit agreements under New York law; 12 state a maturity date/)).toBeTruthy();
