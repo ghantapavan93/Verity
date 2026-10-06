@@ -15,7 +15,7 @@ import type {
   GoldensView,
   GuidanceRecord,
   Health,
-  LineageView,
+  ContractStateView,
   MemoRecord,
   ReviewIn,
   RunDetailView,
@@ -177,8 +177,8 @@ export function getExperiments(): Promise<ExperimentsView> {
   return request<ExperimentsView>("/api/engineering/experiments");
 }
 
-export function getLineage(): Promise<LineageView> {
-  return request<LineageView>("/api/engineering/lineage");
+export function getContractState(): Promise<ContractStateView> {
+  return request<ContractStateView>("/api/engineering/contract-state");
 }
 
 export function getGoldens(): Promise<GoldensView> {

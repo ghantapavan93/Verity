@@ -26,10 +26,10 @@ from ..schemas import (
     ExperimentsOut,
     FamiliesOut,
     GoldensOut,
-    LineageArrival,
-    LineageOut,
-    LineagePortfolio,
-    LineageSummary,
+    ContractStateOut,
+    StateArrival,
+    StatePortfolio,
+    StateSummary,
 )
 from .access import current_workspace
 
@@ -85,40 +85,40 @@ def experiments() -> ExperimentsOut:
     return load_experiments(results_path())
 
 
-# The lineage record: a recording of measured arrivals the contract-lineage experiment exports. The sibling checkout
-# on a development machine; WORKBENCH_LINEAGE_ARRIVALS overrides it. Read as a file: none of the experiment's code
-# runs here, and nothing in the record is recomputed.
-DEFAULT_ARRIVALS = BACKEND_DIR.parents[1] / "ivo-experiments" / "experiments" / "contract-lineage" / "results" / "lineage-arrivals.json"
-LINEAGE_SCHEMA = "lineage-arrivals/1"
+# The contract-state record: a recording of measured arrivals the contract-state experiment exports (it supersedes
+# the lineage-arrivals record). The sibling checkout on a development machine; WORKBENCH_CONTRACT_STATE overrides it.
+# Read as a file: none of the experiment's code runs here, and nothing in the record is recomputed.
+DEFAULT_CONTRACT_STATE = BACKEND_DIR.parents[1] / "ivo-experiments" / "experiments" / "contract-lineage" / "results" / "contract-state.json"
+CONTRACT_STATE_SCHEMA = "contract-state/1"
 
 
-def arrivals_path() -> Path:
-    return settings.lineage_arrivals or DEFAULT_ARRIVALS
+def contract_state_path() -> Path:
+    return settings.contract_state or DEFAULT_CONTRACT_STATE
 
 
-def load_lineage(path: Path) -> LineageOut:
+def load_contract_state(path: Path) -> ContractStateOut:
     if not path.exists():
-        return LineageOut(
+        return ContractStateOut(
             available=False,
             source=path.name,
-            detail="lineage-arrivals.json not found; export it with `python -m evals.export_arrivals` in the contract-lineage experiment",
+            detail="contract-state.json not found; export it with `python -m evals.export_state` in the contract-lineage experiment",
         )
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
-        return LineageOut(available=False, source=path.name, detail=f"lineage-arrivals.json unreadable: {type(error).__name__}")
-    if not isinstance(data, dict) or data.get("schema") != LINEAGE_SCHEMA:
-        return LineageOut(available=False, source=path.name, detail=f"the file is not a {LINEAGE_SCHEMA} record")
+        return ContractStateOut(available=False, source=path.name, detail=f"contract-state.json unreadable: {type(error).__name__}")
+    if not isinstance(data, dict) or data.get("schema") != CONTRACT_STATE_SCHEMA:
+        return ContractStateOut(available=False, source=path.name, detail=f"the file is not a {CONTRACT_STATE_SCHEMA} record")
     # The record carries the sha256 of its own body (sorted keys, UTF-8); a copy matches, an edit does not.
     body = {key: value for key, value in data.items() if key != "sha256"}
     digest = sha256_text(json.dumps(body, sort_keys=True, ensure_ascii=False))
     try:
-        portfolio = LineagePortfolio(**data["portfolio"])
-        summary = LineageSummary(**data["summary"])
-        arrivals = [LineageArrival(**row) for row in data.get("arrivals") or []]
+        portfolio = StatePortfolio(**data["portfolio"])
+        summary = StateSummary(**data["summary"])
+        arrivals = [StateArrival(**row) for row in data.get("arrivals") or []]
     except (ValidationError, KeyError, TypeError) as error:
-        return LineageOut(available=False, source=path.name, detail=f"the record does not fit {LINEAGE_SCHEMA}: {type(error).__name__}")
-    return LineageOut(
+        return ContractStateOut(available=False, source=path.name, detail=f"the record does not fit {CONTRACT_STATE_SCHEMA}: {type(error).__name__}")
+    return ContractStateOut(
         available=True,
         source=path.name,
         schema_version=str(data.get("schema")),
@@ -129,15 +129,14 @@ def load_lineage(path: Path) -> LineageOut:
         what_this_is=str(data["what_this_is"]) if data.get("what_this_is") else None,
         portfolio=portfolio,
         summary=summary,
-        candidate_generation_held_out=data.get("candidate_generation_held_out") or {},
-        adjudication_held_out=data.get("adjudication_held_out") or {},
+        evidence=data.get("evidence") or {},
         arrivals=arrivals,
     )
 
 
-@router.get("/lineage", response_model=LineageOut)
-def lineage() -> LineageOut:
-    return load_lineage(arrivals_path())
+@router.get("/contract-state", response_model=ContractStateOut)
+def contract_state() -> ContractStateOut:
+    return load_contract_state(contract_state_path())
 
 
 @router.get("/citations", response_model=CitationRecordOut)

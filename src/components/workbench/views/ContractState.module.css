@@ -1,0 +1,152 @@
+/* One contract changes: the three panes (family, effective state, context), the recompute plan, the work avoided. */
+
+.panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px;
+  margin-top: 18px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  background: var(--hairline);
+}
+
+.pane {
+  min-width: 0;
+  padding: 14px 16px 16px;
+  background: var(--bg);
+}
+
+.paneTitle {
+  margin: 0 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.members {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.member {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.memberArrived {
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+  color: var(--text);
+}
+
+.relation {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 6px 12px;
+  font-size: 13px;
+}
+
+.facts dt {
+  color: var(--text-3);
+}
+
+.facts dd {
+  margin: 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.moved {
+  color: var(--text);
+  background: var(--accent-tint);
+  box-shadow: inset 2px 0 0 var(--accent);
+  padding: 0 4px;
+}
+
+.evidence {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--hairline);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.plan {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 2.2em minmax(0, 13em) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--hairline);
+  font-size: 13px;
+}
+
+.step:first-child {
+  border-top: 0;
+}
+
+.step::before {
+  counter-increment: step;
+  content: counter(step);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.stepName {
+  color: var(--text-3);
+}
+
+.stepValue {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.stepValue em {
+  font-style: normal;
+  color: var(--text-3);
+}
+
+@media (max-width: 900px) {
+  .panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .step {
+    grid-template-columns: 1.8em minmax(0, 1fr);
+  }
+
+  .stepValue {
+    grid-column: 2;
+  }
+}

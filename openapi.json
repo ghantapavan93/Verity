@@ -558,6 +558,142 @@
         "title": "CitationRecordOut",
         "type": "object"
       },
+      "ContractStateOut": {
+        "properties": {
+          "arrivals": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/StateArrival"
+            },
+            "title": "Arrivals",
+            "type": "array"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Evidence",
+            "type": "object"
+          },
+          "generatedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generatedat"
+          },
+          "portfolio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatePortfolio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schemaVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schemaversion"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "sha256Verified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256Verified"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "sourceCommit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcecommit"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "whatThisIs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatthisis"
+          }
+        },
+        "required": [
+          "available",
+          "source"
+        ],
+        "title": "ContractStateOut",
+        "type": "object"
+      },
       "CoverageOut": {
         "description": "What the reading did with one part of the file: read, accepted, excluded, partial, omitted, absent or unknown.",
         "properties": {
@@ -2642,482 +2778,6 @@
         "title": "InviteIn",
         "type": "object"
       },
-      "LineageArrival": {
-        "properties": {
-          "compositeSectionsChanged": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Compositesectionschanged",
-            "type": "array"
-          },
-          "document": {
-            "$ref": "#/components/schemas/LineageDocument"
-          },
-          "documentsExamined": {
-            "title": "Documentsexamined",
-            "type": "integer"
-          },
-          "familiesRebuilt": {
-            "title": "Familiesrebuilt",
-            "type": "integer"
-          },
-          "family": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Family"
-          },
-          "familyNodesChanged": {
-            "title": "Familynodeschanged",
-            "type": "integer"
-          },
-          "findingsInvalidated": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Findingsinvalidated",
-            "type": "array"
-          },
-          "findingsPreserved": {
-            "title": "Findingspreserved",
-            "type": "integer"
-          },
-          "modelCalls": {
-            "title": "Modelcalls",
-            "type": "integer"
-          },
-          "portfolioDocuments": {
-            "title": "Portfoliodocuments",
-            "type": "integer"
-          },
-          "relationship": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LineageRelationship"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "relationshipIsGold": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Relationshipisgold"
-          },
-          "seconds": {
-            "title": "Seconds",
-            "type": "number"
-          },
-          "trustDependenciesReached": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Trustdependenciesreached",
-            "type": "array"
-          },
-          "unrelatedFamiliesRecomputed": {
-            "title": "Unrelatedfamiliesrecomputed",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "document",
-          "portfolioDocuments",
-          "documentsExamined",
-          "familiesRebuilt",
-          "unrelatedFamiliesRecomputed",
-          "familyNodesChanged",
-          "findingsPreserved",
-          "modelCalls",
-          "seconds"
-        ],
-        "title": "LineageArrival",
-        "type": "object"
-      },
-      "LineageDocument": {
-        "properties": {
-          "agreementType": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Agreementtype"
-          },
-          "date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Date"
-          },
-          "filer": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Filer"
-          },
-          "filerName": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Filername"
-          },
-          "instrument": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument"
-          },
-          "recordId": {
-            "title": "Recordid",
-            "type": "string"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          }
-        },
-        "required": [
-          "recordId"
-        ],
-        "title": "LineageDocument",
-        "type": "object"
-      },
-      "LineageOut": {
-        "properties": {
-          "adjudicationHeldOut": {
-            "additionalProperties": {
-              "additionalProperties": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": "object"
-            },
-            "default": {},
-            "title": "Adjudicationheldout",
-            "type": "object"
-          },
-          "arrivals": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/LineageArrival"
-            },
-            "title": "Arrivals",
-            "type": "array"
-          },
-          "available": {
-            "title": "Available",
-            "type": "boolean"
-          },
-          "candidateGenerationHeldOut": {
-            "additionalProperties": {
-              "additionalProperties": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": "object"
-            },
-            "default": {},
-            "title": "Candidategenerationheldout",
-            "type": "object"
-          },
-          "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Detail"
-          },
-          "generatedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Generatedat"
-          },
-          "portfolio": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LineagePortfolio"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "schemaVersion": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Schemaversion"
-          },
-          "sha256": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sha256"
-          },
-          "sha256Verified": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sha256Verified"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source"
-          },
-          "sourceCommit": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sourcecommit"
-          },
-          "summary": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LineageSummary"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "whatThisIs": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Whatthisis"
-          }
-        },
-        "required": [
-          "available",
-          "source"
-        ],
-        "title": "LineageOut",
-        "type": "object"
-      },
-      "LineagePortfolio": {
-        "properties": {
-          "documentsAtStart": {
-            "title": "Documentsatstart",
-            "type": "integer"
-          },
-          "familiesAtStart": {
-            "title": "Familiesatstart",
-            "type": "integer"
-          },
-          "findingsAtStart": {
-            "title": "Findingsatstart",
-            "type": "integer"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          }
-        },
-        "required": [
-          "documentsAtStart",
-          "familiesAtStart",
-          "findingsAtStart",
-          "source"
-        ],
-        "title": "LineagePortfolio",
-        "type": "object"
-      },
-      "LineageRelationship": {
-        "properties": {
-          "relation": {
-            "title": "Relation",
-            "type": "string"
-          },
-          "target": {
-            "$ref": "#/components/schemas/LineageDocument"
-          }
-        },
-        "required": [
-          "target",
-          "relation"
-        ],
-        "title": "LineageRelationship",
-        "type": "object"
-      },
-      "LineageSummary": {
-        "properties": {
-          "arrivals": {
-            "title": "Arrivals",
-            "type": "integer"
-          },
-          "documentsExaminedMax": {
-            "title": "Documentsexaminedmax",
-            "type": "integer"
-          },
-          "documentsExaminedMean": {
-            "title": "Documentsexaminedmean",
-            "type": "number"
-          },
-          "edgesBound": {
-            "title": "Edgesbound",
-            "type": "integer"
-          },
-          "edgesBoundToGoldBase": {
-            "title": "Edgesboundtogoldbase",
-            "type": "integer"
-          },
-          "familiesAtStart": {
-            "title": "Familiesatstart",
-            "type": "integer"
-          },
-          "findingsAtStart": {
-            "title": "Findingsatstart",
-            "type": "integer"
-          },
-          "findingsInvalidatedTotal": {
-            "title": "Findingsinvalidatedtotal",
-            "type": "integer"
-          },
-          "findingsPreservedTotal": {
-            "title": "Findingspreservedtotal",
-            "type": "integer"
-          },
-          "modelAsksTotal": {
-            "title": "Modelaskstotal",
-            "type": "integer"
-          },
-          "portfolioDocumentsAtStart": {
-            "title": "Portfoliodocumentsatstart",
-            "type": "integer"
-          },
-          "unrelatedFamiliesRecomputedTotal": {
-            "title": "Unrelatedfamiliesrecomputedtotal",
-            "type": "integer"
-          },
-          "wallSecondsP50": {
-            "title": "Wallsecondsp50",
-            "type": "number"
-          },
-          "wallSecondsP95": {
-            "title": "Wallsecondsp95",
-            "type": "number"
-          }
-        },
-        "required": [
-          "arrivals",
-          "portfolioDocumentsAtStart",
-          "familiesAtStart",
-          "findingsAtStart",
-          "unrelatedFamiliesRecomputedTotal",
-          "documentsExaminedMean",
-          "documentsExaminedMax",
-          "edgesBound",
-          "edgesBoundToGoldBase",
-          "findingsInvalidatedTotal",
-          "findingsPreservedTotal",
-          "modelAsksTotal",
-          "wallSecondsP50",
-          "wallSecondsP95"
-        ],
-        "title": "LineageSummary",
-        "type": "object"
-      },
       "MemoIn": {
         "properties": {
           "runId": {
@@ -4511,6 +4171,943 @@
         "title": "StageOut",
         "type": "object"
       },
+      "StateArrival": {
+        "properties": {
+          "changed": {
+            "$ref": "#/components/schemas/StateChanged"
+          },
+          "context": {
+            "$ref": "#/components/schemas/StateContext"
+          },
+          "document": {
+            "$ref": "#/components/schemas/StateDocument"
+          },
+          "documentsBefore": {
+            "title": "Documentsbefore",
+            "type": "integer"
+          },
+          "edge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateEdge"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "edgeOnGoldTarget": {
+            "title": "Edgeongoldtarget",
+            "type": "boolean"
+          },
+          "effective": {
+            "$ref": "#/components/schemas/StateEffective"
+          },
+          "family": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateFamily"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings": {
+            "$ref": "#/components/schemas/StateFindings"
+          },
+          "latencyMs": {
+            "title": "Latencyms",
+            "type": "number"
+          },
+          "objectsBefore": {
+            "title": "Objectsbefore",
+            "type": "integer"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/StatePlan"
+          },
+          "verified": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateVerified"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "work": {
+            "$ref": "#/components/schemas/StateWork"
+          }
+        },
+        "required": [
+          "document",
+          "effective",
+          "context",
+          "findings",
+          "plan",
+          "changed",
+          "work",
+          "latencyMs",
+          "documentsBefore",
+          "objectsBefore",
+          "edgeOnGoldTarget"
+        ],
+        "title": "StateArrival",
+        "type": "object"
+      },
+      "StateChanged": {
+        "properties": {
+          "byKind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Bykind",
+            "type": "object"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total"
+        ],
+        "title": "StateChanged",
+        "type": "object"
+      },
+      "StateCohort": {
+        "properties": {
+          "comparable": {
+            "title": "Comparable",
+            "type": "integer"
+          },
+          "governingLaw": {
+            "title": "Governinglaw",
+            "type": "string"
+          },
+          "maturityDateStated": {
+            "title": "Maturitydatestated",
+            "type": "integer"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "governingLaw",
+          "comparable",
+          "maturityDateStated"
+        ],
+        "title": "StateCohort",
+        "type": "object"
+      },
+      "StateContext": {
+        "properties": {
+          "cohort": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateCohort"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deviationsFromExemplar": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/StateDeviation"
+            },
+            "title": "Deviationsfromexemplar",
+            "type": "array"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateTemplate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "StateContext",
+        "type": "object"
+      },
+      "StateDeviation": {
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "proof": {
+            "title": "Proof",
+            "type": "string"
+          },
+          "referenceSection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referencesection"
+          },
+          "referenceSpan": {
+            "title": "Referencespan",
+            "type": "string"
+          },
+          "targetSection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targetsection"
+          },
+          "targetSpan": {
+            "title": "Targetspan",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "before",
+          "after",
+          "referenceSpan",
+          "targetSpan",
+          "proof"
+        ],
+        "title": "StateDeviation",
+        "type": "object"
+      },
+      "StateDocument": {
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "filer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filer"
+          },
+          "filerName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filername"
+          },
+          "instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument"
+          },
+          "recordId": {
+            "title": "Recordid",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "required": [
+          "recordId"
+        ],
+        "title": "StateDocument",
+        "type": "object"
+      },
+      "StateEdge": {
+        "properties": {
+          "candidates": {
+            "title": "Candidates",
+            "type": "integer"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "leftForModel": {
+            "title": "Leftformodel",
+            "type": "boolean"
+          },
+          "proof": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof"
+          },
+          "relation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "source",
+          "candidates",
+          "leftForModel"
+        ],
+        "title": "StateEdge",
+        "type": "object"
+      },
+      "StateEffective": {
+        "properties": {
+          "after": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "default": {},
+            "title": "After",
+            "type": "object"
+          },
+          "applied": {
+            "title": "Applied",
+            "type": "integer"
+          },
+          "asOf": {
+            "title": "Asof",
+            "type": "string"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "needsReview": {
+            "title": "Needsreview",
+            "type": "integer"
+          },
+          "operations": {
+            "title": "Operations",
+            "type": "integer"
+          },
+          "unsupportedMutations": {
+            "title": "Unsupportedmutations",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asOf",
+          "operations",
+          "applied",
+          "needsReview",
+          "unsupportedMutations"
+        ],
+        "title": "StateEffective",
+        "type": "object"
+      },
+      "StateFamily": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "members": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/StateFamilyMember"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "review": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Review",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "StateFamily",
+        "type": "object"
+      },
+      "StateFamilyMember": {
+        "properties": {
+          "actsOn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actson"
+          },
+          "arrived": {
+            "default": false,
+            "title": "Arrived",
+            "type": "boolean"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "filer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filer"
+          },
+          "filerName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filername"
+          },
+          "instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument"
+          },
+          "recordId": {
+            "title": "Recordid",
+            "type": "string"
+          },
+          "relation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "required": [
+          "recordId"
+        ],
+        "title": "StateFamilyMember",
+        "type": "object"
+      },
+      "StateFindings": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "integer"
+          },
+          "inFamilyAfter": {
+            "title": "Infamilyafter",
+            "type": "integer"
+          },
+          "staleExamples": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Staleexamples",
+            "type": "array"
+          }
+        },
+        "required": [
+          "inFamilyAfter",
+          "changed"
+        ],
+        "title": "StateFindings",
+        "type": "object"
+      },
+      "StatePlan": {
+        "properties": {
+          "documentsExamined": {
+            "title": "Documentsexamined",
+            "type": "integer"
+          },
+          "movedKeys": {
+            "title": "Movedkeys",
+            "type": "integer"
+          },
+          "planSeconds": {
+            "title": "Planseconds",
+            "type": "number"
+          },
+          "planned": {
+            "title": "Planned",
+            "type": "integer"
+          },
+          "plannedByKind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Plannedbykind",
+            "type": "object"
+          }
+        },
+        "required": [
+          "planned",
+          "documentsExamined",
+          "movedKeys",
+          "planSeconds"
+        ],
+        "title": "StatePlan",
+        "type": "object"
+      },
+      "StatePortfolio": {
+        "properties": {
+          "documentsAtStart": {
+            "title": "Documentsatstart",
+            "type": "integer"
+          },
+          "familiesAtStart": {
+            "title": "Familiesatstart",
+            "type": "integer"
+          },
+          "findingsAtEnd": {
+            "title": "Findingsatend",
+            "type": "integer"
+          },
+          "objectsAtStart": {
+            "title": "Objectsatstart",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "documentsAtStart",
+          "objectsAtStart",
+          "familiesAtStart",
+          "findingsAtEnd",
+          "source"
+        ],
+        "title": "StatePortfolio",
+        "type": "object"
+      },
+      "StateSummary": {
+        "properties": {
+          "arrivals": {
+            "title": "Arrivals",
+            "type": "integer"
+          },
+          "changedMean": {
+            "title": "Changedmean",
+            "type": "number"
+          },
+          "documentsExaminedMax": {
+            "title": "Documentsexaminedmax",
+            "type": "integer"
+          },
+          "documentsExaminedMean": {
+            "title": "Documentsexaminedmean",
+            "type": "number"
+          },
+          "edgesAccepted": {
+            "title": "Edgesaccepted",
+            "type": "integer"
+          },
+          "edgesOnGoldTarget": {
+            "title": "Edgesongoldtarget",
+            "type": "integer"
+          },
+          "falseNegativeReach": {
+            "title": "Falsenegativereach",
+            "type": "integer"
+          },
+          "falsePositiveReachShare": {
+            "title": "Falsepositivereachshare",
+            "type": "number"
+          },
+          "leftForModel": {
+            "title": "Leftformodel",
+            "type": "integer"
+          },
+          "modelCallsExecuted": {
+            "title": "Modelcallsexecuted",
+            "type": "integer"
+          },
+          "naiveRebuildPerChange": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Naiverebuildperchange",
+            "type": "object"
+          },
+          "objectsAtStart": {
+            "title": "Objectsatstart",
+            "type": "integer"
+          },
+          "perArrival": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Perarrival",
+            "type": "object"
+          },
+          "plannedMax": {
+            "title": "Plannedmax",
+            "type": "integer"
+          },
+          "plannedMean": {
+            "title": "Plannedmean",
+            "type": "number"
+          },
+          "portfolioDocumentsAtStart": {
+            "title": "Portfoliodocumentsatstart",
+            "type": "integer"
+          },
+          "stabilityBudgetDisturbedWithoutDependencyChange": {
+            "title": "Stabilitybudgetdisturbedwithoutdependencychange",
+            "type": "integer"
+          },
+          "verifiedAgainstRebuild": {
+            "title": "Verifiedagainstrebuild",
+            "type": "integer"
+          },
+          "verifiedStateEqual": {
+            "title": "Verifiedstateequal",
+            "type": "integer"
+          },
+          "workAvoidedPerArrivalMean": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Workavoidedperarrivalmean",
+            "type": "object"
+          }
+        },
+        "required": [
+          "arrivals",
+          "portfolioDocumentsAtStart",
+          "objectsAtStart",
+          "verifiedAgainstRebuild",
+          "verifiedStateEqual",
+          "falseNegativeReach",
+          "stabilityBudgetDisturbedWithoutDependencyChange",
+          "plannedMean",
+          "plannedMax",
+          "changedMean",
+          "falsePositiveReachShare",
+          "documentsExaminedMean",
+          "documentsExaminedMax",
+          "edgesAccepted",
+          "edgesOnGoldTarget",
+          "leftForModel",
+          "modelCallsExecuted"
+        ],
+        "title": "StateSummary",
+        "type": "object"
+      },
+      "StateTemplate": {
+        "properties": {
+          "baseIsExemplar": {
+            "title": "Baseisexemplar",
+            "type": "boolean"
+          },
+          "clusterSize": {
+            "title": "Clustersize",
+            "type": "integer"
+          },
+          "exemplar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "clusterSize",
+          "baseIsExemplar"
+        ],
+        "title": "StateTemplate",
+        "type": "object"
+      },
+      "StateVerified": {
+        "properties": {
+          "changedNotPlanned": {
+            "title": "Changednotplanned",
+            "type": "integer"
+          },
+          "rebuildSeconds": {
+            "title": "Rebuildseconds",
+            "type": "number"
+          },
+          "stateEqualToRebuild": {
+            "title": "Stateequaltorebuild",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "stateEqualToRebuild",
+          "changedNotPlanned",
+          "rebuildSeconds"
+        ],
+        "title": "StateVerified",
+        "type": "object"
+      },
+      "StateWork": {
+        "properties": {
+          "adjudications": {
+            "title": "Adjudications",
+            "type": "integer"
+          },
+          "charactersAModelWouldRead": {
+            "title": "Charactersamodelwouldread",
+            "type": "integer"
+          },
+          "computed": {
+            "title": "Computed",
+            "type": "integer"
+          },
+          "disturbedWithoutDependencyChange": {
+            "title": "Disturbedwithoutdependencychange",
+            "type": "integer"
+          },
+          "keptByInputCheck": {
+            "title": "Keptbyinputcheck",
+            "type": "integer"
+          },
+          "modelCallsIfFindingsWereModelMade": {
+            "title": "Modelcallsiffindingsweremodelmade",
+            "type": "integer"
+          },
+          "pairScores": {
+            "title": "Pairscores",
+            "type": "integer"
+          },
+          "textReads": {
+            "title": "Textreads",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "textReads",
+          "adjudications",
+          "pairScores",
+          "computed",
+          "keptByInputCheck",
+          "disturbedWithoutDependencyChange",
+          "modelCallsIfFindingsWereModelMade",
+          "charactersAModelWouldRead"
+        ],
+        "title": "StateWork",
+        "type": "object"
+      },
       "SupersedesIn": {
         "properties": {
           "previousDocumentId": {
@@ -5467,6 +6064,27 @@
         ]
       }
     },
+    "/api/engineering/contract-state": {
+      "get": {
+        "operationId": "contract_state_api_engineering_contract_state_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Contract State",
+        "tags": [
+          "engineering"
+        ]
+      }
+    },
     "/api/engineering/experiments": {
       "get": {
         "operationId": "experiments_api_engineering_experiments_get",
@@ -5551,27 +6169,6 @@
           }
         },
         "summary": "Goldens",
-        "tags": [
-          "engineering"
-        ]
-      }
-    },
-    "/api/engineering/lineage": {
-      "get": {
-        "operationId": "lineage_api_engineering_lineage_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LineageOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Lineage",
         "tags": [
           "engineering"
         ]

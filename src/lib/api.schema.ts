@@ -201,6 +201,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/engineering/contract-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Contract State */
+        get: operations["contract_state_api_engineering_contract_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/engineering/experiments": {
         parameters: {
             query?: never;
@@ -250,23 +267,6 @@ export interface paths {
          * @description The golden set with each golden's run and verdict per prompt version, and the latest comparison.
          */
         get: operations["goldens_api_engineering_goldens_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/engineering/lineage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Lineage */
-        get: operations["lineage_api_engineering_lineage_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -844,6 +844,41 @@ export interface components {
             verifiedSpans: number;
             /** Withheldfindings */
             withheldFindings: number;
+        };
+        /** ContractStateOut */
+        ContractStateOut: {
+            /**
+             * Arrivals
+             * @default []
+             */
+            arrivals: components["schemas"]["StateArrival"][];
+            /** Available */
+            available: boolean;
+            /** Detail */
+            detail?: string | null;
+            /**
+             * Evidence
+             * @default {}
+             */
+            evidence: {
+                [key: string]: unknown;
+            };
+            /** Generatedat */
+            generatedAt?: string | null;
+            portfolio?: components["schemas"]["StatePortfolio"] | null;
+            /** Schemaversion */
+            schemaVersion?: string | null;
+            /** Sha256 */
+            sha256?: string | null;
+            /** Sha256Verified */
+            sha256Verified?: boolean | null;
+            /** Source */
+            source: string | null;
+            /** Sourcecommit */
+            sourceCommit?: string | null;
+            summary?: components["schemas"]["StateSummary"] | null;
+            /** Whatthisis */
+            whatThisIs?: string | null;
         };
         /**
          * CoverageOut
@@ -1600,157 +1635,6 @@ export interface components {
             /** Invite */
             invite: string;
         };
-        /** LineageArrival */
-        LineageArrival: {
-            /**
-             * Compositesectionschanged
-             * @default []
-             */
-            compositeSectionsChanged: string[];
-            document: components["schemas"]["LineageDocument"];
-            /** Documentsexamined */
-            documentsExamined: number;
-            /** Familiesrebuilt */
-            familiesRebuilt: number;
-            /** Family */
-            family?: string | null;
-            /** Familynodeschanged */
-            familyNodesChanged: number;
-            /**
-             * Findingsinvalidated
-             * @default []
-             */
-            findingsInvalidated: string[];
-            /** Findingspreserved */
-            findingsPreserved: number;
-            /** Modelcalls */
-            modelCalls: number;
-            /** Portfoliodocuments */
-            portfolioDocuments: number;
-            relationship?: components["schemas"]["LineageRelationship"] | null;
-            /** Relationshipisgold */
-            relationshipIsGold?: boolean | null;
-            /** Seconds */
-            seconds: number;
-            /**
-             * Trustdependenciesreached
-             * @default []
-             */
-            trustDependenciesReached: string[];
-            /** Unrelatedfamiliesrecomputed */
-            unrelatedFamiliesRecomputed: number;
-        };
-        /** LineageDocument */
-        LineageDocument: {
-            /** Agreementtype */
-            agreementType?: string | null;
-            /** Date */
-            date?: string | null;
-            /** Filer */
-            filer?: string | null;
-            /** Filername */
-            filerName?: string | null;
-            /** Instrument */
-            instrument?: string | null;
-            /** Recordid */
-            recordId: string;
-            /** Title */
-            title?: string | null;
-        };
-        /** LineageOut */
-        LineageOut: {
-            /**
-             * Adjudicationheldout
-             * @default {}
-             */
-            adjudicationHeldOut: {
-                [key: string]: {
-                    [key: string]: number | null;
-                };
-            };
-            /**
-             * Arrivals
-             * @default []
-             */
-            arrivals: components["schemas"]["LineageArrival"][];
-            /** Available */
-            available: boolean;
-            /**
-             * Candidategenerationheldout
-             * @default {}
-             */
-            candidateGenerationHeldOut: {
-                [key: string]: {
-                    [key: string]: number | null;
-                };
-            };
-            /** Detail */
-            detail?: string | null;
-            /** Generatedat */
-            generatedAt?: string | null;
-            portfolio?: components["schemas"]["LineagePortfolio"] | null;
-            /** Schemaversion */
-            schemaVersion?: string | null;
-            /** Sha256 */
-            sha256?: string | null;
-            /** Sha256Verified */
-            sha256Verified?: boolean | null;
-            /** Source */
-            source: string | null;
-            /** Sourcecommit */
-            sourceCommit?: string | null;
-            summary?: components["schemas"]["LineageSummary"] | null;
-            /** Whatthisis */
-            whatThisIs?: string | null;
-        };
-        /** LineagePortfolio */
-        LineagePortfolio: {
-            /** Documentsatstart */
-            documentsAtStart: number;
-            /** Familiesatstart */
-            familiesAtStart: number;
-            /** Findingsatstart */
-            findingsAtStart: number;
-            /** Source */
-            source: string;
-        };
-        /** LineageRelationship */
-        LineageRelationship: {
-            /** Relation */
-            relation: string;
-            target: components["schemas"]["LineageDocument"];
-        };
-        /** LineageSummary */
-        LineageSummary: {
-            /** Arrivals */
-            arrivals: number;
-            /** Documentsexaminedmax */
-            documentsExaminedMax: number;
-            /** Documentsexaminedmean */
-            documentsExaminedMean: number;
-            /** Edgesbound */
-            edgesBound: number;
-            /** Edgesboundtogoldbase */
-            edgesBoundToGoldBase: number;
-            /** Familiesatstart */
-            familiesAtStart: number;
-            /** Findingsatstart */
-            findingsAtStart: number;
-            /** Findingsinvalidatedtotal */
-            findingsInvalidatedTotal: number;
-            /** Findingspreservedtotal */
-            findingsPreservedTotal: number;
-            /** Modelaskstotal */
-            modelAsksTotal: number;
-            /** Portfoliodocumentsatstart */
-            portfolioDocumentsAtStart: number;
-            /** Unrelatedfamiliesrecomputedtotal */
-            unrelatedFamiliesRecomputedTotal: number;
-            /** Wallsecondsp50 */
-            wallSecondsP50: number;
-            /** Wallsecondsp95 */
-            wallSecondsP95: number;
-        };
         /** MemoIn */
         MemoIn: {
             /** Runid */
@@ -2190,6 +2074,318 @@ export interface components {
             stage: "reading" | "finding_evidence" | "checking" | "verifying" | "complete" | "unresolved" | "failed";
             /** Status */
             status?: ("running" | "ok" | "failed") | null;
+        };
+        /** StateArrival */
+        StateArrival: {
+            changed: components["schemas"]["StateChanged"];
+            context: components["schemas"]["StateContext"];
+            document: components["schemas"]["StateDocument"];
+            /** Documentsbefore */
+            documentsBefore: number;
+            edge?: components["schemas"]["StateEdge"] | null;
+            /** Edgeongoldtarget */
+            edgeOnGoldTarget: boolean;
+            effective: components["schemas"]["StateEffective"];
+            family?: components["schemas"]["StateFamily"] | null;
+            findings: components["schemas"]["StateFindings"];
+            /** Latencyms */
+            latencyMs: number;
+            /** Objectsbefore */
+            objectsBefore: number;
+            plan: components["schemas"]["StatePlan"];
+            verified?: components["schemas"]["StateVerified"] | null;
+            work: components["schemas"]["StateWork"];
+        };
+        /** StateChanged */
+        StateChanged: {
+            /**
+             * Bykind
+             * @default {}
+             */
+            byKind: {
+                [key: string]: number;
+            };
+            /** Total */
+            total: number;
+        };
+        /** StateCohort */
+        StateCohort: {
+            /** Comparable */
+            comparable: number;
+            /** Governinglaw */
+            governingLaw: string;
+            /** Maturitydatestated */
+            maturityDateStated: number;
+            /** Type */
+            type: string;
+        };
+        /** StateContext */
+        StateContext: {
+            cohort?: components["schemas"]["StateCohort"] | null;
+            /**
+             * Deviationsfromexemplar
+             * @default []
+             */
+            deviationsFromExemplar: components["schemas"]["StateDeviation"][];
+            template?: components["schemas"]["StateTemplate"] | null;
+        };
+        /** StateDeviation */
+        StateDeviation: {
+            /** After */
+            after: string | number | boolean | null;
+            /** Before */
+            before: string | number | boolean | null;
+            /** Field */
+            field: string;
+            /** Proof */
+            proof: string;
+            /** Referencesection */
+            referenceSection?: string | null;
+            /** Referencespan */
+            referenceSpan: string;
+            /** Targetsection */
+            targetSection?: string | null;
+            /** Targetspan */
+            targetSpan: string;
+        };
+        /** StateDocument */
+        StateDocument: {
+            /** Date */
+            date?: string | null;
+            /** Filer */
+            filer?: string | null;
+            /** Filername */
+            filerName?: string | null;
+            /** Instrument */
+            instrument?: string | null;
+            /** Recordid */
+            recordId: string;
+            /** Title */
+            title?: string | null;
+            /** Type */
+            type?: string | null;
+        };
+        /** StateEdge */
+        StateEdge: {
+            /** Candidates */
+            candidates: number;
+            /** Evidence */
+            evidence?: string | null;
+            /** Leftformodel */
+            leftForModel: boolean;
+            /** Proof */
+            proof?: string | null;
+            /** Relation */
+            relation?: string | null;
+            /** Source */
+            source: string;
+            /** State */
+            state: string;
+            target?: components["schemas"]["StateDocument"] | null;
+        };
+        /** StateEffective */
+        StateEffective: {
+            /**
+             * After
+             * @default {}
+             */
+            after: {
+                [key: string]: string | number | boolean | null;
+            };
+            /** Applied */
+            applied: number;
+            /** Asof */
+            asOf: string;
+            /** Before */
+            before?: {
+                [key: string]: string | number | boolean | null;
+            } | null;
+            /** Needsreview */
+            needsReview: number;
+            /** Operations */
+            operations: number;
+            /** Unsupportedmutations */
+            unsupportedMutations: number;
+        };
+        /** StateFamily */
+        StateFamily: {
+            /** Id */
+            id: string;
+            /**
+             * Members
+             * @default []
+             */
+            members: components["schemas"]["StateFamilyMember"][];
+            /**
+             * Review
+             * @default []
+             */
+            review: string[];
+        };
+        /** StateFamilyMember */
+        StateFamilyMember: {
+            /** Actson */
+            actsOn?: string | null;
+            /**
+             * Arrived
+             * @default false
+             */
+            arrived: boolean;
+            /** Date */
+            date?: string | null;
+            /** Filer */
+            filer?: string | null;
+            /** Filername */
+            filerName?: string | null;
+            /** Instrument */
+            instrument?: string | null;
+            /** Recordid */
+            recordId: string;
+            /** Relation */
+            relation?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Type */
+            type?: string | null;
+        };
+        /** StateFindings */
+        StateFindings: {
+            /** Changed */
+            changed: number;
+            /** Infamilyafter */
+            inFamilyAfter: number;
+            /**
+             * Staleexamples
+             * @default []
+             */
+            staleExamples: string[];
+        };
+        /** StatePlan */
+        StatePlan: {
+            /** Documentsexamined */
+            documentsExamined: number;
+            /** Movedkeys */
+            movedKeys: number;
+            /** Planseconds */
+            planSeconds: number;
+            /** Planned */
+            planned: number;
+            /**
+             * Plannedbykind
+             * @default {}
+             */
+            plannedByKind: {
+                [key: string]: number;
+            };
+        };
+        /** StatePortfolio */
+        StatePortfolio: {
+            /** Documentsatstart */
+            documentsAtStart: number;
+            /** Familiesatstart */
+            familiesAtStart: number;
+            /** Findingsatend */
+            findingsAtEnd: number;
+            /** Objectsatstart */
+            objectsAtStart: number;
+            /** Source */
+            source: string;
+        };
+        /** StateSummary */
+        StateSummary: {
+            /** Arrivals */
+            arrivals: number;
+            /** Changedmean */
+            changedMean: number;
+            /** Documentsexaminedmax */
+            documentsExaminedMax: number;
+            /** Documentsexaminedmean */
+            documentsExaminedMean: number;
+            /** Edgesaccepted */
+            edgesAccepted: number;
+            /** Edgesongoldtarget */
+            edgesOnGoldTarget: number;
+            /** Falsenegativereach */
+            falseNegativeReach: number;
+            /** Falsepositivereachshare */
+            falsePositiveReachShare: number;
+            /** Leftformodel */
+            leftForModel: number;
+            /** Modelcallsexecuted */
+            modelCallsExecuted: number;
+            /**
+             * Naiverebuildperchange
+             * @default {}
+             */
+            naiveRebuildPerChange: {
+                [key: string]: number;
+            };
+            /** Objectsatstart */
+            objectsAtStart: number;
+            /**
+             * Perarrival
+             * @default {}
+             */
+            perArrival: {
+                [key: string]: number;
+            };
+            /** Plannedmax */
+            plannedMax: number;
+            /** Plannedmean */
+            plannedMean: number;
+            /** Portfoliodocumentsatstart */
+            portfolioDocumentsAtStart: number;
+            /** Stabilitybudgetdisturbedwithoutdependencychange */
+            stabilityBudgetDisturbedWithoutDependencyChange: number;
+            /** Verifiedagainstrebuild */
+            verifiedAgainstRebuild: number;
+            /** Verifiedstateequal */
+            verifiedStateEqual: number;
+            /**
+             * Workavoidedperarrivalmean
+             * @default {}
+             */
+            workAvoidedPerArrivalMean: {
+                [key: string]: number;
+            };
+        };
+        /** StateTemplate */
+        StateTemplate: {
+            /** Baseisexemplar */
+            baseIsExemplar: boolean;
+            /** Clustersize */
+            clusterSize: number;
+            exemplar?: components["schemas"]["StateDocument"] | null;
+            /** Type */
+            type: string;
+        };
+        /** StateVerified */
+        StateVerified: {
+            /** Changednotplanned */
+            changedNotPlanned: number;
+            /** Rebuildseconds */
+            rebuildSeconds: number;
+            /** Stateequaltorebuild */
+            stateEqualToRebuild: boolean;
+        };
+        /** StateWork */
+        StateWork: {
+            /** Adjudications */
+            adjudications: number;
+            /** Charactersamodelwouldread */
+            charactersAModelWouldRead: number;
+            /** Computed */
+            computed: number;
+            /** Disturbedwithoutdependencychange */
+            disturbedWithoutDependencyChange: number;
+            /** Keptbyinputcheck */
+            keptByInputCheck: number;
+            /** Modelcallsiffindingsweremodelmade */
+            modelCallsIfFindingsWereModelMade: number;
+            /** Pairscores */
+            pairScores: number;
+            /** Textreads */
+            textReads: number;
         };
         /** SupersedesIn */
         SupersedesIn: {
@@ -2725,6 +2921,26 @@ export interface operations {
             };
         };
     };
+    contract_state_api_engineering_contract_state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractStateOut"];
+                };
+            };
+        };
+    };
     experiments_api_engineering_experiments_get: {
         parameters: {
             query?: never;
@@ -2792,26 +3008,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoldensOut"];
-                };
-            };
-        };
-    };
-    lineage_api_engineering_lineage_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LineageOut"];
                 };
             };
         };

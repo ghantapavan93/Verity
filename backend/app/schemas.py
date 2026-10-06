@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -545,69 +545,173 @@ class ExperimentsOut(ApiModel):
     baselines: list[ExperimentRecord] = []
 
 
-# ------------------------------------------------------------------ the lineage record: one amendment arrives
-# A recording the contract-lineage experiment exported (`lineage-arrivals/1`), read as a file and shown as it is.
-# Every number is the experiment's; nothing here is computed, and nothing is live.
+# ------------------------------------------------------------------ the contract-state record: one contract changes
+# A recording the contract-state experiment exported (`contract-state/1`), read as a file and shown as it is. Every
+# number is the experiment's; nothing here is computed, and nothing is live. Fact values are what the experiment's
+# reader established (a governing law, a date), or "AMBIGUOUS" when the text stated two.
+
+FactValue = str | int | bool | None
 
 
-class LineageDocument(ApiModel):
+class StateDocument(ApiModel):
     record_id: str
     title: str | None = None
     date: str | None = None
+    instrument: str | None = None
+    type: str | None = None
     filer: str | None = None
     filer_name: str | None = None
-    instrument: str | None = None
-    agreement_type: str | None = None
 
 
-class LineageRelationship(ApiModel):
-    target: LineageDocument
-    relation: str
+class StateEdge(ApiModel):
+    state: str  # bound | ambiguous | partial | none
+    relation: str | None = None
+    proof: str | None = None  # ACCEPTED | NEEDS_REVIEW | UNKNOWN
+    source: str
+    target: StateDocument | None = None
+    evidence: str | None = None
+    candidates: int
+    left_for_model: bool
 
 
-class LineageArrival(ApiModel):
-    document: LineageDocument
-    portfolio_documents: int
+class StateFamilyMember(StateDocument):
+    acts_on: str | None = None
+    relation: str | None = None
+    arrived: bool = False
+
+
+class StateFamily(ApiModel):
+    id: str
+    review: list[str] = []
+    members: list[StateFamilyMember] = []
+
+
+class StateEffective(ApiModel):
+    as_of: str
+    before: dict[str, FactValue] | None = None
+    after: dict[str, FactValue] = {}
+    operations: int
+    applied: int
+    needs_review: int
+    unsupported_mutations: int
+
+
+class StateTemplate(ApiModel):
+    type: str
+    cluster_size: int
+    exemplar: StateDocument | None = None
+    base_is_exemplar: bool
+
+
+class StateCohort(ApiModel):
+    type: str
+    governing_law: str
+    comparable: int
+    maturity_date_stated: int
+
+
+class StateDeviation(ApiModel):
+    field: str
+    before: FactValue
+    after: FactValue
+    reference_span: str
+    target_span: str
+    reference_section: str | None = None
+    target_section: str | None = None
+    proof: str
+
+
+class StateContext(ApiModel):
+    template: StateTemplate | None = None
+    cohort: StateCohort | None = None
+    deviations_from_exemplar: list[StateDeviation] = []
+
+
+class StateFindings(ApiModel):
+    in_family_after: int
+    changed: int
+    stale_examples: list[str] = []
+
+
+class StatePlan(ApiModel):
+    planned: int
+    planned_by_kind: dict[str, int] = {}
     documents_examined: int
-    relationship: LineageRelationship | None = None
-    relationship_is_gold: bool | None = None
-    family: str | None = None
-    families_rebuilt: int
-    unrelated_families_recomputed: int
-    family_nodes_changed: int
-    composite_sections_changed: list[str] = []
-    trust_dependencies_reached: list[str] = []
-    findings_invalidated: list[str] = []
-    findings_preserved: int
-    model_calls: int
-    seconds: float
+    moved_keys: int
+    plan_seconds: float
 
 
-class LineagePortfolio(ApiModel):
+class StateChanged(ApiModel):
+    total: int
+    by_kind: dict[str, int] = {}
+
+
+class StateWork(ApiModel):
+    text_reads: int
+    adjudications: int
+    pair_scores: int
+    computed: int
+    kept_by_input_check: int
+    disturbed_without_dependency_change: int
+    model_calls_if_findings_were_model_made: int
+    characters_a_model_would_read: int
+
+
+class StateVerified(ApiModel):
+    state_equal_to_rebuild: bool
+    changed_not_planned: int
+    rebuild_seconds: float
+
+
+class StateArrival(ApiModel):
+    document: StateDocument
+    edge: StateEdge | None = None
+    family: StateFamily | None = None
+    effective: StateEffective
+    context: StateContext
+    findings: StateFindings
+    plan: StatePlan
+    changed: StateChanged
+    work: StateWork
+    latency_ms: float
+    documents_before: int
+    objects_before: int
+    verified: StateVerified | None = None
+    edge_on_gold_target: bool
+
+
+class StatePortfolio(ApiModel):
     documents_at_start: int
+    objects_at_start: int
     families_at_start: int
-    findings_at_start: int
+    findings_at_end: int
     source: str
 
 
-class LineageSummary(ApiModel):
+class StateSummary(ApiModel):
     arrivals: int
     portfolio_documents_at_start: int
-    families_at_start: int
-    findings_at_start: int
-    unrelated_families_recomputed_total: int
+    objects_at_start: int
+    verified_against_rebuild: int
+    verified_state_equal: int
+    false_negative_reach: int
+    stability_budget_disturbed_without_dependency_change: int
+    planned_mean: float
+    planned_max: int
+    changed_mean: float
+    false_positive_reach_share: float
     documents_examined_mean: float
     documents_examined_max: int
-    edges_bound: int
-    edges_bound_to_gold_base: int
-    findings_invalidated_total: int
-    findings_preserved_total: int
-    model_asks_total: int
-    wall_seconds_p50: float
-    wall_seconds_p95: float
+    edges_accepted: int
+    edges_on_gold_target: int
+    left_for_model: int
+    model_calls_executed: int
+    per_arrival: dict[str, float] = {}
+    naive_rebuild_per_change: dict[str, float] = {}
+    work_avoided_per_arrival_mean: dict[str, float] = {}
 
 
-class LineageOut(ApiModel):
+class ContractStateOut(ApiModel):
     available: bool
     source: str | None
     detail: str | None = None
@@ -617,11 +721,10 @@ class LineageOut(ApiModel):
     sha256: str | None = None
     sha256_verified: bool | None = None
     what_this_is: str | None = None
-    portfolio: LineagePortfolio | None = None
-    summary: LineageSummary | None = None
-    candidate_generation_held_out: dict[str, dict[str, float | None]] = {}
-    adjudication_held_out: dict[str, dict[str, float | None]] = {}
-    arrivals: list[LineageArrival] = []
+    portfolio: StatePortfolio | None = None
+    summary: StateSummary | None = None
+    evidence: dict[str, Any] = {}
+    arrivals: list[StateArrival] = []
 
 
 # ------------------------------------------------------------------ "Why this answer?": the explanation of a run
