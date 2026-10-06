@@ -21,12 +21,12 @@ from ..goldens.service import report
 from ..hashing import sha256_text
 from ..schemas import (
     CitationRecordOut,
+    ContractStateOut,
     ExperimentPage,
     ExperimentRecord,
     ExperimentsOut,
     FamiliesOut,
     GoldensOut,
-    ContractStateOut,
     StateArrival,
     StatePortfolio,
     StateSummary,
