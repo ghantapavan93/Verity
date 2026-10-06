@@ -59,6 +59,9 @@ class Settings(BaseModel):
     # published page it was built for (links become "Open experiment" → <url>#<id>).
     experiments_results: Path | None = Path(os.environ["WORKBENCH_EXPERIMENTS_RESULTS"]) if os.environ.get("WORKBENCH_EXPERIMENTS_RESULTS") else None
     experiments_url: str | None = os.environ.get("WORKBENCH_EXPERIMENTS_URL") or None
+    # Optional: the lineage-arrivals.json the contract-lineage experiment exports (a recording of measured arrivals),
+    # for the Runs surface. Read as a file; nothing of the experiment's code runs here.
+    lineage_arrivals: Path | None = Path(os.environ["WORKBENCH_LINEAGE_ARRIVALS"]) if os.environ.get("WORKBENCH_LINEAGE_ARRIVALS") else None
 
     @property
     def sqlite_url(self) -> str:

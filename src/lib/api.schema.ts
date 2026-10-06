@@ -258,6 +258,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/engineering/lineage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lineage */
+        get: operations["lineage_api_engineering_lineage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/findings": {
         parameters: {
             query?: never;
@@ -1583,6 +1600,157 @@ export interface components {
             /** Invite */
             invite: string;
         };
+        /** LineageArrival */
+        LineageArrival: {
+            /**
+             * Compositesectionschanged
+             * @default []
+             */
+            compositeSectionsChanged: string[];
+            document: components["schemas"]["LineageDocument"];
+            /** Documentsexamined */
+            documentsExamined: number;
+            /** Familiesrebuilt */
+            familiesRebuilt: number;
+            /** Family */
+            family?: string | null;
+            /** Familynodeschanged */
+            familyNodesChanged: number;
+            /**
+             * Findingsinvalidated
+             * @default []
+             */
+            findingsInvalidated: string[];
+            /** Findingspreserved */
+            findingsPreserved: number;
+            /** Modelcalls */
+            modelCalls: number;
+            /** Portfoliodocuments */
+            portfolioDocuments: number;
+            relationship?: components["schemas"]["LineageRelationship"] | null;
+            /** Relationshipisgold */
+            relationshipIsGold?: boolean | null;
+            /** Seconds */
+            seconds: number;
+            /**
+             * Trustdependenciesreached
+             * @default []
+             */
+            trustDependenciesReached: string[];
+            /** Unrelatedfamiliesrecomputed */
+            unrelatedFamiliesRecomputed: number;
+        };
+        /** LineageDocument */
+        LineageDocument: {
+            /** Agreementtype */
+            agreementType?: string | null;
+            /** Date */
+            date?: string | null;
+            /** Filer */
+            filer?: string | null;
+            /** Filername */
+            filerName?: string | null;
+            /** Instrument */
+            instrument?: string | null;
+            /** Recordid */
+            recordId: string;
+            /** Title */
+            title?: string | null;
+        };
+        /** LineageOut */
+        LineageOut: {
+            /**
+             * Adjudicationheldout
+             * @default {}
+             */
+            adjudicationHeldOut: {
+                [key: string]: {
+                    [key: string]: number | null;
+                };
+            };
+            /**
+             * Arrivals
+             * @default []
+             */
+            arrivals: components["schemas"]["LineageArrival"][];
+            /** Available */
+            available: boolean;
+            /**
+             * Candidategenerationheldout
+             * @default {}
+             */
+            candidateGenerationHeldOut: {
+                [key: string]: {
+                    [key: string]: number | null;
+                };
+            };
+            /** Detail */
+            detail?: string | null;
+            /** Generatedat */
+            generatedAt?: string | null;
+            portfolio?: components["schemas"]["LineagePortfolio"] | null;
+            /** Schemaversion */
+            schemaVersion?: string | null;
+            /** Sha256 */
+            sha256?: string | null;
+            /** Sha256Verified */
+            sha256Verified?: boolean | null;
+            /** Source */
+            source: string | null;
+            /** Sourcecommit */
+            sourceCommit?: string | null;
+            summary?: components["schemas"]["LineageSummary"] | null;
+            /** Whatthisis */
+            whatThisIs?: string | null;
+        };
+        /** LineagePortfolio */
+        LineagePortfolio: {
+            /** Documentsatstart */
+            documentsAtStart: number;
+            /** Familiesatstart */
+            familiesAtStart: number;
+            /** Findingsatstart */
+            findingsAtStart: number;
+            /** Source */
+            source: string;
+        };
+        /** LineageRelationship */
+        LineageRelationship: {
+            /** Relation */
+            relation: string;
+            target: components["schemas"]["LineageDocument"];
+        };
+        /** LineageSummary */
+        LineageSummary: {
+            /** Arrivals */
+            arrivals: number;
+            /** Documentsexaminedmax */
+            documentsExaminedMax: number;
+            /** Documentsexaminedmean */
+            documentsExaminedMean: number;
+            /** Edgesbound */
+            edgesBound: number;
+            /** Edgesboundtogoldbase */
+            edgesBoundToGoldBase: number;
+            /** Familiesatstart */
+            familiesAtStart: number;
+            /** Findingsatstart */
+            findingsAtStart: number;
+            /** Findingsinvalidatedtotal */
+            findingsInvalidatedTotal: number;
+            /** Findingspreservedtotal */
+            findingsPreservedTotal: number;
+            /** Modelaskstotal */
+            modelAsksTotal: number;
+            /** Portfoliodocumentsatstart */
+            portfolioDocumentsAtStart: number;
+            /** Unrelatedfamiliesrecomputedtotal */
+            unrelatedFamiliesRecomputedTotal: number;
+            /** Wallsecondsp50 */
+            wallSecondsP50: number;
+            /** Wallsecondsp95 */
+            wallSecondsP95: number;
+        };
         /** MemoIn */
         MemoIn: {
             /** Runid */
@@ -2624,6 +2792,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoldensOut"];
+                };
+            };
+        };
+    };
+    lineage_api_engineering_lineage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineageOut"];
                 };
             };
         };

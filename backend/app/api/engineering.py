@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..application.citation_record import citation_record
@@ -17,7 +18,19 @@ from ..db import get_session
 from ..families.service import DEFAULT_THRESHOLD
 from ..families.service import report as families_report
 from ..goldens.service import report
-from ..schemas import CitationRecordOut, ExperimentPage, ExperimentRecord, ExperimentsOut, FamiliesOut, GoldensOut
+from ..hashing import sha256_text
+from ..schemas import (
+    CitationRecordOut,
+    ExperimentPage,
+    ExperimentRecord,
+    ExperimentsOut,
+    FamiliesOut,
+    GoldensOut,
+    LineageArrival,
+    LineageOut,
+    LineagePortfolio,
+    LineageSummary,
+)
 from .access import current_workspace
 
 router = APIRouter(prefix="/api/engineering", tags=["engineering"])
@@ -70,6 +83,61 @@ def load_experiments(path: Path) -> ExperimentsOut:
 @router.get("/experiments", response_model=ExperimentsOut)
 def experiments() -> ExperimentsOut:
     return load_experiments(results_path())
+
+
+# The lineage record: a recording of measured arrivals the contract-lineage experiment exports. The sibling checkout
+# on a development machine; WORKBENCH_LINEAGE_ARRIVALS overrides it. Read as a file: none of the experiment's code
+# runs here, and nothing in the record is recomputed.
+DEFAULT_ARRIVALS = BACKEND_DIR.parents[1] / "ivo-experiments" / "experiments" / "contract-lineage" / "results" / "lineage-arrivals.json"
+LINEAGE_SCHEMA = "lineage-arrivals/1"
+
+
+def arrivals_path() -> Path:
+    return settings.lineage_arrivals or DEFAULT_ARRIVALS
+
+
+def load_lineage(path: Path) -> LineageOut:
+    if not path.exists():
+        return LineageOut(
+            available=False,
+            source=path.name,
+            detail="lineage-arrivals.json not found; export it with `python -m evals.export_arrivals` in the contract-lineage experiment",
+        )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        return LineageOut(available=False, source=path.name, detail=f"lineage-arrivals.json unreadable: {type(error).__name__}")
+    if not isinstance(data, dict) or data.get("schema") != LINEAGE_SCHEMA:
+        return LineageOut(available=False, source=path.name, detail=f"the file is not a {LINEAGE_SCHEMA} record")
+    # The record carries the sha256 of its own body (sorted keys, UTF-8); a copy matches, an edit does not.
+    body = {key: value for key, value in data.items() if key != "sha256"}
+    digest = sha256_text(json.dumps(body, sort_keys=True, ensure_ascii=False))
+    try:
+        portfolio = LineagePortfolio(**data["portfolio"])
+        summary = LineageSummary(**data["summary"])
+        arrivals = [LineageArrival(**row) for row in data.get("arrivals") or []]
+    except (ValidationError, KeyError, TypeError) as error:
+        return LineageOut(available=False, source=path.name, detail=f"the record does not fit {LINEAGE_SCHEMA}: {type(error).__name__}")
+    return LineageOut(
+        available=True,
+        source=path.name,
+        schema_version=str(data.get("schema")),
+        source_commit=str(data["source_commit"]) if data.get("source_commit") else None,
+        generated_at=str(data["generated_at"]) if data.get("generated_at") else None,
+        sha256=str(data["sha256"]) if data.get("sha256") else None,
+        sha256_verified=digest == data.get("sha256"),
+        what_this_is=str(data["what_this_is"]) if data.get("what_this_is") else None,
+        portfolio=portfolio,
+        summary=summary,
+        candidate_generation_held_out=data.get("candidate_generation_held_out") or {},
+        adjudication_held_out=data.get("adjudication_held_out") or {},
+        arrivals=arrivals,
+    )
+
+
+@router.get("/lineage", response_model=LineageOut)
+def lineage() -> LineageOut:
+    return load_lineage(arrivals_path())
 
 
 @router.get("/citations", response_model=CitationRecordOut)

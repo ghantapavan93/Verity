@@ -15,6 +15,7 @@ import type {
   GoldensView,
   GuidanceRecord,
   Health,
+  LineageView,
   MemoRecord,
   ReviewIn,
   RunDetailView,
@@ -174,6 +175,10 @@ export function listFindings(documentId?: string): Promise<FindingRecord[]> {
 
 export function getExperiments(): Promise<ExperimentsView> {
   return request<ExperimentsView>("/api/engineering/experiments");
+}
+
+export function getLineage(): Promise<LineageView> {
+  return request<LineageView>("/api/engineering/lineage");
 }
 
 export function getGoldens(): Promise<GoldensView> {

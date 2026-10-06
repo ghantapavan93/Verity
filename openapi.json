@@ -2642,6 +2642,482 @@
         "title": "InviteIn",
         "type": "object"
       },
+      "LineageArrival": {
+        "properties": {
+          "compositeSectionsChanged": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Compositesectionschanged",
+            "type": "array"
+          },
+          "document": {
+            "$ref": "#/components/schemas/LineageDocument"
+          },
+          "documentsExamined": {
+            "title": "Documentsexamined",
+            "type": "integer"
+          },
+          "familiesRebuilt": {
+            "title": "Familiesrebuilt",
+            "type": "integer"
+          },
+          "family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family"
+          },
+          "familyNodesChanged": {
+            "title": "Familynodeschanged",
+            "type": "integer"
+          },
+          "findingsInvalidated": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Findingsinvalidated",
+            "type": "array"
+          },
+          "findingsPreserved": {
+            "title": "Findingspreserved",
+            "type": "integer"
+          },
+          "modelCalls": {
+            "title": "Modelcalls",
+            "type": "integer"
+          },
+          "portfolioDocuments": {
+            "title": "Portfoliodocuments",
+            "type": "integer"
+          },
+          "relationship": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LineageRelationship"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "relationshipIsGold": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relationshipisgold"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          },
+          "trustDependenciesReached": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Trustdependenciesreached",
+            "type": "array"
+          },
+          "unrelatedFamiliesRecomputed": {
+            "title": "Unrelatedfamiliesrecomputed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document",
+          "portfolioDocuments",
+          "documentsExamined",
+          "familiesRebuilt",
+          "unrelatedFamiliesRecomputed",
+          "familyNodesChanged",
+          "findingsPreserved",
+          "modelCalls",
+          "seconds"
+        ],
+        "title": "LineageArrival",
+        "type": "object"
+      },
+      "LineageDocument": {
+        "properties": {
+          "agreementType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agreementtype"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "filer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filer"
+          },
+          "filerName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filername"
+          },
+          "instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument"
+          },
+          "recordId": {
+            "title": "Recordid",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "recordId"
+        ],
+        "title": "LineageDocument",
+        "type": "object"
+      },
+      "LineageOut": {
+        "properties": {
+          "adjudicationHeldOut": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "default": {},
+            "title": "Adjudicationheldout",
+            "type": "object"
+          },
+          "arrivals": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LineageArrival"
+            },
+            "title": "Arrivals",
+            "type": "array"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "candidateGenerationHeldOut": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "default": {},
+            "title": "Candidategenerationheldout",
+            "type": "object"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "generatedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generatedat"
+          },
+          "portfolio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LineagePortfolio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schemaVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schemaversion"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "sha256Verified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256Verified"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "sourceCommit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcecommit"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LineageSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "whatThisIs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatthisis"
+          }
+        },
+        "required": [
+          "available",
+          "source"
+        ],
+        "title": "LineageOut",
+        "type": "object"
+      },
+      "LineagePortfolio": {
+        "properties": {
+          "documentsAtStart": {
+            "title": "Documentsatstart",
+            "type": "integer"
+          },
+          "familiesAtStart": {
+            "title": "Familiesatstart",
+            "type": "integer"
+          },
+          "findingsAtStart": {
+            "title": "Findingsatstart",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "documentsAtStart",
+          "familiesAtStart",
+          "findingsAtStart",
+          "source"
+        ],
+        "title": "LineagePortfolio",
+        "type": "object"
+      },
+      "LineageRelationship": {
+        "properties": {
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/LineageDocument"
+          }
+        },
+        "required": [
+          "target",
+          "relation"
+        ],
+        "title": "LineageRelationship",
+        "type": "object"
+      },
+      "LineageSummary": {
+        "properties": {
+          "arrivals": {
+            "title": "Arrivals",
+            "type": "integer"
+          },
+          "documentsExaminedMax": {
+            "title": "Documentsexaminedmax",
+            "type": "integer"
+          },
+          "documentsExaminedMean": {
+            "title": "Documentsexaminedmean",
+            "type": "number"
+          },
+          "edgesBound": {
+            "title": "Edgesbound",
+            "type": "integer"
+          },
+          "edgesBoundToGoldBase": {
+            "title": "Edgesboundtogoldbase",
+            "type": "integer"
+          },
+          "familiesAtStart": {
+            "title": "Familiesatstart",
+            "type": "integer"
+          },
+          "findingsAtStart": {
+            "title": "Findingsatstart",
+            "type": "integer"
+          },
+          "findingsInvalidatedTotal": {
+            "title": "Findingsinvalidatedtotal",
+            "type": "integer"
+          },
+          "findingsPreservedTotal": {
+            "title": "Findingspreservedtotal",
+            "type": "integer"
+          },
+          "modelAsksTotal": {
+            "title": "Modelaskstotal",
+            "type": "integer"
+          },
+          "portfolioDocumentsAtStart": {
+            "title": "Portfoliodocumentsatstart",
+            "type": "integer"
+          },
+          "unrelatedFamiliesRecomputedTotal": {
+            "title": "Unrelatedfamiliesrecomputedtotal",
+            "type": "integer"
+          },
+          "wallSecondsP50": {
+            "title": "Wallsecondsp50",
+            "type": "number"
+          },
+          "wallSecondsP95": {
+            "title": "Wallsecondsp95",
+            "type": "number"
+          }
+        },
+        "required": [
+          "arrivals",
+          "portfolioDocumentsAtStart",
+          "familiesAtStart",
+          "findingsAtStart",
+          "unrelatedFamiliesRecomputedTotal",
+          "documentsExaminedMean",
+          "documentsExaminedMax",
+          "edgesBound",
+          "edgesBoundToGoldBase",
+          "findingsInvalidatedTotal",
+          "findingsPreservedTotal",
+          "modelAsksTotal",
+          "wallSecondsP50",
+          "wallSecondsP95"
+        ],
+        "title": "LineageSummary",
+        "type": "object"
+      },
       "MemoIn": {
         "properties": {
           "runId": {
@@ -5075,6 +5551,27 @@
           }
         },
         "summary": "Goldens",
+        "tags": [
+          "engineering"
+        ]
+      }
+    },
+    "/api/engineering/lineage": {
+      "get": {
+        "operationId": "lineage_api_engineering_lineage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Lineage",
         "tags": [
           "engineering"
         ]

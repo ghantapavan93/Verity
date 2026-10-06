@@ -545,6 +545,85 @@ class ExperimentsOut(ApiModel):
     baselines: list[ExperimentRecord] = []
 
 
+# ------------------------------------------------------------------ the lineage record: one amendment arrives
+# A recording the contract-lineage experiment exported (`lineage-arrivals/1`), read as a file and shown as it is.
+# Every number is the experiment's; nothing here is computed, and nothing is live.
+
+
+class LineageDocument(ApiModel):
+    record_id: str
+    title: str | None = None
+    date: str | None = None
+    filer: str | None = None
+    filer_name: str | None = None
+    instrument: str | None = None
+    agreement_type: str | None = None
+
+
+class LineageRelationship(ApiModel):
+    target: LineageDocument
+    relation: str
+
+
+class LineageArrival(ApiModel):
+    document: LineageDocument
+    portfolio_documents: int
+    documents_examined: int
+    relationship: LineageRelationship | None = None
+    relationship_is_gold: bool | None = None
+    family: str | None = None
+    families_rebuilt: int
+    unrelated_families_recomputed: int
+    family_nodes_changed: int
+    composite_sections_changed: list[str] = []
+    trust_dependencies_reached: list[str] = []
+    findings_invalidated: list[str] = []
+    findings_preserved: int
+    model_calls: int
+    seconds: float
+
+
+class LineagePortfolio(ApiModel):
+    documents_at_start: int
+    families_at_start: int
+    findings_at_start: int
+    source: str
+
+
+class LineageSummary(ApiModel):
+    arrivals: int
+    portfolio_documents_at_start: int
+    families_at_start: int
+    findings_at_start: int
+    unrelated_families_recomputed_total: int
+    documents_examined_mean: float
+    documents_examined_max: int
+    edges_bound: int
+    edges_bound_to_gold_base: int
+    findings_invalidated_total: int
+    findings_preserved_total: int
+    model_asks_total: int
+    wall_seconds_p50: float
+    wall_seconds_p95: float
+
+
+class LineageOut(ApiModel):
+    available: bool
+    source: str | None
+    detail: str | None = None
+    schema_version: str | None = None
+    source_commit: str | None = None
+    generated_at: str | None = None
+    sha256: str | None = None
+    sha256_verified: bool | None = None
+    what_this_is: str | None = None
+    portfolio: LineagePortfolio | None = None
+    summary: LineageSummary | None = None
+    candidate_generation_held_out: dict[str, dict[str, float | None]] = {}
+    adjudication_held_out: dict[str, dict[str, float | None]] = {}
+    arrivals: list[LineageArrival] = []
+
+
 # ------------------------------------------------------------------ "Why this answer?": the explanation of a run
 # A read-only projection of the record (application/explain_run.py). Nothing here is computed by a model, and
 # nothing is recomputed by today's code and presented as what the run established: the model's proposal is

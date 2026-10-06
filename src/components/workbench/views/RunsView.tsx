@@ -15,7 +15,8 @@ import styles from "./Views.module.css";
 import { statusTone } from "./FindingsView";
 import { Figures, MethodBar } from "./Figures";
 import { ListSkeleton, ReadFailed } from "./Skeleton";
-import { absolute, getBatch, getCitations, getExperiments, getFamilies, getGoldens, getRunDetail, listBatches, listRuns } from "@/lib/api";
+import { Arrivals } from "./Arrivals";
+import { absolute, getBatch, getCitations, getExperiments, getFamilies, getGoldens, getLineage, getRunDetail, listBatches, listRuns } from "@/lib/api";
 import { formatClock, formatDelta, formatLatency, formatWhen, plural, shortHash } from "@/lib/format";
 import {
   OUTCOME_LABELS,
@@ -32,6 +33,7 @@ import {
   type GoldenRunView,
   type GoldensView,
   type GoldenVerdict,
+  type LineageView,
   type RunDetailView,
   type RunStage,
   type RunSummary,
@@ -86,6 +88,7 @@ export function RunsView({
 }) {
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [experiments, setExperiments] = useState<ExperimentsView | null>(null);
+  const [lineage, setLineage] = useState<LineageView | null>(null);
   const [goldens, setGoldens] = useState<GoldensView | null>(null);
   const [citations, setCitations] = useState<CitationRecord | null>(null);
   const [batches, setBatches] = useState<BatchSummary[] | null>(null);
@@ -115,6 +118,20 @@ export function RunsView({
             generatedAt: null,
             board: [],
             baselines: [],
+          }),
+      );
+    getLineage()
+      .then((view) => !cancelled && setLineage(view))
+      .catch(
+        () =>
+          !cancelled &&
+          setLineage({
+            available: false,
+            source: null,
+            detail: "The lineage record could not be loaded.",
+            arrivals: [],
+            candidateGenerationHeldOut: {},
+            adjudicationHeldOut: {},
           }),
       );
     getCitations()
@@ -228,6 +245,7 @@ export function RunsView({
           {goldens && <a href="#golden-set">Golden set</a>}
           {batches && <a href="#batches">Batch extraction</a>}
           {families && <a href="#families">Document families</a>}
+          {lineage && <a href="#arrivals">One amendment arrives</a>}
           {experiments && <a href="#experiments">Before this product</a>}
         </nav>
 
@@ -287,6 +305,11 @@ export function RunsView({
         {families && (
           <div id="families" className={styles.anchor}>
             <Families view={families} />
+          </div>
+        )}
+        {lineage && (
+          <div id="arrivals" className={styles.anchor}>
+            <Arrivals view={lineage} />
           </div>
         )}
         {experiments && (
