@@ -63,14 +63,14 @@ export function Arrivals({ view }: { view: LineageView }) {
           { label: "Findings", value: portfolio.findingsAtStart },
           { label: "Arrivals recorded", value: summary.arrivals },
           { label: "Unrelated families recomputed", value: summary.unrelatedFamiliesRecomputedTotal, note: "over every arrival" },
-          { label: "Model calls", value: summary.modelAsksTotal, note: "left for a model to answer; none made" },
+          { label: "Left for a model", value: summary.modelAsksTotal, note: "candidates the deterministic adjudicator left at UNKNOWN; no model was called" },
         ]}
       />
       {arrival && (
         <>
           <p className={styles.quiet} style={{ marginTop: 18 }}>
             <label htmlFor="arrival-pick">Arrival</label>{" "}
-            <select id="arrival-pick" value={index} onChange={(event) => setIndex(Number(event.target.value))}>
+            <select id="arrival-pick" value={index} onChange={(event) => setIndex(Number(event.target.value))} style={{ maxWidth: "100%" }}>
               {view.arrivals.map((a, i) => (
                 <option key={a.document.recordId} value={i}>
                   {titleOf(a.document)}
@@ -95,7 +95,7 @@ export function Arrivals({ view }: { view: LineageView }) {
               { label: "Families rebuilt", value: arrival.familiesRebuilt, note: `${arrival.unrelatedFamiliesRecomputed} unrelated recomputed` },
               { label: "Sections changed", value: arrival.compositeSectionsChanged.length },
               { label: "Findings invalidated", value: arrival.findingsInvalidated.length, note: `${grouped.format(arrival.findingsPreserved)} preserved` },
-              { label: "Model calls", value: arrival.modelCalls },
+              { label: "Left for a model", value: arrival.modelCalls, note: "no model was called" },
               { label: "Latency", value: `${Math.round(arrival.seconds * 1000)} ms` },
             ]}
           />
