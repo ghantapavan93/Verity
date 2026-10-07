@@ -2077,6 +2077,10 @@ export interface components {
         };
         /** StateArrival */
         StateArrival: {
+            /** Certificate */
+            certificate?: {
+                [key: string]: unknown;
+            } | null;
             context: components["schemas"]["StateContext"];
             document: components["schemas"]["StateDocument"];
             /** Documentsbefore */
@@ -2084,6 +2088,10 @@ export interface components {
             edge?: components["schemas"]["StateEdge"] | null;
             /** Edgeongoldtarget */
             edgeOnGoldTarget: boolean;
+            /** Edges */
+            edges?: {
+                [key: string]: number;
+            } | null;
             effective: components["schemas"]["StateEffective"];
             family?: components["schemas"]["StateFamily"] | null;
             findings: components["schemas"]["StateFindings"];

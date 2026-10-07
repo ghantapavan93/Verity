@@ -680,6 +680,11 @@ class StateArrival(ApiModel):
     objects_before: int
     verified: StateVerified | None = None
     edge_on_gold_target: bool
+    # Recorded with the arrival since contract-state/2 carried them: the relationship edges the arrival re-evaluated
+    # (changed, kept with the same value and certificate), and the accepted edge's DerivationCertificate (support,
+    # guard, scope), replayed by the exporter and checked against the recorded edge. Shown as they are.
+    edges: dict[str, int] | None = None
+    certificate: dict[str, Any] | None = None
 
 
 class StatePortfolio(ApiModel):

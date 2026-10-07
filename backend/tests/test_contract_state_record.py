@@ -79,6 +79,14 @@ ARRIVAL = {
     "objects_before": 48000,
     "verified": {"state_equal_to_rebuild": True, "changed_outside_envelope": 0, "rebuild_seconds": 300.0},
     "edge_on_gold_target": True,
+    "edges": {"edges_revalidated": 2, "edge_value_changed": 1, "edge_value_and_certificate_unchanged": 1, "edge_certificate_changed_value_unchanged": 0},
+    "certificate": {
+        "support": {"reference": ["CREDIT AGREEMENT", "2023-05-17"], "target": BASE["record_id"], "principal": "forward", "relation": "AMENDS"},
+        "guard": {"reference": ["CREDIT AGREEMENT", "2023-05-17"], "satisfying_texts": 1, "documents_under_guard": {"2023-05-17": 2}},
+        "scope": {"id": "all"},
+        "reads": 11,
+        "bucket_baseline_reads": 88,
+    },
 }
 
 
@@ -148,6 +156,8 @@ def test_the_record_is_read_from_its_file_hash_checked_and_shown_as_it_is(client
     )
     assert arrival["context"]["cohort"]["comparable"] == 43 and arrival["impactEnvelope"]["impactEnvelopeByKind"]["FINDING"] == 4
     assert arrival["recomputePlan"]["total"] == 6 and arrival["stateDelta"]["byKind"]["FINDING"] == 1
+    assert arrival["edges"]["edges_revalidated"] == 2 and arrival["certificate"]["guard"]["satisfying_texts"] == 1, "the record's names inside, as recorded"
+    assert arrival["certificate"]["guard"]["documents_under_guard"] == {"2023-05-17": 2}
     assert arrival["verified"]["changedOutsideEnvelope"] == 0 and arrival["family"]["members"][1]["arrived"] is True
     assert loaded["evidence"]["relationship_audit"]["metrics"]["recall"] == 0.8904
     assert loaded["whatThisIs"] == "A recording. Not a live run."

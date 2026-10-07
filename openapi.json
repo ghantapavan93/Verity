@@ -4173,6 +4173,18 @@
       },
       "StateArrival": {
         "properties": {
+          "certificate": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certificate"
+          },
           "context": {
             "$ref": "#/components/schemas/StateContext"
           },
@@ -4196,6 +4208,20 @@
           "edgeOnGoldTarget": {
             "title": "Edgeongoldtarget",
             "type": "boolean"
+          },
+          "edges": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edges"
           },
           "effective": {
             "$ref": "#/components/schemas/StateEffective"
