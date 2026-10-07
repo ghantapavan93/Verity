@@ -8,6 +8,7 @@
  * this component chooses which recorded arrival to show and decides nothing else.
  */
 
+import Link from "next/link";
 import { useState } from "react";
 import styles from "./Views.module.css";
 import local from "./ContractState.module.css";
@@ -105,7 +106,7 @@ export function ContractState({ view }: { view: ContractStateView }) {
       </h2>
       <p className={styles.lede}>
         {view.whatThisIs} Replayed here from the result file{view.sourceCommit ? ` of commit ${shortHash(view.sourceCommit, 7)}` : ""}; nothing on this surface
-        is live.
+        is live. <Link href="/state">The same record as a story: one contract changes, what doesn&rsquo;t need to move.</Link>
       </p>
       {arrival && (
         <p className={local.headline} aria-label="This arrival in one line">

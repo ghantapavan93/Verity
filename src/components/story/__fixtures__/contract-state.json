@@ -1,0 +1,1532 @@
+{
+  "available": true,
+  "source": "contract-state.json",
+  "detail": null,
+  "schemaVersion": "contract-state/2",
+  "sourceCommit": "2d00cbb8ba7677f9b041d6ec5bd81ca26740d111",
+  "generatedAt": "2026-10-07T22:21:39+00:00",
+  "sha256": "637f658daa4c3162dfb429f7cfe31f59e5660d4493cd624c066f18c37605a79c",
+  "sha256Verified": null,
+  "whatThisIs": "A recording from the contract-state experiment: sixty real amendments, held out of a portfolio of real SEC EDGAR exhibits, arrive one at a time. For each, the engine first drew the change's ImpactEnvelope (every derived object it could reach: an upper bound, not a forecast of what will change), then recomputed only the envelope's objects whose inputs had moved (the RecomputePlan), and recorded what actually changed (the StateDelta).",
+  "portfolio": {
+    "documentsAtStart": 5414,
+    "objectsAtStart": 57120,
+    "familiesAtStart": 4733,
+    "findingsAtEnd": 30114,
+    "source": "5,474 Exhibit 10 documents of 40 SEC filers (public domain), less the 60 that arrive"
+  },
+  "summary": {
+    "arrivals": 60,
+    "portfolioDocumentsAtStart": 5414,
+    "objectsAtStart": 57120,
+    "verifiedAgainstRebuild": 8,
+    "verifiedStateEqual": 8,
+    "changedOutsideEnvelope": 0,
+    "stabilityBudgetDisturbedWithoutDependencyChange": 0,
+    "impactEnvelopeMean": 295.4,
+    "impactEnvelopeMax": 668,
+    "recomputePlanMean": 27.3,
+    "stateDeltaMean": 2.9,
+    "envelopeShareUnchanged": 0.9904,
+    "documentsExaminedMean": 29.3,
+    "documentsExaminedMax": 64,
+    "edgesAccepted": 59,
+    "edgesOnGoldTarget": 59,
+    "leftForModel": 1,
+    "modelCallsExecuted": 0,
+    "perArrival": {
+      "adjudications_mean": 237.7,
+      "characters_a_model_would_read_mean": 97431.5,
+      "findings_recomputed_mean": 15.95,
+      "objects_kept_by_input_check_mean": 13.8,
+      "objects_recomputed_mean": 27.3,
+      "template_pair_scores_mean": 0.0,
+      "text_reads_mean": 251.7,
+      "wall_seconds_p50": 1.4359,
+      "wall_seconds_p95": 7.6667
+    },
+    "naiveRebuildPerChange": {
+      "adjudications": 24662.0,
+      "characters_a_model_would_read": 170953354.0,
+      "findings_recomputed": 30109.0,
+      "objects_recomputed": 57121.0,
+      "template_pair_scores": 10202.0,
+      "text_reads": 31642.0,
+      "wall_seconds": 320.66499999999996
+    },
+    "workAvoidedPerArrivalMean": {
+      "adjudications_avoided": 24424.3,
+      "documents_not_examined": 5443.7,
+      "families_not_rebuilt": 4732.0,
+      "findings_not_recomputed": 30093.0,
+      "objects_not_recomputed": 57093.7,
+      "speedup_wall": 223.3,
+      "text_reads_avoided": 31390.3
+    }
+  },
+  "evidence": {
+    "authorization": {
+      "changes_in_room_0": 30,
+      "cross_scope_leakage_observations": 0,
+      "documents": 892,
+      "filers": 8,
+      "naive_global_then_filter_leaks": {
+        "candidate_count_counts_invisible": 31,
+        "cluster_size_counts_invisible": 8,
+        "cohort_count_counts_invisible": 8,
+        "edge_to_invisible_target": 3,
+        "exemplar_is_invisible": 3
+      },
+      "objects_per_scope": {
+        "all": 8814,
+        "r0": 3794,
+        "r1": 5449
+      },
+      "r1_objects_in_envelope": 0,
+      "room_0": 401,
+      "room_1": 491,
+      "split_filers": 2
+    },
+    "comparison": {
+      "arrivals": {
+        "bucket": {
+          "adjudications_mean": 874.3,
+          "arrivals": 60,
+          "edge_mode": "bucket",
+          "edges": {
+            "edge_certificate_changed_value_unchanged": 0,
+            "edge_value_and_certificate_unchanged": 1318,
+            "edge_value_changed": 60,
+            "edges_revalidated": 1378
+          },
+          "final_check": {
+            "edges_differing": 0,
+            "examples": [],
+            "objects_differing": 0,
+            "state_equal_to_rebuild": true
+          },
+          "impact_envelope_mean": 315.0,
+          "rebuild": {
+            "adjudications": 24659,
+            "objects": 57120,
+            "wall_seconds": 345.0
+          },
+          "recompute_plan_mean": 54.4,
+          "state_delta_mean": 2.9,
+          "text_reads_mean": 907.1,
+          "wall_seconds_p50": 4.0457
+        },
+        "certificate": {
+          "adjudications_mean": 237.7,
+          "arrivals": 60,
+          "edge_mode": "certificate",
+          "edges": {
+            "edge_certificate_changed_value_unchanged": 0,
+            "edge_value_and_certificate_unchanged": 350,
+            "edge_value_changed": 60,
+            "edges_revalidated": 410
+          },
+          "final_check": {
+            "edges_differing": 0,
+            "examples": [],
+            "objects_differing": 0,
+            "state_equal_to_rebuild": true
+          },
+          "impact_envelope_mean": 295.4,
+          "rebuild": {
+            "adjudications": 24662,
+            "objects": 57121,
+            "wall_seconds": 320.66499999999996
+          },
+          "recompute_plan_mean": 27.3,
+          "state_delta_mean": 2.9,
+          "text_reads_mean": 251.7,
+          "wall_seconds_p50": 1.4359
+        },
+        "positive": {
+          "adjudications_mean": 29.3,
+          "arrivals": 60,
+          "edge_mode": "positive",
+          "edges": {
+            "edge_certificate_changed_value_unchanged": 0,
+            "edge_value_and_certificate_unchanged": 0,
+            "edge_value_changed": 60,
+            "edges_revalidated": 60
+          },
+          "final_check": {
+            "edges_differing": 0,
+            "examples": [],
+            "objects_differing": 0,
+            "state_equal_to_rebuild": true
+          },
+          "impact_envelope_mean": 281.5,
+          "rebuild": {
+            "adjudications": 24659,
+            "objects": 57120,
+            "wall_seconds": 353.65
+          },
+          "recompute_plan_mean": 20.9,
+          "state_delta_mean": 2.9,
+          "text_reads_mean": 36.6,
+          "wall_seconds_p50": 0.605
+        }
+      },
+      "refilings": {
+        "bucket": {
+          "changed_outside_envelope": 0,
+          "edges": {
+            "edge_certificate_changed_value_unchanged": 0,
+            "edge_value_and_certificate_unchanged": 95,
+            "edge_value_changed": 3,
+            "edges_revalidated": 98
+          },
+          "recompute_plan_total": 558,
+          "state_delta_total": 591,
+          "verified": 3,
+          "verified_state_equal": 3
+        },
+        "certificate": {
+          "changed_outside_envelope": 0,
+          "edges": {
+            "edge_certificate_changed_value_unchanged": 0,
+            "edge_value_and_certificate_unchanged": 99,
+            "edge_value_changed": 3,
+            "edges_revalidated": 102
+          },
+          "recompute_plan_total": 562,
+          "state_delta_total": 591,
+          "verified": 3,
+          "verified_state_equal": 3
+        },
+        "positive": {
+          "changed_outside_envelope": 0,
+          "edges": {
+            "edge_certificate_changed_value_unchanged": 0,
+            "edge_value_and_certificate_unchanged": 5,
+            "edge_value_changed": 3,
+            "edges_revalidated": 8
+          },
+          "recompute_plan_total": 431,
+          "state_delta_total": 591,
+          "verified": 3,
+          "verified_state_equal": 3
+        }
+      }
+    },
+    "counterfactual": {
+      "ambiguous": 16,
+      "bounded_readings": 7,
+      "escalations_no_outcome_of_which_reaches_a_finding": 7,
+      "escalations_whose_any_outcome_reaches_a_finding": 266,
+      "left_for_model": 273,
+      "objects_changed_by_the_counterfactuals": 0,
+      "partial": 257,
+      "readings": 289
+    },
+    "crash_resume": {
+      "all_byte_identical": true,
+      "compared": "every exported line (record, instrument, candidates, link with its evidence, profile), timings removed",
+      "escaped_resume_inconsistencies": 0,
+      "links_differing_from_unbroken_run": 0,
+      "population": "the 5,474 real Exhibit 10 documents with their bodies",
+      "records_written_twice": 0
+    },
+    "facts_admitted": {
+      "AUTO_RENEWAL": 0.4375,
+      "GOVERNING_LAW": 1.0,
+      "MATURITY_DATE": 0.9375,
+      "NOTICE_DAYS": 0.375,
+      "TERM_MONTHS": 0.375
+    },
+    "faults": {
+      "applicable": 65,
+      "dominated": 2,
+      "escaped": 0,
+      "rejected": 65,
+      "stale": 0
+    },
+    "featured_arrival": 0,
+    "mutations": {
+      "expectations_hold_on_the_oracle": true,
+      "modes": {
+        "bucket": "bucket-guard baseline: the predecessor engine, every edge reads its whole blocking bucket",
+        "certificate": "certificate-aware: SUPPORT, GUARD (per reference, per scope) and the rule version",
+        "positive": "positive-only ablation (source and bound target only); intentionally incomplete, not a predecessor"
+      },
+      "oracle": "a new engine rebuilt from nothing on the documents, scopes and rules after the change",
+      "scenarios": [
+        {
+          "control": false,
+          "expect": "BECOME_UNKNOWN",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": false,
+              "focal_outcome_met": false,
+              "missed_invalidations": 2,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "add a second candidate satisfying the same reference",
+          "why": "a second distinct text of ACME's credit agreement of the same date, same agent: nothing the source states tells them apart"
+        },
+        {
+          "control": false,
+          "expect": "PRESERVE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": false,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 2
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "add a candidate satisfying a different reference",
+          "why": "ACME's credit agreement of another date: same filer and type, another reference"
+        },
+        {
+          "control": false,
+          "expect": "REVALIDATE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": false,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "add a conformed copy",
+          "why": "the same agreement filed again with a conformed-copy legend: one text, so the edge stands, but its guard moved"
+        },
+        {
+          "control": false,
+          "expect": "REVALIDATE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": false,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "add a refiling-equivalent copy",
+          "why": "the same bytes under another record id: one text"
+        },
+        {
+          "control": false,
+          "expect": "PRESERVE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": false,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 4,
+              "unnecessary_invalidations": 2
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "add a later restatement",
+          "why": "an amended and restated agreement of another date: it answers another reference, and gets its own edge"
+        },
+        {
+          "control": false,
+          "expect": "BECOME_UNKNOWN",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "change the source's role to an annex",
+          "why": "the amendment's text becomes an annex attached to another instrument: an attachment acts on nothing"
+        },
+        {
+          "control": false,
+          "expect": "BECOME_UNKNOWN",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "change the operative citation to historical-only",
+          "why": "the source becomes a second restatement that recites the original only as history"
+        },
+        {
+          "control": false,
+          "expect": "REVALIDATE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "change a historical citation to operative",
+          "why": "the source starts as a second restatement reciting the original; it becomes the amendment that acts on it"
+        },
+        {
+          "control": false,
+          "expect": "BECOME_UNKNOWN",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": false,
+              "focal_outcome_met": false,
+              "missed_invalidations": 1,
+              "relationships_revalidated": 1,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "expand the authorization scope to a second satisfying text",
+          "why": "room-1 holds a second distinct text of the same agreement; r0 gains room-1"
+        },
+        {
+          "control": false,
+          "expect": "PRESERVE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": false,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 1
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 1,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 1,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "expand the authorization scope to another reference",
+          "why": "room-1 holds ACME's credit agreement of another date; r0 gains room-1"
+        },
+        {
+          "control": false,
+          "expect": "BECOME_UNKNOWN",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 1,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 1,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": false,
+              "focal_outcome_met": false,
+              "missed_invalidations": 1,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "shrink the authorization scope past the target",
+          "why": "the target sits in room-1; scope all loses room-1"
+        },
+        {
+          "control": false,
+          "expect": "PRESERVE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "shrink the authorization scope past an unrelated room",
+          "why": "scope all loses room-1, which holds only other filers' documents"
+        },
+        {
+          "control": false,
+          "expect": "BECOME_UNKNOWN",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 2,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": false,
+              "focal_outcome_met": false,
+              "missed_invalidations": 2,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "change the text-equivalence class",
+          "why": "a refiled copy of the target is revised into a distinct text: two texts now satisfy the reference"
+        },
+        {
+          "control": false,
+          "expect": "BECOME_UNKNOWN",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": false,
+              "focal_outcome_met": false,
+              "missed_invalidations": 3,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 3,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": false,
+              "focal_outcome_met": false,
+              "missed_invalidations": 3,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "change the relationship-rule version",
+          "why": "the rules change: an amendment that does not define its agent no longer binds"
+        },
+        {
+          "control": true,
+          "expect": "PRESERVE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "control: an unrelated document is added",
+          "why": "another filer's employment agreement"
+        },
+        {
+          "control": true,
+          "expect": "PRESERVE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "control: an unrelated room is added",
+          "why": "r0 gains room-2, which holds another filer's documents"
+        },
+        {
+          "control": true,
+          "expect": "PRESERVE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "control: a formatting-only change to the source",
+          "why": "the amendment refiled with other line breaks and spacing"
+        },
+        {
+          "control": true,
+          "expect": "PRESERVE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 1,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 1,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": false,
+              "focal_outcome_met": true,
+              "missed_invalidations": 1,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "control: a second satisfying text outside the scope",
+          "why": "the second distinct text is added in room-1, which r0 cannot see"
+        },
+        {
+          "control": true,
+          "expect": "PRESERVE",
+          "modes": {
+            "bucket": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 1,
+              "unnecessary_invalidations": 0
+            },
+            "certificate": {
+              "final_state_equal_to_oracle": true,
+              "focal_outcome_met": true,
+              "missed_invalidations": 0,
+              "relationships_revalidated": 1,
+              "unnecessary_invalidations": 0
+            },
+            "positive": {
+              "final_state_equal_to_oracle": false,
+              "focal_outcome_met": true,
+              "missed_invalidations": 1,
+              "relationships_revalidated": 0,
+              "unnecessary_invalidations": 0
+            }
+          },
+          "scenario": "control: an unrelated reference gains a candidate",
+          "why": "ZENITH's credit agreement gains a second text; ACME's edge rests on none of it"
+        }
+      ],
+      "suite": "PASS",
+      "totals": {
+        "bucket": {
+          "adjudications": 44,
+          "derived_objects_recomputed": 425,
+          "final_state_equal_to_oracle": 18,
+          "focal_outcomes_met": 15,
+          "missed_invalidations": 3,
+          "rebuild_objects_total": 1219,
+          "relationships_revalidated": 27,
+          "scenarios": 19,
+          "unnecessary_invalidations": 5
+        },
+        "certificate": {
+          "adjudications": 37,
+          "derived_objects_recomputed": 456,
+          "final_state_equal_to_oracle": 19,
+          "focal_outcomes_met": 19,
+          "missed_invalidations": 0,
+          "rebuild_objects_total": 1219,
+          "relationships_revalidated": 25,
+          "scenarios": 19,
+          "unnecessary_invalidations": 0
+        },
+        "positive": {
+          "adjudications": 12,
+          "derived_objects_recomputed": 334,
+          "final_state_equal_to_oracle": 12,
+          "focal_outcomes_met": 12,
+          "missed_invalidations": 11,
+          "rebuild_objects_total": 1219,
+          "relationships_revalidated": 10,
+          "scenarios": 19,
+          "unnecessary_invalidations": 0
+        }
+      }
+    },
+    "relationship_audit": {
+      "ambiguous_rate": 0.0613,
+      "gates": {
+        "PRIMARY": "FAIL",
+        "STRETCH recall>=0.90 with the primary gates held": "FAIL",
+        "direction==1.00": "PASS",
+        "false-family<=0.02": "PASS",
+        "precision>=0.98": "PASS",
+        "recall>=0.85": "FAIL"
+      },
+      "independence": "the only held-out set: frozen (results/audit4_labels.json, committed) before any adjudicate/5 or certificate code existed; scored once",
+      "metrics": {
+        "direction_accuracy": 1.0,
+        "false_family_rate": 0.0,
+        "precision": 1.0,
+        "recall": 0.8356,
+        "relation_agreement": 0.9836,
+        "unknown_rate": 0.0653
+      },
+      "pairs": 212,
+      "readers": "blind model readers on a frozen rubric; not people",
+      "readers_related": 73,
+      "set": "audit4"
+    },
+    "relationship_misses": {
+      "candidate_generation": "2 of the 73 related pairs are not in the reference-blind generator's top 20 (pd38a181704, p9bd8f2b080)",
+      "classes": {
+        "BINDER": "the reading was right; a binder invariant that does not yet exist would have decided it",
+        "FEATURE_READER": "the evidence is in the text, but the reading that runs before the binder (references, dates, parties, instrument, title vocabulary, text identity) did not produce it",
+        "STRUCTURAL": "the relationship has a shape the engine does not represent: one instrument acting on several agreements, or a relation that does not mutate an agreement"
+      },
+      "counts": {
+        "BINDER": 1,
+        "FEATURE_READER": 8,
+        "STRUCTURAL": 3
+      },
+      "misses": [
+        {
+          "class": "FEATURE_READER",
+          "pair": "p505f30122e",
+          "what": "an amendment to an executive employment agreement whose reference to the agreement was not parsed: the source has no dated reference"
+        },
+        {
+          "class": "FEATURE_READER",
+          "pair": "p6239107652",
+          "what": "a second amended and restated note: the target's date was read as 2015-02-11 where the reader found November 8, 2019"
+        },
+        {
+          "class": "FEATURE_READER",
+          "pair": "p67fb689271",
+          "what": "a consent and waiver under a settlement agreement: neither document's parties could be read"
+        },
+        {
+          "class": "FEATURE_READER",
+          "pair": "pc307ce00f6",
+          "what": "an amendment to an equity incentive plan: no reference and no parties were read"
+        },
+        {
+          "class": "FEATURE_READER",
+          "pair": "pc720f4b92f",
+          "what": "a supplement to a dealer agreement whose reference to it was not parsed; the target has no date"
+        },
+        {
+          "class": "FEATURE_READER",
+          "pair": "pf12e40a84c",
+          "what": "an amendment profiled as a base agreement, so it never acts as a source"
+        },
+        {
+          "class": "FEATURE_READER",
+          "pair": "pf47df1a5a0",
+          "what": "a 'Fourth Restated' agreement: the title vocabulary reads 'amended and restated', not 'restated' alone, so no relation starts"
+        },
+        {
+          "class": "FEATURE_READER",
+          "pair": "pdf2be5a7fd",
+          "what": "two filings of one financing agreement are not recognised as one text (their parties were read in another order), so the reference stays ambiguous"
+        },
+        {
+          "class": "BINDER",
+          "pair": "pd38a181704",
+          "what": "the conformed annex attached to the source's own filing satisfies the reference beside the original: an annex of the source's own filing is its result, not its target"
+        },
+        {
+          "class": "STRUCTURAL",
+          "pair": "p9bd8f2b080",
+          "what": "an omnibus amendment acting on a note purchase agreement, a security agreement and a pledge agreement at once"
+        },
+        {
+          "class": "STRUCTURAL",
+          "pair": "pb08af38317",
+          "what": "the same omnibus amendment; the readers name the security agreement it reaffirms"
+        },
+        {
+          "class": "STRUCTURAL",
+          "pair": "p64d207ab71",
+          "what": "a consent letter under a credit agreement: consent does not start a family edge in this engine"
+        }
+      ]
+    },
+    "revisions": {
+      "changed_outside_envelope": 0,
+      "doc_hash_disturbed_without_change_total": 3310,
+      "doc_hash_invalidated_total": 3742,
+      "doc_hash_missed_changes_total": 159,
+      "edge_mode": "certificate",
+      "edges": {
+        "edge_certificate_changed_value_unchanged": 0,
+        "edge_value_and_certificate_unchanged": 99,
+        "edge_value_changed": 3,
+        "edges_revalidated": 102
+      },
+      "events": 40,
+      "events_changing_nothing_derived": 0,
+      "ours_disturbed_without_dependency_change_total": 0,
+      "recompute_plan_total": 562,
+      "state_delta_total": 591,
+      "verified": 3,
+      "verified_state_equal": 3
+    },
+    "template_merge_precision": 0.8889,
+    "fixture_note": "three arrivals of the committed record ([3, 19, 0]), trimmed for tests; not hash-checked"
+  },
+  "arrivals": [
+    {
+      "document": {
+        "recordId": "edgar:0000318833-24-000059:a102amendmentno5toablcredi.htm",
+        "title": "AMENDMENT NO. 5 TO CREDIT AGREEMENT",
+        "date": "2024-09-30",
+        "instrument": "AMENDMENT",
+        "type": "CREDIT AGREEMENT",
+        "filer": "0000318833",
+        "filerName": "TEAM INC"
+      },
+      "edge": {
+        "state": "bound",
+        "relation": "AMENDS",
+        "proof": "ACCEPTED",
+        "source": "edgar:0000318833-24-000059:a102amendmentno5toablcredi.htm",
+        "target": {
+          "recordId": "edgar:0001193125-22-042956:d315907dex101.htm",
+          "title": "CREDIT AGREEMENT",
+          "date": "2022-02-11",
+          "instrument": "BASE",
+          "type": "CREDIT AGREEMENT",
+          "filer": "0000318833",
+          "filerName": "TEAM INC"
+        },
+        "evidence": "W I T N E S S E T H: WHEREAS, the Borrower Agent, the other Loan Parties party thereto from time to time, the Lenders party thereto from time to time, the Agent, and the other Persons party thereto from time to time, have entered into that certain Credit Agreement, dated as of February 11, 2022 (as amended by that certain Amendment No",
+        "candidates": 28,
+        "leftForModel": false
+      },
+      "family": {
+        "id": "F366fdd1659809955",
+        "review": [],
+        "members": [
+          {
+            "recordId": "edgar:0001193125-22-042956:d315907dex101.htm",
+            "title": "CREDIT AGREEMENT",
+            "date": "2022-02-11",
+            "instrument": "BASE",
+            "type": "CREDIT AGREEMENT",
+            "filer": "0000318833",
+            "filerName": "TEAM INC",
+            "actsOn": null,
+            "relation": null,
+            "arrived": false
+          },
+          {
+            "recordId": "edgar:0000318833-22-000079:team-amendmentno1toebccred.htm",
+            "title": "AMENDMENT NO. 1 TO CREDIT AGREEMENT",
+            "date": "2022-05-06",
+            "instrument": "AMENDMENT",
+            "type": "CREDIT AGREEMENT",
+            "filer": "0000318833",
+            "filerName": "TEAM INC",
+            "actsOn": "edgar:0001193125-22-042956:d315907dex101.htm",
+            "relation": "AMENDS",
+            "arrived": false
+          },
+          {
+            "recordId": "edgar:0001193125-23-169561:d511396dex102.htm",
+            "title": "AMENDMENT NO. 3 TO CREDIT AGREEMENT",
+            "date": "2023-06-16",
+            "instrument": "AMENDMENT",
+            "type": "CREDIT AGREEMENT",
+            "filer": "0000318833",
+            "filerName": "TEAM INC",
+            "actsOn": "edgar:0001193125-22-042956:d315907dex101.htm",
+            "relation": "AMENDS",
+            "arrived": false
+          },
+          {
+            "recordId": "edgar:0000318833-24-000005:exhibit1021.htm",
+            "title": "AMENDMENT NO. 4, LIMITED WAIVER AND CONSENT TO CREDIT AGREEMENT",
+            "date": "2024-03-06",
+            "instrument": "AMENDMENT",
+            "type": "CREDIT AGREEMENT",
+            "filer": "0000318833",
+            "filerName": "TEAM INC",
+            "actsOn": "edgar:0001193125-22-042956:d315907dex101.htm",
+            "relation": "AMENDS",
+            "arrived": false
+          },
+          {
+            "recordId": "edgar:0000318833-24-000059:a102amendmentno5toablcredi.htm",
+            "title": "AMENDMENT NO. 5 TO CREDIT AGREEMENT",
+            "date": "2024-09-30",
+            "instrument": "AMENDMENT",
+            "type": "CREDIT AGREEMENT",
+            "filer": "0000318833",
+            "filerName": "TEAM INC",
+            "actsOn": "edgar:0001193125-22-042956:d315907dex101.htm",
+            "relation": "AMENDS",
+            "arrived": true
+          },
+          {
+            "recordId": "edgar:0001193125-25-053470:d935596dex103.htm",
+            "title": "AMENDMENT NO. 6 TO CREDIT AGREEMENT",
+            "date": "2025-03-12",
+            "instrument": "AMENDMENT",
+            "type": "CREDIT AGREEMENT",
+            "filer": "0000318833",
+            "filerName": "TEAM INC",
+            "actsOn": "edgar:0001193125-22-042956:d315907dex101.htm",
+            "relation": "AMENDS",
+            "arrived": false
+          },
+          {
+            "recordId": "edgar:0001193125-25-202462:d39655dex107.htm",
+            "title": "EXECUTION AMENDMENT NO. 7 TO CREDIT AGREEMENT",
+            "date": "2025-09-11",
+            "instrument": "AMENDMENT",
+            "type": "CREDIT AGREEMENT",
+            "filer": "0000318833",
+            "filerName": "TEAM INC",
+            "actsOn": "edgar:0001193125-22-042956:d315907dex101.htm",
+            "relation": "AMENDS",
+            "arrived": false
+          }
+        ]
+      },
+      "effective": {
+        "asOf": "2030-01-01",
+        "before": {
+          "GOVERNING_LAW": "New York"
+        },
+        "after": {
+          "GOVERNING_LAW": "New York"
+        },
+        "operations": 17,
+        "applied": 0,
+        "needsReview": 17,
+        "unsupportedMutations": 0
+      },
+      "context": {
+        "template": {
+          "type": "CREDIT AGREEMENT",
+          "clusterSize": 1,
+          "exemplar": {
+            "recordId": "edgar:0001193125-22-042956:d315907dex101.htm",
+            "title": "CREDIT AGREEMENT",
+            "date": "2022-02-11",
+            "instrument": "BASE",
+            "type": "CREDIT AGREEMENT",
+            "filer": "0000318833",
+            "filerName": null
+          },
+          "baseIsExemplar": true
+        },
+        "cohort": {
+          "type": "CREDIT AGREEMENT",
+          "governingLaw": "New York",
+          "comparable": 96,
+          "maturityDateStated": 13
+        },
+        "deviationsFromExemplar": []
+      },
+      "findings": {
+        "inFamilyAfter": 28,
+        "changed": 0,
+        "staleExamples": []
+      },
+      "impactEnvelope": {
+        "impactEnvelope": 412,
+        "impactEnvelopeByKind": {
+          "COLLECTION": 2,
+          "EDGE": 9,
+          "EFFECTIVE": 15,
+          "FAMILY": 15,
+          "FINDING": 341,
+          "MEMBER": 30
+        },
+        "documentsExamined": 28,
+        "movedKeys": 59,
+        "envelopeSeconds": 0.0143
+      },
+      "recomputePlan": {
+        "total": 41,
+        "byKind": {
+          "EDGE": 9,
+          "EFFECTIVE": 1,
+          "FAMILY": 1,
+          "FINDING": 28,
+          "MEMBER": 2
+        }
+      },
+      "stateDelta": {
+        "total": 3,
+        "byKind": {
+          "EDGE": 1,
+          "EFFECTIVE": 1,
+          "FAMILY": 1
+        }
+      },
+      "work": {
+        "textReads": 279,
+        "adjudications": 246,
+        "pairScores": 0,
+        "computed": 41,
+        "keptByInputCheck": 16,
+        "disturbedWithoutDependencyChange": 0,
+        "modelCallsIfFindingsWereModelMade": 28,
+        "charactersAModelWouldRead": 216136
+      },
+      "latencyMs": 9737.2,
+      "documentsBefore": 5417,
+      "objectsBefore": 57123,
+      "verified": {
+        "stateEqualToRebuild": true,
+        "changedOutsideEnvelope": 0,
+        "rebuildSeconds": 324.28
+      },
+      "edgeOnGoldTarget": true,
+      "edges": {
+        "edge_certificate_changed_value_unchanged": 0,
+        "edge_value_and_certificate_unchanged": 8,
+        "edge_value_changed": 1,
+        "edges_revalidated": 9
+      },
+      "certificate": {
+        "bucket_baseline_reads": 88,
+        "candidates_adjudicated": 28,
+        "certificate_sha256": "93b162e034458c3cc35b3679cdb1691cce75ba2eea2d9fa0418216a1e62016f3",
+        "guard": {
+          "documents_under_guard": {
+            "2022-02-11": 3,
+            "2022-05-06": 3,
+            "2022-11-01": 3,
+            "2023-06-16": 4,
+            "2024-03-06": 2
+          },
+          "guarded_dates": ["2022-02-11", "2022-05-06", "2022-11-01", "2023-06-16", "2024-03-06"],
+          "narrowed_by": [],
+          "reference": ["CREDIT AGREEMENT", "2022-02-11"],
+          "satisfying_texts": 1
+        },
+        "reads": 11,
+        "replayed": "on filer 0000318833's 140 documents as they stood at arrival 4; the edge equals the recorded one",
+        "rule": "adjudicate/5|relations/1",
+        "scope": {
+          "id": "all"
+        },
+        "support": {
+          "citation": "OPERATIVE",
+          "cited_span": "W I T N E S S E T H: WHEREAS, the Borrower Agent, the other Loan Parties party thereto from time to time, the Lenders party thereto from time to time, the Agent, and the other Persons party thereto from time to time, have entered into that ",
+          "direction": ["edgar:0000318833-24-000059:a102amendmentno5toablcredi.htm", "edgar:0001193125-22-042956:d315907dex101.htm"],
+          "principal": "forward",
+          "proof": "ACCEPTED",
+          "reference": ["CREDIT AGREEMENT", "2022-02-11"],
+          "relation": "AMENDS",
+          "target": "edgar:0001193125-22-042956:d315907dex101.htm",
+          "target_date": "2022-02-11",
+          "target_role": "AGREEMENT",
+          "target_sha256": "76bd2bc315e18697ca8fc2f20fc5446a808ad9ee868278923558c21927217716",
+          "target_type": "CREDIT AGREEMENT"
+        }
+      }
+    },
+    {
+      "document": {
+        "recordId": "edgar:0000922907-09-000446:form8kexh3_082009.htm",
+        "title": "FIFTH AMENDMENT TO CREDIT AGREEMENT",
+        "date": "2009-08-01",
+        "instrument": "AMENDMENT",
+        "type": "CREDIT AGREEMENT",
+        "filer": "0001424844",
+        "filerName": "SOUTHWEST IOWA RENEWABLE ENERGY, LLC"
+      },
+      "edge": {
+        "state": "partial",
+        "relation": null,
+        "proof": null,
+        "source": "edgar:0000922907-09-000446:form8kexh3_082009.htm",
+        "target": null,
+        "evidence": "",
+        "candidates": 37,
+        "leftForModel": true
+      },
+      "family": {
+        "id": "F27890cd107b958e6",
+        "review": [],
+        "members": [
+          {
+            "recordId": "edgar:0000922907-09-000446:form8kexh3_082009.htm",
+            "title": "FIFTH AMENDMENT TO CREDIT AGREEMENT",
+            "date": "2009-08-01",
+            "instrument": "AMENDMENT",
+            "type": "CREDIT AGREEMENT",
+            "filer": "0001424844",
+            "filerName": "SOUTHWEST IOWA RENEWABLE ENERGY, LLC",
+            "actsOn": null,
+            "relation": null,
+            "arrived": true
+          }
+        ]
+      },
+      "effective": {
+        "asOf": "2030-01-01",
+        "before": null,
+        "after": {},
+        "operations": 0,
+        "applied": 0,
+        "needsReview": 0,
+        "unsupportedMutations": 0
+      },
+      "context": {
+        "template": null,
+        "cohort": null,
+        "deviationsFromExemplar": []
+      },
+      "findings": {
+        "inFamilyAfter": 5,
+        "changed": 5,
+        "staleExamples": []
+      },
+      "impactEnvelope": {
+        "impactEnvelope": 230,
+        "impactEnvelopeByKind": {
+          "COLLECTION": 2,
+          "EDGE": 8,
+          "EFFECTIVE": 31,
+          "FAMILY": 31,
+          "FINDING": 96,
+          "MEMBER": 62
+        },
+        "documentsExamined": 37,
+        "movedKeys": 19,
+        "envelopeSeconds": 0.0021
+      },
+      "recomputePlan": {
+        "total": 47,
+        "byKind": {
+          "EDGE": 8,
+          "EFFECTIVE": 1,
+          "FAMILY": 31,
+          "FINDING": 5,
+          "MEMBER": 2
+        }
+      },
+      "stateDelta": {
+        "total": 10,
+        "byKind": {
+          "EDGE": 1,
+          "EFFECTIVE": 1,
+          "FAMILY": 1,
+          "FINDING": 5,
+          "MEMBER": 2
+        }
+      },
+      "work": {
+        "textReads": 167,
+        "adjudications": 158,
+        "pairScores": 0,
+        "computed": 47,
+        "keptByInputCheck": 33,
+        "disturbedWithoutDependencyChange": 0,
+        "modelCallsIfFindingsWereModelMade": 5,
+        "charactersAModelWouldRead": 30207
+      },
+      "latencyMs": 912.9,
+      "documentsBefore": 5433,
+      "objectsBefore": 57139,
+      "verified": null,
+      "edgeOnGoldTarget": false,
+      "edges": {
+        "edge_certificate_changed_value_unchanged": 0,
+        "edge_value_and_certificate_unchanged": 7,
+        "edge_value_changed": 1,
+        "edges_revalidated": 8
+      },
+      "certificate": null
+    },
+    {
+      "document": {
+        "recordId": "edgar:0000045876-25-000018:exhibit1025amendmentno4-fo.htm",
+        "title": "FOURTH AMENDMENT TO RECEIVABLES PURCHASE AGREEMENT",
+        "date": "2025-02-14",
+        "instrument": "AMENDMENT",
+        "type": "RECEIVABLES PURCHASE AGREEMENT",
+        "filer": "0000045876",
+        "filerName": "HARSCO CORP"
+      },
+      "edge": {
+        "state": "bound",
+        "relation": "AMENDS",
+        "proof": "ACCEPTED",
+        "source": "edgar:0000045876-25-000018:exhibit1025amendmentno4-fo.htm",
+        "target": {
+          "recordId": "edgar:0001193125-22-186159:d339697dex101.htm",
+          "title": "RECEIVABLES PURCHASE AGREEMENT",
+          "date": "2022-06-24",
+          "instrument": "BASE",
+          "type": "RECEIVABLES PURCHASE AGREEMENT",
+          "filer": "0000045876",
+          "filerName": "HARSCO CORP"
+        },
+        "evidence": "BACKGROUND A.The Seller, the Servicer, PNC and PNC Capital Markets LLC have entered into that certain Receivables Purchase Agreement, dated as of June 24, 2022 (as may be amended, restated, supplemented or otherwise modified from time to time, the “Receivables Purchase Agreement”); B.Enviri Corporation (f/k/a Harsco Corporation) (“Enviri”), as the performance guarantor (in such capacity, the “Perf",
+        "candidates": 3,
+        "leftForModel": false
+      },
+      "family": {
+        "id": "Fc4d0599562df22cd",
+        "review": [],
+        "members": [
+          {
+            "recordId": "edgar:0001193125-22-186159:d339697dex101.htm",
+            "title": "RECEIVABLES PURCHASE AGREEMENT",
+            "date": "2022-06-24",
+            "instrument": "BASE",
+            "type": "RECEIVABLES PURCHASE AGREEMENT",
+            "filer": "0000045876",
+            "filerName": "HARSCO CORP",
+            "actsOn": null,
+            "relation": null,
+            "arrived": false
+          },
+          {
+            "recordId": "edgar:0000045876-25-000018:exhibit1025amendmentno4-fo.htm",
+            "title": "FOURTH AMENDMENT TO RECEIVABLES PURCHASE AGREEMENT",
+            "date": "2025-02-14",
+            "instrument": "AMENDMENT",
+            "type": "RECEIVABLES PURCHASE AGREEMENT",
+            "filer": "0000045876",
+            "filerName": "HARSCO CORP",
+            "actsOn": "edgar:0001193125-22-186159:d339697dex101.htm",
+            "relation": "AMENDS",
+            "arrived": true
+          }
+        ]
+      },
+      "effective": {
+        "asOf": "2030-01-01",
+        "before": {
+          "GOVERNING_LAW": "New York"
+        },
+        "after": {
+          "GOVERNING_LAW": "New York"
+        },
+        "operations": 1,
+        "applied": 0,
+        "needsReview": 1,
+        "unsupportedMutations": 0
+      },
+      "context": {
+        "template": {
+          "type": "RECEIVABLES PURCHASE AGREEMENT",
+          "clusterSize": 1,
+          "exemplar": {
+            "recordId": "edgar:0001193125-22-186159:d339697dex101.htm",
+            "title": "RECEIVABLES PURCHASE AGREEMENT",
+            "date": "2022-06-24",
+            "instrument": "BASE",
+            "type": "RECEIVABLES PURCHASE AGREEMENT",
+            "filer": "0000045876",
+            "filerName": null
+          },
+          "baseIsExemplar": true
+        },
+        "cohort": {
+          "type": "RECEIVABLES PURCHASE AGREEMENT",
+          "governingLaw": "New York",
+          "comparable": 2,
+          "maturityDateStated": 0
+        },
+        "deviationsFromExemplar": []
+      },
+      "findings": {
+        "inFamilyAfter": 14,
+        "changed": 0,
+        "staleExamples": []
+      },
+      "impactEnvelope": {
+        "impactEnvelope": 38,
+        "impactEnvelopeByKind": {
+          "COLLECTION": 2,
+          "EDGE": 1,
+          "EFFECTIVE": 3,
+          "FAMILY": 3,
+          "FINDING": 23,
+          "MEMBER": 6
+        },
+        "documentsExamined": 3,
+        "movedKeys": 20,
+        "envelopeSeconds": 0.0006
+      },
+      "recomputePlan": {
+        "total": 19,
+        "byKind": {
+          "EDGE": 1,
+          "EFFECTIVE": 1,
+          "FAMILY": 1,
+          "FINDING": 14,
+          "MEMBER": 2
+        }
+      },
+      "stateDelta": {
+        "total": 3,
+        "byKind": {
+          "EDGE": 1,
+          "EFFECTIVE": 1,
+          "FAMILY": 1
+        }
+      },
+      "work": {
+        "textReads": 6,
+        "adjudications": 3,
+        "pairScores": 0,
+        "computed": 19,
+        "keptByInputCheck": 4,
+        "disturbedWithoutDependencyChange": 0,
+        "modelCallsIfFindingsWereModelMade": 14,
+        "charactersAModelWouldRead": 128739
+      },
+      "latencyMs": 204.0,
+      "documentsBefore": 5414,
+      "objectsBefore": 57120,
+      "verified": {
+        "stateEqualToRebuild": true,
+        "changedOutsideEnvelope": 0,
+        "rebuildSeconds": 318.16
+      },
+      "edgeOnGoldTarget": true,
+      "edges": {
+        "edge_certificate_changed_value_unchanged": 0,
+        "edge_value_and_certificate_unchanged": 0,
+        "edge_value_changed": 1,
+        "edges_revalidated": 1
+      },
+      "certificate": {
+        "bucket_baseline_reads": 13,
+        "candidates_adjudicated": 3,
+        "certificate_sha256": "e729ce609f559ed2c01726b44636e88b997abb139b65fecc5a2fd7018db3e6a4",
+        "guard": {
+          "documents_under_guard": {
+            "2022-06-24": 3,
+            "2024-10-01": 1
+          },
+          "guarded_dates": ["2022-06-24", "2024-10-01"],
+          "narrowed_by": [],
+          "reference": ["RECEIVABLES PURCHASE AGREEMENT", "2022-06-24"],
+          "satisfying_texts": 1
+        },
+        "reads": 8,
+        "replayed": "on filer 0000045876's 163 documents as they stood at arrival 1; the edge equals the recorded one",
+        "rule": "adjudicate/5|relations/1",
+        "scope": {
+          "id": "all"
+        },
+        "support": {
+          "citation": "OPERATIVE",
+          "cited_span": "BACKGROUND A.The Seller, the Servicer, PNC and PNC Capital Markets LLC have entered into that certain Receivables Purchase Agreement, dated as of June 24, 2022 (as may be amended, restated, supplemented or otherwise modified from time to ti",
+          "direction": ["edgar:0000045876-25-000018:exhibit1025amendmentno4-fo.htm", "edgar:0001193125-22-186159:d339697dex101.htm"],
+          "principal": "forward",
+          "proof": "ACCEPTED",
+          "reference": ["RECEIVABLES PURCHASE AGREEMENT", "2022-06-24"],
+          "relation": "AMENDS",
+          "target": "edgar:0001193125-22-186159:d339697dex101.htm",
+          "target_date": "2022-06-24",
+          "target_role": "AGREEMENT",
+          "target_sha256": "13f8689bfd017cac6ae64ddb0069ff1cf0ea8ccd8ab02b5910d4a7fafe363d3b",
+          "target_type": "RECEIVABLES PURCHASE AGREEMENT"
+        }
+      }
+    }
+  ]
+}

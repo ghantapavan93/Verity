@@ -1,0 +1,748 @@
+/* One contract changes: one reading column, numbers set in mono, one accent for what a reader should look at. */
+
+.page {
+  min-height: 100vh;
+  background: radial-gradient(1200px 520px at 50% -180px, var(--bg-glow), transparent 70%), var(--bg);
+}
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px max(16px, calc((100vw - 960px) / 2));
+  background: var(--glass);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.brand {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  flex: none;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-width: 0;
+}
+
+.navLink {
+  font-size: 13px;
+  color: var(--text-2);
+  text-decoration: none;
+  padding: 4px 0;
+}
+
+.navLink:hover {
+  color: var(--text);
+}
+
+.main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+
+.kicker {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ------------------------------------------------------------------------------------ hero */
+
+.hero {
+  padding: 64px 0 40px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.h1 {
+  margin: 14px 0 32px;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: clamp(36px, 6vw, 64px);
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+}
+
+.h1Quiet {
+  display: block;
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.funnel {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.funnelStep {
+  display: grid;
+  grid-template-columns: 180px 120px minmax(0, 1fr);
+  grid-template-areas:
+    "label value bar"
+    "label value note";
+  align-items: center;
+  column-gap: 20px;
+  row-gap: 4px;
+}
+
+.funnelLabel {
+  grid-area: label;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.funnelValue {
+  grid-area: value;
+  font-family: var(--font-mono);
+  font-size: 30px;
+  color: var(--text);
+  text-align: right;
+}
+
+.funnelStep:last-child .funnelValue {
+  color: var(--accent);
+}
+
+.funnelBar {
+  grid-area: bar;
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.funnelBar > span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--text-4);
+}
+
+.funnelStep:last-child .funnelBar > span {
+  background: var(--accent);
+}
+
+.funnelNote {
+  grid-area: note;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.heroClaim {
+  margin: 32px 0 0;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--text);
+  max-width: 720px;
+}
+
+.heroClaim strong {
+  color: var(--accent-soft);
+  font-weight: 600;
+}
+
+.lede {
+  margin: 12px 0 0;
+  max-width: 720px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------------------------------ sections */
+
+.section {
+  padding: 56px 0 8px;
+  scroll-margin-top: 64px;
+}
+
+.h2 {
+  margin: 10px 0 18px;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: clamp(24px, 3.4vw, 32px);
+  line-height: 1.2;
+  max-width: 760px;
+}
+
+.h3 {
+  margin: 32px 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.body {
+  margin: 0 0 18px;
+  max-width: 720px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.quiet {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+p.quiet {
+  margin: 14px 0 0;
+  max-width: 760px;
+}
+
+.page code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------------------------ the certificate chain */
+
+.chain {
+  display: grid;
+  gap: 10px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--bg-raised);
+  padding: 18px 20px 20px;
+  min-width: 0;
+}
+
+.certificate {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 4px var(--accent-tint);
+}
+
+.cardLabel {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.certificate .cardLabel {
+  color: var(--accent);
+}
+
+.cardTitle {
+  margin: 6px 0 2px;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.meta {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.quote {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 2px solid var(--border-strong);
+  background: var(--doc-bg);
+  color: var(--doc-text);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.6;
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  overflow-wrap: anywhere;
+}
+
+.mark {
+  background: var(--doc-mark);
+  color: inherit;
+  box-shadow: inset 0 -2px 0 var(--doc-mark-line);
+  padding: 0 1px;
+}
+
+.arrow {
+  text-align: center;
+  font-size: 20px;
+  color: var(--text-4);
+  line-height: 1;
+}
+
+.cert {
+  display: grid;
+  gap: 16px;
+  margin: 12px 0 0;
+}
+
+.certBlock {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.certBlock dt {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-soft);
+  padding-top: 2px;
+}
+
+.certBlock dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.facts {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.certLead {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.certNote {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.certFoot {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+  font-size: 14px;
+  color: var(--text);
+}
+
+.established {
+  margin: 0;
+  padding: 14px 18px;
+  border-radius: var(--radius-m);
+  background: var(--status-pass-bg);
+  border: 1px solid var(--status-pass-border);
+  color: var(--status-pass-text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------------------------ the trace */
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.picker select {
+  max-width: 100%;
+  min-width: 0;
+  flex: 1 1 280px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+}
+
+.trace {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-l);
+  overflow: hidden;
+}
+
+.traceStep {
+  display: grid;
+  grid-template-columns: 28px 200px minmax(0, 1fr);
+  grid-template-areas:
+    "num name value"
+    "num name note";
+  column-gap: 14px;
+  row-gap: 2px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--hairline);
+  background: var(--bg);
+}
+
+.traceStep:first-child {
+  border-top: 0;
+}
+
+.traceStep:nth-child(6) {
+  background: var(--accent-tint);
+}
+
+.traceNumber {
+  grid-area: num;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-4);
+  padding-top: 2px;
+}
+
+.traceName {
+  grid-area: name;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  padding-top: 1px;
+}
+
+.traceValue {
+  grid-area: value;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.traceNote {
+  grid-area: note;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+/* ------------------------------------------------------------------------------------ tables */
+
+.tableWrap {
+  max-width: 100%;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th,
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table thead th {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.table tbody th,
+.table tfoot th {
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+.table td {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.table tfoot th,
+.table tfoot td {
+  border-bottom: 0;
+}
+
+.tableDense {
+  font-size: 13px;
+}
+
+.tableDense td {
+  font-family: var(--font-sans);
+}
+
+.tone {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.tonePass {
+  background: var(--status-pass-bg);
+  color: var(--status-pass-text);
+  border-color: var(--status-pass-border);
+}
+
+.toneFail {
+  background: var(--status-bad-bg);
+  color: var(--status-bad-text);
+  border-color: var(--status-bad-border);
+}
+
+/* ------------------------------------------------------------------------------------ misses, future, scopes */
+
+.missList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.missCount {
+  display: inline-block;
+  min-width: 28px;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text);
+}
+
+.missDetail {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.future {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  max-width: 760px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.future strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pairCell {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--bg-raised);
+}
+
+.pairValue {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  line-height: 1;
+  color: var(--text);
+}
+
+.pairLabel {
+  font-size: 15px;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------------------------ engineering */
+
+.details {
+  margin: 10px 0 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+  background: var(--bg-raised);
+}
+
+.details > summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--text);
+  list-style-position: inside;
+}
+
+.details[open] > summary {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.detailBody {
+  padding: 14px 16px 16px;
+}
+
+.details .missDetail {
+  padding: 0 16px 14px 34px;
+}
+
+.code {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border-radius: var(--radius-s);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------------------------ states and footer */
+
+.loading,
+.notice {
+  margin: 96px 0;
+  font-size: 15px;
+  color: var(--text-2);
+}
+
+.noticeTitle {
+  margin: 0 0 10px;
+  font-family: var(--font-serif);
+  font-size: 28px;
+  color: var(--text);
+}
+
+.button {
+  margin-top: 12px;
+  padding: 8px 14px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+  cursor: pointer;
+}
+
+.footer {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.footer p {
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------------------------ narrow screens */
+
+@media (max-width: 720px) {
+  .top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    position: static;
+  }
+
+  .hero {
+    padding-top: 36px;
+  }
+
+  .funnelStep {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "label value"
+      "bar bar"
+      "note note";
+  }
+
+  .funnelValue {
+    font-size: 26px;
+  }
+
+  .certBlock {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .traceStep {
+    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-areas:
+      "num name"
+      "num value"
+      "num note";
+  }
+
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tableDense thead {
+    display: none;
+  }
+
+  .tableDense tbody tr,
+  .tableDense tfoot tr {
+    display: grid;
+    gap: 6px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .tableDense th,
+  .tableDense td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  .tableDense td[data-label]::before {
+    content: attr(data-label) ": ";
+    color: var(--text-3);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .funnelBar > span {
+    transition: width var(--dur-slow) var(--ease);
+  }
+}
