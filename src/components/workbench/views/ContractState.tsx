@@ -298,7 +298,9 @@ export function ContractState({ view }: { view: ContractStateView }) {
         Evidence in the same experiment:{" "}
         {audit
           ? `on a blind-read audit of real document pairs, frozen before it was scored (the readers were language models, not people), the relationship engine's precision was ${audit.precision ?? "–"} and its recall ${audit.recall ?? "–"} (it leaves the rest UNKNOWN), with every accepted direction right${
-              auditGate ? `; its preregistered gate (precision at least 0.98, false families at most 2%) was ${auditGate === "PASS" ? "met" : "not met"}` : ""
+              auditGate
+                ? `; its preregistered gate (precision at least 0.98, recall at least 0.85, false families at most 2%, every direction right) was ${auditGate === "PASS" ? "met" : "not met"}`
+                : ""
             }`
           : "no relationship audit record"}
         {leakage

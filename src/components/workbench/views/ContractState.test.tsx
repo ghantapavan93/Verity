@@ -157,7 +157,11 @@ describe("ContractState", () => {
     expect(screen.getByText("6 objects recomputed")).toBeTruthy();
     expect(screen.getByText("5 objects changed")).toBeTruthy();
     expect(screen.getByText(/precision was 0\.9559 and its recall 0\.8904/)).toBeTruthy();
-    expect(screen.getByText(/its preregistered gate \(precision at least 0\.98, false families at most 2%\) was not met/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /its preregistered gate \(precision at least 0\.98, recall at least 0\.85, false families at most 2%, every direction right\) was not met/,
+      ),
+    ).toBeTruthy();
     expect(screen.getByText(/language models, not people/)).toBeTruthy();
     expect(screen.getByText(/file matches its hash/)).toBeTruthy();
 
