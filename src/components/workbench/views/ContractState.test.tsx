@@ -57,8 +57,15 @@ const BOUND: StateArrivalView = {
     deviationsFromExemplar: [],
   },
   findings: { inFamilyAfter: 12, changed: 1, staleExamples: ["2.2"] },
-  plan: { planned: 9, plannedByKind: { EDGE: 1, FAMILY: 1, EFFECTIVE: 1, FINDING: 4 }, documentsExamined: 4, movedKeys: 31, planSeconds: 0.002 },
-  changed: { total: 5, byKind: { EDGE: 1, FAMILY: 1, EFFECTIVE: 1, FINDING: 1, MEMBER: 1 } },
+  impactEnvelope: {
+    impactEnvelope: 9,
+    impactEnvelopeByKind: { EDGE: 1, FAMILY: 1, EFFECTIVE: 1, FINDING: 4 },
+    documentsExamined: 4,
+    movedKeys: 31,
+    envelopeSeconds: 0.002,
+  },
+  recomputePlan: { total: 6, byKind: { EDGE: 1, FAMILY: 1, EFFECTIVE: 1, FINDING: 2, MEMBER: 1 } },
+  stateDelta: { total: 5, byKind: { EDGE: 1, FAMILY: 1, EFFECTIVE: 1, FINDING: 1, MEMBER: 1 } },
   work: {
     textReads: 7,
     adjudications: 4,
@@ -72,7 +79,7 @@ const BOUND: StateArrivalView = {
   latencyMs: 41.5,
   documentsBefore: 5414,
   objectsBefore: 48000,
-  verified: { stateEqualToRebuild: true, changedNotPlanned: 0, rebuildSeconds: 300 },
+  verified: { stateEqualToRebuild: true, changedOutsideEnvelope: 0, rebuildSeconds: 300 },
   edgeOnGoldTarget: true,
 };
 
@@ -92,7 +99,7 @@ const VIEW: ContractStateView = {
   available: true,
   source: "contract-state.json",
   detail: null,
-  schemaVersion: "contract-state/1",
+  schemaVersion: "contract-state/2",
   sourceCommit: "148007b0000000000000000000000000000000000",
   generatedAt: "2026-10-06T23:00:00+00:00",
   sha256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
@@ -105,12 +112,13 @@ const VIEW: ContractStateView = {
     objectsAtStart: 48000,
     verifiedAgainstRebuild: 1,
     verifiedStateEqual: 1,
-    falseNegativeReach: 0,
+    changedOutsideEnvelope: 0,
     stabilityBudgetDisturbedWithoutDependencyChange: 0,
-    plannedMean: 9,
-    plannedMax: 9,
-    changedMean: 5,
-    falsePositiveReachShare: 0.44,
+    impactEnvelopeMean: 9,
+    impactEnvelopeMax: 9,
+    recomputePlanMean: 6,
+    stateDeltaMean: 5,
+    envelopeShareUnchanged: 0.44,
     documentsExaminedMean: 4,
     documentsExaminedMax: 4,
     edgesAccepted: 1,
@@ -122,7 +130,7 @@ const VIEW: ContractStateView = {
     workAvoidedPerArrivalMean: {},
   },
   evidence: {
-    relationship_audit: { metrics: { precision: 1, recall: 0.6364 } },
+    relationship_audit: { metrics: { precision: 0.9559, recall: 0.8904 }, gates: { PRIMARY: "FAIL" } },
     authorization: { cross_scope_leakage_observations: 0, changes_in_room_0: 30 },
   },
   arrivals: [BOUND, AMBIGUOUS],
@@ -131,7 +139,7 @@ const VIEW: ContractStateView = {
 afterEach(cleanup);
 
 describe("ContractState", () => {
-  it("shows the chosen arrival's family, the effective fact that moved, the plan and the work avoided, all from the record", () => {
+  it("shows the chosen arrival's family, the effective fact that moved, envelope, plan and delta, and the work avoided, all from the record", () => {
     render(<ContractState view={VIEW} />);
     expect(screen.getByRole("heading", { name: /One contract changes\. What else must change with it\?/ })).toBeTruthy();
     expect(screen.getByText("1 of 1")).toBeTruthy();
@@ -145,7 +153,12 @@ describe("ContractState", () => {
     expect(screen.getByText(/43 comparable credit agreements under New York law; 12 state a maturity date/)).toBeTruthy();
     expect(screen.getByText("47,994")).toBeTruthy();
     expect(screen.getByText("30,999")).toBeTruthy();
-    expect(screen.getByText(/precision was 1 and its recall 0\.6364/)).toBeTruthy();
+    expect(screen.getByText("9 objects it could reach")).toBeTruthy();
+    expect(screen.getByText("6 objects recomputed")).toBeTruthy();
+    expect(screen.getByText("5 objects changed")).toBeTruthy();
+    expect(screen.getByText(/precision was 0\.9559 and its recall 0\.8904/)).toBeTruthy();
+    expect(screen.getByText(/its preregistered gate \(precision at least 0\.98, false families at most 2%\) was not met/)).toBeTruthy();
+    expect(screen.getByText(/language models, not people/)).toBeTruthy();
     expect(screen.getByText(/file matches its hash/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Arrival"), { target: { value: "1" } });

@@ -2077,7 +2077,6 @@ export interface components {
         };
         /** StateArrival */
         StateArrival: {
-            changed: components["schemas"]["StateChanged"];
             context: components["schemas"]["StateContext"];
             document: components["schemas"]["StateDocument"];
             /** Documentsbefore */
@@ -2088,25 +2087,15 @@ export interface components {
             effective: components["schemas"]["StateEffective"];
             family?: components["schemas"]["StateFamily"] | null;
             findings: components["schemas"]["StateFindings"];
+            impactEnvelope: components["schemas"]["StateEnvelope"];
             /** Latencyms */
             latencyMs: number;
             /** Objectsbefore */
             objectsBefore: number;
-            plan: components["schemas"]["StatePlan"];
+            recomputePlan: components["schemas"]["StateCount"];
+            stateDelta: components["schemas"]["StateCount"];
             verified?: components["schemas"]["StateVerified"] | null;
             work: components["schemas"]["StateWork"];
-        };
-        /** StateChanged */
-        StateChanged: {
-            /**
-             * Bykind
-             * @default {}
-             */
-            byKind: {
-                [key: string]: number;
-            };
-            /** Total */
-            total: number;
         };
         /** StateCohort */
         StateCohort: {
@@ -2128,6 +2117,18 @@ export interface components {
              */
             deviationsFromExemplar: components["schemas"]["StateDeviation"][];
             template?: components["schemas"]["StateTemplate"] | null;
+        };
+        /** StateCount */
+        StateCount: {
+            /**
+             * Bykind
+             * @default {}
+             */
+            byKind: {
+                [key: string]: number;
+            };
+            /** Total */
+            total: number;
         };
         /** StateDeviation */
         StateDeviation: {
@@ -2207,6 +2208,24 @@ export interface components {
             /** Unsupportedmutations */
             unsupportedMutations: number;
         };
+        /** StateEnvelope */
+        StateEnvelope: {
+            /** Documentsexamined */
+            documentsExamined: number;
+            /** Envelopeseconds */
+            envelopeSeconds: number;
+            /** Impactenvelope */
+            impactEnvelope: number;
+            /**
+             * Impactenvelopebykind
+             * @default {}
+             */
+            impactEnvelopeByKind: {
+                [key: string]: number;
+            };
+            /** Movedkeys */
+            movedKeys: number;
+        };
         /** StateFamily */
         StateFamily: {
             /** Id */
@@ -2260,24 +2279,6 @@ export interface components {
              */
             staleExamples: string[];
         };
-        /** StatePlan */
-        StatePlan: {
-            /** Documentsexamined */
-            documentsExamined: number;
-            /** Movedkeys */
-            movedKeys: number;
-            /** Planseconds */
-            planSeconds: number;
-            /** Planned */
-            planned: number;
-            /**
-             * Plannedbykind
-             * @default {}
-             */
-            plannedByKind: {
-                [key: string]: number;
-            };
-        };
         /** StatePortfolio */
         StatePortfolio: {
             /** Documentsatstart */
@@ -2295,8 +2296,8 @@ export interface components {
         StateSummary: {
             /** Arrivals */
             arrivals: number;
-            /** Changedmean */
-            changedMean: number;
+            /** Changedoutsideenvelope */
+            changedOutsideEnvelope: number;
             /** Documentsexaminedmax */
             documentsExaminedMax: number;
             /** Documentsexaminedmean */
@@ -2305,10 +2306,12 @@ export interface components {
             edgesAccepted: number;
             /** Edgesongoldtarget */
             edgesOnGoldTarget: number;
-            /** Falsenegativereach */
-            falseNegativeReach: number;
-            /** Falsepositivereachshare */
-            falsePositiveReachShare: number;
+            /** Envelopeshareunchanged */
+            envelopeShareUnchanged: number;
+            /** Impactenvelopemax */
+            impactEnvelopeMax: number;
+            /** Impactenvelopemean */
+            impactEnvelopeMean: number;
             /** Leftformodel */
             leftForModel: number;
             /** Modelcallsexecuted */
@@ -2329,14 +2332,14 @@ export interface components {
             perArrival: {
                 [key: string]: number;
             };
-            /** Plannedmax */
-            plannedMax: number;
-            /** Plannedmean */
-            plannedMean: number;
             /** Portfoliodocumentsatstart */
             portfolioDocumentsAtStart: number;
+            /** Recomputeplanmean */
+            recomputePlanMean: number;
             /** Stabilitybudgetdisturbedwithoutdependencychange */
             stabilityBudgetDisturbedWithoutDependencyChange: number;
+            /** Statedeltamean */
+            stateDeltaMean: number;
             /** Verifiedagainstrebuild */
             verifiedAgainstRebuild: number;
             /** Verifiedstateequal */
@@ -2361,8 +2364,8 @@ export interface components {
         };
         /** StateVerified */
         StateVerified: {
-            /** Changednotplanned */
-            changedNotPlanned: number;
+            /** Changedoutsideenvelope */
+            changedOutsideEnvelope: number;
             /** Rebuildseconds */
             rebuildSeconds: number;
             /** Stateequaltorebuild */

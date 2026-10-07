@@ -55,14 +55,15 @@ ARRIVAL = {
         "deviations_from_exemplar": [],
     },
     "findings": {"in_family_after": 12, "changed": 1, "stale_examples": ["2.2"]},
-    "plan": {
-        "planned": 9,
-        "planned_by_kind": {"EDGE": 1, "FAMILY": 1, "EFFECTIVE": 1, "FINDING": 4, "MEMBER": 2},
+    "impact_envelope": {
+        "impact_envelope": 9,
+        "impact_envelope_by_kind": {"EDGE": 1, "FAMILY": 1, "EFFECTIVE": 1, "FINDING": 4, "MEMBER": 2},
         "documents_examined": 4,
         "moved_keys": 31,
-        "plan_seconds": 0.002,
+        "envelope_seconds": 0.002,
     },
-    "changed": {"total": 5, "by_kind": {"EDGE": 1, "FAMILY": 1, "EFFECTIVE": 1, "FINDING": 1, "MEMBER": 1}},
+    "recompute_plan": {"total": 6, "by_kind": {"EDGE": 1, "FAMILY": 1, "EFFECTIVE": 1, "FINDING": 2, "MEMBER": 1}},
+    "state_delta": {"total": 5, "by_kind": {"EDGE": 1, "FAMILY": 1, "EFFECTIVE": 1, "FINDING": 1, "MEMBER": 1}},
     "work": {
         "text_reads": 7,
         "adjudications": 4,
@@ -76,14 +77,14 @@ ARRIVAL = {
     "latency_ms": 41.5,
     "documents_before": 5414,
     "objects_before": 48000,
-    "verified": {"state_equal_to_rebuild": True, "changed_not_planned": 0, "rebuild_seconds": 300.0},
+    "verified": {"state_equal_to_rebuild": True, "changed_outside_envelope": 0, "rebuild_seconds": 300.0},
     "edge_on_gold_target": True,
 }
 
 
 def record(**overrides: object) -> dict[str, object]:
     body: dict[str, object] = {
-        "schema": "contract-state/1",
+        "schema": "contract-state/2",
         "source_commit": "148007b0000000000000000000000000000000000",
         "generated_at": "2026-10-06T23:00:00+00:00",
         "what_this_is": "A recording. Not a live run.",
@@ -94,12 +95,13 @@ def record(**overrides: object) -> dict[str, object]:
             "objects_at_start": 48000,
             "verified_against_rebuild": 1,
             "verified_state_equal": 1,
-            "false_negative_reach": 0,
+            "changed_outside_envelope": 0,
             "stability_budget_disturbed_without_dependency_change": 0,
-            "planned_mean": 9.0,
-            "planned_max": 9,
-            "changed_mean": 5.0,
-            "false_positive_reach_share": 0.44,
+            "impact_envelope_mean": 9.0,
+            "impact_envelope_max": 9,
+            "recompute_plan_mean": 6.0,
+            "state_delta_mean": 5.0,
+            "envelope_share_unchanged": 0.44,
             "documents_examined_mean": 4.0,
             "documents_examined_max": 4,
             "edges_accepted": 1,
@@ -111,7 +113,7 @@ def record(**overrides: object) -> dict[str, object]:
             "work_avoided_per_arrival_mean": {"findings_not_recomputed": 30999.0},
             "an_extra_key_the_api_ignores": 1,
         },
-        "evidence": {"relationship_audit": {"set": "audit2", "metrics": {"precision": 1.0, "recall": 0.6364}}},
+        "evidence": {"relationship_audit": {"set": "audit3", "metrics": {"precision": 0.9559, "recall": 0.8904}, "gates": {"PRIMARY": "FAIL"}}},
         "arrivals": [ARRIVAL],
     }
     body.update(overrides)
@@ -133,18 +135,21 @@ def test_the_record_is_read_from_its_file_hash_checked_and_shown_as_it_is(client
     monkeypatch.setattr(config.settings, "contract_state", path)
     assert engineering.contract_state_path() == path
     loaded = client.get("/api/engineering/contract-state").json()
-    assert loaded["available"] is True and loaded["sha256Verified"] is True and loaded["schemaVersion"] == "contract-state/1"
+    assert loaded["available"] is True and loaded["sha256Verified"] is True and loaded["schemaVersion"] == "contract-state/2"
     assert (
-        loaded["portfolio"]["documentsAtStart"] == 5414 and loaded["summary"]["falseNegativeReach"] == 0 and "anExtraKeyTheApiIgnores" not in loaded["summary"]
+        loaded["portfolio"]["documentsAtStart"] == 5414
+        and loaded["summary"]["changedOutsideEnvelope"] == 0
+        and "anExtraKeyTheApiIgnores" not in loaded["summary"]
     )
     arrival = loaded["arrivals"][0]
     assert arrival["edge"]["relation"] == "AMENDS" and arrival["edge"]["source"] == DOC["record_id"] and arrival["edge"]["target"]["date"] == "2023-05-17"
     assert arrival["effective"]["before"]["MATURITY_DATE"] == "2027-05-17" and arrival["effective"]["after"]["MATURITY_DATE"] == "2028-05-17", (
         "fact names are data, not keys to recase"
     )
-    assert arrival["context"]["cohort"]["comparable"] == 43 and arrival["plan"]["plannedByKind"]["FINDING"] == 4
-    assert arrival["verified"]["changedNotPlanned"] == 0 and arrival["family"]["members"][1]["arrived"] is True
-    assert loaded["evidence"]["relationship_audit"]["metrics"]["recall"] == 0.6364
+    assert arrival["context"]["cohort"]["comparable"] == 43 and arrival["impactEnvelope"]["impactEnvelopeByKind"]["FINDING"] == 4
+    assert arrival["recomputePlan"]["total"] == 6 and arrival["stateDelta"]["byKind"]["FINDING"] == 1
+    assert arrival["verified"]["changedOutsideEnvelope"] == 0 and arrival["family"]["members"][1]["arrived"] is True
+    assert loaded["evidence"]["relationship_audit"]["metrics"]["recall"] == 0.8904
     assert loaded["whatThisIs"] == "A recording. Not a live run."
 
 
@@ -154,7 +159,7 @@ def test_an_edited_record_is_shown_with_its_hash_unverified_and_a_foreign_file_i
     from app import config
 
     edited = record()
-    edited["summary"]["false_negative_reach"] = 3  # type: ignore[index]
+    edited["summary"]["changed_outside_envelope"] = 3  # type: ignore[index]
     path = tmp_path / "contract-state.json"
     path.write_text(json.dumps(edited), encoding="utf-8")
     monkeypatch.setattr(config.settings, "contract_state", path)
@@ -163,7 +168,11 @@ def test_an_edited_record_is_shown_with_its_hash_unverified_and_a_foreign_file_i
 
     path.write_text(json.dumps({"schema": "lineage-arrivals/1", "arrivals": []}), encoding="utf-8")
     foreign = client.get("/api/engineering/contract-state").json()
-    assert foreign["available"] is False and "contract-state/1" in foreign["detail"]
+    assert foreign["available"] is False and "contract-state/2" in foreign["detail"]
+
+    path.write_text(json.dumps({**record(), "schema": "contract-state/1"}), encoding="utf-8")
+    older = client.get("/api/engineering/contract-state").json()
+    assert older["available"] is False, "a record of the earlier schema names the pipeline differently and is not shown"
 
     path.write_text("{not json", encoding="utf-8")
     broken = client.get("/api/engineering/contract-state").json()

@@ -546,7 +546,7 @@ class ExperimentsOut(ApiModel):
 
 
 # ------------------------------------------------------------------ the contract-state record: one contract changes
-# A recording the contract-state experiment exported (`contract-state/1`), read as a file and shown as it is. Every
+# A recording the contract-state experiment exported (`contract-state/2`), read as a file and shown as it is. Every
 # number is the experiment's; nothing here is computed, and nothing is live. Fact values are what the experiment's
 # reader established (a governing law, a date), or "AMBIGUOUS" when the text stated two.
 
@@ -633,15 +633,16 @@ class StateFindings(ApiModel):
     stale_examples: list[str] = []
 
 
-class StatePlan(ApiModel):
-    planned: int
-    planned_by_kind: dict[str, int] = {}
+class StateEnvelope(ApiModel):
+    # What one arrival could reach, drawn before anything was recomputed: an upper bound, not a forecast.
+    impact_envelope: int
+    impact_envelope_by_kind: dict[str, int] = {}
     documents_examined: int
     moved_keys: int
-    plan_seconds: float
+    envelope_seconds: float
 
 
-class StateChanged(ApiModel):
+class StateCount(ApiModel):
     total: int
     by_kind: dict[str, int] = {}
 
@@ -659,7 +660,7 @@ class StateWork(ApiModel):
 
 class StateVerified(ApiModel):
     state_equal_to_rebuild: bool
-    changed_not_planned: int
+    changed_outside_envelope: int
     rebuild_seconds: float
 
 
@@ -670,8 +671,9 @@ class StateArrival(ApiModel):
     effective: StateEffective
     context: StateContext
     findings: StateFindings
-    plan: StatePlan
-    changed: StateChanged
+    impact_envelope: StateEnvelope
+    recompute_plan: StateCount  # the envelope's objects whose inputs moved, computed again
+    state_delta: StateCount  # the objects whose value changed
     work: StateWork
     latency_ms: float
     documents_before: int
@@ -694,12 +696,13 @@ class StateSummary(ApiModel):
     objects_at_start: int
     verified_against_rebuild: int
     verified_state_equal: int
-    false_negative_reach: int
+    changed_outside_envelope: int
     stability_budget_disturbed_without_dependency_change: int
-    planned_mean: float
-    planned_max: int
-    changed_mean: float
-    false_positive_reach_share: float
+    impact_envelope_mean: float
+    impact_envelope_max: int
+    recompute_plan_mean: float
+    state_delta_mean: float
+    envelope_share_unchanged: float
     documents_examined_mean: float
     documents_examined_max: int
     edges_accepted: int

@@ -89,7 +89,7 @@ def experiments() -> ExperimentsOut:
 # the lineage-arrivals record). The sibling checkout on a development machine; WORKBENCH_CONTRACT_STATE overrides it.
 # Read as a file: none of the experiment's code runs here, and nothing in the record is recomputed.
 DEFAULT_CONTRACT_STATE = BACKEND_DIR.parents[1] / "ivo-experiments" / "experiments" / "contract-lineage" / "results" / "contract-state.json"
-CONTRACT_STATE_SCHEMA = "contract-state/1"
+CONTRACT_STATE_SCHEMA = "contract-state/2"
 
 
 def contract_state_path() -> Path:

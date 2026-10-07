@@ -4173,9 +4173,6 @@
       },
       "StateArrival": {
         "properties": {
-          "changed": {
-            "$ref": "#/components/schemas/StateChanged"
-          },
           "context": {
             "$ref": "#/components/schemas/StateContext"
           },
@@ -4216,6 +4213,9 @@
           "findings": {
             "$ref": "#/components/schemas/StateFindings"
           },
+          "impactEnvelope": {
+            "$ref": "#/components/schemas/StateEnvelope"
+          },
           "latencyMs": {
             "title": "Latencyms",
             "type": "number"
@@ -4224,8 +4224,11 @@
             "title": "Objectsbefore",
             "type": "integer"
           },
-          "plan": {
-            "$ref": "#/components/schemas/StatePlan"
+          "recomputePlan": {
+            "$ref": "#/components/schemas/StateCount"
+          },
+          "stateDelta": {
+            "$ref": "#/components/schemas/StateCount"
           },
           "verified": {
             "anyOf": [
@@ -4246,8 +4249,9 @@
           "effective",
           "context",
           "findings",
-          "plan",
-          "changed",
+          "impactEnvelope",
+          "recomputePlan",
+          "stateDelta",
           "work",
           "latencyMs",
           "documentsBefore",
@@ -4255,27 +4259,6 @@
           "edgeOnGoldTarget"
         ],
         "title": "StateArrival",
-        "type": "object"
-      },
-      "StateChanged": {
-        "properties": {
-          "byKind": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "default": {},
-            "title": "Bykind",
-            "type": "object"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "total"
-        ],
-        "title": "StateChanged",
         "type": "object"
       },
       "StateCohort": {
@@ -4338,6 +4321,27 @@
           }
         },
         "title": "StateContext",
+        "type": "object"
+      },
+      "StateCount": {
+        "properties": {
+          "byKind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Bykind",
+            "type": "object"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total"
+        ],
+        "title": "StateCount",
         "type": "object"
       },
       "StateDeviation": {
@@ -4657,6 +4661,42 @@
         "title": "StateEffective",
         "type": "object"
       },
+      "StateEnvelope": {
+        "properties": {
+          "documentsExamined": {
+            "title": "Documentsexamined",
+            "type": "integer"
+          },
+          "envelopeSeconds": {
+            "title": "Envelopeseconds",
+            "type": "number"
+          },
+          "impactEnvelope": {
+            "title": "Impactenvelope",
+            "type": "integer"
+          },
+          "impactEnvelopeByKind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Impactenvelopebykind",
+            "type": "object"
+          },
+          "movedKeys": {
+            "title": "Movedkeys",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "impactEnvelope",
+          "documentsExamined",
+          "movedKeys",
+          "envelopeSeconds"
+        ],
+        "title": "StateEnvelope",
+        "type": "object"
+      },
       "StateFamily": {
         "properties": {
           "id": {
@@ -4818,42 +4858,6 @@
         "title": "StateFindings",
         "type": "object"
       },
-      "StatePlan": {
-        "properties": {
-          "documentsExamined": {
-            "title": "Documentsexamined",
-            "type": "integer"
-          },
-          "movedKeys": {
-            "title": "Movedkeys",
-            "type": "integer"
-          },
-          "planSeconds": {
-            "title": "Planseconds",
-            "type": "number"
-          },
-          "planned": {
-            "title": "Planned",
-            "type": "integer"
-          },
-          "plannedByKind": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "default": {},
-            "title": "Plannedbykind",
-            "type": "object"
-          }
-        },
-        "required": [
-          "planned",
-          "documentsExamined",
-          "movedKeys",
-          "planSeconds"
-        ],
-        "title": "StatePlan",
-        "type": "object"
-      },
       "StatePortfolio": {
         "properties": {
           "documentsAtStart": {
@@ -4893,9 +4897,9 @@
             "title": "Arrivals",
             "type": "integer"
           },
-          "changedMean": {
-            "title": "Changedmean",
-            "type": "number"
+          "changedOutsideEnvelope": {
+            "title": "Changedoutsideenvelope",
+            "type": "integer"
           },
           "documentsExaminedMax": {
             "title": "Documentsexaminedmax",
@@ -4913,12 +4917,16 @@
             "title": "Edgesongoldtarget",
             "type": "integer"
           },
-          "falseNegativeReach": {
-            "title": "Falsenegativereach",
+          "envelopeShareUnchanged": {
+            "title": "Envelopeshareunchanged",
+            "type": "number"
+          },
+          "impactEnvelopeMax": {
+            "title": "Impactenvelopemax",
             "type": "integer"
           },
-          "falsePositiveReachShare": {
-            "title": "Falsepositivereachshare",
+          "impactEnvelopeMean": {
+            "title": "Impactenvelopemean",
             "type": "number"
           },
           "leftForModel": {
@@ -4949,21 +4957,21 @@
             "title": "Perarrival",
             "type": "object"
           },
-          "plannedMax": {
-            "title": "Plannedmax",
-            "type": "integer"
-          },
-          "plannedMean": {
-            "title": "Plannedmean",
-            "type": "number"
-          },
           "portfolioDocumentsAtStart": {
             "title": "Portfoliodocumentsatstart",
             "type": "integer"
           },
+          "recomputePlanMean": {
+            "title": "Recomputeplanmean",
+            "type": "number"
+          },
           "stabilityBudgetDisturbedWithoutDependencyChange": {
             "title": "Stabilitybudgetdisturbedwithoutdependencychange",
             "type": "integer"
+          },
+          "stateDeltaMean": {
+            "title": "Statedeltamean",
+            "type": "number"
           },
           "verifiedAgainstRebuild": {
             "title": "Verifiedagainstrebuild",
@@ -4988,12 +4996,13 @@
           "objectsAtStart",
           "verifiedAgainstRebuild",
           "verifiedStateEqual",
-          "falseNegativeReach",
+          "changedOutsideEnvelope",
           "stabilityBudgetDisturbedWithoutDependencyChange",
-          "plannedMean",
-          "plannedMax",
-          "changedMean",
-          "falsePositiveReachShare",
+          "impactEnvelopeMean",
+          "impactEnvelopeMax",
+          "recomputePlanMean",
+          "stateDeltaMean",
+          "envelopeShareUnchanged",
           "documentsExaminedMean",
           "documentsExaminedMax",
           "edgesAccepted",
@@ -5039,8 +5048,8 @@
       },
       "StateVerified": {
         "properties": {
-          "changedNotPlanned": {
-            "title": "Changednotplanned",
+          "changedOutsideEnvelope": {
+            "title": "Changedoutsideenvelope",
             "type": "integer"
           },
           "rebuildSeconds": {
@@ -5054,7 +5063,7 @@
         },
         "required": [
           "stateEqualToRebuild",
-          "changedNotPlanned",
+          "changedOutsideEnvelope",
           "rebuildSeconds"
         ],
         "title": "StateVerified",

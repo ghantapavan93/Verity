@@ -2,8 +2,9 @@
 
 /**
  * One contract changes: what else must change with it. A recording from the contract-state experiment, replayed from
- * its result file. The engine planned every arrival before recomputing anything, recomputed only what the plan named
- * and whose inputs had moved, and was checked against a rebuild from nothing. Every number here is the experiment's;
+ * its result file. For every arrival the engine drew an impact envelope before recomputing anything (what the change
+ * could reach: an upper bound, not a forecast), recomputed only the envelope's objects whose inputs had moved (the
+ * recompute plan), recorded what changed (the state delta), and was checked against a rebuild from nothing. Every number here is the experiment's;
  * this component chooses which recorded arrival to show and decides nothing else.
  */
 
@@ -37,7 +38,7 @@ function count(byKind: Record<string, number> | undefined, kind: string): number
 
 /** What moved in the family's effective state: the admitted facts that changed, else the instructions read. */
 function effectiveChange(arrival: StateArrivalView): string {
-  if (!count(arrival.changed.byKind, "EFFECTIVE")) return "no";
+  if (!count(arrival.stateDelta.byKind, "EFFECTIVE")) return "no";
   const before = arrival.effective.before ?? {};
   const after = arrival.effective.after ?? {};
   const moved = Object.keys(FACT_LABELS).filter((f) => arrival.effective.before && before[f] !== after[f]);
@@ -92,7 +93,9 @@ export function ContractState({ view }: { view: ContractStateView }) {
   const portfolio = view.portfolio;
   const arrival = view.arrivals[Math.min(index, view.arrivals.length - 1)] ?? null;
   const naive = summary.naiveRebuildPerChange ?? {};
-  const audit = (view.evidence?.relationship_audit as { metrics?: Record<string, number | null> } | undefined)?.metrics;
+  const auditRecord = view.evidence?.relationship_audit as { metrics?: Record<string, number | null>; gates?: Record<string, string> } | undefined;
+  const audit = auditRecord?.metrics;
+  const auditGate = auditRecord?.gates?.PRIMARY;
   const leakage = (view.evidence?.authorization as { cross_scope_leakage_observations?: number; changes_in_room_0?: number } | undefined) ?? null;
   return (
     <section className={styles.experiments} aria-labelledby="state-title">
@@ -106,8 +109,8 @@ export function ContractState({ view }: { view: ContractStateView }) {
       </p>
       {arrival && (
         <p className={local.headline} aria-label="This arrival in one line">
-          {grouped.format(arrival.documentsBefore)} documents → {arrival.plan.documentsExamined} examined →{" "}
-          {arrival.edge?.proof === "ACCEPTED" ? "1 family joined" : "no family joined"} → {arrival.changed.total} of {grouped.format(arrival.objectsBefore)}{" "}
+          {grouped.format(arrival.documentsBefore)} documents → {arrival.impactEnvelope.documentsExamined} examined →{" "}
+          {arrival.edge?.proof === "ACCEPTED" ? "1 family joined" : "no family joined"} → {arrival.stateDelta.total} of {grouped.format(arrival.objectsBefore)}{" "}
           derived objects changed; the rest untouched.
         </p>
       )}
@@ -122,7 +125,7 @@ export function ContractState({ view }: { view: ContractStateView }) {
             value: `${summary.verifiedStateEqual} of ${summary.verifiedAgainstRebuild}`,
             note: "state equal to rebuilding everything from nothing",
           },
-          { label: "Changed but not planned", value: summary.falseNegativeReach, note: "over the checked arrivals" },
+          { label: "Changed outside the envelope", value: summary.changedOutsideEnvelope, note: "over the checked arrivals" },
           { label: "Recomputed with no input moved", value: summary.stabilityBudgetDisturbedWithoutDependencyChange, note: "over every arrival" },
         ]}
       />
@@ -202,7 +205,7 @@ export function ContractState({ view }: { view: ContractStateView }) {
               </dl>
             </div>
           </div>
-          <ol className={local.plan} aria-label="The recompute plan for this arrival">
+          <ol className={local.plan} aria-label="From impact envelope to state delta, for this arrival">
             <li className={local.step}>
               <span className={local.stepName}>Portfolio</span>
               <span className={local.stepValue}>
@@ -211,7 +214,7 @@ export function ContractState({ view }: { view: ContractStateView }) {
             </li>
             <li className={local.step}>
               <span className={local.stepName}>Candidates examined</span>
-              <span className={local.stepValue}>{arrival.plan.documentsExamined}</span>
+              <span className={local.stepValue}>{arrival.impactEnvelope.documentsExamined}</span>
             </li>
             <li className={local.step}>
               <span className={local.stepName}>Relationship</span>
@@ -224,13 +227,24 @@ export function ContractState({ view }: { view: ContractStateView }) {
               </span>
             </li>
             <li className={local.step}>
-              <span className={local.stepName}>Planned before recompute</span>
+              <span className={local.stepName}>Impact envelope</span>
               <span className={local.stepValue}>
-                {arrival.plan.planned} objects{" "}
+                {arrival.impactEnvelope.impactEnvelope} objects it could reach{" "}
                 <em>
-                  · {count(arrival.plan.plannedByKind, "FAMILY")} families, {count(arrival.plan.plannedByKind, "FINDING")} findings
+                  · {count(arrival.impactEnvelope.impactEnvelopeByKind, "FAMILY")} families, {count(arrival.impactEnvelope.impactEnvelopeByKind, "FINDING")}{" "}
+                  findings; drawn before recompute, an upper bound
                 </em>
               </span>
+            </li>
+            <li className={local.step}>
+              <span className={local.stepName}>Recompute plan</span>
+              <span className={local.stepValue}>
+                {arrival.recomputePlan.total} objects recomputed <em>· {arrival.work.keptByInputCheck} kept because no input moved</em>
+              </span>
+            </li>
+            <li className={local.step}>
+              <span className={local.stepName}>State delta</span>
+              <span className={local.stepValue}>{arrival.stateDelta.total} objects changed</span>
             </li>
             <li className={local.step}>
               <span className={local.stepName}>Effective state changed</span>
@@ -238,11 +252,11 @@ export function ContractState({ view }: { view: ContractStateView }) {
             </li>
             <li className={local.step}>
               <span className={local.stepName}>Deviations reached</span>
-              <span className={local.stepValue}>{count(arrival.changed.byKind, "DEVIATION")}</span>
+              <span className={local.stepValue}>{count(arrival.stateDelta.byKind, "DEVIATION")}</span>
             </li>
             <li className={local.step}>
               <span className={local.stepName}>Cohorts reached</span>
-              <span className={local.stepValue}>{count(arrival.changed.byKind, "COHORT")}</span>
+              <span className={local.stepValue}>{count(arrival.stateDelta.byKind, "COHORT")}</span>
             </li>
             <li className={local.step}>
               <span className={local.stepName}>Findings</span>
@@ -258,18 +272,13 @@ export function ContractState({ view }: { view: ContractStateView }) {
             </li>
             <li className={local.step}>
               <span className={local.stepName}>Latency</span>
-              <span className={local.stepValue}>
-                {grouped.format(Math.round(arrival.latencyMs))} ms{" "}
-                <em>
-                  · {arrival.work.computed} objects recomputed, {arrival.work.keptByInputCheck} kept because no input moved
-                </em>
-              </span>
+              <span className={local.stepValue}>{grouped.format(Math.round(arrival.latencyMs))} ms</span>
             </li>
           </ol>
           <Figures
             label="Work avoided by this arrival, against rebuilding everything"
             items={[
-              { label: "Documents not examined", value: Math.max(0, arrival.documentsBefore - arrival.plan.documentsExamined) },
+              { label: "Documents not examined", value: Math.max(0, arrival.documentsBefore - arrival.impactEnvelope.documentsExamined) },
               { label: "Objects not recomputed", value: Math.max(0, Math.round((naive.objects_recomputed ?? 0) - arrival.work.computed)) },
               {
                 label: "Findings not recomputed",
@@ -277,8 +286,8 @@ export function ContractState({ view }: { view: ContractStateView }) {
                 note: "each a model call, were findings model-made",
               },
               {
-                label: "Changed but not planned",
-                value: arrival.verified ? arrival.verified.changedNotPlanned : "not checked",
+                label: "Changed outside the envelope",
+                value: arrival.verified ? arrival.verified.changedOutsideEnvelope : "not checked",
                 note: arrival.verified ? "checked against a rebuild" : undefined,
               },
             ]}
@@ -288,7 +297,9 @@ export function ContractState({ view }: { view: ContractStateView }) {
       <p className={styles.quiet} style={{ marginTop: 16 }}>
         Evidence in the same experiment:{" "}
         {audit
-          ? `on a second blind-read audit of real document pairs, the relationship engine's precision was ${audit.precision ?? "–"} and its recall ${audit.recall ?? "–"} (it leaves the rest UNKNOWN), with every accepted direction right`
+          ? `on a blind-read audit of real document pairs, frozen before it was scored (the readers were language models, not people), the relationship engine's precision was ${audit.precision ?? "–"} and its recall ${audit.recall ?? "–"} (it leaves the rest UNKNOWN), with every accepted direction right${
+              auditGate ? `; its preregistered gate (precision at least 0.98, false families at most 2%) was ${auditGate === "PASS" ? "met" : "not met"}` : ""
+            }`
           : "no relationship audit record"}
         {leakage
           ? `; a viewer of one room observed ${leakage.cross_scope_leakage_observations} changes from ${leakage.changes_in_room_0} arrivals in the other`
