@@ -21,24 +21,27 @@ async function serious(page: Page): Promise<string[]> {
   return results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.length} node(s)`);
 }
 
-for (const [name, viewport] of [
-  ["desktop", { width: 1280, height: 800 }],
-  ["phone", { width: 390, height: 844 }],
-] as const) {
-  test(`state page on ${name}: the story from the record, no overflow, no console errors, axe clean`, async ({ page }) => {
-    await page.setViewportSize(viewport);
-    const errors = await serveRecord(page);
-    await page.goto("/state");
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("One contract changes.");
-    await expect(page.getByText("0 observed changes outside the envelope.")).toBeVisible();
-    await expect(page.getByRole("article", { name: "Derivation certificate" })).toContainText("Exactly 1 visible text satisfies this reference.");
-    await expect(page.getByRole("heading", { name: "We preregistered 0.85 recall. The system reached 0.836, so this run failed." })).toBeVisible();
-    for (const details of await page.locator("details").all()) await details.evaluate((el) => ((el as HTMLDetailsElement).open = true));
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
-    expect(await serious(page)).toEqual([]);
-    expect(errors).toEqual([]);
-  });
+async function storyHolds(page: Page, viewport: { width: number; height: number }): Promise<void> {
+  await page.setViewportSize(viewport);
+  const errors = await serveRecord(page);
+  await page.goto("/state");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("One contract changes.");
+  await expect(page.getByText("0 observed changes outside the envelope.")).toBeVisible();
+  await expect(page.getByRole("article", { name: "Derivation certificate" })).toContainText("Exactly 1 visible text satisfies this reference.");
+  await expect(page.getByRole("heading", { name: "We preregistered 0.85 recall. The system reached 0.836, so this run failed." })).toBeVisible();
+  for (const details of await page.locator("details").all()) await details.evaluate((el) => ((el as HTMLDetailsElement).open = true));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  expect(await serious(page)).toEqual([]);
+  expect(errors).toEqual([]);
 }
+
+test("state page on desktop: the story from the record, no overflow, no console errors, axe clean", async ({ page }) => {
+  await storyHolds(page, { width: 1280, height: 800 });
+});
+
+test("state page on a phone: the story from the record, no overflow, no console errors, axe clean", async ({ page }) => {
+  await storyHolds(page, { width: 390, height: 844 });
+});
 
 test("state page: section links and the arrival picker work from the keyboard, and the choice is in the URL", async ({ page }) => {
   await serveRecord(page);
