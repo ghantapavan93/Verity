@@ -17,6 +17,7 @@ from hypothesis import strategies as st
 
 from app.ingest import base_name, ingest, readers
 from app.ingest.invisible import remove_format_characters
+from app.ingest.sections import Block
 from app.policy.durations import parse_durations
 from tests.support import GUIDANCE
 
@@ -43,7 +44,8 @@ def test_the_stored_text_is_the_text_a_person_sees_and_the_day_parser_reads_it(h
     assert shown in text
     assert not any(unicodedata.category(ch) == "Cf" for ch in text)
     mentions = parse_durations(shown)
-    assert mentions and str(mentions[0].duration.value) == shown.split(" ")[2].lstrip("0")
+    duration = mentions[0].duration if mentions else None
+    assert duration is not None and str(duration.value) == shown.split(" ")[2].lstrip("0")
 
 
 def test_the_reading_counts_what_it_removed() -> None:
@@ -71,7 +73,7 @@ def test_the_read_boundary_cleans_whatever_a_reader_returns(monkeypatch: pytest.
     """The guarantee holds for any reader: a block carrying a format character leaves `read` without it."""
 
     def leaky(_data: bytes) -> readers.ReadResult:
-        return readers.ReadResult(blocks=[readers.Block("text", "pay within 9\u200b0 days")], pages=1, title="T\u2060itle")
+        return readers.ReadResult(blocks=[Block("text", "pay within 9\u200b0 days")], pages=1, title="T\u2060itle")
 
     monkeypatch.setattr(readers, "read_pdf", leaky)
     result = readers.read("x.pdf", b"%PDF-1.4 minimal")
