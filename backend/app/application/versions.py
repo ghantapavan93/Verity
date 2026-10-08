@@ -37,28 +37,31 @@ def declare_supersedes(session: Session, workspace: str, document_id: str, previ
     require_document(session, previous_document_id, workspace)
     if document_id == previous_document_id:
         raise InvalidInput("a document cannot supersede itself")
-    placed = _placed(session, workspace, document_id)
-    if placed is not None:
-        if placed.supersedes_document_id == previous_document_id:
-            return Declared(placed, created=False)
-        raise Conflict("This document already has a place in a line of versions. A version supersedes one document, and that cannot be changed.")
-    try:
-        previous = _placed(session, workspace, previous_document_id)
-        if previous is None:  # the earlier document opens a line
-            previous = DocumentVersion(workspace_id=workspace, lineage_id=new_id(), document_id=previous_document_id, supersedes_document_id=None)
-            session.add(previous)
-            session.flush()
-        version = DocumentVersion(workspace_id=workspace, lineage_id=previous.lineage_id, document_id=document_id, supersedes_document_id=previous_document_id)
-        session.add(version)
-        session.commit()
-    except IntegrityError:
-        # Another request placed one of the two between the lookup and the insert. What it recorded decides.
-        session.rollback()
+    # Two attempts: a statement that loses a race to another statement about a different document (both opening the
+    # earlier document's line) is the statement after it, as if made a moment later. Before 2026-10-08 it was refused
+    # with "placed by another request" although its own document was in no line (QA campaign, two versions of one base).
+    for _ in range(2):
         placed = _placed(session, workspace, document_id)
-        if placed is not None and placed.supersedes_document_id == previous_document_id:
-            return Declared(placed, created=False)
-        raise Conflict("This document was placed in a line of versions by another request.") from None
-    return Declared(version, created=True)
+        if placed is not None:
+            if placed.supersedes_document_id == previous_document_id:
+                return Declared(placed, created=False)
+            raise Conflict("This document already has a place in a line of versions. A version supersedes one document, and that cannot be changed.")
+        try:
+            previous = _placed(session, workspace, previous_document_id)
+            if previous is None:  # the earlier document opens a line
+                previous = DocumentVersion(workspace_id=workspace, lineage_id=new_id(), document_id=previous_document_id, supersedes_document_id=None)
+                session.add(previous)
+                session.flush()
+            version = DocumentVersion(
+                workspace_id=workspace, lineage_id=previous.lineage_id, document_id=document_id, supersedes_document_id=previous_document_id
+            )
+            session.add(version)
+            session.commit()
+            return Declared(version, created=True)
+        except IntegrityError:
+            # Another request placed one of the two between the lookup and the insert; the next pass reads what it recorded.
+            session.rollback()
+    raise Conflict("Another request was changing this line of versions at the same moment. Try again.")
 
 
 def lineage(session: Session, workspace: str, document_id: str) -> list[DocumentVersion]:
