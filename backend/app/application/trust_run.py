@@ -19,7 +19,7 @@ from ..runs.versions import SEMANTIC_VERSIONS, stale_versions
 from ..trust.compile import FindingRecord, SpanRecord, compile_manifest
 from ..trust.diff import TrustDiff, trust_diff
 from ..trust.model import SectionText, TrustManifest, snapshot_hash
-from .ingest_document import original_path, stored_document
+from .ingest_document import original_path, reading_name, stored_document
 from .versions import is_later_version
 from .workspace import require_document
 
@@ -52,7 +52,7 @@ def current_reading(session: Session, document: Document) -> tuple[SectionText, 
     if stored is not None:
         return sections_of(stored)
     original = original_path(document)
-    return _read_again(original, document.name, PARSER_VERSION) if original.is_file() else None
+    return _read_again(original, reading_name(document), PARSER_VERSION) if original.is_file() else None
 
 
 def manifest_of(session: Session, run: Run) -> TrustManifest:

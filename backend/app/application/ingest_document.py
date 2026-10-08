@@ -21,7 +21,7 @@ from ..errors import InvalidInput, TooLarge
 from ..hashing import sha256_bytes
 from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, ingest
 from ..ingest.coverage import coverage_report
-from ..ingest.readers import file_type, read
+from ..ingest.readers import SUFFIX_OF, file_type, read
 from ..models import Document, Section
 from .workspace import document_is_curated, grant_document
 
@@ -34,9 +34,27 @@ class IngestedDocument:
     created: bool  # False when the same bytes were already stored under the current reader
 
 
+def document_suffix(document: Document) -> str:
+    """The extension of the type the document's bytes were checked as (Document.media_type); the name's only when the
+    media type is not one this reader knows."""
+    return SUFFIX_OF.get(document.media_type) or Path(document.name).suffix.lower()
+
+
+def reading_name(document: Document) -> str:
+    """The document's name ending in its type's extension: what the stored bytes are read again under, and the name of
+    the original file in an evidence pack. A name cut before 2026-10-08 may have lost its extension; the type has not."""
+    suffix = document_suffix(document)
+    return document.name if document.name.lower().endswith(suffix) else f"{document.name}{suffix}"
+
+
 def original_path(document: Document) -> Path:
-    """Where the uploaded bytes live: by content hash, with the original extension."""
-    return settings.data_dir / "documents" / f"{document.sha256}{Path(document.name).suffix.lower()}"
+    """Where the uploaded bytes live: by content hash, with the extension of the document's type. Bytes kept before
+    2026-10-08 under a name cut through its extension sit where that name put them (no extension, or a fragment of the
+    name), and are found there."""
+    folder = settings.data_dir / "documents"
+    path = folder / f"{document.sha256}{document_suffix(document)}"
+    legacy = folder / f"{document.sha256}{Path(document.name).suffix.lower()}"
+    return legacy if not path.exists() and legacy.exists() else path
 
 
 def coverage_of(document: Document) -> dict[str, object] | None:
@@ -51,7 +69,7 @@ def coverage_of(document: Document) -> dict[str, object] | None:
     if document.parser_version != PARSER_VERSION or not original.exists():
         return None
     try:
-        return coverage_report(read(document.name, original.read_bytes()).coverage, PARSER_VERSION, "reconstructed")
+        return coverage_report(read(reading_name(document), original.read_bytes()).coverage, PARSER_VERSION, "reconstructed")
     except (UnsupportedFile, TooLargeToRead, OSError):
         return None
 

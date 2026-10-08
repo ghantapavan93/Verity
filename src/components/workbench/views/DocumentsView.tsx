@@ -7,7 +7,7 @@ import { Figures } from "./Figures";
 import { ListSkeleton, ReadFailed } from "./Skeleton";
 import { IconArrowRight } from "../icons";
 import { listDocuments } from "@/lib/api";
-import { formatWhen, plural } from "@/lib/format";
+import { formatWhen, nameWithoutType, plural } from "@/lib/format";
 import type { DocumentSummary } from "@/lib/types";
 
 export function DocumentsView({
@@ -96,8 +96,10 @@ export function DocumentsView({
                   </span>
                   <div className={styles.rowMain}>
                     <div className={styles.rowTitle}>
-                      <span className={styles.rowTitleText}>{d.name.replace(/\.[^.]+$/, "")}</span>
-                      <span className={styles.fileType}>{d.name.split(".").pop()}</span>
+                      <span className={styles.rowTitleText} title={d.name}>
+                        {nameWithoutType(d.name, d.fileType)}
+                      </span>
+                      {d.fileType && <span className={styles.fileType}>{d.fileType}</span>}
                     </div>
                     <div className={styles.rowMeta}>
                       {d.pages !== null && <span>{plural(d.pages, "page")}</span>}

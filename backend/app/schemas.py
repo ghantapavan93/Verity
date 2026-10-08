@@ -61,6 +61,9 @@ class DocumentOut(ApiModel):
 class DocumentSummary(ApiModel):
     id: str
     name: str
+    # The type the bytes were checked as (pdf | docx | txt), from the recorded media type, never from the name; null for
+    # a media type this reader does not know.
+    file_type: str | None = None
     pages: int | None
     sections: int
     findings: int = 0

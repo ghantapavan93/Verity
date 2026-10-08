@@ -879,6 +879,17 @@
             "title": "Createdat",
             "type": "string"
           },
+          "fileType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filetype"
+          },
           "findings": {
             "default": 0,
             "title": "Findings",

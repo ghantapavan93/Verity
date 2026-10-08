@@ -954,6 +954,8 @@ export interface components {
         DocumentSummary: {
             /** Createdat */
             createdAt: string;
+            /** Filetype */
+            fileType?: string | null;
             /**
              * Findings
              * @default 0

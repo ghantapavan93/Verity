@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from ..application.ingest_document import coverage_of, ingest_document, refuse_if_too_large
 from ..application.workspace import require_document, visible_documents, visible_runs
 from ..db import get_session
+from ..ingest.readers import SUFFIX_OF
 from ..models import Document, Finding, FindingReview, Run, Section, iso
 from ..schemas import CoverageReport, DocumentOut, DocumentSummary, SectionOut
 from .access import current_workspace
@@ -88,6 +89,7 @@ def list_documents(session: Session = Depends(get_session), workspace: str = Dep
         DocumentSummary(
             id=d.id,
             name=d.name,
+            file_type=SUFFIX_OF.get(d.media_type, "").lstrip(".") or None,
             pages=d.pages,
             sections=count,
             findings=int(finding_counts.get(d.id, 0)),

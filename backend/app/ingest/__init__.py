@@ -12,6 +12,8 @@ from .sections import ParsedSection, build_sections
 
 __all__ = ["PARSER_VERSION", "SUPPORTED", "Ingested", "TooLargeToRead", "UnsupportedFile", "ingest"]
 
+MAX_NAME = 255
+
 # Stored on every document so a run record says which reader produced the text its citations
 # point into. Bump it whenever the reader changes what a file's text is.
 #   (null) python-docx paragraph.text: lost tracked insertions and deletions, kept hidden text.
@@ -57,7 +59,13 @@ def base_name(filename: str) -> str:
     name = filename.replace("\\", "/").rsplit("/", 1)[-1]
     # Invisible format characters too: "Invoice-\u202efdp.exe.txt" displayed as "Invoice-exe.pdf" (2026-10-08).
     name = visible_text("".join(ch for ch in name if ch >= " " and ch != "\x7f")).strip()
-    return name[:255] or "document"
+    if len(name) > MAX_NAME:
+        # Cut the stem, not a supported extension: "....-copy-v12.txt" at 269 characters was stored without ".txt"
+        # (QA campaign, 2026-10-08). Any other ending is only part of the name and is cut as before.
+        stem, dot, suffix = name.rpartition(".")
+        keep = bool(dot and stem) and f".{suffix.lower()}" in SUPPORTED
+        name = f"{stem[: MAX_NAME - len(suffix) - 1]}.{suffix}" if keep else name[:MAX_NAME]
+    return name or "document"
 
 
 def ingest(filename: str, data: bytes) -> Ingested:

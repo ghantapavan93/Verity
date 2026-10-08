@@ -40,3 +40,13 @@ export function shortHash(digest: string | null | undefined, length = 12): strin
 export function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
+
+/**
+ * A document's name as a list shows it beside its type: without the extension only when the name ends in the type the
+ * API recorded (`fileType`, from the bytes, never from the name). A name cut through its extension before 2026-10-08
+ * is shown whole.
+ */
+export function nameWithoutType(name: string, fileType: string | null | undefined): string {
+  const suffix = fileType ? `.${fileType}` : "";
+  return suffix && name.length > suffix.length && name.toLowerCase().endsWith(suffix.toLowerCase()) ? name.slice(0, -suffix.length) : name;
+}

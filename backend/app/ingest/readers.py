@@ -36,6 +36,10 @@ SUPPORTED = {
     ".pdf": "application/pdf",
     ".txt": "text/plain",
 }
+# The extension a document is stored and read again under, from the media type recorded when its bytes were checked;
+# never what is left of its name. A name over 255 characters was cut through its ".txt" (QA campaign, 2026-10-08), and
+# the stored bytes, the reading again and the evidence pack all took their type from the name.
+SUFFIX_OF = {media_type: suffix for suffix, media_type in SUPPORTED.items()}
 
 
 MAX_DOCX_UNPACKED_BYTES = 256 * 1024 * 1024  # a 25 MB upload that unpacks past this is a bomb, not a contract
