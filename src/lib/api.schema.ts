@@ -2031,6 +2031,8 @@ export interface components {
              * @default
              */
             citedSectionLabel: string;
+            /** Clauselabel */
+            clauseLabel?: string | null;
             /** End */
             end: number;
             /** Matchcount */

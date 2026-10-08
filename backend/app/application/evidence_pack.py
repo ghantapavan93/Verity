@@ -25,6 +25,7 @@ from ..hashing import sha256_bytes
 from ..ingest import base_name
 from ..models import Run, iso, utcnow
 from ..verify import spans as verifier
+from .clause_location import ClauseLocator
 from .create_memo import review_head
 from .ingest_document import coverage_of, original_path
 from .reconstruct_input import reconstruct_input
@@ -79,6 +80,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
     document = run.document
     sections = [{"id": s.id, "ordinal": s.ordinal, "number": s.number, "heading": s.heading, "text": s.text} for s in document.sections]
     sections_json = json.dumps(sections, ensure_ascii=False, indent=1)
+    locator = ClauseLocator(document.sections)
     findings = [
         {
             "id": f.id,
@@ -102,6 +104,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
                     "verified": s.verified,
                     "method": s.method,
                     "match_count": s.match_count,
+                    "clause_label": locator.label(s),
                 }
                 for s in f.spans
             ],

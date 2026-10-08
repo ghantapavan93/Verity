@@ -9,6 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, stat
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from ..application.clause_location import ClauseLocator
 from ..application.create_memo import review_head
 from ..application.evidence_pack import build_evidence_pack
 from ..application.explain_run import explain_run
@@ -33,7 +34,8 @@ HEARTBEAT_SECONDS = 15
 # ----------------------------------------------------------------------------- mapping
 
 
-def finding_out(finding: Finding) -> FindingOut:
+def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> FindingOut:
+    locator = locator or ClauseLocator(finding.run.document.sections)
     return FindingOut(
         id=finding.id,
         topic=finding.topic,
@@ -54,6 +56,7 @@ def finding_out(finding: Finding) -> FindingOut:
                 method=s.method,
                 match_count=s.match_count,
                 cited_section_label=s.cited_section_label,
+                clause_label=locator.label(s),
             )
             for s in finding.spans
         ],
@@ -64,16 +67,17 @@ def finding_out(finding: Finding) -> FindingOut:
     )
 
 
-def run_out(run: Run) -> RunOut:
+def run_out(run: Run, locator: ClauseLocator | None = None) -> RunOut:
     # Unresolved findings are kept on the run but not shown as answers.
-    shown = [finding_out(f) for f in run.findings if f.status != "unresolved"] if run.stage == "complete" else []
+    locator = locator or ClauseLocator(run.document.sections)
+    shown = [finding_out(f, locator) for f in run.findings if f.status != "unresolved"] if run.stage == "complete" else []
     return RunOut(
         id=run.id,
         question=run.question,
         shared=run.workspace_id is None,
         stage=run.stage,
         findings=shown,
-        withheld=[finding_out(f) for f in run.findings if f.status == "unresolved"],
+        withheld=[finding_out(f, locator) for f in run.findings if f.status == "unresolved"],
         model=run.model,
         prompt_version=run.prompt_version,
         prompt_hash=run.prompt_hash,
@@ -91,8 +95,9 @@ def run_out(run: Run) -> RunOut:
 
 
 def run_detail(run: Run) -> RunDetail:
-    base = run_out(run).model_dump(by_alias=False)
-    base["findings"] = [finding_out(f) for f in run.findings]
+    locator = ClauseLocator(run.document.sections)
+    base = run_out(run, locator).model_dump(by_alias=False)
+    base["findings"] = [finding_out(f, locator) for f in run.findings]
     spans = [s for f in run.findings for s in f.spans]
     return RunDetail(
         **base,

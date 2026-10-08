@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeRole, decidedByCode, retrievalNote, sectionsReadNote, statusLabel } from "./types";
+import { codeRole, decidedByCode, passageLabel, retrievalNote, sectionsReadNote, statusLabel, type SectionView, type SpanView } from "./types";
 
 /** The chip a lawyer reads most: "Within guidance" is a comparison code made, or it says it is the model's view. */
 describe("statusLabel", () => {
@@ -59,5 +59,19 @@ describe("how the sections were chosen", () => {
     expect(retrievalNote(null)).toContain("was not recorded");
     expect(retrievalNote(undefined)).not.toContain("rank order");
     expect(sectionsReadNote(null, 6, 123)).toBe("the model was handed 6 of this document's 123 sections");
+  });
+});
+
+describe("passageLabel", () => {
+  const section = { id: "s5", number: "5", heading: "Intellectual Property (part 3)", text: "" } as SectionView;
+  const span = { sectionId: "s5", start: 10, end: 40, quote: "q", verified: true, method: "exact", citedSectionLabel: "sec_8" } as SpanView;
+
+  it("names the clause the passage sits in when the API read one from the document's own text", () => {
+    expect(passageLabel({ ...span, clauseLabel: "§13.2 Governing Law" }, section)).toBe("§13.2 Governing Law");
+  });
+
+  it("falls back to the section, as before, when the text names no clause before the passage", () => {
+    expect(passageLabel({ ...span, clauseLabel: null }, section)).toBe("§5 · Intellectual Property (part 3)");
+    expect(passageLabel(span, section)).toBe("§5 · Intellectual Property (part 3)");
   });
 });

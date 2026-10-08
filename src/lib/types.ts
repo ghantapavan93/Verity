@@ -158,3 +158,11 @@ export function citationLabel(section: SectionView): string {
   return section.number ? `§${section.number} · ${section.heading}` : section.heading;
 }
 
+/**
+ * Where a passage is, in the words a reader can check: the clause it sits in when the document's own text names one
+ * (the API's `clauseLabel`, "§13.2 Governing Law"), else its section. A clause written inline is body under the last
+ * standalone heading, so the section alone could name a different clause (2026-10-08).
+ */
+export function passageLabel(span: SpanView, section: SectionView): string {
+  return span.clauseLabel ?? citationLabel(section);
+}

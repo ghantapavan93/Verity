@@ -14,6 +14,7 @@ import { formatWhen } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
 import {
   citationLabel,
+  passageLabel,
   codeRole,
   decidedByCode,
   statusLabel,
@@ -254,9 +255,12 @@ function EvidenceBody({
           return (
             <div key={i} className={styles.drawerSpan}>
               {section && span.verified ? (
-                <button type="button" className={styles.drawerRef} onClick={() => onJump(section.id, span)}>
-                  {citationLabel(section)}
-                </button>
+                <>
+                  <button type="button" className={styles.drawerRef} onClick={() => onJump(section.id, span)}>
+                    {passageLabel(span, section)}
+                  </button>
+                  {span.clauseLabel && <div className={styles.drawerRefStatic}>within {citationLabel(section)}, as the reading divided the document</div>}
+                </>
               ) : (
                 <div className={styles.drawerRefStatic}>{section ? citationLabel(section) : "Section not identified"}</div>
               )}

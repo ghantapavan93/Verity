@@ -17,6 +17,7 @@ from ..errors import Conflict, NotFound
 from ..hashing import sha256_text
 from ..memo.service import memo_docx, memo_html
 from ..models import Memo, Run
+from .clause_location import ClauseLocator
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,9 @@ def create_memo(session: Session, run_id: str) -> CreatedMemo:
         return CreatedMemo(existing, created=False)
     findings = [f for f in run.findings if f.status != "unresolved"]
     titles = {s.id: (f"§{s.number} {s.heading}".strip() if s.number else s.heading) for s in run.document.sections}
-    html = memo_html(run, findings, titles, review_head=head)
+    locator = ClauseLocator(run.document.sections)
+    clauses = {span.id: label for f in findings for span in f.spans if (label := locator.label(span))}
+    html = memo_html(run, findings, titles, review_head=head, clauses=clauses)
     # The file is in place before the row exists, under a name no other request can have. The row used to be
     # committed first and the file moved after it: a process that died between the two left a memo whose DOCX was
     # never there, and every retry was handed that memo (fault injection, 2026-10-02). In this order the worst a
@@ -65,7 +68,7 @@ def create_memo(session: Session, run_id: str) -> CreatedMemo:
     pending_dir = memos_dir / "pending" / token
     pending_dir.mkdir(parents=True, exist_ok=True)
     try:
-        pending, digest = memo_docx(run, findings, titles, pending_dir, review_head=head)
+        pending, digest = memo_docx(run, findings, titles, pending_dir, review_head=head, clauses=clauses)
         path = memos_dir / f"memo-{run.id}-{head[:8]}-{token[:8]}.docx"
         pending.replace(path)
     finally:

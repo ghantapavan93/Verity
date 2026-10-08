@@ -13,6 +13,7 @@ heading and a body at its first sentence break, so the clause text is retrievabl
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 # Nine digits per part: a "number" longer than that is not a clause number, and Python refuses to parse thousands of digits.
@@ -41,6 +42,97 @@ def continues_numbering(number: str, last_top: int) -> bool:
     """Whether a heading's stated number can be a clause number after a heading numbered ``last_top`` (0 before any)."""
     top = number.split(".", 1)[0]
     return top.isdigit() and int(top) <= last_top + MAX_NUMBER_GAP
+
+
+# The title a clause states before its first sentence: "Governing Law." in "13.2 Governing Law. This Agreement …".
+CLAUSE_TITLE = re.compile(r"^([^.:;]{2,60})[.:](?:\s|$)")
+TITLE_SMALL_WORDS = frozenset({"a", "an", "and", "as", "at", "by", "for", "in", "of", "on", "or", "the", "to", "with"})
+
+
+def inline_clause(paragraph: str, last_top: int) -> tuple[str, str] | None:
+    """(number, title) of a paragraph that opens with a numbered clause title ("6. WRF Patents. Washington …", "10. Term
+    and Termination."), or None. The number must continue the numbering without going back (a list inside a clause
+    restarts at 1) and the title must read as one: at most eight words, every significant word capitalised. A numbered
+    sentence ("1.1 Cargill agrees to perform …", "30 days after notice. …") is not a title."""
+    match = HEADING_NUMBER.match(paragraph)
+    if not match:
+        return None
+    number = match.group(1)
+    if int(number.split(".", 1)[0]) < last_top or not continues_numbering(number, last_top):
+        return None
+    title = CLAUSE_TITLE.match(match.group(2))
+    if not title:
+        return None
+    words = title.group(1).split()
+    significant = [w for w in words if w.lower() not in TITLE_SMALL_WORDS]
+    if len(words) > MAX_LEAD_IN_WORDS or not significant or not all(w[0].isupper() or not w[0].isalpha() for w in significant):
+        return None
+    return number, title.group(1).strip()
+
+
+# A section longer than MAX_SECTION_CHARS is stored as parts headed "<heading> (part N)"; `_push` writes the heading and
+# `clause_label_in` reads it back, through these two definitions only.
+PART_HEADING = re.compile(r"^(?P<base>.*) \(part (?P<index>\d+)\)$")
+
+
+def part_heading(heading: str, index: int) -> str:
+    return f"{heading} (part {index})"
+
+
+def clause_label_in(sections: Sequence[tuple[str, str, str]], index: int, start: int) -> str | None:
+    """``clause_label`` for a passage at ``start`` of ``sections[index]`` (each section as number, heading, text, in
+    reading order). A part after the first is read after the parts before it, because they are one section of the source
+    split for size: a clause that opened in part 2 still holds a passage at the top of part 3, unless a numbered paragraph
+    outside it came between, which ends it as within one part."""
+    number, heading, text = sections[index]
+    texts = [text]
+    part = PART_HEADING.match(heading)
+    if part:
+        expected, i = int(part.group("index")) - 1, index - 1
+        while expected >= 1 and i >= 0:
+            earlier_number, earlier_heading, earlier_text = sections[i]
+            earlier = PART_HEADING.match(earlier_heading)
+            first = expected == 1 and earlier_heading == part.group("base")
+            if earlier_number != number or not (first or (earlier and earlier.group("base") == part.group("base") and int(earlier.group("index")) == expected)):
+                break
+            texts.insert(0, earlier_text)
+            expected, i = expected - 1, i - 1
+    offset = sum(len(t) + len(PARAGRAPH_SEPARATOR) for t in texts[:-1])
+    top = number.split(".", 1)[0]
+    return clause_label(PARAGRAPH_SEPARATOR.join(texts), offset + start, int(top) if top.isdigit() else 0)
+
+
+def _ends_clause(number: str, clause: str) -> bool:
+    """A numbered paragraph ends the clause found before it unless it is one of the clause's own sub-numbers ("13.2.1"
+    within 13.2) or a list that starts again below it ("1." inside clause 4)."""
+    top, clause_top = number.split(".", 1)[0], clause.split(".", 1)[0]
+    return top.isdigit() and int(top) >= int(clause_top) and not number.startswith(clause + ".")
+
+
+def clause_label(text: str, start: int, seed: int = 0) -> str | None:
+    """Where a passage starting at ``start`` of a section's text sits, read from that text alone: the clause whose
+    opening paragraph ("13.2 Governing Law. This …") comes last before it, as "§13.2 Governing Law", or None.
+
+    A reading keeps a clause written inline as body under the last standalone heading, so a section's label can name a
+    different clause than the passage is in ("§5 Intellectual Property (part 3)" for a governing-law clause; QA campaign,
+    2026-10-08). Every number returned is printed at the start of a paragraph before the passage. A numbered paragraph
+    that is not part of the clause found (not its sub-number, not a list restarting below it: "13.3 the Parties agree …"
+    after 13.2) ends it. ``seed`` is the section's own top-level number: a clause numbered below it is a list inside the
+    section ("1. Indemnification by Licensee." under §8), never a clause of the document. Earlier parts of a split
+    section are read by `clause_label_in`. None leaves the section's label."""
+    found: tuple[str, str] | None = None
+    last_top = seed
+    offset = 0
+    for paragraph in text.split(PARAGRAPH_SEPARATOR):
+        if offset > start:
+            break
+        clause = inline_clause(paragraph, last_top)
+        if clause is not None:
+            found, last_top = clause, int(clause[0].split(".", 1)[0])
+        elif found is not None and (numbered := HEADING_NUMBER.match(paragraph)) and _ends_clause(numbered.group(1), found[0]):
+            found = None
+        offset += len(paragraph) + len(PARAGRAPH_SEPARATOR)
+    return f"§{found[0]} {found[1]}" if found else None
 
 
 @dataclass
@@ -156,21 +248,21 @@ def _push(sections: list[ParsedSection], section: ParsedSection) -> None:
     for paragraph in section.paragraphs:
         if len(paragraph) > MAX_SECTION_CHARS:
             if part:
-                sections.append(ParsedSection(section.number, f"{section.heading} (part {index})", part, section.number_computed))
+                sections.append(ParsedSection(section.number, part_heading(section.heading, index), part, section.number_computed))
                 index += 1
                 part, size = [], 0
             for chunk in split_paragraph(paragraph, MAX_SECTION_CHARS):
-                sections.append(ParsedSection(section.number, f"{section.heading} (part {index})", [chunk], section.number_computed))
+                sections.append(ParsedSection(section.number, part_heading(section.heading, index), [chunk], section.number_computed))
                 index += 1
             continue
         if part and size + len(paragraph) > MAX_SECTION_CHARS:
-            sections.append(ParsedSection(section.number, f"{section.heading} (part {index})", part, section.number_computed))
+            sections.append(ParsedSection(section.number, part_heading(section.heading, index), part, section.number_computed))
             index += 1
             part, size = [], 0
         part.append(paragraph)
         size += len(paragraph) + len(PARAGRAPH_SEPARATOR)
     if part:
-        sections.append(ParsedSection(section.number, f"{section.heading} (part {index})" if index > 1 else section.heading, part, section.number_computed))
+        sections.append(ParsedSection(section.number, part_heading(section.heading, index) if index > 1 else section.heading, part, section.number_computed))
 
 
 def split_paragraph(text: str, cap: int) -> list[str]:

@@ -120,6 +120,10 @@ class SpanOut(ApiModel):
     match_count: int | None = None
     # The label the model cited (sec_N); kept so a misattribution stays visible on the run record.
     cited_section_label: str = ""
+    # The clause the passage sits in, as the document's own text names it ("§13.2 Governing Law"), when that differs from
+    # what a section's label can say: a clause written inline is body under the last standalone heading. Read from the
+    # stored section text; null when the text names no clause before the passage (application.clause_location).
+    clause_label: str | None = None
 
 
 class FindingOut(ApiModel):

@@ -3997,6 +3997,17 @@
             "title": "Citedsectionlabel",
             "type": "string"
           },
+          "clauseLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clauselabel"
+          },
           "end": {
             "title": "End",
             "type": "integer"

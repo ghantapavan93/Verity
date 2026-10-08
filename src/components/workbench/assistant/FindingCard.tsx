@@ -2,7 +2,7 @@
 
 import styles from "../Workbench.module.css";
 import { StatusChip } from "../shell/primitives";
-import { citationLabel, isLocated, type FindingView, type SectionView, type SpanView } from "@/lib/types";
+import { isLocated, passageLabel, type FindingView, type SectionView, type SpanView } from "@/lib/types";
 
 function excerpt(quote: string, max = 150): string {
   return quote.length > max ? `${quote.slice(0, max - 3).trimEnd()}…` : quote;
@@ -49,7 +49,7 @@ export function FindingCard({
           </div>
           {evidence.map(({ span, section }, i) => (
             <button key={i} type="button" className={styles.citationRow} onClick={() => onJump(section.id, span)} title="Show in the document">
-              <span className={styles.citationLabel}>{citationLabel(section)}</span>
+              <span className={styles.citationLabel}>{passageLabel(span, section)}</span>
               <span className={styles.citationExcerpt}>{excerpt(span.quote)}</span>
             </button>
           ))}

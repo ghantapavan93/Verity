@@ -119,11 +119,15 @@ def reading_line(run: Run) -> str:
     return f"{read} of {total} sections, chosen by retrieval for the question. {scope}"
 
 
-def _sources(findings: list[Finding], section_titles: dict[str, str]) -> list[Source]:
+def _sources(findings: list[Finding], section_titles: dict[str, str], clauses: dict[str, str] | None = None) -> list[Source]:
+    """``clauses`` names, by span id, the clause a passage sits in when the document's own text names one; the section's
+    title follows it, since a clause written inline is body under the reading's last standalone heading (2026-10-08)."""
     sources: list[Source] = []
     for finding in findings:
         for span in finding.spans:
             title = section_titles.get(span.section_id or "", _section_label(span))
+            if clauses and (clause := clauses.get(span.id)):
+                title = f"{clause} · within {title}"
             sources.append(Source(len(sources) + 1, finding, span, title))
     return sources
 
@@ -131,11 +135,11 @@ def _sources(findings: list[Finding], section_titles: dict[str, str]) -> list[So
 # ----------------------------------------------------------------------------- HTML
 
 
-def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str], review_head: str = "") -> str:
+def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str], review_head: str = "", clauses: dict[str, str] | None = None) -> str:
     now = datetime.now().astimezone()
     date = f"{now.day} {now.strftime('%B %Y')}"
     issues = [f for f in findings if f.status in ("needs_review", "missing")]
-    sources = _sources(findings, section_titles)
+    sources = _sources(findings, section_titles, clauses)
     by_span = {id(s.span): s for s in sources}
     parts = [
         "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -306,14 +310,16 @@ def _properties(document: WordDocument, run: Run, verified: int, total: int, rev
     )
 
 
-def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str], out_dir: Path, review_head: str = "") -> tuple[Path, str]:
+def memo_docx(
+    run: Run, findings: list[Finding], section_titles: dict[str, str], out_dir: Path, review_head: str = "", clauses: dict[str, str] | None = None
+) -> tuple[Path, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     document = DocxDocument()
     normal = document.styles["Normal"]
     normal.font.name = "Georgia"
     normal.font.size = Pt(11)
     _ensure_hyperlink_style(document)
-    sources = _sources(findings, section_titles)
+    sources = _sources(findings, section_titles, clauses)
     by_span = {id(s.span): s for s in sources}
     _properties(document, run, sum(1 for s in sources if s.span.verified), len(sources), review_head)
 

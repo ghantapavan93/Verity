@@ -3,7 +3,7 @@
 import styles from "../Workbench.module.css";
 import type { Highlight } from "./DocumentPane";
 import { codePointLength } from "@/lib/text";
-import { citationLabel, isLocated, type DocumentView, type FindingView, type LocatedSpan, type SectionView } from "@/lib/types";
+import { isLocated, passageLabel, type DocumentView, type FindingView, type LocatedSpan, type SectionView } from "@/lib/types";
 
 /** One verified quote, placed along the contract: how far into the text it begins, as a share of the whole. */
 interface Tick {
@@ -59,8 +59,8 @@ export function EvidenceSpine({
             type="button"
             className={`${styles.spineTick} ${current ? styles.spineTickCurrent : ""}`}
             style={{ top: `${Math.min(99, Math.max(1, tick.at * 100))}%` }}
-            title={`${tick.topic}: ${citationLabel(tick.section)}`}
-            aria-label={`${tick.topic}, ${citationLabel(tick.section)}: show in the document`}
+            title={`${tick.topic}: ${passageLabel(tick.span, tick.section)}`}
+            aria-label={`${tick.topic}, ${passageLabel(tick.span, tick.section)}: show in the document`}
             onClick={() => onJump(tick.span.sectionId, tick.span)}
           />
         );
