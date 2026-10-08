@@ -81,6 +81,8 @@ def file_type(filename: str, data: bytes) -> str:
     suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
     if suffix not in SUPPORTED:
         raise UnsupportedFile(f"unsupported file type {suffix or '(none)'}; upload .docx, .pdf or .txt")
+    if not data:  # an empty file was "not a readable PDF" or "no readable text found", which sent the reader looking at the file's form
+        raise UnsupportedFile("the file is empty")
     found = content_type(data)
     if suffix == ".txt" and found is not None:
         raise UnsupportedFile(f"the file is a {'PDF' if found == '.pdf' else 'zip package such as a .docx'}, not plain text; upload it as {found}")

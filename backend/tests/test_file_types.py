@@ -101,3 +101,14 @@ def test_the_same_bytes_are_accepted_under_at_most_one_type(head: bytes, body: b
         with contextlib.suppress(UnsupportedFile):
             accepted.add(file_type(name, data))
     assert len(accepted) <= 1
+
+
+@pytest.mark.parametrize("name", ["empty.pdf", "empty.docx", "empty.txt"])
+def test_an_empty_file_is_refused_as_empty_whatever_its_type(client: TestClient, name: str) -> None:
+    response = client.post("/api/documents", files={"file": (name, b"", "application/octet-stream")})
+    assert response.status_code == 422 and response.json()["detail"] == "the file is empty"
+
+
+def test_controls_whitespace_is_not_empty_and_an_unsupported_empty_file_is_unsupported(client: TestClient) -> None:
+    assert client.post("/api/documents", files={"file": ("blank.txt", b"  \n", "text/plain")}).json()["detail"] == "no readable text found in the file"
+    assert "unsupported file type .docm" in client.post("/api/documents", files={"file": ("x.docm", b"", "application/octet-stream")}).json()["detail"]

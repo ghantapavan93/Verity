@@ -66,7 +66,7 @@ def test_malformed_and_empty_files_are_refused_at_the_boundary(client: TestClien
     pdf = client.post("/api/documents", files={"file": ("broken.pdf", b"%PDF-1.4 garbage without a trailer", "application/pdf")})
     assert pdf.status_code == 422 and "not a readable PDF" in pdf.json()["detail"]
     empty = client.post("/api/documents", files={"file": ("empty.txt", b"", "text/plain")})
-    assert empty.status_code == 422 and "no readable text" in empty.json()["detail"]
+    assert empty.status_code == 422 and empty.json()["detail"] == "the file is empty"
 
 
 def test_an_oversized_upload_is_refused_before_parsing(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
