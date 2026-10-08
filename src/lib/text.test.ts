@@ -38,3 +38,18 @@ describe("revealInvisible", () => {
     }
   });
 });
+
+describe("revealInvisible, the characters reader v10 also removes", () => {
+  it("marks a joiner or selector between two ASCII letters or digits, as the reader removes it there", () => {
+    for (const cp of [0x034f, 0xfe00, 0xfe0f, 0xe0100, 0x200d, 0x3164]) {
+      const ch = String.fromCodePoint(cp);
+      expect(revealInvisible(`9${ch}0 days`).map((p) => p.invisible)).toEqual([false, true, false]);
+    }
+  });
+
+  it("leaves a keycap, an emoji form and a CJK variant as text", () => {
+    for (const text of ["9\ufe0f\u20e3", "\u2764\ufe0f", "\u6f22\ufe00", "a\ufe0f b"]) {
+      expect(revealInvisible(text)).toEqual([{ text, invisible: false }]);
+    }
+  });
+});

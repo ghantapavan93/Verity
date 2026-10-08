@@ -38,7 +38,10 @@ MAX_NAME = 255
 # v9 (2026-10-08): every format. Invisible format characters (Unicode Cf: zero-width space, soft hyphen, word joiner,
 # byte-order mark, tag characters, direction controls) are removed where the text is first read, and counted in the
 # coverage; a file that held "\u202e09\u202c days" displayed "90 days" while everything that checks it read "09".
-PARSER_VERSION = "v9"
+# v10 (2026-10-08): every format. Also removed: the default-ignorable characters that are not Cf (variation selectors,
+# the combining grapheme joiner, Hangul fillers) where they sit between two ASCII letters or digits; v9 kept them, and
+# "9\ufe0f0 days" displayed "90 days" while the day parser read 0. Nothing else a v9 reading holds changes.
+PARSER_VERSION = "v10"
 
 
 @dataclass

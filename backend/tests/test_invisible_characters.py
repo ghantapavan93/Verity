@@ -81,6 +81,40 @@ def test_the_read_boundary_cleans_whatever_a_reader_returns(monkeypatch: pytest.
     assert result.blocks[0].text == "pay within 90 days" and result.title == "Title" and result.format_characters == 1
 
 
+@pytest.mark.parametrize(
+    "hidden",
+    ["\u034f", "\ufe00", "\ufe0f", "\U000e0100", "\u17b4", "\u180b", "\u3164", "\u115f"],
+    ids=[
+        "combining-grapheme-joiner",
+        "variation-selector-1",
+        "variation-selector-16",
+        "variation-selector-17",
+        "khmer-vowel-inherent",
+        "mongolian-fvs1",
+        "hangul-filler",
+        "hangul-choseong-filler",
+    ],
+)
+def test_an_invisible_character_that_is_not_a_format_character_is_removed_between_digits(hidden: str) -> None:
+    """Triage review, 2026-10-08: reader v9 removed only Cf, and "9<U+FE0F>0 days" still displayed 90 and parsed as 0."""
+    text = body("notice.txt", f"1. Termination\n\nEither party may terminate on 9{hidden}0 days written notice.\n".encode())
+    assert "terminate on 90 days" in text
+    mentions = parse_durations(text)
+    duration = mentions[0].duration if mentions else None
+    assert duration is not None and str(duration.value) == "90"
+
+
+def test_controls_a_keycap_an_emoji_form_and_a_cjk_variant_keep_their_selectors() -> None:
+    for text in ("9\ufe0f\u20e3", "\u2764\ufe0f", "\u6f22\ufe00", "a\ufe0f b"):
+        assert remove_format_characters(text) == (text, 0)
+
+
+def test_the_unicode_database_is_the_one_the_reader_was_versioned_under() -> None:
+    """The Cf set is read from Python's Unicode database. A Python whose database differs may remove other characters
+    from the same bytes, which is a new reading: change the reader version with it, then this pin."""
+    assert unicodedata.unidata_version == "15.1.0"
+
+
 def test_controls_scripts_emoji_and_direction_marks_are_text() -> None:
     for text in ("שלום مرحبا", "\U0001f468\u200d\U0001f469\u200d\U0001f467", "a\u200eb\u200fc", "م\u200cن"):
         assert remove_format_characters(text) == (text, 0)
@@ -116,7 +150,11 @@ def test_guidance_a_question_and_a_review_are_stored_as_they_are_seen(client: Te
 
 
 VISIBLE = st.text(alphabet=st.sampled_from(list("0123456789 abcdefxyz.,")), min_size=1, max_size=40)
-INVISIBLE = st.sampled_from(["\u200b", "\u00ad", "\ufeff", "\u2060", "\u202e", "\u202c", "\u2066", "\u2069", "\U000e0041", "\u200d"])
+INVISIBLE = st.sampled_from(
+    ["\u200b", "\u00ad", "\ufeff", "\u2060", "\u202e", "\u202c", "\u2066", "\u2069", "\U000e0041", "\u200d", "\ufe0f", "\u034f", "\U000e0100"]
+)
+# Kept beside anything that is not an ASCII letter or digit: they shape or vary the character they follow.
+SHAPING = "\u200c\u200d\ufe0f\u034f\U000e0100"
 
 
 @settings(max_examples=300, deadline=None)
@@ -125,6 +163,6 @@ def test_removing_invisible_characters_leaves_exactly_the_visible_text(pieces: l
     hidden = "".join(text + mark for text, mark in pieces)
     visible = "".join(text for text, _ in pieces)
     cleaned, count = remove_format_characters(hidden)
-    # A joiner is kept only between characters that are not both ASCII letters or digits; here every neighbour is ASCII.
+    # A joiner or selector is kept only beside a character that is not an ASCII letter or digit (a space, a stop).
     assert all(unicodedata.category(ch) != "Cf" or ch in KEPT for ch in cleaned)
-    assert cleaned.replace("\u200d", "") == visible and count == len(hidden) - len(cleaned)
+    assert "".join(ch for ch in cleaned if ch not in SHAPING) == visible and count == len(hidden) - len(cleaned)

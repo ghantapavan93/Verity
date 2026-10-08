@@ -7,7 +7,8 @@ while the model, the verifier and the day parser read "09", and "9\u200b0 days" 
 reads 0 (adversarial review, 2026-10-08). The invariant: the text a person reads is the text that was checked.
 
 Kept, because text needs them: the zero-width joiner and non-joiner (emoji sequences, the shaping of Arabic and Indic
-scripts) except between two ASCII letters or digits, where nothing is shaped; and the left-to-right, right-to-left and
+scripts) and the other default-ignorable characters (variation selectors, the combining grapheme joiner, Hangul fillers)
+except between two ASCII letters or digits, where nothing is shaped or varied; and the left-to-right, right-to-left and
 Arabic letter marks, which order neutral characters and cannot reverse a run.
 """
 
@@ -19,7 +20,12 @@ from functools import cache
 
 JOINERS = "\u200c\u200d"  # zero-width non-joiner and joiner
 MARKS = "\u200e\u200f\u061c"  # left-to-right, right-to-left and Arabic letter marks
-_JOINER_IN_ASCII = re.compile(rf"(?<=[A-Za-z0-9])[{JOINERS}]+(?=[A-Za-z0-9])")
+# Default-ignorable code points that are not format characters (Unicode's Default_Ignorable_Code_Point less Cf):
+# invisible, yet the Cf pass keeps them. Between two ASCII letters or digits they join or vary nothing, and there
+# "9\ufe0f0 days" displayed "90 days" while the day parser read 0 (triage review, 2026-10-08). Elsewhere they are
+# kept: a variation selector chooses an emoji's or a CJK character's form, and a keycap is a digit, U+FE0F and U+20E3.
+IGNORABLE = "\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180d\u180f\u3164\ufe00-\ufe0f\uffa0\U000e0100-\U000e01ef"
+_BETWEEN_ASCII = re.compile(rf"(?<=[A-Za-z0-9])[{JOINERS}{IGNORABLE}]+(?=[A-Za-z0-9])")
 
 
 @cache
@@ -34,7 +40,7 @@ def _format_characters() -> re.Pattern[str]:
 
 def remove_format_characters(text: str) -> tuple[str, int]:
     """The text without invisible format characters, and how many were removed."""
-    cleaned = _JOINER_IN_ASCII.sub("", _format_characters().sub("", text))
+    cleaned = _BETWEEN_ASCII.sub("", _format_characters().sub("", text))
     return cleaned, len(text) - len(cleaned)
 
 
