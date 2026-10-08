@@ -25,6 +25,7 @@ import { useMemoAction } from "./hooks/useMemoAction";
 import { useRunFollower } from "./hooks/useRunFollower";
 import { useUrlState } from "./hooks/useUrlState";
 import { Landing } from "./landing/Landing";
+import { chooseProof } from "./landing/proofRun";
 import { Rail } from "./shell/Rail";
 import { type Stage, TERMINAL, type View, transitions } from "./shell/constants";
 import { DocumentsView } from "./views/DocumentsView";
@@ -53,7 +54,7 @@ const READY_PAUSE_MS = 450;
 const SAMPLE_PATH = "/samples/cloud-service-agreement.docx";
 const SAMPLE_NAME = "Cloud Service Agreement (Common Paper).docx";
 // The run the first screen offers as a finished review, set at build time for a deployment whose store holds it
-// (the Phase 1 proof run, docs/DEMO-PROOF.md); otherwise the latest complete run with findings.
+// (the Phase 1 proof run, docs/DEMO-PROOF.md), and that run or none (landing/proofRun.ts); otherwise the latest complete run with findings.
 const PROOF_RUN_ID = process.env.NEXT_PUBLIC_PROOF_RUN ?? "";
 
 /** The workbench, behind the gate the API keeps (access/AccessGate.tsx): nothing below mounts, and so nothing asks the API, until the reader is through it. */
@@ -132,12 +133,8 @@ function WorkbenchSurface() {
     listDocuments()
       .then((rows) => !cancelled && setRecent(rows.slice(0, 3)))
       .catch(() => !cancelled && setRecent([]));
-    listRuns()
-      .then((rows) => {
-        if (cancelled) return;
-        const named = PROOF_RUN_ID ? rows.find((r) => r.id === PROOF_RUN_ID) : undefined;
-        setProof(named ?? rows.find((r) => r.stage === "complete" && r.findings > 0) ?? null);
-      })
+    chooseProof(PROOF_RUN_ID, listRuns, getRunDetail)
+      .then((run) => !cancelled && setProof(run))
       .catch(() => !cancelled && setProof(null));
     return () => {
       cancelled = true;
