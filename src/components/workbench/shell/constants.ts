@@ -19,3 +19,7 @@ export function transitions(reduceMotion: boolean) {
     quick: reduceMotion ? { duration: 0 } : { duration: 0.18, ease: EASE },
   };
 }
+
+/** The width at or below which the paper is hidden (Workbench.module.css, "@media (max-width: 640px)"); a control that
+ * would show a passage on the paper shows it in the evidence sheet instead. Keep the two in step. */
+export const NARROW_QUERY = "(max-width: 640px)";

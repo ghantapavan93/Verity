@@ -95,9 +95,13 @@ export function AssistantPanel({
   const question = run?.question ?? pending?.question ?? "";
   const checkingLabel = guidance.guidance ? "Checking against guidance" : "Checking the contract";
 
+  // The evidence sheet covers this panel: what it covers cannot be reached by Tab or a screen reader while it is open
+  // (QA review, 2026-10-08: Tab reached "Add guidance" and the memo action behind the sheet). The paper stays usable.
+  const covered = evidence !== null;
+
   return (
     <div className={styles.assistantPane}>
-      <header className={styles.assistantHeader}>
+      <header className={styles.assistantHeader} inert={covered}>
         <div className={styles.assistantTitleRow}>
           <div className={styles.assistantTitle}>Questions</div>
           <button type="button" className={styles.kbdHint} onClick={onOpenPalette} aria-label="Open commands">
@@ -113,7 +117,7 @@ export function AssistantPanel({
         <GuidanceScope documentName={doc?.name.replace(/\.[^.]+$/, "") ?? ""} guidance={guidance} reduceMotion={reduceMotion} />
       </header>
 
-      <div className={styles.assistantBody}>
+      <div className={styles.assistantBody} inert={covered}>
         {!run && !pending ? (
           <div className={styles.assistantIdle}>
             <div className={styles.assistantKicker}>Ask about this contract</div>
@@ -238,9 +242,14 @@ export function AssistantPanel({
         )}
       </div>
 
-      <motion.div layoutId="composer" className={`${styles.composer} ${styles.assistantComposer}`} transition={morph}>
+      {/* Each question is its own run: no earlier answer reaches the model, so a follow-up must say what it refers to. */}
+      <p className={styles.composerNote} id="composer-note" inert={covered}>
+        Each question is answered on its own, from this contract; earlier answers are not carried over.
+      </p>
+      <motion.div layoutId="composer" className={`${styles.composer} ${styles.assistantComposer}`} transition={morph} inert={covered}>
         <textarea
           ref={inputRef}
+          aria-describedby="composer-note"
           className={styles.composerInput}
           placeholder="Ask a question about this contract"
           rows={1}

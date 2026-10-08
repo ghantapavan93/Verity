@@ -148,9 +148,15 @@ function WorkbenchSurface() {
 
   const loadFile = useCallback(
     async (file: File, sample = false) => {
+      // The first screen's box promises "Your question, asked once the contract is added": a question typed there is
+      // asked when the document opens. Until 2026-10-08 it was carried into the composer and left unsent (QA review).
+      // A file added from inside the workspace sends nothing the person did not send themselves.
+      const question = stage !== "workspace" ? composerText.trim() : "";
       setUploadError(null);
       setPendingName(file.name);
       setProcessingLabel("Reading document");
+      // A file added from another view (Documents) is read on the first screen, where its progress and result show.
+      setView("assistant");
       setStage("processing");
       try {
         const uploaded = await uploadDocument(file);
@@ -161,13 +167,20 @@ function WorkbenchSurface() {
         setHighlight(null);
         setEvidence(null);
         setProcessingLabel("Ready");
-        window.setTimeout(() => setStage("workspace"), READY_PAUSE_MS);
+        window.setTimeout(() => {
+          setStage("workspace");
+          if (!question) return;
+          setComposerText("");
+          void startRun(uploaded.id, guidanceRecord?.id ?? null, question).then((started) => {
+            if (!started) setComposerText(question); // the API refused it; the words are the person's, not the error's
+          });
+        }, READY_PAUSE_MS);
       } catch (error) {
         setUploadError(errorMessage(error));
         setStage("empty");
       }
     },
-    [showRun, resetMemo],
+    [showRun, resetMemo, stage, composerText, startRun, guidanceRecord],
   );
 
   const loadSample = useCallback(async () => {
@@ -352,13 +365,21 @@ function WorkbenchSurface() {
     [run, showRun],
   );
 
+  // Focus returns to the control that opened the sheet after the sheet is gone: the panel under the sheet is inert
+  // while it is open, and a focus call made before that render lands nowhere (found by the 2026-10-08 browser pass).
+  const restoreFocusRef = useRef(false);
   const closeEvidence = useCallback(() => {
+    restoreFocusRef.current = true;
     setEvidence(null);
-    evidenceTriggerRef.current?.focus();
   }, []);
 
   useEffect(() => {
-    if (evidence) drawerCloseRef.current?.focus();
+    if (evidence) {
+      drawerCloseRef.current?.focus();
+    } else if (restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      evidenceTriggerRef.current?.focus();
+    }
   }, [evidence]);
 
   // A finding opened from the Findings surface: once its document and run are on screen
@@ -495,10 +516,7 @@ function WorkbenchSurface() {
                       currentId={doc?.id ?? null}
                       notice={viewError}
                       onOpen={(id) => void openDocument(id)}
-                      onAdd={() => {
-                        setView("assistant");
-                        setStage("empty");
-                      }}
+                      onAdd={() => fileInputRef.current?.click()}
                     />
                   )}
                   {view === "findings" && <FindingsView notice={viewError} onOpen={(record) => void openRun(record.runId, record.id)} />}

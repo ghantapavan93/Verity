@@ -1,6 +1,7 @@
 "use client";
 
 import styles from "../Workbench.module.css";
+import { NARROW_QUERY } from "../shell/constants";
 import { StatusChip } from "../shell/primitives";
 import { isLocated, passageLabel, type FindingView, type SectionView, type SpanView } from "@/lib/types";
 
@@ -48,7 +49,14 @@ export function FindingCard({
             {finding.review ? ` · ${finding.review.verdict === "confirmed" ? "Confirmed" : "Dismissed"} by ${finding.review.reviewer}` : ""}
           </div>
           {evidence.map(({ span, section }, i) => (
-            <button key={i} type="button" className={styles.citationRow} onClick={() => onJump(section.id, span)} title="Show in the document">
+            <button
+              key={i}
+              type="button"
+              className={styles.citationRow}
+              // The paper is hidden on a narrow screen: the passage is shown in the evidence sheet, not jumped to on nothing.
+              onClick={(e) => (window.matchMedia(NARROW_QUERY).matches ? onEvidence(e.currentTarget) : onJump(section.id, span))}
+              title="Show in the document"
+            >
               <span className={styles.citationLabel}>{passageLabel(span, section)}</span>
               <span className={styles.citationExcerpt}>{excerpt(span.quote)}</span>
             </button>
@@ -56,14 +64,19 @@ export function FindingCard({
         </div>
       )}
       <div className={styles.resultActions}>
-        <button type="button" className={styles.actionButton} onClick={() => primary && onJump(primary.section.id, primary.span)} disabled={!primary}>
+        <button
+          type="button"
+          className={`${styles.actionButton} ${styles.wideOnly}`}
+          onClick={() => primary && onJump(primary.section.id, primary.span)}
+          disabled={!primary}
+        >
           View in document
         </button>
         <button type="button" className={`${styles.actionButton} ${styles.actionPrimary}`} onClick={(e) => onEvidence(e.currentTarget)}>
           Inspect evidence
         </button>
         <button type="button" className={styles.actionButton} onClick={onFollowUp}>
-          Ask follow-up
+          Ask another question
         </button>
       </div>
     </article>

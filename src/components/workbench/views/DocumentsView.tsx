@@ -39,10 +39,15 @@ export function DocumentsView({
     <div className={styles.pane}>
       <div className={styles.inner}>
         <div className={styles.kicker}>Documents</div>
-        <h1 className={styles.title}>
-          Contracts in this workbench
-          {documents && <span className={styles.count}>{documents.length}</span>}
-        </h1>
+        <div className={styles.titleRow}>
+          <h1 className={styles.title}>
+            Contracts in this workbench
+            {documents && <span className={styles.count}>{documents.length}</span>}
+          </h1>
+          <button type="button" className={wb.ghostButton} onClick={onAdd}>
+            Add a contract
+          </button>
+        </div>
         <p className={styles.lede}>Each upload is read into numbered sections and stored with its SHA-256. Open one to ask about it.</p>
         {documents && documents.length > 0 && (
           <Figures
