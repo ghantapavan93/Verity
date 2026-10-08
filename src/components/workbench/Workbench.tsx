@@ -76,6 +76,7 @@ function WorkbenchSurface() {
   const [isSample, setIsSample] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [apiHealth, setApiHealth] = useState<Health | null>(null);
+  const [accessKnown, setAccessKnown] = useState(true);
   const [evidence, setEvidence] = useState<FindingView | null>(null);
   // A finished review a visitor can open from the first screen: the run named at build time, else the latest
   // complete run with findings in this store. A record, never a manufactured example.
@@ -112,7 +113,12 @@ function WorkbenchSurface() {
     let cancelled = false;
     health()
       .then((h) => !cancelled && setApiHealth(h))
-      .catch((error: unknown) => !cancelled && setApiHealth({ ok: false, provider: "", model: "", detail: errorMessage(error), access: "off" }));
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        // The API could not be asked, so nothing is known about its door: the first screen claims neither open nor private.
+        setAccessKnown(false);
+        setApiHealth({ ok: false, provider: "", model: "", detail: errorMessage(error), access: "off" });
+      });
     return () => {
       cancelled = true;
     };
@@ -470,6 +476,7 @@ function WorkbenchSurface() {
             onOpenProof={(id, findingId) => void openRun(id, findingId)}
             uploadError={uploadError}
             apiHealth={apiHealth}
+            accessKnown={accessKnown && apiHealth !== null}
             recent={recent}
             onOpenDocument={(id) => void openDocument(id)}
             onAllDocuments={() => navigate("documents")}

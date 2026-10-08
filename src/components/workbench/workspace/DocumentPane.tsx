@@ -7,7 +7,7 @@ import { transitions } from "../shell/constants";
 import { formatWhen, plural } from "@/lib/format";
 import { codePointLength, splitByCodePoints } from "@/lib/text";
 import { EvidenceSpine } from "./EvidenceSpine";
-import type { DocumentView, FindingView, LocatedSpan, SectionView, SpanView } from "@/lib/types";
+import { partOf, type DocumentView, type FindingView, type LocatedSpan, type SectionView, type SpanView } from "@/lib/types";
 
 /** The passage to mark: a section, and within it the exact span the API located. */
 export interface Highlight {
@@ -106,14 +106,21 @@ function SectionBlock({ section, lit, span }: { section: SectionView; lit: boole
   ) : (
     section.text
   );
+  const part = partOf(section.heading);
+  const heading = part ? part.base : section.heading;
   return (
     <section data-section={section.id} className={`${styles.clause} ${lit ? styles.clauseLit : ""}`}>
-      {section.number ? (
+      {part && part.index > 1 ? (
+        <p className={styles.partContinued}>
+          {section.number ? `${section.number} ` : ""}
+          {part.base}, continued
+        </p>
+      ) : section.number ? (
         <h3 className={styles.clauseTitle}>
-          <span className={styles.clauseNumber}>{section.number}</span> {section.heading}
+          <span className={styles.clauseNumber}>{section.number}</span> {heading}
         </h3>
       ) : (
-        <h2 className={styles.docHeading}>{section.heading}</h2>
+        <h2 className={styles.docHeading}>{heading}</h2>
       )}
       {section.text && <p className={styles.clauseBody}>{body}</p>}
     </section>

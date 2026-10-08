@@ -15,6 +15,7 @@ import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
 import {
   citationLabel,
   passageLabel,
+  codeAccount,
   codeRole,
   decidedByCode,
   statusLabel,
@@ -155,7 +156,7 @@ function EvidenceBody({
             who: "Code",
             what: setByModel ? "did not decide" : plainLabel(statusLabel(finding.status, hasGuidance, finding.statusSource)),
             tone: setByModel ? "muted" : toneOf(finding.status),
-            note: overruled ? "the day counts conflict" : confirmed ? "confirmed the model's call" : undefined,
+            note: setByModel ? undefined : codeAccount(finding.statusSource).note || undefined,
             decisive: !setByModel,
           },
           {
@@ -280,7 +281,9 @@ function EvidenceBody({
               {span.verified && match && (
                 <div className={styles.drawerRefStatic}>
                   {match.relocated
-                    ? `Found in ${match.locatedHeading || "another section"}, not in the section the model cited.`
+                    ? span.clauseLabel && match.locatedHeading
+                      ? `Found in ${span.clauseLabel}, within ${match.locatedHeading}, not in the section the model cited.`
+                      : `Found in ${match.locatedHeading || "another section"}, not in the section the model cited.`
                     : "Found where the model cited it."}
                   {match.matchCount != null && match.matchCount > 1 ? ` It occurs ${match.matchCount} times there; the first is highlighted.` : ""}
                   {match.insideModelVisibleContext === false ? " It lies outside the text the model was shown." : ""}
@@ -323,7 +326,7 @@ function EvidenceBody({
                   ? "No comparable day counts, so the model's hint stands as its view."
                   : finding.statusSource === "no_evidence"
                     ? "No verified passage, so no status was given."
-                    : "Lowered by code: " + statusLabel(finding.status, hasGuidance, finding.statusSource).toLowerCase())}
+                    : codeAccount(finding.statusSource).sentence)}
             </dd>
           </div>
           <div>

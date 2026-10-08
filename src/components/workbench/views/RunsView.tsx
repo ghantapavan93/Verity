@@ -11,8 +11,8 @@ import { useEffect, useState } from "react";
 import wb from "../Workbench.module.css";
 import { WhyThisAnswer } from "../assistant/WhyThisAnswer";
 import { TERMINAL } from "../shell/constants";
+import { StatusChip } from "../shell/primitives";
 import styles from "./Views.module.css";
-import { statusTone } from "./FindingsView";
 import { Figures, MethodBar } from "./Figures";
 import { ListSkeleton, ReadFailed } from "./Skeleton";
 import { ContractState } from "./ContractState";
@@ -21,7 +21,6 @@ import { formatClock, formatDelta, formatLatency, formatWhen, plural, shortHash 
 import {
   OUTCOME_LABELS,
   REASON_TITLES,
-  statusLabel,
   STATUS_SOURCE_LABELS,
   retrievalNote,
   type BatchSummary,
@@ -501,7 +500,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
           <article key={f.id} className={styles.finding}>
             <div className={styles.findingHead}>
               <span>{f.topic}</span>
-              <span className={`${wb.statusChip} ${statusTone(f.status)}`}>{statusLabel(f.status, run.hasGuidance, f.statusSource)}</span>
+              <StatusChip status={f.status} hasGuidance={run.hasGuidance} source={f.statusSource} />
             </div>
             <p className={styles.findingText}>{f.conclusion}</p>
             <p className={styles.quiet}>{STATUS_SOURCE_LABELS[f.statusSource] ?? f.statusSource}</p>

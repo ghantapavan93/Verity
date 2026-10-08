@@ -3,7 +3,7 @@
 import styles from "../Workbench.module.css";
 import { useRunExplanation } from "../hooks/useRunExplanation";
 import { shortHash } from "@/lib/format";
-import { retrievalNote, statusLabel, type RunExplanationView } from "@/lib/types";
+import { codeRole, retrievalNote, statusLabel, type RunExplanationView } from "@/lib/types";
 
 /**
  * Why this answer: the run explained from its record. The API assembles the explanation
@@ -268,7 +268,7 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
             <div>
               <dt>
                 {f.recordedPolicyEvaluation.deterministic
-                  ? "Code found a conflict"
+                  ? codeRole(f.recordedPolicyEvaluation.statusSource)
                   : f.recordedPolicyEvaluation.statusSource === "confirmed_days"
                     ? "Proposed by the model, confirmed by code"
                     : "Not decided by code"}

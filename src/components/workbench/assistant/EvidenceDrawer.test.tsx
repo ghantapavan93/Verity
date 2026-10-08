@@ -91,6 +91,28 @@ describe("EvidenceDrawer", () => {
   });
   afterEach(cleanup);
 
+  it("names the clause a relocated passage sits in, then the reading's section, never the section alone", async () => {
+    const base = finding(null);
+    const placed = { ...base, spans: base.spans.map((span) => ({ ...span, clauseLabel: "§4.1 Termination Without Cause" })) } as unknown as FindingView;
+    renderDrawer(placed);
+    const drawer = screen.getByLabelText("Evidence");
+    await within(drawer).findByText("Its hint");
+    const source = within(drawer).getByTestId("layer-source");
+    expect(source.textContent).toContain("Found in §4.1 Termination Without Cause, within EXHIBIT 10.102 (part 1), not in the section the model cited.");
+    expect(within(source).getByRole("button", { name: "§4.1 Termination Without Cause" })).toBeTruthy();
+  });
+
+  it("says which check lowered a finding: a reference check is not a day-count conflict", async () => {
+    const lowered = { ...finding(null), statusSource: "reference_check", statusReason: null } as unknown as FindingView;
+    renderDrawer(lowered);
+    const drawer = screen.getByLabelText("Evidence");
+    const code = within(drawer).getByTestId("layer-code");
+    expect(within(code).getByRole("heading", { level: 4 }).textContent).toBe("Code lowered it");
+    expect(code.textContent).toContain("the conclusion names a section this document does not have");
+    expect(drawer.textContent).not.toContain("day counts conflict");
+    expect(drawer.textContent).toContain("names a section not in this document");
+  });
+
   it("shows the Phase 1 finding in four layers, in order, with the machinery behind Prove it", async () => {
     renderDrawer(finding(CONFIRMED));
     const drawer = screen.getByLabelText("Evidence");

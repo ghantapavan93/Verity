@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import wb from "../Workbench.module.css";
 import styles from "./Views.module.css";
+import { StatusChip } from "../shell/primitives";
 import { Figures } from "./Figures";
 import { ListSkeleton, ReadFailed } from "./Skeleton";
 import { errorMessage, listFindings, reviewFinding } from "@/lib/api";
 import { formatWhen, plural } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
-import { statusLabel, type FindingRecord, type FindingStatus, type ReviewVerdict } from "@/lib/types";
+import { type FindingRecord, type FindingStatus, type ReviewVerdict } from "@/lib/types";
 
 /** What the figures at the top can narrow the list to. */
 type Filter = "all" | "needs_review" | "pass" | "missing" | "awaiting";
@@ -17,10 +18,6 @@ function keep(filter: Filter, r: FindingRecord): boolean {
   if (filter === "all") return true;
   if (filter === "awaiting") return !r.review;
   return r.status === filter;
-}
-
-export function statusTone(status: FindingStatus): string {
-  return status === "needs_review" ? wb.statusReview : status === "pass" ? wb.statusPass : wb.statusMuted;
 }
 
 type Decision = Exclude<ReviewVerdict, "cleared">;
@@ -163,7 +160,11 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                         <span
                           key={c}
                           className={`${styles.tag} ${r.evidenceKind === "coverage" ? styles.tagSearched : ""}`}
-                          title={r.evidenceKind === "coverage" ? "Read while searching; in the model's view it does not state the point" : "Verified passage"}
+                          title={
+                            r.evidenceKind === "coverage"
+                              ? `${c}: read while searching; in the model's view it does not state the point`
+                              : `${c}: a passage found in the document text`
+                          }
                         >
                           {r.evidenceKind === "coverage" ? `searched ${c}` : c}
                         </span>
@@ -171,7 +172,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                       {r.citations.length === 0 && <span className={styles.tag}>{plural(r.verifiedSpans, "passage")}</span>}
                     </div>
                     <div className={styles.rowSide}>
-                      <span className={`${wb.statusChip} ${statusTone(r.status)}`}>{statusLabel(r.status, r.hasGuidance, r.statusSource)}</span>
+                      <StatusChip status={r.status} hasGuidance={r.hasGuidance} source={r.statusSource} />
                       <span>{formatWhen(r.createdAt)}</span>
                     </div>
                   </button>

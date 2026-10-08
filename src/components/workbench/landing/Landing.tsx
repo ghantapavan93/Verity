@@ -39,6 +39,7 @@ export function Landing({
   onOpenProof,
   uploadError,
   apiHealth,
+  accessKnown,
   recent,
   onOpenDocument,
   onAllDocuments,
@@ -57,6 +58,8 @@ export function Landing({
   onOpenProof: (runId: string, findingId?: string) => void;
   uploadError: string | null;
   apiHealth: Health | null;
+  /** Whether the API has said what its door is; until it has, the screen claims neither open nor private. */
+  accessKnown: boolean;
   recent: DocumentSummary[];
   onOpenDocument: (id: string) => void;
   onAllDocuments: () => void;
@@ -99,8 +102,11 @@ export function Landing({
       : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] as const } };
 
   // What the API says the door is: off means every record made here is readable by whoever reaches the site, and
-  // the first screen must say so rather than call it private.
-  const openPreview = apiHealth?.access === "off";
+  // the first screen must say so rather than call it private. Until the API has said (or when it could not be asked),
+  // the screen claims neither: it used to read "Private preview … readable through your invite and no other" for the
+  // first seconds of an open site (QA review, 2026-10-08).
+  const openPreview = accessKnown && apiHealth?.access === "off";
+  const privatePreview = accessKnown && (apiHealth?.access === "required" || apiHealth?.access === "entered");
 
   return (
     <motion.section
@@ -118,7 +124,7 @@ export function Landing({
         </button>
         <span className={styles.preview}>
           <span className={styles.previewDot} aria-hidden="true" />
-          {openPreview ? "Open preview" : "Private preview"}
+          {openPreview ? "Open preview" : privatePreview ? "Private preview" : "Preview"}
         </span>
       </header>
 
@@ -190,8 +196,12 @@ export function Landing({
                   <div className={styles.dropText}>
                     <div className={styles.dropTitle}>Drop a contract here</div>
                     <div className={styles.dropHint}>
-                      PDF, DOCX or TXT. It is read into numbered sections and stored with its SHA-256 on this machine,{" "}
-                      {openPreview ? "where anyone with this address can open it: this preview is open." : "readable through your invite and no other."}
+                      PDF, DOCX or TXT. It is read into numbered sections and stored with its SHA-256 on this machine
+                      {openPreview
+                        ? ", where anyone with this address can open it: this preview is open."
+                        : privatePreview
+                          ? ", readable through your invite and no other."
+                          : "."}
                     </div>
                   </div>
                   <button type="button" className={styles.primary} aria-label="Add a contract" onClick={onPickFile}>

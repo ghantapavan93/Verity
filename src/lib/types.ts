@@ -129,10 +129,36 @@ export function decidedByCode(source: string | null | undefined): boolean {
  * a day comparison establishes: two periods that do not agree. Whether they concern the same point is the model's
  * reading. "Code confirmed" is a record made under policy v2, when code still confirmed a pass; it no longer does.
  */
-export function codeRole(source: string | null | undefined): "Code found a conflict" | "Code confirmed" | "Code withheld" | "Code did not decide" {
-  if (decidedByCode(source)) return "Code found a conflict";
-  if (source === "confirmed_days") return "Code confirmed";
-  return source === "no_evidence" ? "Code withheld" : "Code did not decide";
+export function codeRole(source: string | null | undefined): CodeAccount["role"] {
+  return codeAccount(source).role;
+}
+
+export interface CodeAccount {
+  role: "Code found a conflict" | "Code lowered it" | "Code confirmed" | "Code withheld" | "Code did not decide";
+  /** A few words for the drawer's summary strip. */
+  note: string;
+  /** What the check did, when the record carries no sentence of its own. */
+  sentence: string;
+}
+
+/**
+ * What code did about a finding, by the check recorded as its status source: the one table every surface reads. Only a
+ * day comparison finds a conflict; the other checks lower a finding for their own reason, and say which. Until
+ * 2026-10-08 every code-set status was headed "Code found a conflict" and noted "the day counts conflict", including a
+ * reference check that compared no days (QA review: an amendment citing its base agreement's sections).
+ */
+const CODE_ACCOUNTS: Record<string, CodeAccount> = {
+  computed_days: { role: "Code found a conflict", note: "the day counts conflict", sentence: STATUS_SOURCE_LABELS.computed_days },
+  reference_check: { role: "Code lowered it", note: "names a section not in this document", sentence: STATUS_SOURCE_LABELS.reference_check },
+  position_check: { role: "Code lowered it", note: "a day count not in the quote", sentence: STATUS_SOURCE_LABELS.position_check },
+  ambiguous_fact: { role: "Code lowered it", note: "the quote states no one period", sentence: STATUS_SOURCE_LABELS.ambiguous_fact },
+  confirmed_days: { role: "Code confirmed", note: "confirmed the model's call", sentence: STATUS_SOURCE_LABELS.confirmed_days },
+  no_evidence: { role: "Code withheld", note: "no passage found", sentence: STATUS_SOURCE_LABELS.no_evidence },
+};
+const NOT_DECIDED: CodeAccount = { role: "Code did not decide", note: "", sentence: STATUS_SOURCE_LABELS.model_hint };
+
+export function codeAccount(source: string | null | undefined): CodeAccount {
+  return (source != null && CODE_ACCOUNTS[source]) || NOT_DECIDED;
 }
 
 /**
@@ -152,6 +178,18 @@ export function sectionsReadNote(mode: RunView["retrievalMode"], read: number, t
   return mode === "opening_fallback"
     ? `retrieval ranked no section for this question, so the model was handed the opening ${read} of this document's ${total} sections`
     : `the model was handed ${read} of this document's ${total} sections`;
+}
+
+/**
+ * A section longer than the reader's limit is stored as parts headed "<heading> (part N)" (backend
+ * `ingest.sections.PART_HEADING`, mirrored here exactly). The suffix is the reading's division, not the document's
+ * text: the paper shows the heading once and marks later parts as continued; citation labels keep the suffix.
+ */
+const PART_HEADING = /^(.*) \(part (\d+)\)$/;
+
+export function partOf(heading: string): { base: string; index: number } | null {
+  const match = PART_HEADING.exec(heading);
+  return match ? { base: match[1], index: Number(match[2]) } : null;
 }
 
 export function citationLabel(section: SectionView): string {

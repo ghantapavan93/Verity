@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeRole, decidedByCode, passageLabel, retrievalNote, sectionsReadNote, statusLabel, type SectionView, type SpanView } from "./types";
+import { codeRole, decidedByCode, partOf, passageLabel, retrievalNote, sectionsReadNote, statusLabel, type SectionView, type SpanView } from "./types";
 
 /** The chip a lawyer reads most: "Within guidance" is a comparison code made, or it says it is the model's view. */
 describe("statusLabel", () => {
@@ -37,6 +37,9 @@ describe("statusLabel", () => {
     expect(codeRole("model_hint")).toBe("Code did not decide");
     expect(codeRole("no_evidence")).toBe("Code withheld");
     expect(codeRole(undefined)).toBe("Code did not decide");
+    // Only a day comparison finds a conflict; the other checks lower a finding for their own named reason.
+    for (const source of ["reference_check", "position_check", "ambiguous_fact"]) expect(codeRole(source)).toBe("Code lowered it");
+    expect(codeRole("a_source_added_later")).toBe("Code did not decide");
   });
 });
 
@@ -73,5 +76,15 @@ describe("passageLabel", () => {
   it("falls back to the section, as before, when the text names no clause before the passage", () => {
     expect(passageLabel({ ...span, clauseLabel: null }, section)).toBe("§5 · Intellectual Property (part 3)");
     expect(passageLabel(span, section)).toBe("§5 · Intellectual Property (part 3)");
+  });
+});
+
+describe("partOf", () => {
+  // The same cases as the backend's part_heading / PART_HEADING (backend/app/ingest/sections.py).
+  it("reads the part a heading names, and nothing else", () => {
+    expect(partOf("Fees and Milestones (part 3)")).toEqual({ base: "Fees and Milestones", index: 3 });
+    expect(partOf("Intellectual Property (part 1)")).toEqual({ base: "Intellectual Property", index: 1 });
+    expect(partOf("Fees (part 2) and more")).toBeNull();
+    expect(partOf("Fees and Milestones")).toBeNull();
   });
 });

@@ -294,6 +294,15 @@
   transition-duration: var(--dur-fast);
 }
 
+/* A later part of a section the reading split for length: marked as such, never printed as a heading the document has. */
+.partContinued {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--doc-text-2);
+  font-style: italic;
+}
+
 .clauseTitle {
   margin: 20px 0 6px;
   font-size: 15.5px;

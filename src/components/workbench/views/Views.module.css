@@ -915,6 +915,7 @@ button.figureActive:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  min-width: 0;
 }
 
 .tag {
@@ -926,6 +927,10 @@ button.figureActive:hover {
   color: var(--text-2);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  /* a long section label is cut, never laid under the status beside it; the full label is the tag's title */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tagSearched {
