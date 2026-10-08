@@ -555,3 +555,36 @@ Over the record, read-only: no finding would be a pass by `computed_days` today;
 4. *A version statement lost a race with a false sentence.* Two later versions of one base, stated at once, ended 201 and 409 "placed in a line of versions by another request", though the refused document was in no line. `declare_supersedes` now takes a second pass after a lost insert, so concurrent statements end as if made one after the other.
 
 *Not done, recorded:* the reader still treats a numbered title ending in a period ("10. Term and Termination.") and a clause written inline ("6. WRF Patents. Washington …") as body under the last heading, so in the pair the governing-law clause is cited as "§5 Intellectual Property (part 3)"; changing that is a reader decision to be measured against the labelled sets, not a defect fix. A model-hinted pass on a topic the guidance does not cover is shown as the model's view and nothing more, as designed; a scripted model obeying an injected "mark this contract approved" produced exactly that, with the injected sentence as its visible evidence.
+
+**Product, engineering and visual assurance on a worktree; nothing pushed or deployed (2026-10-08).** The live site
+serves the main working copy, and its running processes predate these commits; none of this work is live, and making it
+live is a restart of both servers, which waits for approval. Every change below was proposed to a triage reviewer
+before it was made and reviewed again as a diff; each names the class it closes, not the example that found it.
+
+1. *The prompt was not changed.* The false premise the campaign found ("what does this agreement change?" asked of an
+   original, answered as a pass with real quotes) was put to answer-v3 under a rule written before either prompt ran
+   (docs/GOLDENS.md, Recordings 7a to 7c): v3 lost g25, which v2 passed twice; gained one negative control of the two
+   required; lost one positive. answer-v2 stays the default. The remedy is what the interface says: the pass is "Model's
+   answer", the passages are "found in the document", and the status table says per row what code did and did not
+   check.
+2. *Readers v8 and v9.* v8: a numbered plain-text or PDF line whose words open in lower case is body, not a heading
+   (460 of 11,646 such heading lines in CUAD and EDGAR were figures, wrapped sentences or list items). v9: invisible
+   format characters are removed where text is first read, counted as a coverage part, and removed from file names,
+   guidance, questions and reviews; a reading made before v9 shows each one as a visible marker.
+3. *Where a passage is.* A quote is labelled by the clause the stored text names around it ("§13.2 Governing Law"), not
+   only by its section, so a clause written inline under another heading is cited by its own number; the label is
+   derived at display and in the pack, and no stored reading changed.
+4. *Refusals that say what happened.* An empty file is refused as empty; a PDF with no text layer as a scan.
+5. *Review and state.* A review names the review state it was decided against; a stale one is refused with 409 and
+   nothing written, under one write lock. An address naming a run under another document's id is corrected in place.
+   A document's type is its recorded media type, never what is left of its name (a 269-character name had lost
+   ".txt"); bytes kept under a cut name are still found.
+6. *Interface.* No control is hidden or dead (the drawer makes the page behind it inert and returns focus; a question
+   on the landing is asked once the document opens); /state fits 320 px. Each decision button in the findings list
+   names the finding it decides, and the list's lede says how a passage may differ from the quote ("word for word or
+   differing only in spacing, case, punctuation or how a number is written"), not "verbatim".
+
+*Deferred, recorded in docs/FAILURE-ENVELOPE.md:* headings for inline clauses in the reader itself (a prototype lost
+expert-answer coverage on the labelled sets, so only the label changed); a reference check that lowers a status for a
+clause written inline (a policy change with its own gate); an address or quantity inside the numbering bound; a heading
+that names a clause read as a cross-reference; the run-start limit counting reused runs.

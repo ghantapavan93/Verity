@@ -259,3 +259,27 @@ moved inside the letters of a quote ("the rapist" had verified against "therapis
 span in the store, 7 of 1,475 (5 runs) verify today only because of that forgiveness, and none of them belongs to a
 golden question, so the same model outputs judged under v6 give the same 37 of 44. Recording 6c stands as the
 baseline; it was made under verifier v5 and says so. The model was not called.
+
+**Recordings 7a, 7b and 7c, 2026-10-08: answer-v3 against answer-v2 under a rule written before either ran.** 44 goldens,
+the bundled sample (123 sections, the same reading in every store: reader labels v7 and v8 change only plain text and
+PDF), Qwen3 8B, k = 6, window 6,000, alias table on, sandbox stores only. 7a and 7c are answer-v2 in two fresh stores, to
+measure how often a golden moves with nothing changed; 7b is answer-v3. The rule: v3 becomes the default only if no
+golden that passed under v2 in both recordings fails under v3, v3 passes no fewer than the lower v2 count, and on a
+frozen set of 15 false-premise controls (the CUAD pair the QA campaign used, and six unseen CUAD texts chosen by a
+seeded rule and frozen by hash before any run) v3 passes at least two more of the seven negatives and no fewer of the
+eight positives, all scored by code.
+
+| Recording | Result | Fails |
+|---|---|---|
+| 7a, answer-v2 | 37 of 44 | g08, g11, g12, g26, g30, g35, g42 |
+| 7c, answer-v2 again | 37 of 44 | the same seven; no golden moved between the two v2 recordings |
+| 7b, answer-v3 | 37 of 44 | g08, g12, g25, g26, g30, g35, g42: gains g11 (the absent point answered "not found"), loses g25 (the liability-cap exclusions cited from part 3 of the agreement, not from §8.4) |
+
+Controls: negatives v2 3 of 7, v3 4 of 7 (two more were required); positives v2 6 of 8, v3 5 of 8 (one held-out
+positive ended unresolved under v3, its citations unverified). **Not adopted** on all three counts; answer-v2 stays the
+default and answer-v3 stays in the repository as the candidate it was. g44, the false premise, passed in all three
+(the run withheld, nothing asserted), so the false-premise failure the QA campaign found is not one this set catches;
+the remedy adopted is the interface's wording (the pass is named the model's answer, and the passages are said to be
+found in the document, not to support it). Each control pass stopped part way at the API's run-start limit (20 in 10
+minutes, counting a start that hands back an existing run) and was resumed; the resumed pass was handed the runs already
+finished, same inputs, same runs.
