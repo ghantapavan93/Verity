@@ -59,6 +59,10 @@ def ingest(filename: str, data: bytes) -> Ingested:
     result: ReadResult = read(filename, data)
     sections = build_sections(result.blocks, title=result.title)
     if not sections or not any(s.text for s in sections):
+        # A PDF whose every page has no text layer is a scan: say so, since "no readable text" left the reader to guess why.
+        scanned = next((part.count for part in result.coverage if part.part == "scanned_pages"), 0)
+        if result.pages and scanned >= result.pages:
+            raise UnsupportedFile("the PDF has no text layer on any page (a scan?); no OCR is run, so upload a PDF with selectable text")
         raise UnsupportedFile("no readable text found in the file")
     suffix = "." + filename.rsplit(".", 1)[-1].lower()
     return Ingested(

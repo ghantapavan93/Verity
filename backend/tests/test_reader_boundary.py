@@ -84,3 +84,19 @@ def test_controls_an_intact_file_reads_and_a_reason_raised_by_a_reader_is_kept(m
     monkeypatch.setattr(readers, "read_pdf", encrypted)
     with pytest.raises(UnsupportedFile, match="encrypted"):
         readers.read("contract.pdf", PDF)
+
+
+def test_a_pdf_with_no_text_layer_is_refused_as_a_scan_and_a_text_file_with_no_words_as_before() -> None:
+    import io as _io
+
+    from pypdf import PdfWriter
+
+    blank = PdfWriter()
+    blank.add_blank_page(612, 792)
+    blank.add_blank_page(612, 792)
+    data = _io.BytesIO()
+    blank.write(data)
+    with pytest.raises(UnsupportedFile, match="no text layer on any page"):
+        ingest("scan.pdf", data.getvalue())
+    with pytest.raises(UnsupportedFile, match=r"^no readable text found in the file$"):
+        ingest("blank.txt", b"   \n\n")
