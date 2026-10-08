@@ -78,7 +78,7 @@ export function AssistantPanel({
   evidence: FindingView | null;
   onOpenEvidence: (finding: FindingView, trigger: HTMLElement | null) => void;
   onCloseEvidence: () => void;
-  onReviewed: (findingId: string, review: ReviewView | null) => void;
+  onReviewed: (findingId: string, review: ReviewView | null | undefined, latestReviewId?: number) => void;
   drawerCloseRef: Ref<HTMLButtonElement>;
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;

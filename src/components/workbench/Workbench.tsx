@@ -350,11 +350,14 @@ function WorkbenchSurface() {
 
   /** A decision recorded from the drawer: the run on screen takes the record's review, so the card and the drawer agree. */
   const reviewed = useCallback(
-    (findingId: string, review: ReviewView | null) => {
+    (findingId: string, review: ReviewView | null | undefined, latestReviewId?: number) => {
       if (!run) return;
-      const findings = run.findings.map((f) => (f.id === findingId ? { ...f, review } : f));
-      showRun({ ...run, findings });
-      setEvidence((open) => (open && open.id === findingId ? { ...open, review } : open));
+      // `undefined`: the decision was refused because the finding was reviewed since; only the fetch below shows the state.
+      if (review !== undefined) {
+        const update = (f: FindingView) => (f.id === findingId ? { ...f, review, latestReviewId: latestReviewId ?? f.latestReviewId } : f);
+        showRun({ ...run, findings: run.findings.map(update) });
+        setEvidence((open) => (open ? update(open) : open));
+      }
       getRun(run.id)
         .then((fresh) => {
           showRun(fresh);

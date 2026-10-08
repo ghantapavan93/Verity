@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..application.review_finding import review_finding, review_out
+from ..application.review_finding import latest_review_id, review_finding, review_out
 from ..application.workspace import require_finding, require_own_run, visible_runs
 from ..db import get_session
 from ..models import Document, EvidenceSpan, Finding, Run, iso
@@ -29,10 +29,10 @@ def review(
     """Record a person's decision. 201 when it changed the state, 200 when it repeated it; `cleared` undoes. With the gate
     on, the invite's subject is recorded beside the typed name; the name is what the browser sent and is not an identity."""
     require_own_run(require_finding(session, finding_id, workspace).run, workspace)
-    reviewed = review_finding(session, finding_id, body.verdict, body.reviewer, body.note, getattr(request.state, "subject", None))
+    reviewed = review_finding(session, finding_id, body.verdict, body.reviewer, body.note, getattr(request.state, "subject", None), body.based_on)
     if not reviewed.created:
         response.status_code = status.HTTP_200_OK
-    return FindingReviewOut(finding_id=reviewed.finding.id, review=review_out(reviewed.review))
+    return FindingReviewOut(finding_id=reviewed.finding.id, review=review_out(reviewed.review), latest_review_id=latest_review_id(reviewed.finding))
 
 
 @router.get("", response_model=list[FindingRecord])
@@ -75,6 +75,7 @@ def list_findings(
                 status=finding.status,
                 evidence_kind="coverage" if finding.status == "missing" else "passage",
                 review=review_out(finding.review),
+                latest_review_id=latest_review_id(finding),
                 conclusion=finding.shown_conclusion,
                 verified_spans=count,
                 citations=citations,

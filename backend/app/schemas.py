@@ -84,6 +84,10 @@ class ReviewIn(ApiModel):
     verdict: ReviewVerdictName
     reviewer: str = Field(min_length=1, max_length=80)
     note: str | None = Field(default=None, max_length=2000)
+    # The latest review id the reviewer saw (FindingOut.latest_review_id; 0 for none). The interface always sends it;
+    # when the finding has been reviewed since, the review is refused with 409 and nothing is written. Omitted, the
+    # decision is recorded whatever came before (API callers from before 2026-10-08).
+    based_on: int | None = Field(default=None, ge=0)
 
 
 class ReviewOut(ApiModel):
@@ -100,6 +104,9 @@ class ReviewOut(ApiModel):
 class FindingReviewOut(ApiModel):
     finding_id: str
     review: ReviewOut | None = None
+    # The id of the finding's latest review row (a cleared one included), 0 when it has none: a review sends it back as
+    # `based_on`, so a decision made against a state that has since changed is refused instead of written over it.
+    latest_review_id: int = 0
 
 
 class RunIn(ApiModel):
@@ -139,6 +146,8 @@ class FindingOut(ApiModel):
     evidence_kind: Literal["passage", "coverage"] = "passage"
     # A person's decision, when one has been recorded and not cleared.
     review: ReviewOut | None = None
+    # The id of the latest review row, a cleared one included; 0 when none. A review sends it back (ReviewIn.based_on).
+    latest_review_id: int = 0
     # What the product says. For a point the model reported as not found it is the product's own sentence, about the
     # sections the model was given; otherwise it is the model's conclusion.
     conclusion: str
@@ -217,6 +226,8 @@ class FindingRecord(ApiModel):
     verified_spans: int
     evidence_kind: Literal["passage", "coverage"] = "passage"
     review: ReviewOut | None = None
+    # The id of the latest review row, a cleared one included; 0 when none (FindingOut.latest_review_id).
+    latest_review_id: int = 0
     # Section labels of the verified citations, e.g. ["§5.4", "§5.3.1"].
     citations: list[str] = []
     has_guidance: bool = False

@@ -9,7 +9,7 @@ import { EASE } from "../shell/constants";
 import { StatusChip, Visible } from "../shell/primitives";
 import { DayGauge, readComparison } from "./DayGauge";
 import { WhyThisAnswer } from "./WhyThisAnswer";
-import { absolute, errorMessage, reviewFinding } from "@/lib/api";
+import { absolute, errorMessage, isConflict, reviewFinding } from "@/lib/api";
 import { formatWhen } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
 import {
@@ -52,7 +52,7 @@ export function EvidenceDrawer({
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
   onClose: () => void;
-  onReviewed?: (findingId: string, review: ReviewView | null) => void;
+  onReviewed?: (findingId: string, review: ReviewView | null | undefined, latestReviewId?: number) => void;
   closeRef: Ref<HTMLButtonElement>;
   reduceMotion: boolean;
 }) {
@@ -113,7 +113,7 @@ function EvidenceBody({
   guidance: string | null;
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
-  onReviewed?: (findingId: string, review: ReviewView | null) => void;
+  onReviewed?: (findingId: string, review: ReviewView | null | undefined, latestReviewId?: number) => void;
 }) {
   const [prove, setProve] = useState(false);
   // Read once when the drawer opens: the first layer needs it, and "Prove it" renders the same read.
@@ -408,7 +408,8 @@ function HumanLayer({
   curated = false,
 }: {
   finding: FindingView;
-  onReviewed?: (findingId: string, review: ReviewView | null) => void;
+  /** The recorded state and its review id; `undefined` when the decision was refused as stale and the current state must be fetched. */
+  onReviewed?: (findingId: string, review: ReviewView | null | undefined, latestReviewId?: number) => void;
   /** A curated record: the review is kept as recorded, and no control to change it is offered. */
   curated?: boolean;
 }) {
@@ -426,12 +427,17 @@ function HumanLayer({
     setBusy(true);
     setError(null);
     try {
-      const out = await reviewFinding(finding.id, { verdict, reviewer, note: null });
+      // The decision is made against the review state this drawer shows; one recorded since refuses it (409).
+      const out = await reviewFinding(finding.id, { verdict, reviewer, note: null, basedOn: finding.latestReviewId });
       rememberReviewer(reviewer);
       setPending(null);
-      onReviewed?.(finding.id, out.review ?? null);
+      onReviewed?.(finding.id, out.review ?? null, out.latestReviewId);
     } catch (e) {
       setError(errorMessage(e));
+      if (isConflict(e)) {
+        setPending(null);
+        onReviewed?.(finding.id, undefined);
+      }
     } finally {
       setBusy(false);
     }

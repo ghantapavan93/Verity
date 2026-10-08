@@ -14,7 +14,7 @@ from ..application.create_memo import review_head
 from ..application.evidence_pack import build_evidence_pack
 from ..application.explain_run import explain_run
 from ..application.recover_runs import recover_interrupted_runs
-from ..application.review_finding import review_out
+from ..application.review_finding import latest_review_id, review_out
 from ..application.start_run import start_run
 from ..application.workspace import require_run, visible_runs
 from ..db import SessionLocal, get_session
@@ -44,6 +44,7 @@ def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> Findi
         status_reason=finding.status_reason,
         evidence_kind="coverage" if finding.status == "missing" else "passage",
         review=review_out(finding.review),
+        latest_review_id=latest_review_id(finding),
         conclusion=finding.shown_conclusion,
         model_conclusion=finding.conclusion,
         spans=[

@@ -6,7 +6,7 @@ import styles from "./Views.module.css";
 import { StatusChip } from "../shell/primitives";
 import { Figures } from "./Figures";
 import { ListSkeleton, ReadFailed } from "./Skeleton";
-import { errorMessage, listFindings, reviewFinding } from "@/lib/api";
+import { errorMessage, isConflict, listFindings, reviewFinding } from "@/lib/api";
 import { formatWhen, plural } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
 import { type FindingRecord, type FindingStatus, type ReviewVerdict } from "@/lib/types";
@@ -72,10 +72,16 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
     setBusyId(record.id);
     setError(null);
     try {
-      const out = await reviewFinding(record.id, { verdict, reviewer, note: null });
-      setRecords((rows) => rows?.map((r) => (r.id === record.id ? { ...r, review: out.review ?? null } : r)) ?? rows);
+      // Decided against the review state this row shows; one recorded since, in another tab or by another person, refuses it.
+      const out = await reviewFinding(record.id, { verdict, reviewer, note: null, basedOn: record.latestReviewId });
+      setRecords((rows) => rows?.map((r) => (r.id === record.id ? { ...r, review: out.review ?? null, latestReviewId: out.latestReviewId } : r)) ?? rows);
     } catch (e) {
       setError(errorMessage(e));
+      if (isConflict(e)) {
+        // Show the decision that was recorded instead: the list is read again.
+        setPending(null);
+        setAttempt((n) => n + 1);
+      }
     } finally {
       setBusyId(null);
     }

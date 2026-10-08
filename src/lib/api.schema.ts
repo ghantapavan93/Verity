@@ -1329,6 +1329,11 @@ export interface components {
             /** Id */
             id: string;
             /**
+             * Latestreviewid
+             * @default 0
+             */
+            latestReviewId: number;
+            /**
              * Modelconclusion
              * @default
              */
@@ -1385,6 +1390,11 @@ export interface components {
             hasGuidance: boolean;
             /** Id */
             id: string;
+            /**
+             * Latestreviewid
+             * @default 0
+             */
+            latestReviewId: number;
             /** Question */
             question: string;
             review?: components["schemas"]["ReviewOut"] | null;
@@ -1414,6 +1424,11 @@ export interface components {
         FindingReviewOut: {
             /** Findingid */
             findingId: string;
+            /**
+             * Latestreviewid
+             * @default 0
+             */
+            latestReviewId: number;
             review?: components["schemas"]["ReviewOut"] | null;
         };
         /** GoldenCategoryCount */
@@ -1710,6 +1725,8 @@ export interface components {
         };
         /** ReviewIn */
         ReviewIn: {
+            /** Basedon */
+            basedOn?: number | null;
             /** Note */
             note?: string | null;
             /** Reviewer */

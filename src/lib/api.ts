@@ -36,6 +36,22 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** A request the API answered with an error: its sentence, and the status, so a caller can tell a conflict from a failure. */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+/** The API refused the request because the record changed since it was read (409). */
+export function isConflict(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409;
+}
+
 async function readError(response: Response): Promise<string> {
   try {
     const body = await response.json();
@@ -73,7 +89,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(unreachable(API_URL));
   }
   if (response.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event(ACCESS_REQUIRED_EVENT));
-  if (!response.ok) throw new Error(await readError(response));
+  if (!response.ok) throw new ApiError(response.status, await readError(response));
   if (!(response.headers.get("content-type") ?? "").includes("json")) {
     // A sign-in page in place of data: the session in front of the API has expired.
     throw new Error("The workbench API answered with a page instead of data; your sign-in may have expired. Reload the page.");

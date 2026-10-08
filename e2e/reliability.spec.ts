@@ -127,6 +127,42 @@ test.describe("state that must survive", () => {
     await expect(page.getByRole("button", { name: "Undo" }).first()).toBeVisible();
   });
 
+  test("a decision made in an out-of-date tab is refused, and that tab then shows the decision that stands", async ({ page, context }) => {
+    // Adversarial review, 2026-10-08: two tabs with one finding open decided over each other; the later click won and
+    // the earlier tab went on showing its own decision.
+    await context.addInitScript(() => window.localStorage.setItem("workbench.reviewer", "Playwright"));
+    await openSample(page);
+    await ask(page, LIABILITY);
+    await expect(finding(page)).toBeVisible();
+    await page.getByRole("button", { name: "Findings" }).click();
+    await expect(page.getByText(/awaiting review/)).toBeVisible();
+    const rowIn = (tab: Page) =>
+      tab
+        .locator("li")
+        .filter({ hasText: `Asked: ${LIABILITY}` })
+        .first();
+    // The data directory is shared across runs and the run is reused, so the finding may carry a decision already.
+    const undo = rowIn(page).getByRole("button", { name: "Undo" });
+    if (await undo.isVisible().catch(() => false)) await undo.click();
+    await expect(rowIn(page).getByRole("button", { name: "Confirm" })).toBeVisible();
+
+    const other = await context.newPage();
+    await other.goto(page.url());
+    await other.getByRole("button", { name: "Findings" }).click();
+    await expect(rowIn(other).getByRole("button", { name: "Dismiss" })).toBeVisible(); // undecided, as the second tab read it
+
+    await rowIn(page).getByRole("button", { name: "Confirm" }).click();
+    await expect(rowIn(page).getByRole("button", { name: "Undo" })).toBeVisible();
+
+    await rowIn(other).getByRole("button", { name: "Dismiss" }).click();
+    await expect(other.getByText(/confirmed by Playwright after you opened it/)).toBeVisible();
+    await expect(rowIn(other)).toContainText("Confirmed"); // the second tab now shows the decision that stands
+    await page.reload();
+    await page.getByRole("button", { name: "Findings" }).click();
+    await expect(rowIn(page)).toContainText("Confirmed"); // and the dismissal was not written over it
+    await other.close();
+  });
+
   test("the URL alone restores the run and the document cold", async ({ page }) => {
     await openSample(page);
     await ask(page, LIABILITY);

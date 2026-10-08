@@ -19,6 +19,7 @@ vi.mock("@/lib/api", () => ({
   getRunExplanation: api.getRunExplanation,
   reviewFinding: api.reviewFinding,
   errorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  isConflict: (error: unknown) => error instanceof Error && error.name === "ApiError" && (error as Error & { status?: number }).status === 409,
   absolute: (path: string) => `http://api.test${path}`,
 }));
 
@@ -49,6 +50,7 @@ function finding(review: FindingView["review"]): FindingView {
     suggestedPosition: "90 days' written notice",
     evidenceKind: "passage",
     review,
+    latestReviewId: review ? 7 : 0,
     spans: [{ sectionId: "s0", verified: true, method: "relocated:exact", quote: QUOTE, start: 4136, end: 4284, citedSectionLabel: "sec_4", matchCount: 1 }],
   } as unknown as FindingView;
 }
@@ -236,13 +238,38 @@ describe("EvidenceDrawer", () => {
   it("records a decision from the drawer under a remembered name and hands the review back", async () => {
     window.localStorage.setItem("workbench.reviewer", "Pavan");
     const onReviewed = vi.fn();
-    api.reviewFinding.mockResolvedValue({ review: CONFIRMED, reviewHead: "abc" } as unknown as Awaited<ReturnType<typeof reviewFinding>>);
+    api.reviewFinding.mockResolvedValue({ review: CONFIRMED, latestReviewId: 8 } as unknown as Awaited<ReturnType<typeof reviewFinding>>);
     renderDrawer(finding(null), onReviewed);
     const human = within(screen.getByLabelText("Evidence")).getByTestId("layer-human");
     expect(human.textContent).toContain("No one has decided on this finding yet.");
     fireEvent.click(within(human).getByRole("button", { name: "Confirm" }));
-    await vi.waitFor(() => expect(onReviewed).toHaveBeenCalledWith("afa60a7574984690", CONFIRMED));
-    expect(api.reviewFinding).toHaveBeenCalledWith("afa60a7574984690", { verdict: "confirmed", reviewer: "Pavan", note: null });
+    await vi.waitFor(() => expect(onReviewed).toHaveBeenCalledWith("afa60a7574984690", CONFIRMED, 8));
+    // The decision names the review state the drawer showed: none yet.
+    expect(api.reviewFinding).toHaveBeenCalledWith("afa60a7574984690", { verdict: "confirmed", reviewer: "Pavan", note: null, basedOn: 0 });
+  });
+
+  it("says a decision was refused when the finding was reviewed since, and asks for the current state", async () => {
+    window.localStorage.setItem("workbench.reviewer", "Pavan");
+    const onReviewed = vi.fn();
+    const stale = Object.assign(new Error("This finding was dismissed by B. Reviewer after you opened it."), { name: "ApiError", status: 409 });
+    api.reviewFinding.mockRejectedValue(stale);
+    renderDrawer(finding(CONFIRMED), onReviewed);
+    const human = within(screen.getByLabelText("Evidence")).getByTestId("layer-human");
+    fireEvent.click(within(human).getByRole("button", { name: "Clear the decision" }));
+    await vi.waitFor(() => expect(within(human).getByRole("alert").textContent).toContain("dismissed by B. Reviewer after you opened it"));
+    expect(api.reviewFinding).toHaveBeenCalledWith("afa60a7574984690", { verdict: "cleared", reviewer: "Pavan", note: null, basedOn: 7 });
+    expect(onReviewed).toHaveBeenCalledWith("afa60a7574984690", undefined);
+  });
+
+  it("control: a failure that is not a conflict is shown and does not ask for the state again", async () => {
+    window.localStorage.setItem("workbench.reviewer", "Pavan");
+    const onReviewed = vi.fn();
+    api.reviewFinding.mockRejectedValue(new Error("The workbench API is not reachable."));
+    renderDrawer(finding(null), onReviewed);
+    const human = within(screen.getByLabelText("Evidence")).getByTestId("layer-human");
+    fireEvent.click(within(human).getByRole("button", { name: "Dismiss" }));
+    await vi.waitFor(() => expect(within(human).getByRole("alert").textContent).toContain("not reachable"));
+    expect(onReviewed).not.toHaveBeenCalled();
   });
 
   it("asks for a name once when none is remembered", () => {

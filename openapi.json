@@ -1934,6 +1934,11 @@
             "title": "Id",
             "type": "string"
           },
+          "latestReviewId": {
+            "default": 0,
+            "title": "Latestreviewid",
+            "type": "integer"
+          },
           "modelConclusion": {
             "default": "",
             "title": "Modelconclusion",
@@ -2095,6 +2100,11 @@
             "title": "Id",
             "type": "string"
           },
+          "latestReviewId": {
+            "default": 0,
+            "title": "Latestreviewid",
+            "type": "integer"
+          },
           "question": {
             "title": "Question",
             "type": "string"
@@ -2179,6 +2189,11 @@
           "findingId": {
             "title": "Findingid",
             "type": "string"
+          },
+          "latestReviewId": {
+            "default": 0,
+            "title": "Latestreviewid",
+            "type": "integer"
           },
           "review": {
             "anyOf": [
@@ -2981,6 +2996,18 @@
       },
       "ReviewIn": {
         "properties": {
+          "basedOn": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basedon"
+          },
           "note": {
             "anyOf": [
               {
