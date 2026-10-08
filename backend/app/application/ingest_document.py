@@ -19,9 +19,9 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..errors import InvalidInput, TooLarge
 from ..hashing import sha256_bytes
-from ..ingest import PARSER_VERSION, SUPPORTED, TooLargeToRead, UnsupportedFile, ingest
+from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, ingest
 from ..ingest.coverage import coverage_report
-from ..ingest.readers import read
+from ..ingest.readers import file_type, read
 from ..models import Document, Section
 from .workspace import document_is_curated, grant_document
 
@@ -67,12 +67,14 @@ def refuse_if_too_large(size: int | None) -> None:
         raise TooLarge("file larger than 25 MB")
 
 
-def refuse_unsupported_type(filename: str) -> None:
-    """The name's type decides before the bytes are looked up: a known document under a .docm name, or no name, was
-    "reused" without its type ever being checked (sweep, 2026-10-01)."""
-    suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
-    if suffix not in SUPPORTED:
-        raise InvalidInput(f"unsupported file type {suffix or '(none)'}; upload .docx, .pdf or .txt")
+def refuse_unsupported_type(filename: str, data: bytes) -> None:
+    """The type is checked, name against bytes, before the bytes are looked up: a known document under a .docm name, or
+    no name, was "reused" without its type ever being checked (sweep, 2026-10-01), and a known PDF under a .txt name was
+    handed back as the PDF while unknown PDF bytes under that name were read as text (QA campaign, 2026-10-08)."""
+    try:
+        file_type(filename, data)
+    except UnsupportedFile as error:
+        raise InvalidInput(str(error)) from error
 
 
 def ingest_document(session: Session, filename: str, data: bytes, workspace: str | None = None) -> IngestedDocument:
@@ -80,7 +82,7 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
     second workspace uploading the same bytes gets a grant on the one stored reading, and learns nothing it did not
     already hold, since it had the bytes. "created" is from that workspace's side: new to it, or already its."""
     refuse_if_too_large(len(data))
-    refuse_unsupported_type(filename)
+    refuse_unsupported_type(filename, data)
     existing = stored_document(session, sha256_bytes(data))
     if existing is not None:
         keep_original(existing, data)  # the same bytes by hash: a row whose file is not there is completed here

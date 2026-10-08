@@ -38,7 +38,7 @@ def test_the_audit_keeps_every_denominator_apart_and_names_a_runtime_upload(clie
     assert named["golden questions"] == "44"
     assert named["cuad-30.json contracts"] == "30" and named["cuad-skillopt.json contracts"] == "30"
     assert named["CUAD-30 questions (one per category)"] == "7" and named["batch fields over the public corpus"] == "3"
-    assert named["browser flows"] == "25" and named["hand mutants"] == "24"
+    assert named["browser flows"] == "26" and named["hand mutants"] == "24"
     assert named["runs in the store"] == "1"
 
     # The test contract is a fixture by its text and, once uploaded, a stored reading; it is never counted as evaluation.

@@ -25,7 +25,11 @@ __all__ = ["PARSER_VERSION", "SUPPORTED", "Ingested", "TooLargeToRead", "Unsuppo
 # v6 (2026-10-02): text hidden through a style is left out. The reader resolves w:vanish through the run's character
 # style, the paragraph's style and their basedOn chains, and treats w:specVanish as hidden; before, only a run's own
 # w:vanish was honoured, so a Word "Hidden" character style carried text to the model that Word never showed.
-PARSER_VERSION = "v6"
+# v7 (2026-10-08): plain text and PDF. A heading's number is one its text states: a heading without one is labelled by its
+# heading alone (v6 computed one from levels, a number the document never shows: "§7 MILESTONE 1" beside the agreement's own
+# clause 7), and a stated number that does not continue the clause numbering is not a heading ("15285 Minnetonka Blvd." was
+# §15285, and the schedules after it §15408 onward). DOCX is read as in v6. The file's bytes must agree with its type.
+PARSER_VERSION = "v7"
 
 
 @dataclass

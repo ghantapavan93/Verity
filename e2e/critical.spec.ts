@@ -1,6 +1,8 @@
-// The three flows the validation brief names that the other specs did not cover: a review against
-// guidance, a malformed upload from the landing, and a refresh while a run is in flight.
+// The flows the validation brief names that the other specs did not cover: a review against guidance, a malformed
+// upload from the landing, a file whose bytes contradict its name, and a refresh while a run is in flight.
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 const LIABILITY = "What is the limitation of liability?";
@@ -39,6 +41,18 @@ test("a malformed upload is refused with the reason, and nothing is opened", asy
     .setInputFiles({ name: "broken.docx", mimeType: "application/octet-stream", buffer: Buffer.from("PK\u0003\u0004 not a package") });
   await expect(page.getByText(/not a readable \.docx package/)).toBeVisible();
   await expect(page).not.toHaveURL(/[?&]document=/);
+});
+
+test("a file whose bytes contradict its name is refused with what it is, and under its own name it opens", async ({ page }) => {
+  // QA campaign, 2026-10-08: a PDF named .txt was read as text, and later uploads of the same bytes were handed that reading.
+  const pdf = readFileSync(path.join(__dirname, "..", "backend", "tests", "fixtures", "services-agreement.pdf"));
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles({ name: "agreement.txt", mimeType: "text/plain", buffer: pdf });
+  await expect(page.getByText("the file is a PDF, not plain text; upload it as .pdf")).toBeVisible();
+  await expect(page).not.toHaveURL(/[?&]document=/);
+  await page.locator('input[type="file"]').setInputFiles({ name: "agreement.pdf", mimeType: "application/pdf", buffer: pdf });
+  await expect(page).toHaveURL(/[?&]document=/);
+  await expect(page.locator("section[data-section]").first()).toBeVisible();
 });
 
 test("a refresh while a run is in flight loses nothing: the page reattaches to the same run and shows its result", async ({ page }) => {

@@ -12,22 +12,23 @@ from __future__ import annotations
 
 import codecs
 import io
+import logging
 import re
 import zipfile
 from dataclasses import dataclass, field
 from typing import cast
 
 from docx import Document as DocxDocument
-from docx.opc.exceptions import PackageNotFoundError
 from docx.oxml.ns import qn
 from docx.oxml.text.paragraph import CT_P
 from docx.text.paragraph import Paragraph
 from lxml import etree
 from pypdf import PdfReader
-from pypdf.errors import PyPdfError
 
 from .coverage import PartCoverage, docx_coverage, pdf_coverage, txt_coverage
-from .sections import HEADING_NUMBER, Block, looks_like_heading
+from .sections import HEADING_NUMBER, Block, continues_numbering, looks_like_heading
+
+log = logging.getLogger(__name__)
 
 SUPPORTED = {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -57,15 +58,55 @@ class ReadResult:
     coverage: list[PartCoverage] = field(default_factory=list)
 
 
-def read(filename: str, data: bytes) -> ReadResult:
+PDF_SIGNATURE = b"%PDF-"
+PDF_SIGNATURE_WINDOW = 1024  # readers accept a header anywhere in the first kilobyte, so the check does too
+ZIP_SIGNATURE = b"PK\x03\x04"
+UNREADABLE = {".docx": "the file is not a readable .docx package", ".pdf": "the file is not a readable PDF"}
+
+
+def content_type(data: bytes) -> str | None:
+    """What the bytes are, whatever the name says: ".pdf", ".docx" for a zip package, or None (text, or neither)."""
+    if PDF_SIGNATURE in data[:PDF_SIGNATURE_WINDOW]:
+        return ".pdf"
+    if data.startswith(ZIP_SIGNATURE):
+        return ".docx"
+    return None
+
+
+def file_type(filename: str, data: bytes) -> str:
+    """The type a file is read as: the name claims it, the bytes must agree. A document is its bytes and the reading of
+    them, so the same bytes must only ever be read one way. Before 2026-10-08 the name alone chose the reader: a PDF
+    uploaded as .txt became a "document" of its own binary, and the same bytes uploaded later as .pdf were handed that
+    reading, because the store knew them by hash (QA campaign, CUAD pair)."""
     suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
-    if suffix == ".docx":
-        return read_docx(data)
-    if suffix == ".pdf":
-        return read_pdf(data)
-    if suffix == ".txt":
+    if suffix not in SUPPORTED:
+        raise UnsupportedFile(f"unsupported file type {suffix or '(none)'}; upload .docx, .pdf or .txt")
+    found = content_type(data)
+    if suffix == ".txt" and found is not None:
+        raise UnsupportedFile(f"the file is a {'PDF' if found == '.pdf' else 'zip package such as a .docx'}, not plain text; upload it as {found}")
+    if suffix != ".txt" and found != suffix:
+        raise UnsupportedFile(UNREADABLE[suffix])
+    return suffix
+
+
+def read(filename: str, data: bytes) -> ReadResult:
+    """Every file of a supported type ends as a reading or as UnsupportedFile with a reason. The parsers fail on a damaged
+    file in many shapes (pypdf: AssertionError, KeyError, TypeError, NotImplementedError and its own errors; python-docx
+    and zipfile: zlib.error among others); 112 of 300 mutations of a real PDF escaped as a 500 before 2026-10-08."""
+    suffix = file_type(filename, data)
+    try:
+        if suffix == ".docx":
+            return read_docx(data)
+        if suffix == ".pdf":
+            return read_pdf(data)
         return read_txt(data)
-    raise UnsupportedFile(f"unsupported file type {suffix or '(none)'}; upload .docx, .pdf or .txt")
+    except UnsupportedFile:
+        raise
+    except Exception as error:
+        # pypdf's LimitReachedError is among these: it guards decompression and also flags damaged structure ("Invalid CID
+        # width range"), so it is not evidence of size; a file the parsers cannot finish is unreadable, whatever the shape.
+        log.warning("reader refused a damaged %s: %s: %s", suffix, type(error).__name__, str(error)[:200])
+        raise UnsupportedFile(UNREADABLE.get(suffix, "the file is not readable plain text")) from error
 
 
 # --------------------------------------------------------------------------- DOCX
@@ -280,11 +321,8 @@ def read_docx(data: bytes) -> ReadResult:
     unpacked = _unpacked_size(data)
     if unpacked is not None and unpacked > MAX_DOCX_UNPACKED_BYTES:
         raise TooLargeToRead(f"the .docx unpacks to {unpacked // (1024 * 1024)} MB; the limit is {MAX_DOCX_UNPACKED_BYTES // (1024 * 1024)} MB")
-    try:
-        document = DocxDocument(io.BytesIO(data))
-    except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError, AttributeError, TypeError, etree.XMLSyntaxError) as error:
-        # A valid zip with a broken or hostile package inside: python-docx fails in many shapes, all of them a 422 here.
-        raise UnsupportedFile("the file is not a readable .docx package") from error
+    # A valid zip with a broken or hostile package inside fails in many shapes; `read` refuses every one of them.
+    document = DocxDocument(io.BytesIO(data))
     body = document.element.body
     try:
         styles_element: etree._Element | None = document.styles.element
@@ -383,20 +421,14 @@ def read_docx(data: bytes) -> ReadResult:
 
 
 def read_pdf(data: bytes) -> ReadResult:
-    try:
-        reader = PdfReader(io.BytesIO(data))
-        encrypted = bool(reader.is_encrypted)
-        page_count = 0 if encrypted else len(reader.pages)
-    except (PyPdfError, ValueError, KeyError) as error:
-        raise UnsupportedFile("the file is not a readable PDF") from error
-    if encrypted:
+    # A damaged file fails anywhere below; `read` refuses every such failure as an unreadable PDF.
+    reader = PdfReader(io.BytesIO(data))
+    if reader.is_encrypted:
         raise UnsupportedFile("the PDF is encrypted; remove the password and upload it again")
+    page_count = len(reader.pages)
     if page_count > MAX_PDF_PAGES:
         raise TooLargeToRead(f"the PDF has {page_count} pages; the limit is {MAX_PDF_PAGES}")
-    try:
-        pages = list(reader.pages)
-    except (PyPdfError, ValueError, KeyError) as error:
-        raise UnsupportedFile("the file is not a readable PDF") from error
+    pages = list(reader.pages)
     lines: list[str] = []
     textless = 0
     for page in pages:
@@ -440,6 +472,10 @@ def decode_text(data: bytes) -> tuple[str, str]:
 
 def read_txt(data: bytes) -> ReadResult:
     text, encoding = decode_text(data)
+    if "\x00" in text:
+        # Text never carries NUL once decoded (UTF-16 is decoded above); binary does, and was read as text before
+        # 2026-10-08, its control characters stripped and the rest kept as clauses.
+        raise UnsupportedFile("the file is not plain text: it holds binary data")
     lines = _CONTROL_CHARS.sub("", text).splitlines()
     return ReadResult(coverage=txt_coverage(encoding), blocks=_blocks_from_lines(lines), pages=None, title=_first_line(lines))
 
@@ -470,20 +506,30 @@ def _blocks_from_lines(lines: list[str]) -> list[Block]:
             paragraph.clear()
 
     seen_heading = False
+    last_number = 0  # the top-level number of the last numbered heading: clause numbers count on from it
     for raw in lines:
         line = raw.strip()
         if not line:
             flush()
             continue
         if looks_like_heading(line):
+            numbered = HEADING_NUMBER.match(line)
+            if numbered and not continues_numbering(numbered.group(1), last_number):
+                # "15285 Minnetonka Blvd.", "2024 Fee Schedule", "4552374 CUDDL DUDS": a number that does not continue the
+                # clause numbering is an address, a year or a registration number, part of the text around it.
+                paragraph.append(line)
+                continue
             flush()
-            numbered = bool(HEADING_NUMBER.match(line))
             if not numbered and not seen_heading and not blocks:
                 # An all-caps first line is the title, not clause 1.
                 blocks.append(Block("text", line))
                 continue
             seen_heading = True
-            blocks.append(Block("heading", line, 1 if "." not in line.split(" ", 1)[0].rstrip(".") else 2))
+            if numbered:
+                last_number = int(numbered.group(1).split(".")[0])
+            # A plain-text or PDF heading carries its number in its text or has none: no format numbers it implicitly,
+            # so a number computed for it would be a number the document never shows (QA campaign, 2026-10-08).
+            blocks.append(Block("heading", line, 1 if "." not in line.split(" ", 1)[0].rstrip(".") else 2, implicit_number=False))
             continue
         paragraph.append(line)
     flush()

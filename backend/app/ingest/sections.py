@@ -29,11 +29,28 @@ MAX_SECTION_CHARS = 6000  # a section longer than this is split so retrieval and
 MAX_HEADING_CHARS = 110
 
 
+# How far a stated clause number may run ahead of the last one. Measured on the 510 CUAD texts under reader v6
+# (2026-10-08): between consecutive numbered headings the top-level number moved by 0 or 1 in 4,879 of 5,418 steps and by
+# 2 to 20 in 298 (clauses written inline are not headings, so numbering skips); of the 17 forward jumps past 20, the eight
+# inspected were all an address, a year, a registration or a table figure ("10450 Science Center Drive", "180 Days").
+# A step back (224) is a restart, as in an exhibit.
+MAX_NUMBER_GAP = 20
+
+
+def continues_numbering(number: str, last_top: int) -> bool:
+    """Whether a heading's stated number can be a clause number after a heading numbered ``last_top`` (0 before any)."""
+    top = number.split(".", 1)[0]
+    return top.isdigit() and int(top) <= last_top + MAX_NUMBER_GAP
+
+
 @dataclass
 class Block:
     kind: str  # "heading" | "text"
     text: str
     level: int = 0  # heading level, 1-based; 0 for text
+    # Whether the format numbers this heading without the number being in its text (Word's automatic numbering), so a
+    # number may be computed from levels. Plain text and PDF show every number they have; their headings say False.
+    implicit_number: bool = True
 
 
 @dataclass
@@ -103,6 +120,8 @@ def build_sections(blocks: list[Block], title: str = "") -> list[ParsedSection]:
             level = max(1, block.level or 1)
             if number:
                 counters = [int(p) for p in number.split(".") if p.isdigit()]
+            elif not block.implicit_number:
+                pass  # labelled by its heading alone; the numbering of the headings around it is untouched
             else:
                 counters = counters[:level]
                 while len(counters) < level:
