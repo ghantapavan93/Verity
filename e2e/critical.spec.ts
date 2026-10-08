@@ -26,7 +26,7 @@ test("a review against guidance runs to a finding with a status and the guidance
   await page.getByPlaceholder("Paste a playbook rule, a lawyer's note or a review instruction").fill(GUIDANCE);
   await page.getByRole("button", { name: "Use", exact: true }).click();
   await page.getByRole("button", { name: "Review against instructions" }).click();
-  await expect(page.getByText(/Evidence · \d+ verified passage|Closest provisions read/).first()).toBeVisible();
+  await expect(page.getByText(/Evidence · \d+ passages? found in the document text|Closest provisions read/).first()).toBeVisible();
   await page.getByRole("button", { name: "Inspect evidence" }).first().click();
   const drawer = page.locator('[aria-label="Evidence"]');
   await expect(drawer).toBeVisible();
@@ -68,7 +68,7 @@ test("a refresh while a run is in flight loses nothing: the page reattaches to t
   await expect(page.getByText("Checking the contract")).toBeVisible(); // still running: the model has not answered
   await page.reload();
   await expect(page.getByText(/Reading contract|Finding relevant language|Checking the contract|Verifying citations/).first()).toBeVisible(); // reattached, still in flight
-  await expect(page.getByText(/Evidence · \d+ verified passage/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Evidence · \d+ passages? found in the document text/)).toBeVisible({ timeout: 30_000 });
   await expect(page).toHaveURL(new RegExp(`[?&]run=${runId}`)); // the same run, not a second one
   await expect(page.locator("section[data-section]").first()).toBeVisible();
 });

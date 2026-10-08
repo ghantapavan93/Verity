@@ -244,7 +244,7 @@ def test_interrupted_runs_are_failed_on_restart_and_become_retryable(client: Tes
 
 def test_a_pass_without_guidance_is_a_plain_answer_not_within_guidance(client: TestClient) -> None:
     """Found while tracing (docs/SYSTEM_TRUTH.md H, 2026-09-29): every pass was labelled "Within guidance", guidance or
-    not. The run and the findings list now say whether guidance was given, and the memo heads such a pass "Answered"."""
+    not. The run and the findings list now say whether guidance was given, and the memo heads such a pass "Model's answer" (2026-10-08; "Answered" before)."""
     result = upload_and_ask(client, "Can the customer terminate for convenience?", with_guidance=False)
     run = result["run"]
     assert run["hasGuidance"] is False and run["findings"][0]["status"] == "pass"
@@ -253,10 +253,10 @@ def test_a_pass_without_guidance_is_a_plain_answer_not_within_guidance(client: T
     assert record["hasGuidance"] is False
     memo = client.post("/api/memos", json={"runId": result["run_id"]}).json()
     html = client.get(memo["htmlUrl"]).text
-    assert "· Answered</h2>" in html and "Within guidance" not in html
+    assert "· Model's answer</h2>" in html and "Within guidance" not in html
     with zipfile.ZipFile(io.BytesIO(client.get(memo["docxUrl"]).content)) as package:
         body = package.read("word/document.xml").decode("utf-8")
-    assert "Answered" in body and "Within guidance" not in body
+    assert "Model's answer" in body and "Within guidance" not in body
 
     guided = upload_and_ask(client, "Can the customer terminate for convenience?")
     assert guided["run"]["hasGuidance"] is True and guided["run"]["findings"][0]["status"] == "needs_review"

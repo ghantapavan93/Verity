@@ -198,7 +198,7 @@ function EvidenceBody({
               <dt>It cited</dt>
               <dd>
                 {proposal.evidence.length} passage{proposal.evidence.length === 1 ? "" : "s"}
-                {finding.spans.length > 0 ? `; ${verified} verified${withheld ? `, ${withheld} withheld` : ""}` : ""}
+                {finding.spans.length > 0 ? `; ${verified} found in the document text${withheld ? `, ${withheld} withheld` : ""}` : ""}
               </dd>
             </div>
           </dl>
@@ -267,8 +267,10 @@ function EvidenceBody({
                   {!span.verified
                     ? `Not found verbatim in the document · withheld${span.citedSectionLabel ? ` · the model cited ${span.citedSectionLabel}` : ""}`
                     : finding.evidenceKind === "coverage"
-                      ? "Verified verbatim · the closest provision read; in the model's view it does not state the point"
-                      : `Verified verbatim in the document text · ${span.method}`}
+                      ? "Found in the document text · the closest provision read; in the model's view it does not state the point"
+                      : span.method === "exact"
+                        ? "Found word for word in the document text · exact"
+                        : `Found in the document text · ${span.method}`}
                 </span>
               </span>
               {span.verified && match && (
@@ -287,6 +289,11 @@ function EvidenceBody({
           );
         })}
         {finding.spans.length === 0 && <p className={styles.drawerRefStatic}>No passage was cited.</p>}
+        {finding.spans.some((span) => span.verified) && (
+          <p className={styles.drawerRefStatic} data-testid="source-limit">
+            Code checked that each passage is in the document text. Whether it supports the answer is the model&apos;s reading, and yours to decide.
+          </p>
+        )}
       </section>
 
       <section className={`${styles.drawerSection} ${styles.layer} ${setByModel ? "" : styles.layerSet}`} data-testid="layer-code">
@@ -348,7 +355,7 @@ function EvidenceBody({
                 <div>
                   <dt>Sources</dt>
                   <dd>
-                    {verified} verified{withheld ? ` · ${withheld} withheld` : ""}
+                    {verified} found in the document text{withheld ? ` · ${withheld} withheld` : ""}
                   </dd>
                 </div>
                 {run.latencyMs !== null && (

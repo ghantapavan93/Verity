@@ -405,7 +405,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
         </div>
         <div>
           <dt>Citations</dt>
-          <dd>{run.totalSpans > 0 ? `${run.verifiedSpans} of ${run.totalSpans} verified verbatim` : "none proposed"}</dd>
+          <dd>{run.totalSpans > 0 ? `${run.verifiedSpans} of ${run.totalSpans} found in the document text` : "none proposed"}</dd>
         </div>
         <div>
           <dt>Model latency</dt>
@@ -818,7 +818,7 @@ function Batches({ batches, onOpenRun }: { batches: BatchSummary[]; onOpenRun: (
             <div>
               <dt>Citations</dt>
               <dd>
-                {open.verifiedSpans} of {open.spans} verified · {open.withheldFindings} of {open.findings} findings withheld
+                {open.verifiedSpans} of {open.spans} found in the document text · {open.withheldFindings} of {open.findings} findings withheld
               </dd>
             </div>
             <div>

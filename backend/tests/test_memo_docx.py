@@ -39,6 +39,6 @@ def test_the_docx_memo_carries_its_record_and_its_links(client: TestClient) -> N
 def test_a_pass_is_within_guidance_only_when_the_run_had_guidance() -> None:
     assert status_label("pass", True) == "Within guidance"
     assert status_label("pass", True, "model_hint") == "Within guidance (model's view)", "a pass the model hinted is labelled as its view"
-    assert status_label("pass", False, "model_hint") == "Answered"
-    assert status_label("pass", False) == "Answered"
+    assert status_label("pass", False, "model_hint") == "Model's answer"
+    assert status_label("pass", False) == "Model's answer"
     assert status_label("needs_review", False) == "Needs review" and status_label("missing", True) == "Not found in the sections read"

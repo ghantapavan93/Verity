@@ -56,7 +56,7 @@ test("a question ends in a finding whose citation opens the document's own text"
   await openSample(page);
   await ask(page, LIABILITY);
 
-  const evidenceHead = page.getByText(/Evidence · \d+ verified passage/);
+  const evidenceHead = page.getByText(/Evidence · \d+ passages? found in the document text/);
   await expect(evidenceHead).toBeVisible();
   await expect(page).toHaveURL(/[?&]run=/);
 
@@ -69,7 +69,7 @@ test("a question ends in a finding whose citation opens the document's own text"
   await page.getByRole("button", { name: "Inspect evidence" }).first().click();
   const drawer = page.locator('[aria-label="Evidence"]');
   await expect(drawer).toBeVisible();
-  const tag = drawer.getByText(/Verified verbatim in the document text · /).first();
+  const tag = drawer.getByText(/Found (word for word )?in the document text · /).first();
   await expect(tag).toBeVisible();
   const quoted = (await drawer.locator("blockquote").first().innerText()).replace(/^[“"]|[”"]$/g, "");
   const highlighted = await mark.innerText();
@@ -99,7 +99,7 @@ test("the finished review the landing offers opens as the run it names", async (
   // A complete run with findings must exist in this store; the sample question makes one (or finds the same run again).
   await openSample(page);
   await ask(page, LIABILITY);
-  await expect(page.getByText(/Evidence · \d+ verified passage/)).toBeVisible();
+  await expect(page.getByText(/Evidence · \d+ passages? found in the document text/)).toBeVisible();
 
   await page.goto("/");
   // The link reads as the run's question; its title names the run it opens.
@@ -108,7 +108,7 @@ test("the finished review the landing offers opens as the run it names", async (
   const named = ((await proof.getAttribute("title")) ?? "").replace("Open run ", "");
   await proof.click();
   await expect(page).toHaveURL(new RegExp(`[?&]run=${named}`));
-  await expect(page.getByText(/Evidence · \d+ verified passage|Closest provisions read/).first()).toBeVisible();
+  await expect(page.getByText(/Evidence · \d+ passages? found in the document text|Closest provisions read/).first()).toBeVisible();
 });
 
 test("the most favoured nation question is not answered with an invented clause", async ({ page }) => {
@@ -119,22 +119,22 @@ test("the most favoured nation question is not answered with an invented clause"
   const nothing = page.getByText("No supporting passage found");
   const coverage = page.getByText(/Closest provisions read · \d+ · the model found none that states the point/);
   await expect(withheld.or(nothing).or(coverage).first()).toBeVisible();
-  await expect(page.getByText(/Evidence · \d+ verified passage/)).toHaveCount(0);
+  await expect(page.getByText(/Evidence · \d+ passages? found in the document text/)).toHaveCount(0);
 });
 
 test("a reload restores the run from the URL", async ({ page }) => {
   await openSample(page);
   await ask(page, LIABILITY);
-  await expect(page.getByText(/Evidence · \d+ verified passage/)).toBeVisible();
+  await expect(page.getByText(/Evidence · \d+ passages? found in the document text/)).toBeVisible();
   await page.reload();
-  await expect(page.getByText(/Evidence · \d+ verified passage/)).toBeVisible();
+  await expect(page.getByText(/Evidence · \d+ passages? found in the document text/)).toBeVisible();
   await expect(page.locator("section[data-section]").first()).toBeVisible();
 });
 
 test("Findings and Runs show the record, and the evidence pack downloads", async ({ page }) => {
   await openSample(page);
   await ask(page, LIABILITY);
-  await expect(page.getByText(/Evidence · \d+ verified passage/)).toBeVisible();
+  await expect(page.getByText(/Evidence · \d+ passages? found in the document text/)).toBeVisible();
 
   await page.getByRole("button", { name: "Findings" }).click();
   await expect(page.getByText("Finding", { exact: true })).toBeVisible();
@@ -160,7 +160,7 @@ test("Findings and Runs show the record, and the evidence pack downloads", async
 test("the review memo is written from the stored findings, with no second model call", async ({ page }) => {
   await openSample(page);
   await ask(page, LIABILITY);
-  await expect(page.getByText(/Evidence · \d+ verified passage/)).toBeVisible();
+  await expect(page.getByText(/Evidence · \d+ passages? found in the document text/)).toBeVisible();
   await page.getByRole("button", { name: /memo/i }).click();
   await expect(page.getByText("Review memo ready")).toBeVisible();
   const docx = page.getByRole("link", { name: "Download .docx" });

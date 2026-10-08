@@ -7,7 +7,7 @@
  *
  * The document is the source of truth on screen; the Assistant is secondary. Nothing on the
  * primary path is simulated: uploads are parsed by the API, runs are model runs, and every
- * citation shown was verified verbatim by the API before it arrived here.
+ * passage shown was found in the document text by the API before it arrived here.
  */
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";

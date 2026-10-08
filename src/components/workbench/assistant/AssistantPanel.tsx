@@ -217,7 +217,7 @@ export function AssistantPanel({
                       <code>{run.model}</code> · prompt <code>{run.promptVersion}</code>
                       {run.latencyMs !== null ? ` · ${(run.latencyMs / 1000).toFixed(0)} s` : ""}
                     </span>
-                    <span>every citation verified against the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}</span>
+                    <span>every quoted passage found in the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}</span>
                     {run.sectionsRead != null && doc && <span>{sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length)}</span>}
                   </p>
                   {doc && <RevisionCheck key={run.id} runId={run.id} documentId={doc.id} />}

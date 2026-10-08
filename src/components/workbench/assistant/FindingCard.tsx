@@ -44,7 +44,7 @@ export function FindingCard({
           <div className={styles.evidenceHead}>
             {finding.evidenceKind === "coverage"
               ? `Closest provisions read · ${evidence.length} · the model found none that states the point`
-              : `Evidence · ${evidence.length} verified passage${evidence.length === 1 ? "" : "s"}`}
+              : `Evidence · ${evidence.length} passage${evidence.length === 1 ? "" : "s"} found in the document text`}
             {finding.review ? ` · ${finding.review.verdict === "confirmed" ? "Confirmed" : "Dismissed"} by ${finding.review.reviewer}` : ""}
           </div>
           {evidence.map(({ span, section }, i) => (

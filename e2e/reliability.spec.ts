@@ -21,7 +21,7 @@ async function ask(page: Page, question: string): Promise<void> {
   await composer.press("Enter");
 }
 
-const finding = (page: Page) => page.getByText(/Evidence · \d+ verified passage/);
+const finding = (page: Page) => page.getByText(/Evidence · \d+ passages? found in the document text/);
 
 /** Letters only: the question is also the retrieval query, and a digit would be a term the contract has. */
 function nonce(): string {

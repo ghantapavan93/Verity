@@ -97,7 +97,7 @@ const STATUS_LABELS: Record<Exclude<FindingStatus, "pass">, string> = {
 // A caller that does not say who decided gets the weaker claim, never "code decided".
 export function statusLabel(status: FindingStatus, hasGuidance: boolean, source: string = "model_hint"): string {
   if (status === "pass") {
-    if (!hasGuidance) return "Answered";
+    if (!hasGuidance) return "Model's answer";
     if (source === "model_hint") return "Within guidance (model's view)";
     // The model proposed the pass and code confirmed it; had the model asked for review there would be no pass, so
     // the label does not present it as a decision code made (policy-v2).
@@ -157,3 +157,4 @@ export function sectionsReadNote(mode: RunView["retrievalMode"], read: number, t
 export function citationLabel(section: SectionView): string {
   return section.number ? `§${section.number} · ${section.heading}` : section.heading;
 }
+

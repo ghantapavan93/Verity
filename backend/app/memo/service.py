@@ -53,7 +53,8 @@ def status_label(status: str, with_guidance: bool, source: str = "computed_days"
     2026-10-01 found "Within guidance" on findings that said the contract provides no notice period at all."""
     if status == "pass":
         if not with_guidance:
-            return "Answered"
+            # Code evaluated nothing: no guidance, so the pass is the model's answer and is named as such (2026-10-08).
+            return "Model's answer"
         if source == "model_hint":
             return "Within guidance (model's view)"
         # The model proposed the pass and code confirmed it (policy-v2): not a decision code made, and not headed as one.
@@ -97,7 +98,7 @@ def _review_line(finding: Finding) -> str:
 
 def _located(span: EvidenceSpan) -> str:
     if span.verified:
-        return f"verified verbatim · {span.method} · characters {span.start} to {span.end}"
+        return f"found in the document text · {span.method} · characters {span.start} to {span.end}"
     return "not found in the document; withheld"
 
 
@@ -201,7 +202,8 @@ def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str],
     parts.append(
         f"<hr><p><small>Generated from run {escape(run.id)} · review state {escape(review_head[:8]) or 'none'} · model {escape(run.model)} · "
         f"prompt {escape(run.prompt_version)} ({escape(run.prompt_hash[:12])}) · "
-        "every quoted passage was verified verbatim against the document text before this memo was written.</small></p></body></html>"
+        "every quoted passage was found in the document text before this memo was written; that a passage supports its finding is the "
+        "model's reading and the reviewer's decision.</small></p></body></html>"
     )
     return "".join(parts)
 
@@ -281,7 +283,7 @@ def _properties(document: WordDocument, run: Run, verified: int, total: int, rev
     core.author = AUTHOR
     core.last_modified_by = AUTHOR
     core.category = "Review memo"
-    core.keywords = "contract review; verified citations; contract workbench"
+    core.keywords = "contract review; quoted passages; contract workbench"
     core.identifier = run.id
     core.version = run.prompt_version
     core.comments = f"run {run.id} · document sha256 {run.document_sha256} · model {run.model} · prompt {run.prompt_version} {run.prompt_hash}"
@@ -386,7 +388,8 @@ def memo_docx(run: Run, findings: list[Finding], section_titles: dict[str, str],
     footer = document.add_paragraph()
     footer.add_run(
         f"Generated from run {run.id} · review state {review_head[:8] or 'none'} · model {run.model} · prompt {run.prompt_version} ({run.prompt_hash[:12]}). "
-        "Every quoted passage was verified verbatim against the document text before this memo was written. "
+        "Every quoted passage was found in the document text before this memo was written; that a passage supports its finding is "
+        "the model's reading and the reviewer's decision. "
         "The run id, document hash, model and prompt are also in this file's document properties."
     ).italic = True
     path = out_dir / f"memo-{run.id}.docx"

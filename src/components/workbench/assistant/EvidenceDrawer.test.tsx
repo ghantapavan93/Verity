@@ -110,7 +110,7 @@ describe("EvidenceDrawer", () => {
     expect(model.textContent).toContain("60 days' written notice against at least 90 days");
     const words = [...model.querySelectorAll("span")].map((s) => s.textContent);
     expect(words).toEqual(expect.arrayContaining(["60 days' written notice", "at least 90 days"]));
-    expect(model.textContent).toContain("1 passage; 1 verified");
+    expect(model.textContent).toContain("1 passage; 1 found in the document text");
     // What the model suggested and where it pointed in the guidance are the model's, and sit in its layer.
     expect(model.textContent).toContain("It suggested90 days' written notice");
     expect(model.textContent).toContain("It pointed at");
@@ -118,7 +118,9 @@ describe("EvidenceDrawer", () => {
     // Source: the quote, how it verified, and where it was found in words.
     const source = within(drawer).getByTestId("layer-source");
     expect(within(source).getByText("EXHIBIT 10.102 (part 1)")).toBeTruthy();
-    expect(source.textContent).toContain("Verified verbatim in the document text · relocated:exact");
+    expect(source.textContent).toContain("Found in the document text · relocated:exact");
+    // What code checked is said beside the passages: their presence in the text, not that they support the answer.
+    expect(within(source).getByTestId("source-limit").textContent).toContain("Whether it supports the answer is the model");
     expect(source.textContent).toContain("Found in EXHIBIT 10.102 (part 1), not in the section the model cited.");
 
     // Code found a conflict: observed against required, the sentence, the final status; the guidance it was checked against.

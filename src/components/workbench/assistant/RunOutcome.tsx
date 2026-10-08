@@ -74,7 +74,7 @@ export function WithheldList({
             return (
               <div key={i} className={styles.withheldSpan}>
                 <span className={span.verified ? styles.withheldQuoteKept : `${styles.withheldQuote} ${styles.quoteWithheld}`}>{span.quote}</span>
-                <span className={styles.verifiedTag}>{span.verified ? `verified in ${where}` : `not found verbatim in ${where}`}</span>
+                <span className={styles.verifiedTag}>{span.verified ? `found in ${where}` : `not found verbatim in ${where}`}</span>
               </div>
             );
           })}

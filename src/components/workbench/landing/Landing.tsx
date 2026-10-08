@@ -267,7 +267,7 @@ export function Landing({
                     </div>
                     <div>
                       <dt>Findings</dt>
-                      <dd>{plural(proof.findings, "finding")}, every citation verified</dd>
+                      <dd>{plural(proof.findings, "finding")}, every quoted passage found in the document</dd>
                     </div>
                     <div>
                       <dt>Model</dt>

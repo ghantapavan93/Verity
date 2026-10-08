@@ -4,8 +4,8 @@ import { codeRole, decidedByCode, retrievalNote, sectionsReadNote, statusLabel }
 /** The chip a lawyer reads most: "Within guidance" is a comparison code made, or it says it is the model's view. */
 describe("statusLabel", () => {
   it("calls a pass without guidance an answer", () => {
-    expect(statusLabel("pass", false)).toBe("Answered");
-    expect(statusLabel("pass", false, "model_hint")).toBe("Answered");
+    expect(statusLabel("pass", false)).toBe("Model's answer");
+    expect(statusLabel("pass", false, "model_hint")).toBe("Model's answer");
   });
 
   it("calls a computed pass within guidance", () => {
