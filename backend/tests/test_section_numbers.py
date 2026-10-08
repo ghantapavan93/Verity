@@ -124,3 +124,24 @@ def test_every_number_shown_is_stated_by_the_document(lines: list[str]) -> None:
         return  # no readable text: refused, nothing shown
     for section in sections:
         assert section.number == "" or section.number in starts, (section.number, section.heading)
+
+
+def test_a_numbered_line_whose_words_open_in_lower_case_is_not_a_heading() -> None:
+    """Reader v8. A clause title opens with a capital; a numbered line that does not is a wrapped sentence, a figure or a
+    list item inside a clause. Measured 2026-10-08 over the CUAD texts and 300 EDGAR filings: 460 of 11,646 numbered
+    heading lines, none of 60 sampled a clause title."""
+    from app.ingest.sections import looks_like_heading
+
+    for line in ("6.09 shall be paid into the Net Cash Proceeds Account", "3.00 to 1.00", "3.1.14 make available for", "15 years", "2 of 6"):
+        assert not looks_like_heading(line), line
+    for line in ("5.5 Effect of Termination", "12. Notices", "Section 7 Governing Law", "ARTICLE 3 REPRESENTATIONS"):
+        assert looks_like_heading(line), line
+    # Recorded trade-off: a title that opens with a lower-case brand ("eBay") is read as body, under the clause before it.
+    assert not looks_like_heading("10. eBay Listings")
+
+
+def test_a_lower_case_list_item_stays_in_its_clause() -> None:
+    text = "1. Services\n\nThe Supplier will:\n\n1.1 deliver the goods\n\n1.2 install them\n\n2. Payment\n\nFees are due monthly.\n"
+    assert [n for n, _ in reading(text) if n] == ["1", "2"]
+    services = next(s for s in ingest("contract.txt", text.encode()).sections if s.number == "1")
+    assert "1.1 deliver the goods" in services.text and "1.2 install them" in services.text

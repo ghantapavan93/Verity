@@ -29,7 +29,10 @@ __all__ = ["PARSER_VERSION", "SUPPORTED", "Ingested", "TooLargeToRead", "Unsuppo
 # heading alone (v6 computed one from levels, a number the document never shows: "§7 MILESTONE 1" beside the agreement's own
 # clause 7), and a stated number that does not continue the clause numbering is not a heading ("15285 Minnetonka Blvd." was
 # §15285, and the schedules after it §15408 onward). DOCX is read as in v6. The file's bytes must agree with its type.
-PARSER_VERSION = "v7"
+# v8 (2026-10-08): plain text and PDF. A numbered line whose words open in lower case is not a heading: a wrapped
+# sentence ("Section 19 of the Facility Lease, or modify …"), a figure ("3.00 to 1.00", "15 years") or a list item inside a
+# clause ("3.1.14 make available for …"), which now stays body under its clause. DOCX is read as in v7.
+PARSER_VERSION = "v8"
 
 
 @dataclass

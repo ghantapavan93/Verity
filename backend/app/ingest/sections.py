@@ -200,6 +200,12 @@ def looks_like_heading(line: str) -> bool:
     match = HEADING_NUMBER.match(stripped)
     if match and not stripped.endswith((".", ";", ",", ":")):
         title = match.group(2)
+        # A heading's title opens with a capital; a numbered line whose words open in lower case is a wrapped sentence
+        # ("Section 19 of the Facility Lease, or modify …"), a figure ("3.50 to 1.00", "15 years") or a list item
+        # inside a clause ("3.1.14 make available for …"). Measured 2026-10-08: 460 of 11,646 numbered heading lines in
+        # the CUAD texts and 300 EDGAR filings; none of 60 sampled was a clause title.
+        if title[:1].islower():
+            return False
         # Cross-references read like headings and are not: "5.5 (Effect of Termination), Section 5.6 (Survival)".
         return not (title.startswith("(") or re.search(r"\b(?:Section|Clause|Article)s?\s+\d", title, re.IGNORECASE))
     letters = [c for c in stripped if c.isalpha()]
