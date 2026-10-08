@@ -170,4 +170,30 @@ describe("useUrlState", () => {
     rerender({ ...initial, doc, stage: "workspace", run: running });
     expect(window.location.search).toBe("?document=doc1&run=run1");
   });
+
+  it("corrects an address that names a run under another document's id, once, in place", () => {
+    // Adversarial review, 2026-10-08: ?document=A&run=<a run of B> showed B and its answer but kept document=A.
+    setUrl("?document=docOther&run=run1");
+    const before = window.history.length;
+    const initial = props();
+    const { rerender } = renderHook((p) => useUrlState(p), { initialProps: initial });
+    expect(initial.openRun).toHaveBeenCalledWith("run1", null, true);
+    rerender({ ...initial, doc, stage: "workspace", run: finished }); // the run arrives with its own document
+    expect(window.location.search).toBe("?document=doc1&run=run1");
+    expect(window.history.length).toBe(before); // replaced, not pushed
+    rerender({ ...initial, doc, stage: "workspace", run: { ...finished } });
+    rerender({ ...initial, doc, stage: "workspace", run: { ...finished } });
+    expect(window.location.search).toBe("?document=doc1&run=run1");
+    expect(window.history.length).toBe(before); // no loop, no further entries
+    expect(initial.openRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("control: an address whose run does not arrive is left as it was", () => {
+    setUrl("?document=docOther&run=runMissing");
+    const initial = props();
+    const { rerender } = renderHook((p) => useUrlState(p), { initialProps: initial });
+    rerender({ ...initial }); // the run failed to load: nothing is shown
+    rerender({ ...initial, doc, stage: "workspace" }); // a document alone is not the run the address named
+    expect(window.location.search).toBe("?document=docOther&run=runMissing");
+  });
 });

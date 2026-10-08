@@ -23,6 +23,17 @@ const COALESCE_MS = 600;
 /** How long a restore may take to arrive before the URL follows the state again. */
 const RESTORE_PATIENCE_MS = 5000;
 
+/**
+ * The state an address names, comparable across spellings: the parameters in one order, and no `document` beside a
+ * `run`, since a run determines its document. `?document=A&run=<a run of B>` names B's run, and B is what is shown.
+ */
+function named(search: string): string {
+  const params = new URLSearchParams(search);
+  if (params.get("run")) params.delete("document");
+  params.sort();
+  return params.toString();
+}
+
 /** What the address asks for, and the state that answers it. True when the address named something this app has. */
 function apply(search: string, { openRun, openDocument, navigate, goHome }: Pick<UrlStateArgs, "openRun" | "openDocument" | "navigate" | "goHome">): boolean {
   const params = new URLSearchParams(search);
@@ -83,15 +94,22 @@ export function useUrlState({ view, doc, stage, run, findingId, openRun, openDoc
     const query = params.toString();
     const search = query ? `?${query}` : "";
     const next = `${window.location.pathname}${search}`;
+    const current = `${window.location.pathname}${window.location.search}`;
     if (restoring.current) {
-      if (search === restoring.current.search) {
+      if (named(search) === named(restoring.current.search)) {
         restoring.current = null;
+        // The restore arrived. An address that said it differently (another document's id beside the run, the
+        // parameters in another order) is corrected in place: no history entry, and Back still leaves the page.
+        if (next !== current) {
+          window.history.replaceState(null, "", next);
+          lastPush.current = Date.now();
+        }
         return;
       }
       if (Date.now() - restoring.current.at < RESTORE_PATIENCE_MS) return;
       restoring.current = null;
     }
-    if (next === `${window.location.pathname}${window.location.search}`) return;
+    if (next === current) return;
     const now = Date.now();
     if (now - lastPush.current < COALESCE_MS) {
       window.history.replaceState(null, "", next);
