@@ -92,12 +92,13 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
       <div className={styles.inner}>
         <div className={styles.kicker}>Findings</div>
         <h1 className={styles.title}>
-          Findings with verified evidence
+          Findings and their passages
           {records && <span className={styles.count}>{records.length}</span>}
         </h1>
         <p className={styles.lede}>
-          Every finding here cites contract text that code found verbatim. Open one to see the exact passage marked in its document. Where a point was not
-          found, the citations marked <em>searched</em> are the closest provisions that were read, not support for a claim.
+          Every finding here cites contract text that code found in the document, word for word or differing only in spacing, case, punctuation or how a number
+          is written. Open one to see the passage marked in its document and how it was matched. Where a point was not found, the citations marked{" "}
+          <em>searched</em> are the closest provisions that were read, not support for a claim.
           {records && records.length > 0 && ` ${plural(awaiting, "finding")} awaiting review · ${reviewed} reviewed.`}
         </p>
         {records && records.length > 0 && (
@@ -201,7 +202,13 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                           by {r.review.reviewer} · {formatWhen(r.review.at)}
                           {r.review.note ? ` · ${r.review.note}` : ""}
                         </span>
-                        <button type="button" className={styles.reviewButton} disabled={busyId === r.id} onClick={() => void decide(r, "cleared")}>
+                        <button
+                          type="button"
+                          className={styles.reviewButton}
+                          disabled={busyId === r.id}
+                          onClick={() => void decide(r, "cleared")}
+                          aria-label={`Undo: ${r.topic}`}
+                        >
                           Undo
                         </button>
                       </>
@@ -221,11 +228,16 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                           name="reviewer"
                           className={styles.reviewInput}
                           placeholder="Your name, asked once"
+                          aria-label="Your name, recorded with the decision"
                           maxLength={80}
                           required
                           ref={(element) => element?.focus()}
                         />
-                        <button type="submit" className={styles.reviewButton}>
+                        <button
+                          type="submit"
+                          className={styles.reviewButton}
+                          aria-label={`${pending.verdict === "confirmed" ? "Confirm" : "Dismiss"}: ${r.topic}`}
+                        >
                           {pending.verdict === "confirmed" ? "Confirm" : "Dismiss"}
                         </button>
                         <button type="button" className={styles.reviewButton} onClick={() => setPending(null)}>
@@ -235,10 +247,22 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                     ) : (
                       <>
                         <span>Review</span>
-                        <button type="button" className={styles.reviewButton} disabled={busyId === r.id} onClick={() => void decide(r, "confirmed")}>
+                        <button
+                          type="button"
+                          className={styles.reviewButton}
+                          disabled={busyId === r.id}
+                          onClick={() => void decide(r, "confirmed")}
+                          aria-label={`Confirm: ${r.topic}`}
+                        >
                           Confirm
                         </button>
-                        <button type="button" className={styles.reviewButton} disabled={busyId === r.id} onClick={() => void decide(r, "dismissed")}>
+                        <button
+                          type="button"
+                          className={styles.reviewButton}
+                          disabled={busyId === r.id}
+                          onClick={() => void decide(r, "dismissed")}
+                          aria-label={`Dismiss: ${r.topic}`}
+                        >
                           Dismiss
                         </button>
                       </>
