@@ -212,7 +212,7 @@ export function RunsView({
                   note: citations.firstRunAt ? `since ${formatWhen(citations.firstRunAt)}` : undefined,
                 },
                 { label: "Quoted passages", value: citations.spans },
-                { label: "Found verbatim", value: citations.verifiedSpans },
+                { label: "Found in the document text", value: citations.verifiedSpans },
                 { label: "Findings withheld", value: citations.withheldFindings, note: `of ${citations.findings.toLocaleString("en-US")} findings` },
               ]}
             />

@@ -126,7 +126,7 @@ export function RecordPipeline({
     {
       label: "Code found",
       value: citations?.verifiedSpans ?? null,
-      note: "verbatim in the document text",
+      note: "in the document text",
       tone: "accent",
       icon: (
         <Stroke>
