@@ -576,7 +576,10 @@ before it was made and reviewed again as a diff; each names the class it closes,
    readings exist only in sandbox stores; the version moved rather than read the same bytes two ways under one name.
 3. *Where a passage is.* A quote is labelled by the clause the stored text names around it ("§13.2 Governing Law"), not
    only by its section, so a clause written inline under another heading is cited by its own number; the label is
-   derived at display and in the pack, and no stored reading changed.
+   derived at display and in the pack, and no stored reading changed. The real-model smoke on a printed PDF then found
+   two clauses run together in one paragraph and the governing-law quote labelled by the first; an opening after a
+   sentence now moves the label only to the clause that follows, and every unclear case leaves the clause unknown
+   (measured over 810 documents in docs/FAILURE-ENVELOPE.md, no wrong name in the 116 changes read).
 4. *Refusals that say what happened.* An empty file is refused as empty; a PDF with no text layer as a scan.
 5. *Review and state.* A review names the review state it was decided against; a stale one is refused with 409 and
    nothing written, under one write lock; a lock not had within SQLite's wait is a 503, not a 500. An address naming a run under another document's id is corrected in place.
