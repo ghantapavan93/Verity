@@ -33,6 +33,12 @@ class TooLarge(WorkbenchError):
     status_code = 413
 
 
+class Busy(WorkbenchError):
+    """The store is held by another write for longer than a request waits; nothing was written, and a retry may pass."""
+
+    status_code = 503
+
+
 class AccessRequired(WorkbenchError):
     """No valid session: the reader has not come through an invite, or the session has ended."""
 

@@ -10,9 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from ..errors import Conflict, NotFound
+from ..errors import Busy, Conflict, NotFound
 from ..ingest.invisible import visible_text
 from ..models import Finding, FindingReview, ReviewVerdictName, iso
 from ..schemas import ReviewOut
@@ -61,7 +62,14 @@ def review_finding(
     if based_on is not None and session.get_bind().dialect.name == "sqlite":
         # Take the write lock before reading the latest review: two stale tabs cannot both pass the check below.
         session.commit()
-        session.execute(text("BEGIN IMMEDIATE"))
+        try:
+            session.execute(text("BEGIN IMMEDIATE"))
+        except OperationalError as error:
+            # SQLite waits five seconds for the lock, then says "database is locked": a 500 until the triage review.
+            session.rollback()
+            if "locked" not in str(error):
+                raise
+            raise Busy("Another decision is being recorded; nothing was written. Try again in a moment.") from error
         session.expire(finding, ["reviews"])
     latest = finding.reviews[-1] if finding.reviews else None
     if latest is not None and (latest.verdict, latest.reviewer, latest.note) == (verdict, reviewer, note):

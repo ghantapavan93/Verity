@@ -5,6 +5,7 @@ click won and the earlier tab still showed its own decision as the finding's sta
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 from typing import Any, cast
 
@@ -146,3 +147,18 @@ def test_every_recorded_decision_was_made_against_the_state_it_replaced(client: 
         else:
             assert response.status_code == 201 and rows(finding) == before_rows + 1
         seen[tab] = latest(client, finding)
+
+
+def test_a_review_that_cannot_take_the_write_lock_is_refused_as_busy_and_writes_nothing(client: TestClient) -> None:
+    """Another writer holding the store past SQLite's five-second wait used to surface as a 500."""
+    finding = answered(client)
+    holder = sqlite3.connect(str(db_module.engine.url.database), isolation_level=None)
+    try:
+        holder.execute("BEGIN IMMEDIATE")
+        busy = review(client, finding, "confirmed", "A. Reviewer", based_on=0)
+        assert busy.status_code == 503 and "nothing was written" in busy.json()["detail"]
+    finally:
+        holder.rollback()
+        holder.close()
+    assert rows(finding) == 0
+    assert review(client, finding, "confirmed", "A. Reviewer", based_on=0).status_code == 201
