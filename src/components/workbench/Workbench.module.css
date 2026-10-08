@@ -816,14 +816,18 @@
   padding: 16px 16px 6px;
 }
 
+/* Wraps: in a narrow panel (768 px) the status chip went past the card's edge (release review, 2026-10-08). */
 .resultHead {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
 }
 
 .resultTopic {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-family: var(--font-serif);
   font-size: 17px;
   font-weight: 600;
@@ -1009,8 +1013,10 @@
   color: var(--text-3);
 }
 
+/* Each fact wraps inside itself when the panel is narrower than it; nowrap cut "every quoted passage found in the
+   document text" off at 768 px (release review, 2026-10-08). */
 .runMeta span {
-  white-space: nowrap;
+  min-width: 0;
 }
 
 .runMeta code {
@@ -1229,6 +1235,42 @@
   background: var(--glass-opaque);
   overflow-y: auto;
   counter-reset: layer;
+  /* The drawer covers the assistant panel, whose width follows the window and the divider, not the window alone. */
+  container: drawer / inline-size;
+}
+
+/* A narrow drawer in a wide window (a 768 px tablet, or the divider dragged right) reads as the phone layout does: at
+   768 px the four-cell strip was clipped and the facts broke words mid-letter (release review, 2026-10-08). */
+/* Prefixed with .drawer: the base rules for these classes come later in this file and would win on order. */
+@container drawer (max-width: 440px) {
+  .drawer .drawerBody {
+    padding: 4px 16px 24px;
+  }
+
+  .drawer .drawerSection {
+    padding-left: 34px;
+  }
+
+  .drawer .layer::before {
+    left: 10px;
+  }
+
+  .drawer .layer h4::before {
+    left: -34px;
+  }
+
+  .drawer .strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .drawer .drawerFacts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .drawer .drawerFacts dd {
+    margin-bottom: 8px;
+  }
 }
 
 .drawerHead {
