@@ -570,13 +570,16 @@ before it was made and reviewed again as a diff; each names the class it closes,
 2. *Readers v8 and v9.* v8: a numbered plain-text or PDF line whose words open in lower case is body, not a heading
    (460 of 11,646 such heading lines in CUAD and EDGAR were figures, wrapped sentences or list items). v9: invisible
    format characters are removed where text is first read, counted as a coverage part, and removed from file names,
-   guidance, questions and reviews; a reading made before v9 shows each one as a visible marker.
+   guidance, questions and reviews; a reading made before v9 shows each one as a visible marker. v10, from the triage
+   review of the v9 diff: the invisible characters that are not Cf (variation selectors, the combining grapheme joiner,
+   Hangul fillers) are removed between ASCII letters or digits, where "9", U+FE0F, "0 days" had still parsed as 0. v9
+   readings exist only in sandbox stores; the version moved rather than read the same bytes two ways under one name.
 3. *Where a passage is.* A quote is labelled by the clause the stored text names around it ("§13.2 Governing Law"), not
    only by its section, so a clause written inline under another heading is cited by its own number; the label is
    derived at display and in the pack, and no stored reading changed.
 4. *Refusals that say what happened.* An empty file is refused as empty; a PDF with no text layer as a scan.
 5. *Review and state.* A review names the review state it was decided against; a stale one is refused with 409 and
-   nothing written, under one write lock. An address naming a run under another document's id is corrected in place.
+   nothing written, under one write lock; a lock not had within SQLite's wait is a 503, not a 500. An address naming a run under another document's id is corrected in place.
    A document's type is its recorded media type, never what is left of its name (a 269-character name had lost
    ".txt"); bytes kept under a cut name are still found.
 6. *Interface.* No control is hidden or dead (the drawer makes the page behind it inert and returns focus; a question
