@@ -107,6 +107,45 @@ def test_known_gap_a_titled_list_inside_a_clause_is_read_as_the_next_clause() ->
     assert at(listed, "Breach entitles") == "§5 Remedies"
 
 
+def test_a_clause_that_opens_inside_a_paragraph_places_the_passage_after_it() -> None:
+    """Real-model smoke on a printed PDF, 2026-10-08: two clauses in one paragraph, and the governing-law quote was
+    labelled by the first ("§3.1 Notices")."""
+    printed = "3.1 Notices. Notices must be in writing. 3.2 Governing Law. This Agreement is governed by the laws of Delaware."
+    assert clause_label(printed, printed.index("This Agreement is governed"), 3) == "§3.2 Governing Law"
+    assert clause_label(printed, printed.index("Notices must be"), 3) == "§3.1 Notices"
+    first = "3. General. These terms apply. 3.1 Notices. Notices must be in writing."
+    assert at(first, "Notices must be") == "§3.1 Notices"  # a clause's first sub-clause continues it
+    later = "15.5 Severability. A void term is severed. 15.10 Export Control. Neither party exports controlled goods."
+    assert at(later, "Neither party exports") is None  # 15.10 is not the clause after 15.5: unknown, not either name
+
+
+def test_controls_inside_a_paragraph_an_abbreviation_or_a_contents_line_names_no_clause() -> None:
+    # Under clause 2, "No. 3 Joinder Agreement, Amendment No." reads like clause 3 opening; a period after "No" is not a
+    # sentence end, so it is not adopted, and the clause it sits in is left unknown rather than named wrongly.
+    joinder = "2. Joinder. The parties executed Amendment No. 3 Joinder Agreement, Amendment No. 4 thereto. The Borrower shall pay."
+    assert at(joinder, "The Borrower shall pay") is None
+    initialism = "2. Scope. This covers the U.S. 3 Regions. The supplier delivers."
+    assert at(initialism, "The supplier delivers") is None
+    contents = "1. Definitions. Terms used below. 12 Article 11 Audits. . . . . . 13 Article 12 Limited Warranties. . . . 14"
+    assert at(contents, "Limited Warranties") is None  # a candidate that does not follow: the clause is no longer known
+    unknown = "Fees are due monthly. 3.2 Governing Law. This Agreement is governed by the laws of Delaware."
+    assert at(unknown, "This Agreement is governed") is None  # nothing found before: nothing inside a paragraph names one
+
+
+def test_the_next_number_without_a_title_ends_the_clause_inside_a_paragraph() -> None:
+    untitled = "3.1 Notices. Notices must be in writing. 3.2 The parties agree that Delaware law governs. It applies."
+    assert clause_label(untitled, untitled.index("It applies"), 3) is None  # not 3.1, whatever 3.2 is called
+    sub = "3.2 Governing Law. Delaware law governs. 3.2.1 the courts of Delaware hear disputes."
+    assert clause_label(sub, sub.index("the courts of Delaware"), 3) == "§3.2 Governing Law"  # its own sub-clause
+
+
+def test_known_gap_a_titled_figure_that_follows_reads_as_the_next_clause() -> None:
+    """Recorded, not fixed (triage review, 2026-10-08): a sentence that starts with the next number and reads as a title
+    ("4 Business Days.") is taken for clause 4. It needs both the number that follows and a capitalised title."""
+    figure = "3.1 Notices. Notices arrive within ten days. 4 Business Days. Then the term ends."
+    assert clause_label(figure, figure.index("Then the term ends"), 3) == "§4 Business Days"
+
+
 PARAGRAPH = st.one_of(
     st.builds(
         lambda n, t: f"{n}. {t}. The parties agree to the terms below.",
@@ -114,7 +153,14 @@ PARAGRAPH = st.one_of(
         st.sampled_from(["Payment", "Governing Law", "Term and Termination", "Notices"]),
     ),
     st.builds(lambda n, m: f"{n}.{m} the supplier shall deliver the goods.", st.integers(1, 30), st.integers(1, 9)),
-    st.sampled_from(["Fees are due monthly.", "1. the first item of a list.", "Section 9 applies."]),
+    st.sampled_from(["Fees are due monthly.", "1. the first item of a list.", "Section 9 applies.", "See Amendment No. 3 Joinder, Exhibit A."]),
+    # two clauses in one paragraph, as a printed PDF often reads
+    st.builds(
+        lambda n, m, t: f"{n}.{m} Notices. Notices are in writing. {n}.{m + 1} {t}. The parties agree.",
+        st.integers(1, 30),
+        st.integers(1, 8),
+        st.sampled_from(["Payment", "Governing Law", "Assignment"]),
+    ),
 )
 
 
@@ -127,12 +173,9 @@ def test_every_label_names_a_clause_printed_before_the_passage(paragraphs: list[
     if label is None:
         return
     number, title = re.match(r"§(\S+) (.+)", label).groups()  # type: ignore[union-attr]
-    offset, openings = 0, []
-    for paragraph in text.split(PARAGRAPH_SEPARATOR):
-        if offset <= start:
-            openings.append(paragraph)
-        offset += len(paragraph) + len(PARAGRAPH_SEPARATOR)
-    assert any(p.startswith((f"{number}. {title}.", f"{number} {title}.")) for p in openings), label
+    # Printed as an opening at or before the passage: at the start of a paragraph, or after a sentence inside one.
+    opening = re.compile(rf"(?:^|(?<=\n)|(?<=[.;:])\s+){re.escape(number)}\.? {re.escape(title)}[.:]", re.MULTILINE)
+    assert any(m.start() <= start for m in opening.finditer(text)), label
 
 
 INLINE = """SERVICES AGREEMENT

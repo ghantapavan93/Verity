@@ -109,17 +109,46 @@ def _ends_clause(number: str, clause: str) -> bool:
     return top.isdigit() and int(top) >= int(clause_top) and not number.startswith(clause + ".")
 
 
+# A sentence inside a paragraph that may open a clause: "… in writing. 3.2 Governing Law. This …" (real-model smoke on a
+# printed PDF, 2026-10-08: the governing-law quote was labelled "§3.1 Notices").
+SENTENCE_START = re.compile(r"(?<=[.;:])\s+(?=\d)")
+
+
+def follows(previous: str, number: str) -> bool:
+    """Whether a clause numbered ``number`` can be the next one after ``previous``: its first sub-clause (3 then 3.1), a
+    later sibling a short step on (3.1 then 3.2 to 3.4), or the next top-level clause bare or at .1 (5.5 then 6 or 6.1,
+    16 then 17 or 18). A list item, a cross-reference or an abbreviation ("Amendment No. 3 Joinder") rarely does."""
+    a, b = previous.split("."), number.split(".")
+    if b[:-1] == a and b[-1] == "1":
+        return True
+    if len(a) == len(b) and a[:-1] == b[:-1] and a[-1].isdigit() and b[-1].isdigit():
+        return 0 < int(b[-1]) - int(a[-1]) <= MAX_SIBLING_STEP
+    if a[0].isdigit() and b[0].isdigit() and 0 < int(b[0]) - int(a[0]) <= MAX_TOP_STEP:
+        return len(b) == 1 or (len(b) == 2 and b[1] == "1")
+    return False
+
+
+MAX_SIBLING_STEP = 3
+MAX_TOP_STEP = 2
+
+
 def clause_label(text: str, start: int, seed: int = 0) -> str | None:
     """Where a passage starting at ``start`` of a section's text sits, read from that text alone: the clause whose
-    opening paragraph ("13.2 Governing Law. This …") comes last before it, as "§13.2 Governing Law", or None.
+    opening ("13.2 Governing Law. This …") comes last before it, as "§13.2 Governing Law", or None.
 
     A reading keeps a clause written inline as body under the last standalone heading, so a section's label can name a
     different clause than the passage is in ("§5 Intellectual Property (part 3)" for a governing-law clause; QA campaign,
-    2026-10-08). Every number returned is printed at the start of a paragraph before the passage. A numbered paragraph
-    that is not part of the clause found (not its sub-number, not a list restarting below it: "13.3 the Parties agree …"
-    after 13.2) ends it. ``seed`` is the section's own top-level number: a clause numbered below it is a list inside the
-    section ("1. Indemnification by Licensee." under §8), never a clause of the document. Earlier parts of a split
-    section are read by `clause_label_in`. None leaves the section's label."""
+    2026-10-08). Every number returned is printed as an opening before the passage: at the start of a paragraph, or after
+    a sentence inside one. A numbered paragraph that is not part of the clause found (not its sub-number, not a list
+    restarting below it: "13.3 the Parties agree …" after 13.2) ends it. ``seed`` is the section's own top-level number: a
+    clause numbered below it is a list inside the section ("1. Indemnification by Licensee." under §8), never a clause of
+    the document. Earlier parts of a split section are read by `clause_label_in`.
+
+    Inside a paragraph (a printed PDF often runs clauses together: "… in writing. 3.2 Governing Law. This …"), only the
+    clause that follows the one found (`follows`) moves the label, and only after a real sentence end. Anything else
+    there that could open a clause, a number that follows without a title, or an opening after an abbreviation's
+    period ("Amendment No. 3 Joinder") leaves the clause unknown; nothing inside a paragraph names a clause when none was
+    found before it. None leaves the section's label."""
     found: tuple[str, str] | None = None
     last_top = seed
     offset = 0
@@ -131,8 +160,32 @@ def clause_label(text: str, start: int, seed: int = 0) -> str | None:
             found, last_top = clause, int(clause[0].split(".", 1)[0])
         elif found is not None and (numbered := HEADING_NUMBER.match(paragraph)) and _ends_clause(numbered.group(1), found[0]):
             found = None
+        for sentence in SENTENCE_START.finditer(paragraph):
+            if found is None or offset + sentence.end() > start:
+                break
+            rest = paragraph[sentence.end() :]
+            numbered = HEADING_NUMBER.match(rest)
+            if numbered is None:
+                continue
+            number, opened = numbered.group(1), inline_clause(rest, last_top)
+            if not follows(found[0], number):
+                if opened is not None:
+                    found = None  # reads as a clause opening and is not the next clause: which clause this is, is unknown
+            elif opened is not None and not _abbreviation_before(paragraph, sentence.start()):
+                found, last_top = opened, int(opened[0].split(".", 1)[0])
+            elif not number.startswith(found[0] + "."):
+                found = None  # the next number, untitled or after an abbreviation: the clause found has ended, maybe
         offset += len(paragraph) + len(PARAGRAPH_SEPARATOR)
     return f"§{found[0]} {found[1]}" if found else None
+
+
+# What a period that ends an abbreviation looks like: one capitalised word of up to three letters ("No.", "Sec.", "Co.")
+# or a dotted initialism ("U.S."). A number after it ("No. 3") is a reference, not an opening.
+ABBREVIATION = re.compile(r"(?:^|\s)(?:[A-Z][a-z]{0,2}|(?:[A-Za-z]\.){1,}[A-Za-z])[.]$")
+
+
+def _abbreviation_before(paragraph: str, at: int) -> bool:
+    return ABBREVIATION.search(paragraph[:at]) is not None
 
 
 @dataclass
