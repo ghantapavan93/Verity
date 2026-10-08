@@ -66,7 +66,7 @@ def test_binary_named_as_text_is_refused_and_utf16_text_is_not(client: TestClien
     response = client.post("/api/documents", files={"file": ("scan.txt", png, "text/plain")})
     assert response.status_code == 422 and "binary" in response.json()["detail"]
     # Control: UTF-16 carries NUL bytes and is text; it is decoded, not refused.
-    utf16 = "﻿1. Payment\n\nFees are due within thirty (30) days of invoice.\n".encode("utf-16-le")
+    utf16 = "\ufeff1. Payment\n\nFees are due within thirty (30) days of invoice.\n".encode("utf-16-le")
     assert client.post("/api/documents", files={"file": ("terms.txt", utf16, "text/plain")}).status_code == 201
 
 
