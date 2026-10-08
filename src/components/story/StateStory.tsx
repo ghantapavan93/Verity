@@ -161,14 +161,20 @@ function longDate(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 }
 
-/** The recorded sentence, cut around the words that name the agreement; those words are marked. */
-function citation(text: string, type: string | null): { before: string; marked: string; after: string } {
+/**
+ * The recorded sentence, cut around the words that name the agreement; those words are marked only when the year they
+ * carry is the reference's own. A recorded snippet can end before the reference and name the source instead ("… is made
+ * as of December 15, 2006" for a 2005 agreement); it is then shown unmarked (2026-10-08: arrivals 30, 37 and 49).
+ */
+function citation(text: string, type: string | null, referenceDate: string | null): { before: string; marked: string; after: string } {
   const words = (type ?? "")
     .split(/\s+/)
     .filter(Boolean)
     .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const match = words.length ? new RegExp(`${words.join("\\s+")}[^.;]{0,90}?\\b(?:19|20)\\d{2}\\b`, "i").exec(text) : null;
-  if (!match) return { before: text, marked: "", after: "" };
+  const year = (referenceDate ?? "").slice(0, 4);
+  const pattern = words.length ? new RegExp(`${words.join("\\s+")}[^.;]{0,90}?\\b((?:19|20)\\d{2})\\b`, "gi") : null;
+  const match = pattern ? [...text.matchAll(pattern)].find((m) => m[1] === year) : undefined;
+  if (!match || match.index === undefined) return { before: text, marked: "", after: "" };
   // cut at word boundaries, so the excerpt never starts or ends inside a word
   let start = Math.max(0, match.index - 150);
   if (start > 0) start = text.indexOf(" ", start) + 1 || start;
@@ -348,8 +354,8 @@ function Hero({ view, evidence }: { view: ContractStateView; evidence: Evidence 
   const steps: [string, number, string, number][] = [
     ["Derived objects", total, "what a full rebuild recomputes", 0],
     ["Impact envelope", s.impactEnvelopeMean, "what one arrival could reach, on average", 0],
-    ["Recompute plan", s.recomputePlanMean, "what needed another look", 1],
-    ["State delta", s.stateDeltaMean, "what actually changed", 1],
+    ["Recompute plan", s.recomputePlanMean, "what needed another look, on average", 1],
+    ["State delta", s.stateDeltaMean, "what actually changed, on average", 1],
   ];
   const top = Math.log10(total);
   return (
@@ -403,7 +409,7 @@ function CertificateMoment({ arrival }: { arrival: StateArrivalView }) {
       </Section>
     );
   }
-  const quote = citation(edge.evidence ?? cert.support.cited_span, cert.support.reference[0]);
+  const quote = citation(edge.evidence ?? cert.support.cited_span, cert.support.reference[0], cert.support.reference[1] ?? null);
   const underGuard = cert.guard.documents_under_guard[cert.support.reference[1] ?? ""] ?? null;
   const otherDates = cert.guard.guarded_dates.filter((d) => d !== cert.support.reference[1]).length;
   return (
@@ -462,7 +468,7 @@ function CertificateMoment({ arrival }: { arrival: StateArrivalView }) {
                 <p className={styles.certLead}>Exactly {cert.guard.satisfying_texts} visible text satisfies this reference.</p>
                 <p className={styles.certNote}>
                   {underGuard !== null
-                    ? `${grouped.format(underGuard)} ${underGuard === 1 ? "document" : "documents"} of this filer carry that date and are watched`
+                    ? `${grouped.format(underGuard)} ${underGuard === 1 ? "document of this filer carries that date and is" : "documents of this filer carry that date and are"} watched`
                     : "The filer's documents of that date are watched"}
                   {otherDates ? `, with the source's ${otherDates} other dated ${otherDates === 1 ? "reference" : "references"}` : ""}. A second text satisfying
                   the reference would reopen this edge; a document answering another reference does not.
@@ -532,7 +538,7 @@ function ArrivalMoment({
       "Input and certificate checks",
       `${grouped.format(arrival.work.keptByInputCheck)} kept as computed`,
       edges
-        ? `inputs unchanged, so kept as computed; of ${edges.edges_revalidated} relationships re-evaluated, ${edges.edge_value_and_certificate_unchanged} came back with the same value and certificate and reached nothing downstream`
+        ? `inputs unchanged, so kept as computed; of ${edges.edges_revalidated} ${edges.edges_revalidated === 1 ? "relationship" : "relationships"} re-evaluated, ${edges.edge_value_and_certificate_unchanged} came back with the same value and certificate and reached nothing downstream`
         : "inputs unchanged, so kept as computed",
     ],
     ["Recompute plan", `${grouped.format(arrival.recomputePlan.total)} objects`, kinds(arrival.recomputePlan.byKind)],

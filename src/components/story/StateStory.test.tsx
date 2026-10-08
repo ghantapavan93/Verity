@@ -38,6 +38,19 @@ describe("StateStory", () => {
     expect(quote.tagName).toBe("MARK");
   });
 
+  it("marks the agreement's name only where its year is the reference's own, never the source's own date", () => {
+    const view = structuredClone(VIEW) as unknown as { arrivals: { edge?: { evidence?: string } }[] };
+    // A recorded snippet that names the agreement only with the amendment's own date (a 2023 date for a 2022 reference).
+    view.arrivals[0].edge = {
+      ...view.arrivals[0].edge,
+      evidence: "Amendment No. 3 to the Credit Agreement is made as of March 1, 2023, by and among the parties.",
+    };
+    render(<StateStory initial={view as unknown as ContractStateView} />);
+    const source = screen.getByRole("article", { name: "Source" });
+    expect(source.querySelector("mark")).toBeNull();
+    expect(source.textContent).toContain("made as of March 1, 2023");
+  });
+
   it("traces one recorded arrival, and a chosen arrival is named in the URL", () => {
     render(<StateStory initial={VIEW} />);
     const trace = screen.getByRole("list", { name: "The recorded trace of this arrival" });
