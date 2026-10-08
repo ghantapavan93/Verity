@@ -90,7 +90,7 @@ def test_the_accepted_view_reports_what_it_accepted_and_excluded() -> None:
 
 def test_plain_text_and_pdf_readings_say_what_they_can_and_cannot_know() -> None:
     parsed = ingest("agreement.txt", b"1. Term\nThis Agreement commences on the Effective Date.\n")
-    assert [(c.part, c.status) for c in parsed.coverage] == [("main_body", Status.READ)]
+    assert [(c.part, c.status) for c in parsed.coverage] == [("main_body", Status.READ), ("format_characters", Status.ABSENT)]
 
 
 def test_the_document_carries_its_coverage_and_the_pack_records_it(client: TestClient) -> None:

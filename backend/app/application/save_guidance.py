@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..errors import InvalidInput
 from ..hashing import sha256_text
+from ..ingest.invisible import visible_text
 from ..models import Guidance
 
 
@@ -26,7 +27,7 @@ def stored_guidance(session: Session, sha256: str, workspace: str | None = None)
 
 
 def save_guidance(session: Session, text: str, source: str = "pasted", workspace: str | None = None) -> SavedGuidance:
-    text = text.strip()
+    text = visible_text(text).strip()  # guidance is read by the day parser too: no invisible characters in it
     if not text:
         # Found while tracing (2026-09-29): whitespace was stored as empty guidance and the status logic was told guidance existed.
         raise InvalidInput("guidance is empty once whitespace is removed; paste a rule, a note or an instruction, or ask without guidance")

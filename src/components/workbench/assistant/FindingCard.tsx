@@ -2,7 +2,7 @@
 
 import styles from "../Workbench.module.css";
 import { NARROW_QUERY } from "../shell/constants";
-import { StatusChip } from "../shell/primitives";
+import { StatusChip, Visible } from "../shell/primitives";
 import { isLocated, passageLabel, type FindingView, type SectionView, type SpanView } from "@/lib/types";
 
 function excerpt(quote: string, max = 150): string {
@@ -58,7 +58,9 @@ export function FindingCard({
               title="Show in the document"
             >
               <span className={styles.citationLabel}>{passageLabel(span, section)}</span>
-              <span className={styles.citationExcerpt}>{excerpt(span.quote)}</span>
+              <span className={styles.citationExcerpt}>
+                <Visible text={excerpt(span.quote)} />
+              </span>
             </button>
           ))}
         </div>

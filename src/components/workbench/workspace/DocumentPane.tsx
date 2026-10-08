@@ -6,6 +6,7 @@ import styles from "../Workbench.module.css";
 import { transitions } from "../shell/constants";
 import { formatWhen, plural } from "@/lib/format";
 import { codePointLength, splitByCodePoints } from "@/lib/text";
+import { Visible } from "../shell/primitives";
 import { EvidenceSpine } from "./EvidenceSpine";
 import { partOf, type DocumentView, type FindingView, type LocatedSpan, type SectionView, type SpanView } from "@/lib/types";
 
@@ -27,6 +28,10 @@ function describe(doc: DocumentView): string {
   if (doc.hiddenRuns) parts.push(`${plural(doc.hiddenRuns, "hidden run")} left out`);
   const unread = notRead(doc);
   if (unread.length) parts.push(`${plural(unread.length, "part")} not read`);
+  // Reader v9 removes invisible characters (zero-width, soft hyphen, direction controls) and counts them: a signed copy
+  // may display differently where they were, and the paper shows the text in the order it is stored and checked.
+  const removed = (doc.coverage?.parts ?? []).find((c) => c.part === "format_characters")?.count ?? 0;
+  if (removed) parts.push(`${plural(removed, "invisible character")} removed; text shown in stored order`);
   if (doc.reused) parts.push("already in the workbench, opened as stored");
   return parts.filter(Boolean).join(" · ");
 }
@@ -99,12 +104,14 @@ function SectionBlock({ section, lit, span }: { section: SectionView; lit: boole
     span && span.verified && span.start >= 0 && span.end <= codePointLength(section.text) ? splitByCodePoints(section.text, span.start, span.end) : null;
   const body = located ? (
     <>
-      {located[0]}
-      <mark className={styles.passage}>{located[1]}</mark>
-      {located[2]}
+      <Visible text={located[0]} />
+      <mark className={styles.passage}>
+        <Visible text={located[1]} />
+      </mark>
+      <Visible text={located[2]} />
     </>
   ) : (
-    section.text
+    <Visible text={section.text} />
   );
   const part = partOf(section.heading);
   const heading = part ? part.base : section.heading;

@@ -35,6 +35,7 @@ PARTS: tuple[str, ...] = (
     "automatic_numbering",
     "embedded_objects",
     "external_chunks",
+    "format_characters",
 )
 
 

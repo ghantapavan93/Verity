@@ -2,6 +2,7 @@
 
 import styles from "../Workbench.module.css";
 import { VerityMark } from "../icons";
+import { revealInvisible } from "@/lib/text";
 import { statusLabel, type FindingStatus } from "@/lib/types";
 
 /** A finding's status as the API decided it, worded by whether its run had guidance. The tone is presentation; the status is not decided here. */
@@ -24,5 +25,25 @@ export function Brand() {
       <VerityMark size={20} />
       <span className={styles.wordmark}>Verity</span>
     </div>
+  );
+}
+
+/**
+ * Stored text as it is: an invisible format character an older reading still holds is shown as a marker naming it, so
+ * the screen never displays different text from what was checked (lib/text revealInvisible).
+ */
+export function Visible({ text }: { text: string }) {
+  return (
+    <>
+      {revealInvisible(text).map((piece, i) =>
+        piece.invisible ? (
+          <span key={i} className={styles.invisibleMark} title={`An invisible character (${piece.codePoint}) in the stored text`}>
+            {piece.codePoint}
+          </span>
+        ) : (
+          piece.text
+        ),
+      )}
+    </>
   );
 }

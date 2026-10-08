@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from ..hashing import sha256_bytes
 from .coverage import PartCoverage
+from .invisible import visible_text
 from .readers import SUPPORTED, ReadResult, TooLargeToRead, UnsupportedFile, read
 from .sections import ParsedSection, build_sections
 
@@ -32,7 +33,10 @@ __all__ = ["PARSER_VERSION", "SUPPORTED", "Ingested", "TooLargeToRead", "Unsuppo
 # v8 (2026-10-08): plain text and PDF. A numbered line whose words open in lower case is not a heading: a wrapped
 # sentence ("Section 19 of the Facility Lease, or modify …"), a figure ("3.00 to 1.00", "15 years") or a list item inside a
 # clause ("3.1.14 make available for …"), which now stays body under its clause. DOCX is read as in v7.
-PARSER_VERSION = "v8"
+# v9 (2026-10-08): every format. Invisible format characters (Unicode Cf: zero-width space, soft hyphen, word joiner,
+# byte-order mark, tag characters, direction controls) are removed where the text is first read, and counted in the
+# coverage; a file that held "\u202e09\u202c days" displayed "90 days" while everything that checks it read "09".
+PARSER_VERSION = "v9"
 
 
 @dataclass
@@ -51,7 +55,8 @@ def base_name(filename: str) -> str:
     """The name a person gave the file, without directories or control characters: it names a stored document, a zip
     entry in the evidence pack and the CONTRACT line of the prompt, none of which may carry a path (hostile review, 2026-10-01)."""
     name = filename.replace("\\", "/").rsplit("/", 1)[-1]
-    name = "".join(ch for ch in name if ch >= " " and ch != "\x7f").strip()
+    # Invisible format characters too: "Invoice-\u202efdp.exe.txt" displayed as "Invoice-exe.pdf" (2026-10-08).
+    name = visible_text("".join(ch for ch in name if ch >= " " and ch != "\x7f")).strip()
     return name[:255] or "document"
 
 

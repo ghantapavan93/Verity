@@ -20,6 +20,7 @@ from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, load_prompt
 from ..config import settings
 from ..errors import NotFound
 from ..hashing import fingerprint
+from ..ingest.invisible import visible_text
 from ..models import Document, Guidance, Run
 from ..providers.base import ModelProvider
 from ..retrieval.aliases import ALIASES_SHA256
@@ -102,7 +103,7 @@ def start_run(
         if guidance_id and guidance is None:
             raise NotFound("guidance", guidance_id)
 
-    question = question.strip()
+    question = visible_text(question).strip()
     prompt = load_prompt(prompt_version)
     task = task_for(guidance is not None)
     decision = router().select(task, model)

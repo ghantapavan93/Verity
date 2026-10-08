@@ -6,7 +6,7 @@ import styles from "../Workbench.module.css";
 import { useRunExplanation } from "../hooks/useRunExplanation";
 import { IconCheck, IconClose } from "../icons";
 import { EASE } from "../shell/constants";
-import { StatusChip } from "../shell/primitives";
+import { StatusChip, Visible } from "../shell/primitives";
 import { DayGauge, readComparison } from "./DayGauge";
 import { WhyThisAnswer } from "./WhyThisAnswer";
 import { absolute, errorMessage, reviewFinding } from "@/lib/api";
@@ -265,7 +265,9 @@ function EvidenceBody({
               ) : (
                 <div className={styles.drawerRefStatic}>{section ? citationLabel(section) : "Section not identified"}</div>
               )}
-              <blockquote className={span.verified ? styles.drawerQuote : `${styles.drawerQuote} ${styles.quoteWithheld}`}>{span.quote}</blockquote>
+              <blockquote className={span.verified ? styles.drawerQuote : `${styles.drawerQuote} ${styles.quoteWithheld}`}>
+                <Visible text={span.quote} />
+              </blockquote>
               <span className={styles.verifiedTag}>
                 {span.verified && <IconCheck className={styles.verifiedMark} />}
                 <span>

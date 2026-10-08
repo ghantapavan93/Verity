@@ -294,6 +294,18 @@
   transition-duration: var(--dur-fast);
 }
 
+/* An invisible character an older reading still holds, shown by name instead of acting on the text around it. */
+.invisibleMark {
+  display: inline-block;
+  margin: 0 1px;
+  padding: 0 3px;
+  border: 1px dashed var(--doc-mark-line);
+  border-radius: 3px;
+  font: 500 12px/1.3 var(--font-mono);
+  color: inherit;
+  vertical-align: 1px;
+}
+
 /* A later part of a section the reading split for length: marked as such, never printed as a heading the document has. */
 .partContinued {
   margin: 14px 0 6px;

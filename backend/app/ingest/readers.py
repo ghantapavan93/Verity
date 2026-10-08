@@ -25,7 +25,8 @@ from docx.text.paragraph import Paragraph
 from lxml import etree
 from pypdf import PdfReader
 
-from .coverage import PartCoverage, docx_coverage, pdf_coverage, txt_coverage
+from .coverage import PartCoverage, Status, docx_coverage, pdf_coverage, txt_coverage
+from .invisible import remove_format_characters, visible_text
 from .sections import HEADING_NUMBER, Block, continues_numbering, looks_like_heading
 
 log = logging.getLogger(__name__)
@@ -56,6 +57,8 @@ class ReadResult:
     hidden_runs: int = 0
     # What this reading did with each part of the file (ingest.coverage); anything unread is listed as unread.
     coverage: list[PartCoverage] = field(default_factory=list)
+    # Invisible format characters removed from the text (ingest.invisible), counted so the reading can say so.
+    format_characters: int = 0
 
 
 PDF_SIGNATURE = b"%PDF-"
@@ -96,6 +99,29 @@ def read(filename: str, data: bytes) -> ReadResult:
     file in many shapes (pypdf: AssertionError, KeyError, TypeError, NotImplementedError and its own errors; python-docx
     and zipfile: zlib.error among others); 112 of 300 mutations of a real PDF escaped as a 500 before 2026-10-08."""
     suffix = file_type(filename, data)
+    result = _read_as(suffix, data)
+    # The text a person reads is the text that is checked: each reader removes invisible format characters where its
+    # text is first read (so headings are found on the visible text), and this pass guarantees it for every block.
+    removed = result.format_characters
+    for block in result.blocks:
+        block.text, count = remove_format_characters(block.text)
+        removed += count
+    result.title = visible_text(result.title)
+    result.format_characters = removed
+    result.coverage.append(
+        PartCoverage(
+            "format_characters",
+            Status.EXCLUDED if removed else Status.ABSENT,
+            removed,
+            "invisible characters (zero-width, soft hyphen, direction controls) removed; the text is shown in stored order"
+            if removed
+            else "no invisible format characters",
+        )
+    )
+    return result
+
+
+def _read_as(suffix: str, data: bytes) -> ReadResult:
     try:
         if suffix == ".docx":
             return read_docx(data)
@@ -336,8 +362,12 @@ def read_docx(data: bytes) -> ReadResult:
     # Text of paragraphs whose mark is deleted: once accepted, they run into the next paragraph.
     carry = ""
 
+    removed = 0
+
     def add(text: str, level: int = 0) -> None:
-        nonlocal title
+        nonlocal title, removed
+        text, count = remove_format_characters(text)
+        removed += count
         if not text:
             return
         if level:
@@ -415,6 +445,7 @@ def read_docx(data: bytes) -> ReadResult:
         title=title,
         tracked_changes=tracked,
         hidden_runs=walk.hidden_runs + walk.style_hidden_runs,
+        format_characters=removed,
         coverage=docx_coverage(data, etree.tostring(body, encoding="unicode"), tracked, walk.hidden_runs, walk.style_hidden_runs),
     )
 
@@ -433,17 +464,22 @@ def read_pdf(data: bytes) -> ReadResult:
     pages = list(reader.pages)
     lines: list[str] = []
     textless = 0
+    removed = 0
     for page in pages:
         # Layout mode keeps blank lines between paragraphs, which is the only structure most PDFs carry.
         try:
             text = page.extract_text(extraction_mode="layout") or ""
         except Exception:  # noqa: BLE001 - fall back to the plain extractor for odd PDFs
             text = page.extract_text() or ""
+        text, count = remove_format_characters(text)
+        removed += count
         if not text.strip():
             textless += 1  # an image-only (scanned) page: the record says so instead of "unknown"
         lines.extend(re.sub(r"[ \t]{2,}", " ", line) for line in text.splitlines())
         lines.append("")
-    return ReadResult(coverage=pdf_coverage(page_count, textless), blocks=_blocks_from_lines(lines), pages=len(pages), title=_first_line(lines))
+    return ReadResult(
+        coverage=pdf_coverage(page_count, textless), blocks=_blocks_from_lines(lines), pages=len(pages), title=_first_line(lines), format_characters=removed
+    )
 
 
 # ---------------------------------------------------------------------------- TXT
@@ -478,8 +514,9 @@ def read_txt(data: bytes) -> ReadResult:
         # Text never carries NUL once decoded (UTF-16 is decoded above); binary does, and was read as text before
         # 2026-10-08, its control characters stripped and the rest kept as clauses.
         raise UnsupportedFile("the file is not plain text: it holds binary data")
+    text, removed = remove_format_characters(text)
     lines = _CONTROL_CHARS.sub("", text).splitlines()
-    return ReadResult(coverage=txt_coverage(encoding), blocks=_blocks_from_lines(lines), pages=None, title=_first_line(lines))
+    return ReadResult(coverage=txt_coverage(encoding), blocks=_blocks_from_lines(lines), pages=None, title=_first_line(lines), format_characters=removed)
 
 
 def _first_line(lines: list[str]) -> str:
