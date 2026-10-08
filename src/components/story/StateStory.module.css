@@ -746,3 +746,21 @@ p.quiet {
     transition: width var(--dur-slow) var(--ease);
   }
 }
+
+/* The narrowest phones (320 px): the comparison and gate tables keep three columns, with tighter cells and headings
+   that wrap, so the page never scrolls sideways (2026-10-08, 53 px of overflow at 320). */
+@media (max-width: 400px) {
+  .table {
+    font-size: 13px;
+  }
+
+  .table th,
+  .table td {
+    padding: 8px 6px;
+  }
+
+  .table thead th {
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+  }
+}
