@@ -1,5 +1,11 @@
 import type { RunDetailView, RunSummary } from "@/lib/types";
 
+/** The findings shown as answers: the run's record also holds the withheld ones, whose quotes were not found, and the
+ * runs list (api/runs.run_summary) counts only these. */
+function shown(run: RunDetailView): number {
+  return run.findings.filter((f) => f.status !== "unresolved").length;
+}
+
 /** A run's record in the shape the first screen's receipt reads. */
 function summaryOf(run: RunDetailView): RunSummary {
   return {
@@ -12,7 +18,7 @@ function summaryOf(run: RunDetailView): RunSummary {
     promptHash: run.promptHash,
     latencyMs: run.latencyMs,
     reason: run.reason,
-    findings: run.findings.length,
+    findings: shown(run),
     hasGuidance: run.hasGuidance,
     documentId: run.documentId,
     documentName: run.documentName,
@@ -35,7 +41,7 @@ export async function chooseProof(
   if (configured) {
     try {
       const run = await read(configured);
-      return run.stage === "complete" && run.findings.length > 0 ? summaryOf(run) : null;
+      return run.stage === "complete" && shown(run) > 0 ? summaryOf(run) : null;
     } catch {
       return null;
     }

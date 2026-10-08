@@ -58,6 +58,22 @@ describe("chooseProof", () => {
     expect(await chooseProof("proof1", list, unfinished)).toBeNull();
   });
 
+  it("counts the findings shown, as the runs list does: a withheld finding is not one with a found quote", async () => {
+    const read = vi.fn(
+      async (id: string) =>
+        ({
+          ...detail(id),
+          findings: [
+            { id: "f1", status: "pass" },
+            { id: "f2", status: "unresolved" },
+          ],
+        }) as unknown as RunDetailView,
+    );
+    expect((await chooseProof("proof1", vi.fn(), read))?.findings).toBe(1);
+    const onlyWithheld = vi.fn(async (id: string) => ({ ...detail(id), findings: [{ id: "f2", status: "unresolved" }] }) as unknown as RunDetailView);
+    expect(await chooseProof("proof1", vi.fn(), onlyWithheld)).toBeNull();
+  });
+
   it("control: without a configured run, the latest finished run with findings", async () => {
     const list = vi.fn(async () => [summary("empty", 0), summary("running", 2, "checking"), summary("latest"), summary("older")]);
     const read = vi.fn();
