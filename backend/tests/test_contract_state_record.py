@@ -191,3 +191,25 @@ def test_an_edited_record_is_shown_with_its_hash_unverified_and_a_foreign_file_i
     path.write_text(json.dumps(record(arrivals=[{"document": {"record_id": "x"}}])), encoding="utf-8")
     unfit = client.get("/api/engineering/contract-state").json()
     assert unfit["available"] is False and "does not fit" in unfit["detail"]
+
+
+def test_an_unchanged_record_is_read_once_and_an_edited_one_is_read_again(client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The record is served without a session, so a visitor's reload must not re-read and re-check the file each time;
+    an edit to the file is still seen, and still fails its hash."""
+    from app import config
+    from app.api import engineering
+
+    path = tmp_path / "contract-state.json"
+    path.write_text(json.dumps(record()), encoding="utf-8")
+    monkeypatch.setattr(config.settings, "contract_state", path)
+    reads: list[Path] = []
+    original = engineering.load_contract_state
+    monkeypatch.setattr(engineering, "load_contract_state", lambda p: reads.append(p) or original(p))
+    first = client.get("/api/engineering/contract-state").json()
+    second = client.get("/api/engineering/contract-state").json()
+    assert first == second and first["sha256Verified"] is True and len(reads) == 1, "the same file is parsed once"
+    edited = record()
+    edited["summary"]["changed_outside_envelope"] = 7  # a change after export: the body no longer matches its hash
+    path.write_text(json.dumps(edited) + " ", encoding="utf-8")
+    third = client.get("/api/engineering/contract-state").json()
+    assert len(reads) == 2 and third["sha256Verified"] is False, "an edited file is read again and fails its hash"

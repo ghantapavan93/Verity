@@ -78,10 +78,11 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
             )
         return response
 
-    # Health and the gate itself are open; everything else is mounted behind the gate here, in one place, so a route
+    # Health, the gate itself and the published research record are open; everything else is mounted behind the gate here, in one place, so a route
     # added to any of these routers is behind it without anyone remembering (a test walks every route to be sure).
     app.include_router(health.router)
     app.include_router(access.router)
+    app.include_router(engineering.public_router)
     gate = [Depends(access.require_access)]
     for router in (documents.router, guidance.router, findings.router, memos.router, batches.router, engineering.router, trust.router):
         app.include_router(router, dependencies=gate)

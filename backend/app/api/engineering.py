@@ -34,6 +34,8 @@ from ..schemas import (
 from .access import current_workspace
 
 router = APIRouter(prefix="/api/engineering", tags=["engineering"])
+# The recorded contract-state experiment, as the public research page shows it: no reader's data, so no session.
+public_router = APIRouter(prefix="/api/engineering", tags=["engineering"])
 
 # The sibling checkout on a development machine; WORKBENCH_EXPERIMENTS_RESULTS overrides it.
 DEFAULT_RESULTS = BACKEND_DIR.parents[1] / "ivo-experiments" / "docs" / "results.json"
@@ -134,9 +136,25 @@ def load_contract_state(path: Path) -> ContractStateOut:
     )
 
 
-@router.get("/contract-state", response_model=ContractStateOut)
+# The record is served without a session; a reload must not re-read and re-check ~200 KB each time. Keyed by the
+# file's identity, so an edited or replaced file is read (and hash-checked) again.
+_contract_state_cache: dict[tuple[str, int, int], ContractStateOut] = {}
+
+
+@public_router.get("/contract-state", response_model=ContractStateOut)
 def contract_state() -> ContractStateOut:
-    return load_contract_state(contract_state_path())
+    path = contract_state_path()
+    try:
+        stat = path.stat()
+    except OSError:
+        return load_contract_state(path)
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    cached = _contract_state_cache.get(key)
+    if cached is None:
+        cached = load_contract_state(path)
+        _contract_state_cache.clear()
+        _contract_state_cache[key] = cached
+    return cached
 
 
 @router.get("/citations", response_model=CitationRecordOut)

@@ -21,7 +21,7 @@ from tests.support import CONTRACT, upload_and_ask
 
 SECRET = "test-secret-" + "x" * 40
 ORIGIN = "https://testserver"
-OPEN = {"/api/health", "/api/access", "/api/access/session"}
+OPEN = {"/api/health", "/api/access", "/api/access/session", "/api/engineering/contract-state"}
 
 
 @pytest.fixture
@@ -235,3 +235,13 @@ def test_a_review_made_through_the_gate_records_the_invite_subject_beside_the_ty
     finding = gated.get(f"/api/runs/{run['id']}/detail").json()["findings"][0]
     review = gated.post(f"/api/findings/{finding['id']}/review", json={"verdict": "confirmed", "reviewer": "Pavan", "note": None}).json()["review"]
     assert (review["reviewer"], review["accessSubject"]) == ("Pavan", "didier"), "the name shown is the typed one; the subject recorded is the invite's"
+
+
+def test_the_recorded_research_is_readable_without_a_session(gated: TestClient) -> None:
+    """The contract-state record is published as it is on the public research page; it holds no reader's data. A
+    visitor without an invite reads it here too, and nothing beside it opens: the other engineering records read the
+    workspace."""
+    record = gated.get("/api/engineering/contract-state")
+    assert record.status_code == 200, record.text[:200]
+    for private in ("/api/engineering/goldens", "/api/engineering/citations", "/api/engineering/families"):
+        assert gated.get(private).status_code == 401, private
