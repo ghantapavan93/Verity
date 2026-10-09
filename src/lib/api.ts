@@ -29,7 +29,17 @@ import type {
 
 export type { GuidanceRecord, Health, MemoRecord } from "./types";
 
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+/**
+ * Where the interface finds the API. A production build reaches it on its own origin (relative URLs, behind a proxy that
+ * sends /api to the API) unless the build names one; a development build keeps the API's local port. Release review,
+ * 2026-10-08: the live build was made without NEXT_PUBLIC_API_URL and sent every remote browser to its own loopback.
+ */
+export function apiBase(configured: string | undefined, production: boolean): string {
+  const base = configured ?? (production ? "" : "http://127.0.0.1:8000");
+  return base.replace(/\/$/, "");
+}
+
+export const API_URL = apiBase(process.env.NEXT_PUBLIC_API_URL, process.env.NODE_ENV === "production");
 
 /** The one place a thrown error becomes a sentence for the interface. */
 export function errorMessage(error: unknown): string {
@@ -70,8 +80,11 @@ async function readError(response: Response): Promise<string> {
  * wrong thing (2026-10-02).
  */
 export function unreachable(apiUrl: string): string {
-  const base = `The workbench API at ${apiUrl} is not reachable.`;
-  return apiUrl.startsWith("https://") ? `${base} If this page has been open for a long time, your sign-in may have expired: reload the page.` : base;
+  // An empty base is this site's own origin: the deployment that serves the page also serves the API, behind its gate.
+  const base = apiUrl ? `The workbench API at ${apiUrl} is not reachable.` : "The workbench API on this site is not reachable.";
+  return !apiUrl || apiUrl.startsWith("https://")
+    ? `${base} If this page has been open for a long time, your sign-in may have expired: reload the page.`
+    : base;
 }
 
 const JSON_HEADERS = { "Content-Type": "application/json" };

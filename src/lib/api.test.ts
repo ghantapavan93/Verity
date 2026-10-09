@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { health, unreachable } from "./api";
+import { apiBase, health, unreachable } from "./api";
 
 /** Behind Cloudflare Access an expired sign-in answers a request for data with a sign-in page, status 200. */
 describe("a page in place of data", () => {
@@ -41,5 +41,28 @@ describe("a request that fails outright", () => {
     expect(unreachable("https://workbench.example")).toBe(
       "The workbench API at https://workbench.example is not reachable. If this page has been open for a long time, your sign-in may have expired: reload the page.",
     );
+  });
+});
+
+/**
+ * A production build reaches the API on its own origin unless told otherwise. Release review, 2026-10-08: the live build
+ * was made without NEXT_PUBLIC_API_URL and sent every remote browser to its own 127.0.0.1:8000.
+ */
+describe("where the interface finds the API", () => {
+  it("is its own origin in a production build that names none", () => {
+    expect(apiBase(undefined, true)).toBe("");
+  });
+
+  it("is what the build names, without a trailing slash", () => {
+    expect(apiBase("https://workbench.example/", true)).toBe("https://workbench.example");
+    expect(apiBase("", true)).toBe(""); // named as the same origin explicitly
+  });
+
+  it("control: a development build keeps the API's local port", () => {
+    expect(apiBase(undefined, false)).toBe("http://127.0.0.1:8000");
+  });
+
+  it("says the site's own API is unreachable, never an empty address", () => {
+    expect(unreachable("")).toMatch(/^The workbench API on this site is not reachable\./);
   });
 });
