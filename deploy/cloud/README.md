@@ -101,7 +101,7 @@ The evidence page rolls back by redeploying the previous `out-state/` from Pages
 
 The stack ran under Docker Desktop with Caddy's internal CA at `https://localhost:8443` (the API and interface publish
 no ports) and the API calling the workstation's Ollama over HTTP, the same build the cloud would serve. Results are in
-`C:/Temp/verity-qa/rehearsal/` on the workstation. Passed: the gate and the first-party session cookie; upload and a
+a rehearsal folder on the workstation, not in the repository. Passed: the gate and the first-party session cookie; upload and a
 real streamed run (66 s, cited passages verified); every request to the page's own origin; two readers isolated by list
 and by id; two readers at once; a forged `Cf-Connecting-Ip` ignored; unknown ids; a stale session; the API restarting
 mid-run (the run ends failed, never complete); history surviving restarts; the interface restarting; the model endpoint
