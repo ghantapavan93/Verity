@@ -47,6 +47,34 @@ def test_references_handles_and_enumerators_are_not_values() -> None:
     assert unquoted_values(answer, ["Unlimited Claims are excluded."], []) == []
 
 
+def test_attachment_pointers_are_not_values() -> None:
+    """Triage, 2026-10-09: "Exhibit 10.1" was listed as a value in "none of the quotes"."""
+    for answer in (
+        "Under Attachment 10.1, fees are due in 45 days.",
+        "Per Rider 3, fees are due in 45 days.",
+        "Exhibit No. 10.1 sets fees due in 45 days.",
+        "As set out in Exhibit 10.1, fees are due in 45 days.",
+        "Addendum 2 and Annex 4.2 set fees due in 45 days.",
+    ):
+        assert unquoted_values(answer, ["forty-five days"], []) == [], answer
+    assert unquoted_values("Exhibit 10.1 caps fees at 12%.", ["Fees are capped."], []) == ["12%"], "control: the value beside a pointer is still read"
+
+
+def test_magnitude_words_are_part_of_the_value() -> None:
+    """Triage: "$1.5 million" was listed against a quote of "$1,500,000"."""
+    assert unquoted_values("The cap is $1.5 million.", ["liability capped at $1,500,000"], []) == []
+    assert unquoted_values("The cap is $1,500,000.", ["capped at USD 1.5 million"], []) == []
+    assert unquoted_values("The cap is $2.5 million.", ["liability capped at $1,500,000"], []) == ["$2.5 million"], "control"
+
+
+def test_a_date_is_one_value_shown_as_written() -> None:
+    """Triage: "January 1, 2024" was listed as "1" and "2024"; a day of the month is never shown as a bare number."""
+    assert unquoted_values("The term runs two years from January 1, 2024.", ["for two (2) years"], []) == ["January 1, 2024"]
+    assert unquoted_values("The term starts on January 1, 2024.", ["commencing on the 1st day of January, 2024"], []) == []
+    assert unquoted_values("The term starts on 1 January 2024.", ["Effective Date: January 1, 2024"], []) == []
+    assert unquoted_values("Renewal is due in March 2025.", ["renews each March"], []) == ["March 2025"]
+
+
 def test_the_readers_own_numbers_are_not_reported() -> None:
     answer = "The contract allows 45 days, short of the 60 days the guidance requires."
     assert unquoted_values(answer, ["within forty-five (45) days"], ["Notice must be at least 60 days."]) == []
