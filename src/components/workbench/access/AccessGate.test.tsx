@@ -7,17 +7,19 @@
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { enterWithInvite, getAccess } from "@/lib/api";
+import type { enterWithInvite, getAccess, health } from "@/lib/api";
 
 const api = vi.hoisted(() => ({
   getAccess: vi.fn<typeof getAccess>(),
   enterWithInvite: vi.fn<typeof enterWithInvite>(),
+  health: vi.fn<typeof health>(),
 }));
 
 vi.mock("@/lib/api", () => ({
   ACCESS_REQUIRED_EVENT: "verity:access-required",
   getAccess: api.getAccess,
   enterWithInvite: api.enterWithInvite,
+  health: api.health,
   errorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }));
 
@@ -35,6 +37,8 @@ describe("AccessGate", () => {
   beforeEach(() => {
     api.getAccess.mockReset();
     api.enterWithInvite.mockReset();
+    api.health.mockReset();
+    api.health.mockRejectedValue(new Error("no answer"));
     window.history.replaceState(null, "", "/");
   });
   afterEach(cleanup);
@@ -74,7 +78,7 @@ describe("AccessGate", () => {
         <Inside />
       </AccessGate>,
     );
-    expect(await screen.findByRole("heading", { name: "Private engineering preview" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "The live Verity workbench" })).toBeTruthy();
     expect(screen.queryByText("the workbench")).toBeNull();
     expect(screen.getByLabelText("Invite link")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Enter workbench" })).toBeTruthy();
@@ -123,7 +127,7 @@ describe("AccessGate", () => {
         <Inside />
       </AccessGate>,
     );
-    expect(await screen.findByRole("heading", { name: "Private engineering preview" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "The live Verity workbench" })).toBeTruthy();
     // The browser does not reload for a change of fragment; it only says the fragment changed.
     api.enterWithInvite.mockResolvedValue(IN);
     api.getAccess.mockResolvedValue(IN);
@@ -157,6 +161,37 @@ describe("AccessGate", () => {
       window.dispatchEvent(new Event("verity:access-required"));
     });
     expect(screen.queryByText("the workbench")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Private engineering preview" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "The live Verity workbench" })).toBeTruthy();
+  });
+
+  it("tells a visitor without an invite what the workbench does and where to go instead, with real destinations", async () => {
+    api.getAccess.mockResolvedValue(OUT);
+    render(
+      <AccessGate>
+        <Inside />
+      </AccessGate>,
+    );
+    await screen.findByRole("heading", { name: "The live Verity workbench" });
+    const text = document.body.textContent ?? "";
+    expect(text).toMatch(/PDF, DOCX or TXT/);
+    expect(text).toMatch(/sample agreement/);
+    expect(text).toMatch(/passage/);
+    expect(screen.getByRole("link", { name: /recorded research/i }).getAttribute("href")).toBe("/state");
+    expect(screen.getByRole("link", { name: /source code/i }).getAttribute("href")).toBe("https://github.com/ghantapavan93/Verity");
+    // Nothing is said about where the model runs until the API says.
+    expect(text).not.toMatch(/runs on|model runs/i);
+  });
+
+  it("says where the model runs only as the API reports it", async () => {
+    api.getAccess.mockResolvedValue(OUT);
+    api.health.mockResolvedValue({ ok: true, provider: "", model: "", detail: "", access: "required", modelLocation: "server", modelHost: "" } as Awaited<
+      ReturnType<typeof health>
+    >);
+    render(
+      <AccessGate>
+        <Inside />
+      </AccessGate>,
+    );
+    expect(await screen.findByText(/model runs on the Verity server/)).toBeTruthy();
   });
 });
