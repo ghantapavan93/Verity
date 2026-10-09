@@ -32,7 +32,7 @@ def test_the_pack_verifies_itself_and_a_tampered_pack_fails(client: TestClient, 
 
     record = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     assert record["run_id"] == result["run_id"] and record["document"]["sha256"] == result["document"]["sha256"]
-    assert record["verifier"]["ladder"] == ["exact", "normalized", "casefold", "typed"] and record["verifier"]["version"] == "v6"
+    assert record["verifier"]["ladder"] == ["exact", "normalized", "casefold", "typed"] and record["verifier"]["version"] == "v7"
 
     verified = run_verify(folder)
     assert verified.returncode == 0, verified.stdout + verified.stderr

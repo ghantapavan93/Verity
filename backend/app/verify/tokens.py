@@ -8,6 +8,11 @@ no meaning and are dropped, so "days’ written" still meets "days written" and 
 "non-exclusive", while a changed digit or a moved decimal point can never be forgiven, and neither can a space
 moved inside the letters: "the rapist" is not "therapist" (verifier v6).
 
+Until v7 a token could end inside a run of letters and digits, so "30days" gave the number 3 and "1,500USD" gave
+1,50, and every comma was dropped, so "1,5%" was 15%: five quotes with a changed number were found, and one recorded
+span verified "3,0 days" against "30 days". From v7 every letter and digit belongs to exactly one significant token,
+and a comma separates thousands only in thousands grouping.
+
 Every token keeps the offsets of its surface in the original text, so a match is reported as exact
 character offsets and the interface highlights what was found.
 """
@@ -45,21 +50,29 @@ _CURRENCY = r"[$€£¥]|USD|EUR|GBP|CHF|CAD|AUD"
 _TOKEN = re.compile(
     rf"""
     (?<![^\W_])                                                                           # no token starts inside a run of letters and digits
-    (?:(?P<section>\d+(?:\.\d+){{2,}}(?:\([a-z0-9]+\))*|\d+(?:\.\d+)?(?:\([a-z0-9]+\))+)   # 8.1.2, 12.4(a), 3(b)
-    |(?P<currency>(?:{_CURRENCY})\s?\d[\d,]*(?:\.\d+)?)                                 # $1,500  USD 10.00
-    |(?P<percent>\d[\d,]*(?:\.\d+)?\s?(?:%|percent\b|per\s+cent\b))                     # 15%  1.5 percent
-    |(?P<number>\d[\d,]*(?:\.\d+)?(?![^\W\d_]))                                        # 30  1,500  15.00; not "0A"
-    |(?P<word>[^\W_]+)                                                                  # letters, any script; "A1" is one word
+    (?:(?:(?P<section>\d+(?:\.\d+){{2,}}(?:\([a-z0-9]+\))*|\d+(?:\.\d+)?(?:\([a-z0-9]+\))+)  # 8.1.2, 12.4(a), 3(b)
+    |(?P<currency>(?:{_CURRENCY})\s?\d+(?:,\d+)*(?:\.\d+)?)                             # $1,500  USD 10.00
+    |(?P<percent>\d+(?:,\d+)*(?:\.\d+)?\s?(?:%|percent\b|per\s+cent\b))                 # 15%  1.5 percent
+    |(?P<number>\d+(?:,\d+)*(?:\.\d+)?)                                                 # 30  1,500  15.00; a comma only between digits
+    |(?P<word>[^\W_]+))                                                                 # letters, any script; "A1", "30days" are one word
+    (?![^\W_])                                                                          # and no token ends inside a run (v7)
     |(?P<punct>[^\w\s]|_))
     """,
     re.IGNORECASE | re.VERBOSE,
 )
 
 
+_GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?")
+
+
 def canonical_number(text: str) -> str:
     """ "1,500" → "1500": thousands separators and spaces carry nothing. The digits themselves are kept as written,
-    so "15.00" is not "15" and "1.50" is not "1.5": a verifier forgives spelling, never precision."""
-    cleaned = text.replace(",", "").replace(" ", "")
+    so "15.00" is not "15" and "1.50" is not "1.5": a verifier forgives spelling, never precision. A comma is a
+    thousands separator only in thousands grouping: "1,5" and "15,00" keep it, so they are never 15 or 1500 (v7)."""
+    compact = text.replace(" ", "")
+    if "," in compact and not _GROUPED.fullmatch(compact):
+        return compact
+    cleaned = compact.replace(",", "")
     try:
         Decimal(cleaned)
     except InvalidOperation:

@@ -59,6 +59,7 @@ and the test or record that holds it. "Open" means measured or reasoned about, n
 | Model returns something that is not the schema | one corrected retry, then failed `invalid_output`, never a verdict; the interface says the model did not return a valid result | as expected, in the API and in the browser | `test_failure_matrix`; `e2e/reliability.spec.ts` non-schema output |
 | Quote not in the document | finding withheld, raw output kept, the run says so | as expected | `test_api_flow` paraphrase |
 | A digit changed inside a quote | refused; no similarity tier | refused | `test_spans`, Hypothesis properties |
+| A digit glued to letters, or a comma moved inside a number | refused | **before v7: found** ("30days" read as 3, "1,5%" as 15%; one recorded span); every letter and digit now belongs to one token | `test_verifier_v7.py`, property tests |
 | Same request sent twice, or a response lost after success | the same run comes back (`reused: true`) | as expected, in the API and observed on the wire from the browser | `test_failure_matrix`; `e2e/reliability.spec.ts` twice |
 | Stream connection lost | the stored stage events are sent again on connect; the client also polls | as expected; with every event stream aborted in the browser, the run still finishes on screen through polling | `useRunFollower` tests, `test_api_flow` events, `e2e/reliability.spec.ts` dropped stream |
 | Finished run updated or deleted | the database refuses | as expected | `test_failure_matrix` immutability |

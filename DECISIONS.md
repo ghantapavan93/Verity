@@ -657,3 +657,13 @@ Found on the way: a public workspace would have been handed curated guidance wit
 curated documents a visitor's upload of the same bytes would have been unreadable to them; the first is fixed, the
 second is why the public store may hold none.
 
+**Verifier v7: a changed number is never found (2026-10-09).** A measurement over the store and 400 public EDGAR
+exhibits found the typed tier reporting a quote as found when a number in it had changed: a token could end inside a
+run of letters and digits ("30days" gave the number 3, "1,500USD" gave 1,50) and every comma was dropped ("1,5%" was
+15%). One recorded span had verified "3,0 days" against "30 days". From v7 no token ends inside such a run, and a comma
+separates thousands only in thousands grouping; a comma after a number is punctuation, as replaying the change over
+EDGAR showed it must be ("March 16, 2024"). Of 1,524 recorded verified spans replayed under v6 and v7, exactly one
+outcome differs: the "3,0 days" span, now withheld. On 218 glued units in 150 exhibits, a quote copying the run is
+found as before (218 of 218); one dropping the unit is no longer forgiven where it never occurred. Recorded runs keep
+v6; the evidence pack's own checker applies the same comma rule, so its PASS never accepts what v7 refuses.
+

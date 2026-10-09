@@ -60,9 +60,9 @@ def alnum(text):
 
 TOKEN = re.compile(
     r"(?P<section>\d+(?:\.\d+){2,}(?:\([a-z0-9]+\))*|\d+(?:\.\d+)?(?:\([a-z0-9]+\))+)"
-    r"|(?P<currency>(?:[$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)\s?\d[\d,]*(?:\.\d+)?)"
-    r"|(?P<percent>\d[\d,]*(?:\.\d+)?\s?(?:%|percent\b|per\s+cent\b))"
-    r"|(?P<number>\d[\d,]*(?:\.\d+)?)"
+    r"|(?P<currency>(?:[$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)\s?\d+(?:,\d+)*(?:\.\d+)?)"
+    r"|(?P<percent>\d+(?:,\d+)*(?:\.\d+)?\s?(?:%|percent\b|per\s+cent\b))"
+    r"|(?P<number>\d+(?:,\d+)*(?:\.\d+)?)"
     r"|(?P<word>[^\W\d_]+)"
     r"|(?P<punct>[^\w\s]|_)",
     re.IGNORECASE,
@@ -70,8 +70,12 @@ TOKEN = re.compile(
 
 
 def number(text):
+    compact = text.replace(" ", "")
+    # A comma separates thousands only in thousands grouping: "1,5" and "15,00" are not 15 and 1500 (verifier v7).
+    if "," in compact and not re.fullmatch(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?", compact):
+        return compact
     try:
-        return format(decimal.Decimal(text.replace(",", "").replace(" ", "")).normalize(), "f")
+        return format(decimal.Decimal(compact.replace(",", "")).normalize(), "f")
     except decimal.InvalidOperation:
         return text
 

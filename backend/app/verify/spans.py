@@ -37,7 +37,7 @@ from dataclasses import dataclass
 
 from .tokens import locate_tokens
 
-VERIFIER_VERSION = "v6"
+VERIFIER_VERSION = "v7"
 
 # A section number as the reader writes it: "12", "8.1.2". Anything else in front of a label is heading text.
 _SECTION_NUMBER = re.compile(r"\d+(?:\.\d+)*")
