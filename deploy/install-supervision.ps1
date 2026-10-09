@@ -4,7 +4,9 @@
 
 .DESCRIPTION
   One task per server ("Verity API", "Verity Web"), running deploy/supervise.ps1 under the current user at logon,
-  hidden, with no time limit, on battery or not. `-Build` first builds the interface for the public origin.
+  hidden, with no time limit, on battery or not. `-Build` first builds the interface for the public origin. Servers
+  already running are stopped first (deploy/down.ps1) and their supervisors waited out: a task whose instance is still
+  running ignores a new start, and on 2026-10-09 the previous release kept serving over a new build.
   `-Uninstall` writes the stop files, stops both servers and removes the tasks. The connector is already a Windows
   service (cloudflared) and is not touched. The laptop must stay logged in for logon tasks to run.
 #>
@@ -18,6 +20,9 @@ param(
   [switch]$Uninstall
 )
 $ErrorActionPreference = "Stop"
+# A public store never holds the owner's proof run, so -PublicDataDir implies an empty -ProofRun. An empty argument is
+# dropped by `powershell -File`, which made the documented command fail (2026-10-09).
+if ($PublicDataDir -and -not $PSBoundParameters.ContainsKey("ProofRun")) { $ProofRun = "" }
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $logs = Join-Path $root "backend\data\logs\deploy"
 $supervise = Join-Path $root "deploy\supervise.ps1"
@@ -42,6 +47,17 @@ if ($Build) {
 }
 
 New-Item -ItemType Directory -Force $logs | Out-Null
+
+# The release being installed is the one that serves: stop what runs now, and wait until each task's instance has
+# ended, or Start-ScheduledTask below is ignored (-MultipleInstances IgnoreNew) and the old processes keep serving.
+$running = @($tasks.Values | Where-Object { (Get-ScheduledTask -TaskName $_ -ErrorAction SilentlyContinue).State -eq "Running" })
+if ($running.Count -gt 0) {
+  & (Join-Path $root "deploy\down.ps1")
+  $until = (Get-Date).AddSeconds(60)
+  while ((Get-Date) -lt $until -and @($running | Where-Object { (Get-ScheduledTask -TaskName $_).State -eq "Running" }).Count -gt 0) { Start-Sleep -Seconds 2 }
+  $still = @($running | Where-Object { (Get-ScheduledTask -TaskName $_).State -eq "Running" })
+  if ($still.Count -gt 0) { throw "still running after the stop: $($still -join ', '); nothing was restarted" }
+}
 $publicArg = if ($PublicDataDir) { " -PublicDataDir `"$PublicDataDir`"" } else { "" }
 foreach ($name in $tasks.Keys) {
   Remove-Item (Join-Path $logs "$name.stop") -Force -ErrorAction SilentlyContinue

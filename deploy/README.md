@@ -9,10 +9,11 @@ shared: the gate stays required, and every route serves the session's own worksp
 reader's. The API runs on a store of its own, never the owner's:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Build -Origin https://ivo.pavankg.dev -ProofRun "" -PublicDataDir "C:\Verity\public-data"
+powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Build -Origin https://ivo.pavankg.dev -PublicDataDir "C:\Verity\public-data"
 ```
 
-The owner's store (`backend/data`, every historical run) is left as it was. The API refuses to start with anonymous
+It stops the servers already running and waits for their supervisors before it starts the new release, and
+`-PublicDataDir` implies an empty `-ProofRun`. The owner's store (`backend/data`, every historical run) is left as it was. The API refuses to start with anonymous
 sessions on if its store holds any owner or curated record, so a misplaced `WORKBENCH_DATA_DIR` cannot put it in
 front of the public. A visitor's workspace reads only its own records, never curated ones.
 
