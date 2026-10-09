@@ -172,6 +172,28 @@ def test_the_sweep_removes_only_old_files_no_row_names(public: TestClient) -> No
     assert not orphan_old.exists() and orphan_young.exists() and named.exists()
 
 
+def test_the_sweep_removes_old_partial_writes_whatever_hash_they_carry(public: TestClient) -> None:  # noqa: F811
+    """A crash between writing an upload's partial file and renaming it leaves visitor bytes no row will ever name:
+    past the grace no upload is still writing them, so they go too (an audit finding, 2026-10-09)."""
+    a, _ = arrive(public)
+    a.post("/api/documents", files={"file": ("a.txt", CONTRACT.encode(), "text/plain")})
+    folder = config.settings.data_dir / "documents"
+    named = next(folder.glob("*.txt"))
+    old_of_named, old_orphan, young = (
+        folder / f"{named.name}.0a1b2c3d.part",
+        folder / ("d" * 64 + ".txt.11111111.part"),
+        folder / f"{named.name}.22222222.part",
+    )
+    for path in (old_of_named, old_orphan, young):
+        path.write_text("a visitor's partial bytes", encoding="utf-8")
+    hours_ago = time.time() - 2 * 3600
+    for path in (old_of_named, old_orphan, named):
+        os.utime(path, (hours_ago, hours_ago))
+    assert sweep_orphaned_files(db_module.engine) == 2
+    assert not old_of_named.exists() and not old_orphan.exists()
+    assert young.exists() and named.exists(), "control: a write in progress and a named file stay"
+
+
 def test_the_corpus_tools_are_not_a_visitors(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: F811
     visitor, _ = arrive(public)
     for path in ("/api/engineering/goldens", "/api/engineering/families", "/api/batches"):

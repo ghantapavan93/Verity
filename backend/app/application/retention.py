@@ -137,14 +137,15 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None) -> Pur
 
 def sweep_orphaned_files(engine: Engine, now: datetime | None = None) -> int:
     """Files in the public store that no row names any more, older than SWEEP_GRACE: what a crash between a purge's
-    commit and its unlinks would leave."""
+    commit and its unlinks would leave, and an upload's partial file left by a crash before its rename (no row ever
+    names a partial, and none is still being written after the grace)."""
     cutoff = (now or utcnow()).timestamp() - SWEEP_GRACE.total_seconds()
     removed = 0
     with engine.connect() as connection:
         hashes = {str(r[0]) for r in connection.execute(text("SELECT sha256 FROM documents"))}
         memos = {PureWindowsPath(str(r[0])).name for r in connection.execute(text("SELECT docx_path FROM memos"))}
     for path in (settings.data_dir / "documents").glob("*"):
-        if path.is_file() and path.stat().st_mtime < cutoff and not path.name.endswith(".part") and path.name.split(".")[0] not in hashes:
+        if path.is_file() and path.stat().st_mtime < cutoff and (path.name.endswith(".part") or path.name.split(".")[0] not in hashes):
             removed += _unlink(path)
     for path in (settings.data_dir / "memos").glob("*"):
         if path.is_file() and path.stat().st_mtime < cutoff and path.name not in memos:
