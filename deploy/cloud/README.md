@@ -22,7 +22,7 @@ Rejected: Kubernetes, Postgres, Redis, queues; Vercel in front (a 300 s function
 1. A Modal account, a workspace budget (hard cap, suggested $50/month) and `modal deploy deploy/cloud/modal_ollama.py`.
    Then the equivalence check below, before anyone is told the cloud answers like the workstation.
 2. A DigitalOcean droplet (Ubuntu LTS, 2 GB), weekly backups on (+20%), SSH keys only.
-3. DNS: an A record for the workbench (e.g. `try.ivo.pavankg.dev`) to the droplet, grey cloud (DNS only: Caddy does TLS,
+3. DNS: an A record for the workbench (e.g. `verity.pavankg.dev`) to the droplet, grey cloud (DNS only: Caddy does TLS,
    and Cloudflare's proxy cuts an origin response at 125 s); a Pages custom domain for the evidence page.
 4. Who may enter: `WORKBENCH_ACCESS_REQUIRED=1` (in `env.example`; it refuses to start open) and the invites you send.
 5. The proof run the first screen shows: record one on this deployment, or restore the curated store (a production data
@@ -46,15 +46,15 @@ nothing goes to a public registry:
 
 ```bash
 cd deploy/cloud
-VERITY_SITE=try.ivo.pavankg.dev VERITY_BUILD_SHA=$(git rev-parse HEAD) VERITY_PROOF_RUN=<id or empty> docker compose build
+VERITY_SITE=verity.pavankg.dev VERITY_BUILD_SHA=$(git rev-parse HEAD) VERITY_PROOF_RUN=<id or empty> docker compose build
 docker save verity-api:local verity-web:local | gzip > verity-images.tar.gz
 scp verity-images.tar.gz compose.yml Caddyfile env.example root@<droplet>:/opt/verity/
 # on the droplet
 cd /opt/verity && gunzip -c verity-images.tar.gz | docker load
 cp env.example .env && chmod 600 .env    # fill in; make the secret with the line in env.example
 # first boot: Let's Encrypt staging until the name resolves and 80/443 answer, then production
-VERITY_SITE=try.ivo.pavankg.dev VERITY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory docker compose up -d
-VERITY_SITE=try.ivo.pavankg.dev docker compose up -d --force-recreate caddy
+VERITY_SITE=verity.pavankg.dev VERITY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory docker compose up -d
+VERITY_SITE=verity.pavankg.dev docker compose up -d --force-recreate caddy
 ```
 
 ## Environment

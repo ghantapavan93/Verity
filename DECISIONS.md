@@ -619,3 +619,10 @@ triage reviewer, and rehearsed locally with Docker; every account, purchase, DNS
 
 *Deferred:* a site-wide content-security policy; per-reader invite revocation (today: rotate the secret); a plain-500
 upload when the store is read-only; off-machine backups until an object store exists.
+
+**Two hostnames, and the laptop's API never open (2026-10-08).** `ivo.pavankg.dev` becomes the static evidence page on
+Cloudflare Pages (no server, no store, no model; it stays up when the laptop is off). The live workbench moves to
+`verity.pavankg.dev`: the zone's free certificate covers `*.pavankg.dev` only, so `try.ivo.pavankg.dev` would need a
+paid certificate. Moving the host signs readers out (the session cookie is host-only); invite links still work. The
+supervisor sets `WORKBENCH_ACCESS_REQUIRED=1`, so the tunnelled API refuses to start without the gate's secret. The
+`ci` workflows stay on their branch until they have run green on GitHub; a red check on main is worse than none.
