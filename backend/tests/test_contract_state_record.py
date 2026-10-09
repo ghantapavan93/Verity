@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.schemas import ContractStateOut
+
 DOC = {
     "record_id": "edgar:a-1:f.htm",
     "title": "AMENDMENT NO. 1 TO CREDIT AGREEMENT",
@@ -204,12 +206,17 @@ def test_an_unchanged_record_is_read_once_and_an_edited_one_is_read_again(client
     monkeypatch.setattr(config.settings, "contract_state", path)
     reads: list[Path] = []
     original = engineering.load_contract_state
-    monkeypatch.setattr(engineering, "load_contract_state", lambda p: reads.append(p) or original(p))
+
+    def counted(read: Path) -> ContractStateOut:
+        reads.append(read)
+        return original(read)
+
+    monkeypatch.setattr(engineering, "load_contract_state", counted)
     first = client.get("/api/engineering/contract-state").json()
     second = client.get("/api/engineering/contract-state").json()
     assert first == second and first["sha256Verified"] is True and len(reads) == 1, "the same file is parsed once"
-    edited = record()
+    edited = json.loads(path.read_text(encoding="utf-8"))
     edited["summary"]["changed_outside_envelope"] = 7  # a change after export: the body no longer matches its hash
-    path.write_text(json.dumps(edited) + " ", encoding="utf-8")
+    path.write_text(json.dumps(edited), encoding="utf-8")
     third = client.get("/api/engineering/contract-state").json()
     assert len(reads) == 2 and third["sha256Verified"] is False, "an edited file is read again and fails its hash"
