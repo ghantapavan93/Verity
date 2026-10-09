@@ -46,9 +46,23 @@ def _start_token(pid: int) -> str | None:
     try:
         with open(f"/proc/{pid}/stat", encoding="utf-8") as handle:
             fields = handle.read().rpartition(")")[2].split()
-        return fields[19]  # starttime, in clock ticks since boot
+        return start_token_of(fields[19], _boot_id())  # starttime, in clock ticks since boot
     except (OSError, IndexError):
         return "" if _alive_posix(pid) else None
+
+
+def _boot_id() -> str | None:
+    try:
+        with open("/proc/sys/kernel/random/boot_id", encoding="utf-8") as handle:
+            return handle.read().strip() or None
+    except OSError:
+        return None
+
+
+def start_token_of(starttime: str, boot_id: str | None) -> str:
+    """A start in clock ticks since boot, qualified by the boot: after a reboot a container's pid 1 starts at about the
+    same uptime as the one that died before it, and the tick count alone would pass for that process (2026-10-09)."""
+    return f"{starttime}@{boot_id}" if boot_id else starttime
 
 
 def _alive_posix(pid: int) -> bool:

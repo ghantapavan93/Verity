@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 
-from app.runs.owner import ProcessIdentity, owner_is_alive_here, owner_is_gone, this_process
+from app.runs.owner import ProcessIdentity, owner_is_alive_here, owner_is_gone, start_token_of, this_process
 
 
 def test_this_process_identifies_itself_and_is_never_gone() -> None:
@@ -56,3 +56,12 @@ def test_an_earlier_process_with_this_pid_is_gone_and_not_this_one() -> None:
     assert owner_is_gone(earlier.render())
     assert not owner_is_alive_here(earlier.render())
     assert owner_is_alive_here(me.render()) and not owner_is_gone(me.render()), "this process itself is alive and here"
+
+
+def test_a_start_after_a_reboot_never_matches_one_before_it() -> None:
+    """Linux counts a process's start in clock ticks since boot, and after a reboot a container's pid 1 starts at
+    about the same uptime: the same pid and the same tick count would pass for the process that died before the
+    reboot, and its interrupted run would never be recovered. The boot is part of the token."""
+    before, after = start_token_of("1866531", "boot-a"), start_token_of("1866531", "boot-b")
+    assert before != after
+    assert start_token_of("1866531", None) == "1866531", "where the boot cannot be read, the tick count alone"
