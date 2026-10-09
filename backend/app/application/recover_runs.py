@@ -53,7 +53,8 @@ def recover_interrupted_runs(session: Session, stale_after_s: float | None = Non
             continue
         minutes = int((now - started).total_seconds() // 60)
         message = (
-            f"Interrupted: the process running the {run.stage} stage ({latest.owner}) no longer exists. Ask the question again."
+            # The process's identity goes to the log below, never into what a reader sees (journey audit, 2026-10-09).
+            f"Interrupted: the server process running the {run.stage} stage stopped. Ask the question again."
             if gone and latest is not None
             else f"Interrupted: no progress for {minutes} min after the {run.stage} stage started; the process running it "
             "stopped or restarted. Ask the question again."
@@ -72,7 +73,7 @@ def recover_interrupted_runs(session: Session, stale_after_s: float | None = Non
             RunStage(run_id=run.id, stage="failed", at=now, detail=message, completed_at=now, duration_ms=0.0, status="failed", error_code="internal_error")
         )
         session.commit()
-        log.warning("run_id=%s recovered_as=failed reason=internal_error stale_minutes=%d", run.id, minutes)
+        log.warning("run_id=%s recovered_as=failed reason=internal_error stale_minutes=%d owner=%s", run.id, minutes, latest.owner if latest else None)
         bus.publish(StageEvent(run.id, "failed", message))  # an open stream to this run ends now, not at the next heartbeat
         recovered += 1
     return recovered

@@ -8,6 +8,7 @@ re-run under it. Embeddings come from Ollama; a missing model fails the run with
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -15,8 +16,10 @@ from dataclasses import dataclass
 import httpx
 
 from ..config import settings
-from ..providers.base import ProviderError
+from ..providers.base import ProviderError, failed_call
 from .lexical import Candidate, LexicalIndex
+
+log = logging.getLogger(__name__)
 
 RRF_K = 60
 EMBED_BATCH = 64
@@ -40,8 +43,12 @@ def ollama_embed(texts: list[str], model: str | None = None) -> list[list[float]
             )
             response.raise_for_status()
             vectors += response.json()["embeddings"]
-        except (httpx.HTTPError, KeyError, ValueError) as error:
-            raise ProviderError(f"embedding with {name} failed: {error}") from error
+        except httpx.HTTPError as error:
+            log.warning("embedding call failed: %s", error)
+            raise ProviderError(failed_call(f"Embedding with {name} failed", error)) from error
+        except (KeyError, ValueError) as error:
+            log.warning("embedding response unreadable: %s", error)
+            raise ProviderError(f"Embedding with {name} failed: the model endpoint's answer could not be read ({type(error).__name__})") from error
     return vectors
 
 

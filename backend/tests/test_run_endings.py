@@ -149,7 +149,12 @@ def test_a_run_whose_process_is_gone_is_recovered_at_once_and_a_live_one_waits_f
         session.commit()
         assert recover_interrupted_runs(session) == 1
     recovered = client.get(f"/api/runs/{run_id}").json()
-    assert recovered["stage"] == "failed" and "no longer exists" in recovered["error"]
+    assert recovered["stage"] == "failed" and "stopped. Ask the question again" in recovered["error"]
+    # The server's process identity is for its log, never for a reader (journey audit, 2026-10-09: a visitor saw the
+    # host name, pid and start token). Nothing the run's routes return carries a part of it.
+    shown = " ".join(client.get(f"/api/runs/{run_id}{path}").text for path in ("", "/detail", "/explanation"))
+    for part in (piece for piece in dead.split(":") if piece):
+        assert part not in shown, part
     assert client.get(f"/api/runs/{other_id}").json()["stage"] == "checking", "a live process's run is not touched"
 
 

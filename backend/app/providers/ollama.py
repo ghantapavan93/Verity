@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 
 from ..config import settings
-from .base import ContextOverflow, Generation, ProviderError
+from .base import ContextOverflow, Generation, ProviderError, failed_call
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +116,8 @@ class OllamaProvider:
             response.raise_for_status()
             body = response.json()
         except httpx.HTTPError as error:
-            raise ProviderError(f"Ollama request failed: {error}") from error
+            log.warning("model call failed: %s", error)
+            raise ProviderError(failed_call("The model could not answer", error)) from error
         except ValueError as error:
             raise ProviderError("Ollama returned a non-JSON response") from error
         latency_ms = (time.perf_counter() - started) * 1000

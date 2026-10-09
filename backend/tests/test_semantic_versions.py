@@ -52,7 +52,7 @@ RECORDED: dict[str, str] = {
     "policy-v4": "b88a4017c8ebfd98",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
-    "retrieval-v1": "12dfe9555e1c2275",  # 2026-10-09: the embed call carries the endpoint's credentials; what retrieval decides is unchanged
+    "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
 }
 
 

@@ -406,7 +406,8 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         _fail(session, run, str(error), "provider_error")
     except Exception as error:
         log.exception("run %s failed", run_id)
-        _fail(session, run, f"{type(error).__name__}: {error}", "internal_error")
+        # The exception's text is in the log above; the reader is told what happened, not what was raised.
+        _fail(session, run, f"The server failed while answering this question ({type(error).__name__}). Ask the question again.", "internal_error")
 
 
 def _fail(session: Session, run: Run, error: str, reason: RunReasonName) -> None:
