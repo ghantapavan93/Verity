@@ -9,6 +9,9 @@ import type { TrustDiffView, TrustFindingChange } from "@/lib/types";
  * "Has this contract been revised?" Under a finished run: the reader hands over the revised file, says by doing so
  * that it is the next version of the document this run read, and is shown what the revision does to each finding.
  *
+ * Saying a file is the next version is permanent (a line of versions is never rewritten), so it is never said by picking
+ * a file: the reader is asked, with the file's name and that it cannot be undone, before anything is recorded.
+ *
  * It renders what the API decided and decides nothing. Which findings are stale, why, and which were not reached
  * are the API's answers (`/api/runs/{id}/trust/diff`); the run itself is never changed.
  */
@@ -22,7 +25,11 @@ const STATE_LABEL: Record<string, string> = { supported: "supported", needs_revi
 const ORDER = ["stale", "revalidated", "unchanged"];
 
 type Phase =
-  { name: "idle" } | { name: "working"; step: string } | { name: "done"; diff: TrustDiffView; fileName: string } | { name: "failed"; message: string };
+  | { name: "idle" }
+  | { name: "working"; step: string }
+  | { name: "confirm"; revisedId: string; fileName: string }
+  | { name: "done"; diff: TrustDiffView; fileName: string }
+  | { name: "failed"; message: string };
 
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
@@ -63,7 +70,7 @@ export function RevisionCheck({ runId, documentId }: { runId: string; documentId
   const input = useRef<HTMLInputElement>(null);
   const inputId = useId();
 
-  async function check(file: File) {
+  async function read(file: File) {
     try {
       setPhase({ name: "working", step: "Reading the revised file" });
       const revised = await uploadDocument(file);
@@ -71,10 +78,18 @@ export function RevisionCheck({ runId, documentId }: { runId: string; documentId
         setPhase({ name: "failed", message: "That file is the document this run already read. Nothing has been revised." });
         return;
       }
+      setPhase({ name: "confirm", revisedId: revised.id, fileName: file.name });
+    } catch (error) {
+      setPhase({ name: "failed", message: errorMessage(error) });
+    }
+  }
+
+  async function record(revisedId: string, fileName: string) {
+    try {
       setPhase({ name: "working", step: "Recording it as the next version" });
-      await recordSupersedes(revised.id, documentId);
+      await recordSupersedes(revisedId, documentId);
       setPhase({ name: "working", step: "Checking each finding against it" });
-      setPhase({ name: "done", diff: await getRunTrustDiff(runId, revised.id), fileName: file.name });
+      setPhase({ name: "done", diff: await getRunTrustDiff(runId, revisedId), fileName });
     } catch (error) {
       setPhase({ name: "failed", message: errorMessage(error) });
     }
@@ -100,13 +115,30 @@ export function RevisionCheck({ runId, documentId }: { runId: string; documentId
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = "";
-            if (file) void check(file);
+            if (file) void read(file);
           }}
         />
-        <button type="button" className={styles.button} onClick={() => input.current?.click()} disabled={busy}>
+        <button type="button" className={styles.button} onClick={() => input.current?.click()} disabled={busy || phase.name === "confirm"}>
           {busy ? phase.step : phase.name === "done" ? "Check another revision" : "Check a revised version"}
         </button>
       </div>
+
+      {phase.name === "confirm" && (
+        <div className={styles.confirm} role="group" aria-label="Confirm the next version">
+          <p className={styles.confirmText}>
+            Record <strong>{phase.fileName}</strong> as the next version of the contract this run read? This cannot be undone: a document keeps its place in a
+            line of versions. Only record a file that is a revision of this same agreement.
+          </p>
+          <div className={styles.confirmActions}>
+            <button type="button" className={styles.button} onClick={() => void record(phase.revisedId, phase.fileName)}>
+              Record as the next version
+            </button>
+            <button type="button" className={styles.quiet} onClick={() => setPhase({ name: "idle" })}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {phase.name === "failed" && (
         <p className={styles.error} role="alert">

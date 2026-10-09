@@ -48,6 +48,10 @@ const DIFF: TrustDiffView = {
   ],
 };
 
+async function confirm() {
+  fireEvent.click(await screen.findByRole("button", { name: "Record as the next version" }));
+}
+
 function choose(file: File) {
   fireEvent.change(screen.getByLabelText("Revised contract file"), { target: { files: [file] } });
 }
@@ -64,6 +68,7 @@ describe("RevisionCheck", () => {
     api.getRunTrustDiff.mockResolvedValue(DIFF);
     render(<RevisionCheck runId="run-1" documentId="doc-1" />);
     choose(new File(["revised"], "agreement-v2.txt", { type: "text/plain" }));
+    await confirm();
 
     const panel = await screen.findByTestId("revision-check");
     await waitFor(() => expect(panel.textContent).toContain("1 finding is stale."));
@@ -96,6 +101,26 @@ describe("RevisionCheck", () => {
     api.recordSupersedes.mockRejectedValue(new Error("This document already has a place in a line of versions."));
     render(<RevisionCheck runId="run-1" documentId="doc-1" />);
     choose(new File(["revised"], "agreement-v2.txt", { type: "text/plain" }));
+    await confirm();
     expect((await screen.findByRole("alert")).textContent).toContain("already has a place in a line of versions");
+  });
+
+  it("records nothing until the reader confirms, and nothing when they cancel", async () => {
+    // Journey audit, 2026-10-09: picking a file recorded a permanent "supersedes" at once, and an unrelated contract
+    // became the next version of the agreement. The statement is one-way, so the reader makes it, knowing that.
+    api.uploadDocument.mockResolvedValue({ id: "doc-2" } as Awaited<ReturnType<typeof uploadDocument>>);
+    render(<RevisionCheck runId="run-1" documentId="doc-1" />);
+    choose(new File(["crane"], "crane-rental.txt", { type: "text/plain" }));
+
+    const question = await screen.findByRole("group", { name: "Confirm the next version" });
+    expect(question.textContent).toContain("crane-rental.txt");
+    expect(question.textContent).toContain("cannot be undone");
+    expect(api.recordSupersedes).not.toHaveBeenCalled();
+    expect(api.getRunTrustDiff).not.toHaveBeenCalled();
+
+    fireEvent.click(within(question).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Confirm the next version" })).toBeNull());
+    expect(api.recordSupersedes).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Check a revised version" })).toBeTruthy();
   });
 });
