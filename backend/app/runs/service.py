@@ -19,6 +19,7 @@ from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, SectionForPrompt, an
 from ..config import settings
 from ..document_names import run_prompt_name
 from ..hashing import sha256_text
+from ..ingest.sections import stated_clause_numbers
 from ..models import (
     RUN_STAGES,
     TERMINAL_STAGES,
@@ -300,6 +301,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         withheld_count = 0
         all_sections_by_id = {s.id: s for s in sections}
         every_section = [(s.number, s.heading) for s in sections]
+        printed = stated_clause_numbers([s.text for s in sections])  # the clause numbers the document's own text opens
         handed = [(s.number, s.heading) for s in chosen]
         proposed: list[tuple[Finding, Decision, Grounds]] = []
         for ordinal, item in enumerate(proposal.findings):
@@ -343,7 +345,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 dependencies=dependencies,
                 passages=passages,
             )
-            decision = check_references(decision, label_handles(item.conclusion, labels), (s.number for s in sections), by_label)
+            decision = check_references(decision, label_handles(item.conclusion, labels), (s.number for s in sections), by_label, printed)
             verified_any = verified_any or all_verified
             if not all_verified:
                 withheld_count += 1

@@ -206,14 +206,27 @@ class GuidanceRule:
     maximum: Duration | None = None
 
 
+# A ceiling is never to be read as a floor (the holdout audit of 2026-10-09: "must not exceed 60 days" was): every
+# phrasing that bounds from above is listed here, its negated forms with it, so the "not" in them is not a negation.
 _MAXIMUM = re.compile(
-    r"(?:≤|<=|at most|no more than|not more than|nor more than|maximum of|a maximum|or less|or fewer|or shorter|within"
-    r"|no longer than|not longer than|not to exceed|up to|no later than|not later than)",
+    r"(?:≤|<=|at most|(?:no|not|nor|never)(?: be)? (?:more|longer|greater) than|maximum of|a maximum|or less|or fewer|or shorter|within"
+    r"|(?:not|never)(?: to)? exceed(?:ing|s)?|capped at|a cap of|up to|no later than|not later than)",
     re.IGNORECASE,
 )
-_MINIMUM = re.compile(
-    r"(?:≥|>=|at least|no less than|not less than|nor less than|minimum of|a minimum|or more|or longer|not shorter than|no shorter than)", re.IGNORECASE
+_MINIMUM = re.compile(r"(?:≥|>=|at least|(?:no|not|nor|never)(?: be)? (?:less|fewer|shorter) than|minimum of|a minimum|or more|or longer)", re.IGNORECASE)
+# "less than 30 days" with no negation before it: an upper bound, stated strictly.
+BELOW = re.compile(
+    r"(?<!not )(?<!no )(?<!nor )(?<!never )(?<!not be )(?<!never be )\b(?:less than|fewer than|shorter than|under|below)\s*\(?\s*$", re.IGNORECASE
 )
+# A bare comparative before a guidance period says which side the sentence is about, not which side it allows: "must
+# be less than 60 days" is a ceiling, "anything below 30 days requires review" a floor. The predicate decides, and
+# code does not read predicates; a period so stated is not a rule.
+_STRICT = re.compile(
+    r"(?<!not )(?<!no )(?<!nor )(?<!never )(?<!not be )(?<!never be )(?<!not to )(?<!never to )"
+    r"\b(?:(?:less|fewer|shorter|more|longer|greater) than|under|below|over|above|in excess of|exceed(?:ing|s)?|beyond)\s*\(?\s*$",
+    re.IGNORECASE,
+)
+NEGATION = re.compile(r"\b(?:not|no|never|without|nor|neither|cannot|waives?|waived)\b", re.IGNORECASE)
 _EXACT = re.compile(r"(?:exactly|precisely)", re.IGNORECASE)
 _LATER_THAN = re.compile(r"(?:no|not) later than", re.IGNORECASE)
 _BEFORE = re.compile(r"\b(?:before|prior to|ahead of)\b", re.IGNORECASE)
@@ -264,10 +277,33 @@ def explicit_operator(text: str, mention: DurationMention) -> Operator | None:
     return min(candidates, key=lambda c: c[0])[1]
 
 
-def _operator_near(text: str, mention: DurationMention) -> Operator:
+def stated_operator(text: str, mention: DurationMention) -> Operator | None:
+    """The comparison the text states around a period: "less than 30 days" first (an upper bound), then the nearest
+    comparison phrase; None when it states none. One reading for the guidance and the contract alike."""
+    if BELOW.search(window_before(text, mention)):
+        return Operator.MAXIMUM
+    return explicit_operator(text, mention)
+
+
+def negation_near(text: str, mention: DurationMention, *, after: bool = True) -> str | None:
+    """A negation word beside the period, once the comparison phrases that carry one ("not less than") are set aside;
+    with ``after=False``, only one before it."""
+    found = NEGATION.search(without_comparisons(window_before(text, mention))) or (NEGATION.search(window_after(text, mention)) if after else None)
+    return found.group(0).lower() if found else None
+
+
+def _operator_near(text: str, mention: DurationMention) -> Operator | None:
     """The comparison a guidance sentence states around its duration. A duration with no comparison word is a floor:
-    a notice requirement states the least notice that will do (written here once)."""
-    return explicit_operator(text, mention) or Operator.MINIMUM
+    a notice requirement states the least notice that will do (written here once). None where a negation code does not
+    read stands beside it: before a stated comparison ("must not be at least 60 days"), or on either side of a bare
+    period ("more than 60 days are not acceptable"); and after a bare comparative ("less than 60 days", see _STRICT).
+    A guidance bound is read as written or not read at all."""
+    if _STRICT.search(window_before(text, mention)):
+        return None
+    stated = explicit_operator(text, mention)
+    if stated is not None:
+        return None if negation_near(text, mention, after=False) else stated
+    return None if negation_near(text, mention) else Operator.MINIMUM
 
 
 def _sentence_spans(text: str) -> list[tuple[int, int]]:
@@ -319,7 +355,9 @@ def parse_rule(guidance: str | None, topic: str | None = None) -> GuidanceRule |
             best = (score, order, inside)
     assert best is not None
     chosen = best[2]
-    operators = [(m, _operator_near(guidance, m)) for m in chosen]
+    operators = [(m, op) for m, op in ((m, _operator_near(guidance, m)) for m in chosen) if op is not None]
+    if not operators:
+        return None  # the topic's sentence negates its period in a way code does not read: no rule, never another sentence's
     floors = [m for m, op in operators if op is Operator.MINIMUM]
     ceilings = [m for m, op in operators if op is Operator.MAXIMUM]
     if floors and ceilings:
@@ -335,8 +373,16 @@ def stated_rules(guidance: str | None) -> list[GuidanceRule]:
     """Every period the guidance states, each as a rule of its own with the comparison word nearest it. `parse_rule`
     picks the one about the topic; this is what it picked from, so a caller can see whether the choice mattered
     ("at least 30 days' notice, or 90 days for enterprise agreements" states two floors, and which applies to this
-    agreement is not something the text of the guidance settles)."""
-    return [GuidanceRule(_operator_near(guidance, m), m.duration, m.surface) for m in parse_durations(guidance) if m.duration is not None] if guidance else []
+    agreement is not something the text of the guidance settles). A period whose negation code does not read is not
+    a rule."""
+    if not guidance:
+        return []
+    rules: list[GuidanceRule] = []
+    for mention in parse_durations(guidance):
+        operator = _operator_near(guidance, mention)
+        if mention.duration is not None and operator is not None:
+            rules.append(GuidanceRule(operator, mention.duration, mention.surface))
+    return rules
 
 
 def stated_periods(quote: str) -> set[Duration]:

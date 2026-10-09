@@ -28,13 +28,11 @@ from .durations import (
     GuidanceRule,
     Operator,
     counts_back,
-    explicit_operator,
+    negation_near,
     parse_durations,
     period_sentences,
+    stated_operator,
     stated_periods,
-    window_after,
-    window_before,
-    without_comparisons,
 )
 
 # Words that say nothing about which clause a sentence is: units, parties, modals, the vocabulary of any notice.
@@ -55,9 +53,6 @@ _WORD = re.compile(r"[a-z]{4,}")
 # How many of a guidance sentence's own words the quotes must carry before code treats them as being about the same point.
 CONCEPT_WORDS_NEEDED = 2
 
-# The contract's own bound, where the guidance vocabulary has no word for it: "notice of less than 30 days".
-_BELOW = re.compile(r"(?<!not )(?<!no )(?<!nor )\b(?:less than|fewer than|shorter than|under|below)\s*\(?\s*$", re.IGNORECASE)
-_NEGATION = re.compile(r"\b(?:not|no|never|without|nor|neither|cannot|waives?|waived)\b", re.IGNORECASE)
 # A condition or an exception anywhere in the quote. A bare "if" is not listed: it is how most rights are granted.
 _CARVE_OUT = re.compile(
     r"\b(?:unless|except|excluding|provided(?:,)? (?:that|however)|notwithstanding|subject to|save (?:as|that|for)|other than|only if"
@@ -84,18 +79,12 @@ def same_point(quotes: Sequence[str], guidance: str) -> bool:
 
 
 def _quote_operator(quote: str, mention_index: int) -> Operator | None:
-    mention = parse_durations(quote)[mention_index]
-    if _BELOW.search(window_before(quote, mention)):
-        return Operator.MAXIMUM
-    return explicit_operator(quote, mention)
+    return stated_operator(quote, parse_durations(quote)[mention_index])
 
 
 def _negated(quote: str, mention_index: int) -> str | None:
     """A negation word near the period, once the comparison phrases that contain one ("not less than") are set aside."""
-    mention = parse_durations(quote)[mention_index]
-    before = without_comparisons(window_before(quote, mention))
-    found = _NEGATION.search(before) or _NEGATION.search(window_after(quote, mention))
-    return found.group(0).lower() if found else None
+    return negation_near(quote, parse_durations(quote)[mention_index])
 
 
 def pass_blockers(quotes: Sequence[str], guidance: str, rule: GuidanceRule, dependencies: Sequence[str] = (), passages: Sequence[str] = ()) -> list[str]:

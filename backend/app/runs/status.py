@@ -41,7 +41,13 @@ from ..policy.proof import pass_blockers, same_point
 # model's, confirmed by code only when every period of the guidance is met and the source text, the sentences around
 # the quote and the run's related findings give no reason against it. Changing what any of this means is a new
 # version: tests/test_semantic_versions.py fails until the version and its fingerprint are recorded together.
-POLICY_VERSION = "policy-v3"
+# policy-v4 (2026-10-09): a guidance bound is read as written or not at all. "Must not exceed 60 days" was a floor;
+# every ceiling phrasing is now a ceiling, and a period beside a negation or a bare comparative code does not read
+# ("more than 60 days are not acceptable") states no rule. Replayed over the 63 recorded findings with guidance: none
+# changed. A reference is unknown only when the document's text never opens a clause with it either (§12.3 inside §12
+# was "a section this document does not have"); replayed over 1,229 recorded findings, 21 references became known, each
+# printed as a clause opening in its document.
+POLICY_VERSION = "policy-v4"
 
 
 @dataclass(frozen=True)
@@ -199,18 +205,25 @@ def settle_together(decisions: Sequence[Decision], grounds: Sequence[Grounds], g
 REFERENCE = re.compile(r"(?:§|\bSection\s+|\bClause\s+|\bArticle\s+)(\d+(?:\.\d+)*)", re.IGNORECASE)
 
 
-def unknown_references(text: str | None, section_numbers: Iterable[str], handed_ids: Iterable[str]) -> list[str]:
+def unknown_references(text: str | None, section_numbers: Iterable[str], handed_ids: Iterable[str], stated: Iterable[str] = ()) -> list[str]:
     """Section numbers the text points at that exist neither in the document nor among the ids the model was
     handed. A model that writes "§73" for "sec_73" is confused about labels, not inventing a clause, so those
-    are not reported. A number is known when a section number equals it or ends with it, so a reader whose
-    numbering carries a prefix ("0.15.11" for clause 15.11) raises no false alarm. Measured over 398 recorded
-    findings on 2026-09-29: four unknown references, all wrong (docs/GOLDENS.md)."""
+    are not reported. A number is known when a section number equals it, ends with it (a reader whose numbering
+    carries a prefix: "0.15.11" for clause 15.11) or sits under it ("6.1" for Section 6); or when the document's text
+    opens a clause with it, or with one under it (``stated``, `ingest.sections.stated_clause_numbers`: "12.3" inside
+    §12, "6." in a reading without numbering). Measured over 398 recorded findings on 2026-09-29: four unknown
+    references, all wrong (docs/GOLDENS.md); the audit of 2026-10-09 found four false ones, all printed in the text."""
     numbers = [n for n in section_numbers if n]
+    printed = [n for n in stated if n]
     ids = {handle.removeprefix("sec_") for handle in handed_ids}
     unknown: list[str] = []
     for reference in REFERENCE.findall(text or ""):
         reference = reference.rstrip(".")
-        if reference in ids or any(number == reference or number.endswith("." + reference) for number in numbers):
+        if reference in ids:
+            continue
+        if any(n == reference or n.endswith("." + reference) or n.startswith(reference + ".") for n in numbers):
+            continue
+        if any(n == reference or n.startswith(reference + ".") for n in printed):
             continue
         if reference not in unknown:
             unknown.append(reference)
@@ -257,9 +270,11 @@ def unseen_references(passage: str, sections: Iterable[tuple[str, str]], handed:
     return unseen
 
 
-def check_references(decision: Decision, conclusion: str | None, section_numbers: Iterable[str], handed_ids: Iterable[str]) -> Decision:
+def check_references(
+    decision: Decision, conclusion: str | None, section_numbers: Iterable[str], handed_ids: Iterable[str], stated: Iterable[str] = ()
+) -> Decision:
     """A pass that sends the reader to a section the document does not have is not a pass: the quote may be
     real, the reference is not, and a person must look. Other statuses already ask for that."""
-    if decision.status != "pass" or not unknown_references(conclusion, section_numbers, handed_ids):
+    if decision.status != "pass" or not unknown_references(conclusion, section_numbers, handed_ids, stated):
         return decision
     return Decision("needs_review", "reference_check")

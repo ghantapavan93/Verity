@@ -113,6 +113,22 @@ def _ends_clause(number: str, clause: str) -> bool:
 # printed PDF, 2026-10-08: the governing-law quote was labelled "§3.1 Notices").
 SENTENCE_START = re.compile(r"(?<=[.;:])\s+(?=\d)")
 
+# A clause number as a document opens a clause with it: "12.3 Notwithstanding …", "6. TERMINATION.", "Section 5 Fees"
+# at the start of a paragraph, or "… in writing. 4.1 Late fees …" after a sentence end. A bare whole number must be
+# followed by "." or ")" so that "30 days after notice" is not clause 30; a cross-reference ("Subject to Section 9")
+# opens nothing.
+_OPENING_NUMBER = r"(\d{1,9}(?:\.\d{1,9})+|\d{1,9}(?=[.)]))[.)]?[ \t]+(?=\S)"
+_CLAUSE_OPENING = re.compile(
+    rf"^[ \t]*(?:(?:Section|Clause|Article)[ \t]+(\d{{1,9}}(?:\.\d{{1,9}})*)[.)]?[ \t]+(?=\S)|{_OPENING_NUMBER})|(?<=[.;:])[ \t]+{_OPENING_NUMBER}",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def stated_clause_numbers(texts: Sequence[str]) -> set[str]:
+    """Every number the texts open a clause with, as printed: what a reference may name although no section of this
+    reading carries it (a numbered paragraph inside a stored section, or a document read without numbering)."""
+    return {next(group for group in match.groups() if group) for text in texts for match in _CLAUSE_OPENING.finditer(text)}
+
 
 def follows(previous: str, number: str) -> bool:
     """Whether a clause numbered ``number`` can be the next one after ``previous``: its first sub-clause (3 then 3.1), a
