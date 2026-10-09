@@ -2067,6 +2067,14 @@
           "topic": {
             "title": "Topic",
             "type": "string"
+          },
+          "unquotedValues": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Unquotedvalues",
+            "type": "array"
           }
         },
         "required": [

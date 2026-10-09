@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from ..application.clause_location import ClauseLocator
 from ..application.create_memo import review_head
@@ -20,11 +20,12 @@ from ..application.start_run import start_run
 from ..application.workspace import require_run, visible_runs
 from ..db import SessionLocal, get_session
 from ..document_names import run_document_name
-from ..models import Finding, Run, iso
+from ..models import Finding, Guidance, Run, iso
 from ..providers import make_provider
 from ..providers.base import ModelProvider
 from ..runs.events import TERMINAL, bus
 from ..runs.service import execute_run
+from ..runs.values import unquoted_values
 from ..schemas import CandidateOut, FindingOut, RunDetail, RunExplanation, RunIn, RunOut, RunSummary, SpanOut, StageOut
 from .access import current_workspace
 from .deps import get_provider
@@ -34,6 +35,20 @@ HEARTBEAT_SECONDS = 15
 
 
 # ----------------------------------------------------------------------------- mapping
+
+
+def _unquoted(finding: Finding) -> list[str]:
+    """Values the shown answer states that no verified quote, nor the reader's question or guidance, states (runs.values).
+    Read now, from the record: a disclosure that changes no status. A point reported as not found states none."""
+    if finding.status == "missing":
+        return []
+    quotes = [s.quote for s in finding.spans if s.verified]
+    if not quotes:
+        return []
+    run = finding.run
+    session = object_session(finding)
+    guidance = session.get(Guidance, run.guidance_id) if session is not None and run.guidance_id else None
+    return unquoted_values(finding.shown_conclusion, quotes, [run.question, guidance.text if guidance else ""])
 
 
 def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> FindingOut:
@@ -67,6 +82,7 @@ def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> Findi
         observed=finding.observed,
         required=finding.required,
         suggested_position=finding.suggested_position,
+        unquoted_values=_unquoted(finding),
     )
 
 

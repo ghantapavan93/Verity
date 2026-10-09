@@ -161,6 +161,10 @@ class FindingOut(ApiModel):
     observed: str | None
     required: str | None
     suggested_position: str | None
+    # Values the answer states that no verified quote, nor the reader's question or guidance, states ("45 days"), as
+    # the answer writes them (runs.values). Code's, read from the record; it changes no status, and an empty list
+    # claims nothing: a quote can state the right number for the wrong band.
+    unquoted_values: list[str] = []
 
 
 class RunOut(ApiModel):
