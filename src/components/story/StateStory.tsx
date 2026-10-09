@@ -11,7 +11,7 @@
  */
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./StateStory.module.css";
 import { errorMessage, getContractState } from "@/lib/api";
 import { shortHash } from "@/lib/format";
@@ -233,6 +233,16 @@ export function StateStory({ initial }: { initial?: ContractStateView }) {
     setFailure(null);
     fetchRecord();
   }, [fetchRecord]);
+
+  // A shared link to a section (#audit) arrives before the record does, so the browser had nowhere to scroll: land on it
+  // once, when the record has rendered, and never again on later renders.
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current || !view?.available) return;
+    landed.current = true;
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (id) document.getElementById(id)?.scrollIntoView({ behavior: "auto", block: "start" });
+  }, [view]);
 
   const evidence = (view?.evidence ?? {}) as Evidence;
   const featured = Math.min(Math.max(evidence.featured_arrival ?? 0, 0), Math.max((view?.arrivals.length ?? 1) - 1, 0));

@@ -4,7 +4,7 @@
  */
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContractStateView } from "@/lib/types";
 
 import record from "./__fixtures__/contract-state.json";
@@ -79,6 +79,25 @@ describe("StateStory", () => {
     expect(within(gate).getAllByText("FAIL")).toHaveLength(1);
     expect(screen.getByText("12 missed relationships")).toBeTruthy();
     expect(screen.getByText(/Timing side channels were not tested\./)).toBeTruthy();
+  });
+
+  it("lands on the section a shared link names, once the record has rendered, and keeps the arrival it names", () => {
+    // A link such as /state?arrival=2#audit arrived before the record did, so the browser had nowhere to scroll.
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    window.history.replaceState(null, "", "/state?arrival=2#audit");
+    const { rerender } = render(<StateStory initial={VIEW} />);
+    rerender(<StateStory initial={VIEW} />);
+    expect(scrolled).toHaveBeenCalledTimes(1); // once, not on every render
+    expect((scrolled.mock.contexts[0] as Element).id).toBe("audit");
+    expect((screen.getByLabelText("Recorded arrival") as HTMLSelectElement).value).toBe("1");
+  });
+
+  it("control: without a section in the link, the page stays at its top", () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    render(<StateStory initial={VIEW} />);
+    expect(scrolled).not.toHaveBeenCalled();
   });
 
   it("says when the record is not connected and never invents a page", () => {
