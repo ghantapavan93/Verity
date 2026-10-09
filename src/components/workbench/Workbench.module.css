@@ -175,28 +175,51 @@
   background: var(--border);
 }
 
+/* The button is the 24 px target; the 15 x 7 px mark is drawn inside it (WCAG 2.5.8; it was the mark alone). */
 .spineTick {
   position: absolute;
-  left: 3px;
-  width: 15px;
-  height: 7px;
-  margin-top: -3.5px;
+  left: -1px;
+  width: 24px;
+  height: 24px;
+  margin-top: -12px;
   padding: 0;
   border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.spineTick::before {
+  content: "";
+  position: absolute;
+  top: 8.5px;
+  left: 4px;
+  width: 15px;
+  height: 7px;
   border-radius: 2px;
   background: var(--accent-line);
-  cursor: pointer;
   transition:
     background var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
 }
 
-.spineTick:hover {
+/* A provision read for a point reported as not found: outlined, not filled; not evidence. */
+.spineTickRead::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--text-3);
+}
+
+.spineTick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.spineTick:hover::before {
   background: var(--accent-soft);
   transform: scaleX(1.3);
 }
 
-.spineTickCurrent {
+.spineTickCurrent::before {
   background: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-tint);
 }
@@ -333,6 +356,14 @@
 }
 
 /* The passage a finding cites: brass under the words, drawn in once when it is marked. */
+/* A provision the model read for a point it reports as not found: underlined, never filled like evidence. */
+.passageRead {
+  color: inherit;
+  background: none;
+  text-decoration: underline dotted var(--text-3);
+  text-underline-offset: 3px;
+}
+
 .passage {
   color: inherit;
   padding: 1px 1px;
@@ -791,6 +822,19 @@
 }
 
 .statusMuted::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+/* "Not found in the sections read": the model's report of an absence, outlined and dashed, not an answer's chip. */
+.statusAbsent {
+  background: transparent;
+  color: var(--text-2);
+  border-color: var(--border-strong);
+  border-style: dashed;
+}
+
+.statusAbsent::before {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px currentColor;
 }

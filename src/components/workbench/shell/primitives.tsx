@@ -9,7 +9,8 @@ import { statusLabel, type FindingStatus } from "@/lib/types";
 export function StatusChip({ status, hasGuidance, source }: { status: FindingStatus; hasGuidance: boolean; source?: string }) {
   // The pass colour is for a pass code stood behind (a record made under policy v2); the model's own pass is shown plain.
   const codeBacked = status === "pass" && source != null && source !== "model_hint";
-  const tone = status === "needs_review" ? styles.statusReview : codeBacked ? styles.statusPass : styles.statusMuted;
+  const tone =
+    status === "needs_review" ? styles.statusReview : status === "missing" ? styles.statusAbsent : codeBacked ? styles.statusPass : styles.statusMuted;
   return <span className={`${styles.statusChip} ${tone}`}>{statusLabel(status, hasGuidance, source)}</span>;
 }
 

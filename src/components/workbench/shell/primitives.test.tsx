@@ -11,12 +11,15 @@ import { StatusChip } from "./primitives";
 afterEach(cleanup);
 
 describe("StatusChip", () => {
-  it("names a pass without guidance as the model's answer, in the plain colour", () => {
+  it("names a pass without guidance as the model's answer, plain, and never dresses an absence as an answer", () => {
     render(<StatusChip status="pass" hasGuidance={false} source="model_hint" />);
     const modelPass = screen.getByText("Model's answer");
+    render(<StatusChip status="needs_review" hasGuidance={false} source="model_hint" />);
     render(<StatusChip status="missing" hasGuidance={false} source="model_hint" />);
     const missing = screen.getByText("Not found in the sections read");
-    expect(modelPass.className).toBe(missing.className);
+    // Until 2026-10-09 the two shared one chip: a reader could not tell "the model answered" from "the model found nothing".
+    expect(missing.className).not.toBe(modelPass.className);
+    expect(modelPass.className).not.toBe(screen.getByText("Needs review").className);
   });
 
   it("keeps the pass colour for a pass code confirmed, and gives a caller that names no source the weaker claim", () => {

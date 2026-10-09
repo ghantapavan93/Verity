@@ -7,6 +7,8 @@ import { isLocated, passageLabel, type DocumentView, type FindingView, type Loca
 
 /** One verified quote, placed along the contract: how far into the text it begins, as a share of the whole. */
 interface Tick {
+  /** A provision the model read for a point it reports as not found: not evidence, and not marked as evidence. */
+  read: boolean;
   span: LocatedSpan;
   section: SectionView;
   topic: string;
@@ -44,7 +46,7 @@ export function EvidenceSpine({
       const section = sections.get(span.sectionId);
       const start = starts.get(span.sectionId);
       if (!section || start === undefined) continue;
-      ticks.push({ span, section, topic: finding.topic, at: (start + span.start) / total });
+      ticks.push({ span, section, topic: finding.topic, read: finding.evidenceKind === "coverage", at: (start + span.start) / total });
     }
   }
   if (ticks.length === 0) return null;
@@ -57,10 +59,11 @@ export function EvidenceSpine({
           <button
             key={`${tick.span.sectionId}-${tick.span.start}-${i}`}
             type="button"
-            className={`${styles.spineTick} ${current ? styles.spineTickCurrent : ""}`}
+            className={`${styles.spineTick} ${tick.read ? styles.spineTickRead : ""} ${current ? styles.spineTickCurrent : ""}`}
+            data-read={tick.read || undefined}
             style={{ top: `${Math.min(99, Math.max(1, tick.at * 100))}%` }}
-            title={`${tick.topic}: ${passageLabel(tick.span, tick.section)}`}
-            aria-label={`${tick.topic}, ${passageLabel(tick.span, tick.section)}: show in the document`}
+            title={`${tick.topic}: ${passageLabel(tick.span, tick.section)}${tick.read ? " (read, not relied on)" : ""}`}
+            aria-label={`${tick.topic}, ${passageLabel(tick.span, tick.section)}${tick.read ? ", read, not relied on" : ""}: show in the document`}
             onClick={() => onJump(tick.span.sectionId, tick.span)}
           />
         );

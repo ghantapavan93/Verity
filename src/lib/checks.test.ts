@@ -114,12 +114,7 @@ describe("checkLedger: what was checked, and by whom", () => {
   });
 
   it("names the person who decided", () => {
-    const rows = checkLedger(
-      finding({ review: { verdict: "confirmed", reviewer: "Didier", at: "" } }),
-      true,
-      sections,
-      null,
-    );
+    const rows = checkLedger(finding({ review: { verdict: "confirmed", reviewer: "Didier", at: "" } }), true, sections, null);
     expect(row(rows, "person")).toMatchObject({ text: "Confirmed by Didier", by: "person" });
   });
 });

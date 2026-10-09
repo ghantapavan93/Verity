@@ -90,7 +90,13 @@ export function DocumentPane({
       </header>
       <article className={styles.paper}>
         {doc?.sections.map((section) => (
-          <SectionBlock key={section.id} section={section} lit={lit === section.id} span={highlight?.sectionId === section.id ? highlight.span : null} />
+          <SectionBlock
+            key={section.id}
+            section={section}
+            lit={lit === section.id}
+            span={highlight?.sectionId === section.id ? highlight.span : null}
+            readOnly={highlight?.sectionId === section.id && readNotRelied(findings, highlight.span)}
+          />
         ))}
         {isSample && <p className={styles.paperNote}>Sample · Common Paper Cloud Service Agreement · CC BY 4.0 · a real standard agreement, unmodified</p>}
       </article>
@@ -98,14 +104,22 @@ export function DocumentPane({
   );
 }
 
-function SectionBlock({ section, lit, span }: { section: SectionView; lit: boolean; span: SpanView | null }) {
+/** A passage only a not-found finding cites: the model read it and relied on it for nothing, so it is not shown as evidence. */
+function readNotRelied(findings: FindingView[] | undefined, span: SpanView | null): boolean {
+  if (!span || !findings) return false;
+  const same = (s: SpanView) => s.sectionId === span.sectionId && s.start === span.start && s.end === span.end;
+  const citing = findings.filter((f) => f.spans.some(same));
+  return citing.length > 0 && citing.every((f) => f.evidenceKind === "coverage");
+}
+
+function SectionBlock({ section, lit, span, readOnly = false }: { section: SectionView; lit: boolean; span: SpanView | null; readOnly?: boolean }) {
   // Offsets are code points (the API's), so the slice is by code points too (src/lib/text.ts).
   const located =
     span && span.verified && span.start >= 0 && span.end <= codePointLength(section.text) ? splitByCodePoints(section.text, span.start, span.end) : null;
   const body = located ? (
     <>
       <Visible text={located[0]} />
-      <mark className={styles.passage}>
+      <mark className={readOnly ? styles.passageRead : styles.passage} title={readOnly ? "Read by the model, not relied on" : undefined}>
         <Visible text={located[1]} />
       </mark>
       <Visible text={located[2]} />
