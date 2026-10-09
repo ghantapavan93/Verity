@@ -45,7 +45,7 @@ from ..policy.proof import pass_blockers, same_point
 # every ceiling phrasing is now a ceiling, and a period beside a negation or a bare comparative code does not read
 # ("more than 60 days are not acceptable") states no rule. Replayed over the 63 recorded findings with guidance: none
 # changed. A reference is unknown only when the document's text never opens a clause with it either (§12.3 inside §12
-# was "a section this document does not have"); replayed over 1,229 recorded findings, 21 references became known, each
+# was "a section this document does not have"); replayed over 1,229 recorded findings, 20 became known, each
 # printed as a clause opening in its document.
 POLICY_VERSION = "policy-v4"
 

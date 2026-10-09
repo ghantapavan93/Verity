@@ -115,8 +115,8 @@ SENTENCE_START = re.compile(r"(?<=[.;:])\s+(?=\d)")
 
 # A clause number as a document opens a clause with it: "12.3 Notwithstanding …", "6. TERMINATION.", "Section 5 Fees"
 # at the start of a paragraph, or "… in writing. 4.1 Late fees …" after a sentence end. A bare whole number must be
-# followed by "." or ")" so that "30 days after notice" is not clause 30; a cross-reference ("Subject to Section 9")
-# opens nothing.
+# followed by "." or ")" so that "30 days after notice" is not clause 30, and must open a titled clause (`inline_clause`)
+# so that a list item ("2. invoice monthly;") is not clause 2; a cross-reference ("Subject to Section 9") opens nothing.
 _OPENING_NUMBER = r"(\d{1,9}(?:\.\d{1,9})+|\d{1,9}(?=[.)]))[.)]?[ \t]+(?=\S)"
 _CLAUSE_OPENING = re.compile(
     rf"^[ \t]*(?:(?:Section|Clause|Article)[ \t]+(\d{{1,9}}(?:\.\d{{1,9}})*)[.)]?[ \t]+(?=\S)|{_OPENING_NUMBER})|(?<=[.;:])[ \t]+{_OPENING_NUMBER}",
@@ -126,8 +126,21 @@ _CLAUSE_OPENING = re.compile(
 
 def stated_clause_numbers(texts: Sequence[str]) -> set[str]:
     """Every number the texts open a clause with, as printed: what a reference may name although no section of this
-    reading carries it (a numbered paragraph inside a stored section, or a document read without numbering)."""
-    return {next(group for group in match.groups() if group) for text in texts for match in _CLAUSE_OPENING.finditer(text)}
+    reading carries it (a numbered paragraph inside a stored section, or a document read without numbering). A dotted
+    number ("12.3") is a clause number wherever it opens; a whole number only where it opens a titled clause ("6. WRF
+    Patents."), because a numbered list restarts at 1 inside any clause (triage, 2026-10-09)."""
+    stated: set[str] = set()
+    for text in texts:
+        for match in _CLAUSE_OPENING.finditer(text):
+            index = next(i for i, group in enumerate(match.groups(), start=1) if group)
+            number = match.group(index)
+            if "." not in number:
+                end = text.find("\n", match.start(index))
+                line = text[match.start(index) : end if end >= 0 else len(text)]
+                if inline_clause(line, int(number)) is None:
+                    continue
+            stated.add(number)
+    return stated
 
 
 def follows(previous: str, number: str) -> bool:

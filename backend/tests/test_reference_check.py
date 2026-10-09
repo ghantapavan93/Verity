@@ -30,7 +30,7 @@ RUN_TOGETHER = "Fees are due monthly. 5. Payment Terms. (i) Invoices are payable
 
 def test_a_clause_the_text_opens_inside_a_stored_section_is_known() -> None:
     stated = stated_clause_numbers([C32_SECTION])
-    assert {"12", "12.1", "12.3"} <= stated
+    assert {"12.1", "12.3"} <= stated
     assert unknown_references("The notice period is ninety days, as §12.3 states.", ["12"], ["sec_11"], stated) == []
 
 
@@ -65,3 +65,18 @@ def test_the_check_lowers_a_pass_only_for_a_reference_the_document_lacks() -> No
     assert check_references(passing, "Ninety days, per §12.3.", ["12"], [], stated) is passing
     lowered = check_references(passing, "Ninety days, per §14.2.", ["12"], [], stated)
     assert (lowered.status, lowered.source) == ("needs_review", "reference_check")
+
+
+def test_a_numbered_list_does_not_make_a_section_known() -> None:
+    """Triage, 2026-10-09: a list item opens no clause. "1. deliver goods;" is not clause 1, so "§2" stays reported in a
+    contract whose only "2." is a list item; a whole number counts only when it opens a titled clause."""
+    listed = "The Supplier shall:\n\n1. deliver the goods;\n\n2. invoice monthly; and\n\n3. keep records."
+    stated = stated_clause_numbers([listed, "Fees are due. 4 days later the goods ship."])
+    assert stated.isdisjoint({"1", "2", "3", "4"}), stated
+    assert unknown_references("Section 2 grants exclusivity; §3 caps liability.", ["7"], [], stated) == ["2", "3"]
+
+
+def test_a_titled_whole_number_clause_is_known() -> None:
+    stated = stated_clause_numbers(["Recitals here.\n\n6. WRF Patents. Washington shall file the applications."])
+    assert "6" in stated
+    assert unknown_references("Under Section 6 the patents are filed.", ["1"], [], stated) == []
