@@ -11,7 +11,11 @@ import { codeAccount, decidedByCode, passageLabel, type FindingView, type Sectio
  */
 export type CheckBy = "code" | "model" | "person" | "nobody";
 
-export type CheckRow = { key: "quote" | "support" | "comparison" | "context" | "person"; label: string; text: string; by: CheckBy };
+export type CheckRow = { key: "quote" | "support" | "numbers" | "comparison" | "context" | "person"; label: string; text: string; by: CheckBy };
+
+function listed(items: string[]): string {
+  return items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
 
 const VERBATIM = new Set(["exact", "normalized"]);
 
@@ -69,6 +73,13 @@ export function checkLedger(
       text: "Not checked by code: that the passage supports the answer is the model's reading",
       by: "model",
     });
+    // What code can see of that gap: a value the answer states that no verified quote states (holdout audit,
+    // 2026-10-09, backend runs/values.py). Shown only when there is one; none found is not "every number checked",
+    // since a quote can hold the right number for the wrong band.
+    const unquoted = finding.unquotedValues ?? [];
+    if (unquoted.length > 0) {
+      rows.push({ key: "numbers", label: "Numbers", text: `Code found ${listed(unquoted)} in the answer and in none of the quotes`, by: "code" });
+    }
   }
 
   const source = finding.statusSource || "model_hint";

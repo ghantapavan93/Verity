@@ -57,6 +57,21 @@ describe("checkLedger: what was checked, and by whom", () => {
     expect(rows.filter((r) => r.by === "code").map((r) => r.key)).toEqual(["quote"]);
   });
 
+  it("says which numbers in the answer no quote states, as code's finding, and claims nothing when there are none", () => {
+    // Holdout audit, 2026-10-09: "one (1) day of service credit" on a quote that stops before the credit.
+    const flagged = checkLedger(finding({ unquotedValues: ["one (1) day", "$78,600.00"] }), false, sections, null);
+    expect(row(flagged, "numbers")).toEqual({
+      key: "numbers",
+      label: "Numbers",
+      text: "Code found one (1) day and $78,600.00 in the answer and in none of the quotes",
+      by: "code",
+    });
+    expect(flagged.map((r) => r.key).indexOf("numbers")).toBe(flagged.map((r) => r.key).indexOf("support") + 1);
+    // Nothing found is not "every number checked": a quote can hold the right number for the wrong band (AD7).
+    expect(row(checkLedger(finding({ unquotedValues: [] }), false, sections, null), "numbers")).toBeUndefined();
+    expect(row(checkLedger(finding({ evidenceKind: "coverage", unquotedValues: ["45 days"] }), false, sections, null), "numbers")).toBeUndefined();
+  });
+
   it("says what code compared when code decided the status", () => {
     const rows = checkLedger(
       finding({

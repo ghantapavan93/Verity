@@ -1395,6 +1395,11 @@ export interface components {
             suggestedPosition: string | null;
             /** Topic */
             topic: string;
+            /**
+             * Unquotedvalues
+             * @default []
+             */
+            unquotedValues: string[];
         };
         /** FindingRecord */
         FindingRecord: {
