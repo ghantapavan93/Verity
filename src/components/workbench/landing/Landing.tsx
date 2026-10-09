@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useContext, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import styles from "./Landing.module.css";
 import { IconArrowRight, IconFile } from "../icons";
 import { transitions, type Stage } from "../shell/constants";
@@ -11,6 +11,7 @@ import { getCitations, getRun, listDocuments, type Health } from "@/lib/api";
 import { plural } from "@/lib/format";
 import { modelPlace } from "@/lib/modelPlace";
 import { TopLinks } from "./TopLinks";
+import { PublicDemo } from "../access/PublicDemo";
 import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
 /** How a status is set, in the order the evidence drawer reads it. Static: it describes the product, not one run. */
@@ -112,6 +113,8 @@ export function Landing({
   // first seconds of an open site (QA review, 2026-10-08).
   const openPreview = accessKnown && apiHealth?.access === "off";
   const privatePreview = accessKnown && (apiHealth?.access === "required" || apiHealth?.access === "entered");
+  // A public demo: this browser's own workspace, deleted on schedule (access/AccessGate.tsx, backend retention).
+  const demo = useContext(PublicDemo);
   // Where the model runs, as the API says; nothing about a contract's whereabouts is claimed before it has said.
   const place = modelPlace(accessKnown ? apiHealth : null);
 
@@ -133,7 +136,7 @@ export function Landing({
           <TopLinks />
           <span className={styles.preview}>
             <span className={styles.previewDot} aria-hidden="true" />
-            {openPreview ? "Open preview" : privatePreview ? "Private preview" : "Preview"}
+            {demo ? "Public demo" : openPreview ? "Open preview" : privatePreview ? "Private preview" : "Preview"}
           </span>
         </div>
       </header>
@@ -207,11 +210,13 @@ export function Landing({
                     <div className={styles.dropTitle}>Drop a contract here</div>
                     <div className={styles.dropHint}>
                       PDF, DOCX or TXT. It is read into numbered sections and stored with its SHA-256 on the Verity server
-                      {openPreview
-                        ? ", where anyone with this address can open it: this preview is open."
-                        : privatePreview
-                          ? ", readable through your invite and no other."
-                          : "."}
+                      {demo
+                        ? ", in a workspace only this browser can open."
+                        : openPreview
+                          ? ", where anyone with this address can open it: this preview is open."
+                          : privatePreview
+                            ? ", readable through your invite and no other."
+                            : "."}
                     </div>
                   </div>
                   <button type="button" className={styles.primary} aria-label="Add a contract" onClick={onPickFile}>
@@ -230,6 +235,12 @@ export function Landing({
                   try a sample agreement
                 </button>
               </p>
+              {demo && (
+                <p className={styles.after}>
+                  A public demo: use public, synthetic or non-sensitive agreements. What you add is kept in a workspace only this browser can open, and is
+                  deleted automatically {demo.retentionDays} days after your first visit. Clearing cookies loses access to it.
+                </p>
+              )}
               {uploadError && (
                 <p className={styles.error} role="alert">
                   {uploadError}

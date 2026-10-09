@@ -45,6 +45,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/access/visit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Visit
+         * @description A browser with no session is handed one of its own: an unpredictable subject the server makes (the client never
+         *     chooses it), signed like an invite's session, in a workspace no other session can read. A browser that already has
+         *     a working session keeps it, unrenewed, so a refresh or a second tab stays in the same workspace and the session
+         *     still ends with the workspace.
+         */
+        post: operations["visit_api_access_visit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/batches": {
         parameters: {
             query?: never;
@@ -602,10 +625,17 @@ export interface components {
          * @description Whether the gate is on and whether this browser is through it.
          */
         AccessOut: {
+            /**
+             * Anonymous
+             * @default false
+             */
+            anonymous: boolean;
             /** Entered */
             entered: boolean;
             /** Required */
             required: boolean;
+            /** Retentiondays */
+            retentionDays?: number | null;
             /** Subject */
             subject?: string | null;
         };
@@ -2710,6 +2740,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    visit_api_access_visit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessOut"];
                 };
             };
         };

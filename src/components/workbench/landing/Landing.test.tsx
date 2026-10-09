@@ -7,6 +7,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Health, RunSummary } from "@/lib/types";
 
+import { PublicDemo } from "../access/PublicDemo";
 import { Landing } from "./Landing";
 
 afterEach(cleanup);
@@ -137,5 +138,42 @@ describe("Landing: the way to the research", () => {
     const links = screen.getByRole("navigation", { name: "Elsewhere" });
     expect(links.querySelector('a[href="/state"]')?.textContent).toBe("Research");
     expect(links.querySelector('a[href="https://github.com/ghantapavan93/Verity"]')?.textContent).toBe("Source");
+  });
+});
+
+describe("Landing: a public demo", () => {
+  it("says it is a public demo, what to upload, and when what is added is deleted", () => {
+    render(
+      <PublicDemo.Provider value={{ retentionDays: 7 }}>
+        <Landing
+          stage="empty"
+          processingLabel=""
+          pendingName=""
+          composerText=""
+          setComposerText={vi.fn()}
+          onHome={vi.fn()}
+          onPickFile={vi.fn()}
+          onLoadSample={vi.fn()}
+          proof={null}
+          proofStory={false}
+          onOpenProof={vi.fn()}
+          uploadError={null}
+          apiHealth={health("entered")}
+          accessKnown
+          recent={[]}
+          onOpenDocument={vi.fn()}
+          onAllDocuments={vi.fn()}
+          viewError={null}
+          reduceMotion
+        />
+      </PublicDemo.Provider>,
+    );
+    expect(screen.getByText("Public demo")).toBeTruthy();
+    expect(screen.queryByText("Private preview")).toBeNull();
+    const text = document.body.textContent ?? "";
+    expect(text).toMatch(/public, synthetic or non-sensitive/);
+    expect(text).toMatch(/deleted automatically 7 days after your first visit/);
+    expect(text).toMatch(/[Cc]learing (your )?cookies/);
+    expect(text).not.toMatch(/invite/i);
   });
 });

@@ -7,12 +7,13 @@
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { enterWithInvite, getAccess, health } from "@/lib/api";
+import type { enterWithInvite, getAccess, health, visit } from "@/lib/api";
 
 const api = vi.hoisted(() => ({
   getAccess: vi.fn<typeof getAccess>(),
   enterWithInvite: vi.fn<typeof enterWithInvite>(),
   health: vi.fn<typeof health>(),
+  visit: vi.fn<typeof visit>(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -20,14 +21,15 @@ vi.mock("@/lib/api", () => ({
   getAccess: api.getAccess,
   enterWithInvite: api.enterWithInvite,
   health: api.health,
+  visit: api.visit,
   errorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }));
 
 import { AccessGate } from "./AccessGate";
 
-const OUT = { required: true, entered: false, subject: null };
-const IN = { required: true, entered: true, subject: "min-kyu" };
-const OFF = { required: false, entered: true, subject: null };
+const OUT = { required: true, entered: false, subject: null, anonymous: false };
+const IN = { required: true, entered: true, subject: "min-kyu", anonymous: false };
+const OFF = { required: false, entered: true, subject: null, anonymous: false };
 
 function Inside() {
   return <p>the workbench</p>;
@@ -38,6 +40,7 @@ describe("AccessGate", () => {
     api.getAccess.mockReset();
     api.enterWithInvite.mockReset();
     api.health.mockReset();
+    api.visit.mockReset();
     api.health.mockRejectedValue(new Error("no answer"));
     window.history.replaceState(null, "", "/");
   });
@@ -194,5 +197,79 @@ describe("AccessGate", () => {
       </AccessGate>,
     );
     expect(await screen.findByText(/model runs on the Verity server/)).toBeTruthy();
+  });
+});
+
+describe("AccessGate: a public demo", () => {
+  const ANON_OUT = { required: true, entered: false, subject: null, anonymous: true, retentionDays: 7 };
+  const ANON_IN = { ...ANON_OUT, entered: true };
+
+  beforeEach(() => {
+    api.getAccess.mockReset();
+    api.enterWithInvite.mockReset();
+    api.visit.mockReset();
+    api.health.mockReset();
+    api.health.mockRejectedValue(new Error("no answer"));
+    window.history.replaceState(null, "", "/");
+  });
+  afterEach(cleanup);
+
+  it("hands a first visit a workspace of its own and opens the workbench with no step in between", async () => {
+    api.getAccess.mockResolvedValue(ANON_OUT);
+    api.visit.mockResolvedValue(ANON_IN);
+    render(
+      <AccessGate>
+        <Inside />
+      </AccessGate>,
+    );
+    expect(await screen.findByText("the workbench")).toBeTruthy();
+    expect(api.visit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText("Invite link")).toBeNull();
+  });
+
+  it("keeps the workspace a returning browser already has", async () => {
+    api.getAccess.mockResolvedValue(ANON_IN);
+    render(
+      <AccessGate>
+        <Inside />
+      </AccessGate>,
+    );
+    expect(await screen.findByText("the workbench")).toBeTruthy();
+    expect(api.visit).not.toHaveBeenCalled();
+  });
+
+  it("says why it cannot open when the visit is refused, offers to try again, and never asks for an invite", async () => {
+    api.getAccess.mockResolvedValue(ANON_OUT);
+    api.visit.mockRejectedValueOnce(new Error("Too many new visits from your network in the last hour. Try again in 12 minutes."));
+    api.visit.mockResolvedValueOnce(ANON_IN);
+    render(
+      <AccessGate>
+        <Inside />
+      </AccessGate>,
+    );
+    expect(await screen.findByText(/Too many new visits/)).toBeTruthy();
+    expect(screen.queryByLabelText("Invite link")).toBeNull();
+    expect(screen.getByRole("link", { name: /recorded research/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("the workbench")).toBeTruthy();
+  });
+
+  it("says a workspace has ended and starts a new one only when asked", async () => {
+    api.getAccess.mockResolvedValue(ANON_IN);
+    api.visit.mockResolvedValue(ANON_IN);
+    render(
+      <AccessGate>
+        <Inside />
+      </AccessGate>,
+    );
+    await screen.findByText("the workbench");
+    act(() => {
+      window.dispatchEvent(new Event("verity:access-required"));
+    });
+    expect(await screen.findByText(/workspace has ended/i)).toBeTruthy();
+    expect(screen.queryByLabelText("Invite link")).toBeNull();
+    expect(api.visit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Start a new workspace" }));
+    expect(await screen.findByText("the workbench")).toBeTruthy();
   });
 });

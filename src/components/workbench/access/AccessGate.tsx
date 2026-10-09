@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import styles from "../Workbench.module.css";
 import door from "../landing/Landing.module.css";
 import { Brand } from "../shell/primitives";
-import { ACCESS_REQUIRED_EVENT, enterWithInvite, errorMessage, getAccess, health, type Health } from "@/lib/api";
+import { ACCESS_REQUIRED_EVENT, enterWithInvite, errorMessage, getAccess, health, visit, type Health } from "@/lib/api";
+import type { AccessView } from "@/lib/types";
 import { modelPlace } from "@/lib/modelPlace";
 import { SOURCE, TopLinks } from "../landing/TopLinks";
+import { PublicDemo } from "./PublicDemo";
 
 /**
  * The door in front of the workbench, when the API has one (backend/app/api/access.py). This component decides
@@ -17,9 +19,14 @@ import { SOURCE, TopLinks } from "../landing/TopLinks";
  * fragment is exchanged for a session cookie before the workbench mounts and is then removed from the address bar,
  * so what is left is the page the link was for. A reader who arrives without it, or whose session has ended, is
  * asked for the link: one field, no account, nothing to reset.
+ *
+ * A public demo (the API says `anonymous`) has no door to show: a browser with no session is handed one of its own
+ * at once (POST /api/access/visit), in a workspace no other browser can read, and the workbench opens. If that is
+ * refused (too many new visits from one network) the page says so and offers to try again; it never asks for an
+ * invite. A workspace that ends while the page is open is said to have ended, and a new one starts only when asked.
  */
 
-type State = "checking" | "open" | "closed";
+type State = "checking" | "open" | "closed" | "unavailable" | "ended";
 
 const INVITE_IN_FRAGMENT = /(?:^#|&)invite=([^&]+)/;
 
@@ -38,6 +45,35 @@ export function AccessGate({ children }: { children: ReactNode }) {
   const [problem, setProblem] = useState<string | null>(null);
   // Anonymous health names no provider or model, only where the model runs; nothing is claimed until it answers.
   const [apiHealth, setApiHealth] = useState<Health | null>(null);
+  const [demo, setDemo] = useState<{ retentionDays: number } | null>(null);
+  const demoRef = useRef(false);
+
+  const startVisit = useCallback(async (): Promise<State> => {
+    try {
+      const visited = await visit();
+      setDemo({ retentionDays: visited.retentionDays ?? 7 });
+      setProblem(null);
+      return "open";
+    } catch (error) {
+      setProblem(errorMessage(error));
+      return "unavailable";
+    }
+  }, []);
+
+  const settle = useCallback(
+    async (access: AccessView): Promise<State> => {
+      demoRef.current = access.anonymous;
+      if (access.anonymous) {
+        if (access.entered) {
+          setDemo({ retentionDays: access.retentionDays ?? 7 });
+          return "open";
+        }
+        return startVisit();
+      }
+      return access.entered ? "open" : "closed";
+    },
+    [startVisit],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +89,8 @@ export function AccessGate({ children }: { children: ReactNode }) {
       }
       try {
         const access = await getAccess();
-        if (!cancelled) setState(access.entered ? "open" : "closed");
+        const next = await settle(access);
+        if (!cancelled) setState(next);
       } catch {
         // The API did not answer. The workbench says so in its own words; the door has nothing to add.
         if (!cancelled) setState("open");
@@ -65,8 +102,9 @@ export function AccessGate({ children }: { children: ReactNode }) {
         if (!cancelled) setApiHealth(answer);
       })
       .catch(() => undefined);
-    // A session that ends while the page is open: the next request is refused, and the door closes.
-    const close = () => setState("closed");
+    // A session that ends while the page is open: the next request is refused, and the door closes. In a public demo
+    // the workspace has ended; a new one is not started behind the visitor's back.
+    const close = () => setState(demoRef.current ? "ended" : "closed");
     window.addEventListener(ACCESS_REQUIRED_EVENT, close);
     // An invite link opened in a tab that already shows this page changes only the fragment, and a browser does not
     // reload for that: without this the link did nothing and the invite stayed in the address bar (found by driving
@@ -80,7 +118,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
       window.removeEventListener(ACCESS_REQUIRED_EVENT, close);
       window.removeEventListener("hashchange", arrivedInPlace);
     };
-  }, []);
+  }, [settle]);
 
   const enter = async (event: FormEvent) => {
     event.preventDefault();
@@ -98,9 +136,60 @@ export function AccessGate({ children }: { children: ReactNode }) {
     }
   };
 
+  const again = async () => {
+    if (busy) return;
+    setBusy(true);
+    const next = await startVisit();
+    setBusy(false);
+    setState(next);
+  };
+
   const place = modelPlace(apiHealth);
-  if (state === "open") return <>{children}</>;
+  if (state === "open") return <PublicDemo.Provider value={demo}>{children}</PublicDemo.Provider>;
   if (state === "checking") return <div className={styles.root} data-stage="empty" aria-busy="true" />;
+  if (state === "unavailable" || state === "ended") {
+    return (
+      <div className={styles.root} data-stage="empty">
+        <section id="main" tabIndex={-1} className={door.page} aria-label="Live workbench">
+          <header className={door.topbar}>
+            <Brand />
+            <div className={door.topRight}>
+              <TopLinks />
+            </div>
+          </header>
+          <div className={door.gate}>
+            <h1 className={door.title}>The live Verity workbench</h1>
+            {state === "ended" ? (
+              <p className={door.lead}>
+                Your demo workspace has ended: it lasts {demo?.retentionDays ?? 7} days, and this browser&apos;s cookie for it is gone or has expired. What it
+                held cannot be opened again. A new workspace starts empty.
+              </p>
+            ) : (
+              <p className={door.error} role="alert">
+                {problem}
+              </p>
+            )}
+            <div className={door.gateForm}>
+              <button type="button" className={door.primary} disabled={busy} onClick={again}>
+                {busy ? "Starting" : state === "ended" ? "Start a new workspace" : "Try again"}
+              </button>
+            </div>
+            <p className={door.gateNote}>
+              Meanwhile:{" "}
+              <a className={door.link} href="/state">
+                Read the recorded research
+              </a>
+              , or the{" "}
+              <a className={door.link} href={SOURCE}>
+                source code
+              </a>
+              .
+            </p>
+          </div>
+        </section>
+      </div>
+    );
+  }
   return (
     <div className={styles.root} data-stage="empty">
       <section id="main" tabIndex={-1} className={door.page} aria-label="Live workbench">

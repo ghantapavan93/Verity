@@ -4,6 +4,11 @@
       "AccessOut": {
         "description": "Whether the gate is on and whether this browser is through it.",
         "properties": {
+          "anonymous": {
+            "default": false,
+            "title": "Anonymous",
+            "type": "boolean"
+          },
           "entered": {
             "title": "Entered",
             "type": "boolean"
@@ -11,6 +16,17 @@
           "required": {
             "title": "Required",
             "type": "boolean"
+          },
+          "retentionDays": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retentiondays"
           },
           "subject": {
             "anyOf": [
@@ -5817,6 +5833,28 @@
           }
         },
         "summary": "Enter",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/api/access/visit": {
+      "post": {
+        "description": "A browser with no session is handed one of its own: an unpredictable subject the server makes (the client never\nchooses it), signed like an invite's session, in a workspace no other session can read. A browser that already has\na working session keeps it, unrenewed, so a refresh or a second tab stays in the same workspace and the session\nstill ends with the workspace.",
+        "operationId": "visit_api_access_visit_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Visit",
         "tags": [
           "access"
         ]

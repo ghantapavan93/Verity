@@ -120,6 +120,11 @@ export function getAccess(): Promise<AccessView> {
 }
 
 /** Exchange an invite, the token or the whole link, for a session cookie. The API answers with who entered. */
+/** A public demo: a browser with no session is handed one of its own, in a workspace no one else can read. */
+export function visit(): Promise<AccessView> {
+  return request<AccessView>("/api/access/visit", { method: "POST" });
+}
+
 export function enterWithInvite(invite: string): Promise<AccessView> {
   return request<AccessView>("/api/access/session", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ invite }) });
 }
