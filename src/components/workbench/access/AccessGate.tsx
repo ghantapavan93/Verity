@@ -6,8 +6,7 @@ import door from "../landing/Landing.module.css";
 import { Brand } from "../shell/primitives";
 import { ACCESS_REQUIRED_EVENT, enterWithInvite, errorMessage, getAccess, health, type Health } from "@/lib/api";
 import { modelPlace } from "@/lib/modelPlace";
-
-const SOURCE = "https://github.com/ghantapavan93/Verity";
+import { SOURCE, TopLinks } from "../landing/TopLinks";
 
 /**
  * The door in front of the workbench, when the API has one (backend/app/api/access.py). This component decides
@@ -107,10 +106,13 @@ export function AccessGate({ children }: { children: ReactNode }) {
       <section id="main" tabIndex={-1} className={door.page} aria-label="Live workbench">
         <header className={door.topbar}>
           <Brand />
-          <span className={door.preview}>
-            <span className={door.previewDot} aria-hidden="true" />
-            Private preview
-          </span>
+          <div className={door.topRight}>
+            <TopLinks />
+            <span className={door.preview}>
+              <span className={door.previewDot} aria-hidden="true" />
+              Private preview
+            </span>
+          </div>
         </header>
         <div className={door.gate}>
           <p className={door.kicker}>

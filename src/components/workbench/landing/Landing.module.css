@@ -1017,3 +1017,38 @@
     grid-template-columns: 28px minmax(0, 1fr);
   }
 }
+
+/* ---- the ways out, beside the door badge ---- */
+
+.topRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.topLinks {
+  display: inline-flex;
+  gap: 16px;
+}
+
+.topLink {
+  font-size: 13px;
+  color: var(--text-2);
+  text-decoration: none;
+  padding: 4px 0;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.topLink:hover {
+  color: var(--text);
+}
+
+@media (max-width: 420px) {
+  .topRight {
+    gap: 12px;
+  }
+
+  .topRight .preview {
+    display: none;
+  }
+}

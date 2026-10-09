@@ -130,3 +130,12 @@ describe("Landing: the finished review it shows", () => {
     expect(document.body.textContent).not.toContain("Code checks the quote, then the arithmetic");
   });
 });
+
+describe("Landing: the way to the research", () => {
+  it("links the recorded research and the source from the first screen", () => {
+    renderLanding(health("entered"), true);
+    const links = screen.getByRole("navigation", { name: "Elsewhere" });
+    expect(links.querySelector('a[href="/state"]')?.textContent).toBe("Research");
+    expect(links.querySelector('a[href="https://github.com/ghantapavan93/Verity"]')?.textContent).toBe("Source");
+  });
+});

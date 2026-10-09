@@ -176,6 +176,7 @@ describe("AccessGate", () => {
     expect(text).toMatch(/PDF, DOCX or TXT/);
     expect(text).toMatch(/sample agreement/);
     expect(text).toMatch(/passage/);
+    expect(screen.getByRole("navigation", { name: "Elsewhere" }).querySelector('a[href="/state"]')).toBeTruthy();
     expect(screen.getByRole("link", { name: /recorded research/i }).getAttribute("href")).toBe("/state");
     expect(screen.getByRole("link", { name: /source code/i }).getAttribute("href")).toBe("https://github.com/ghantapavan93/Verity");
     // Nothing is said about where the model runs until the API says.

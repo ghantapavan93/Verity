@@ -10,6 +10,7 @@ import { OneRun, RecordPipeline, Refusals } from "./LandingStory";
 import { getCitations, getRun, listDocuments, type Health } from "@/lib/api";
 import { plural } from "@/lib/format";
 import { modelPlace } from "@/lib/modelPlace";
+import { TopLinks } from "./TopLinks";
 import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
 /** How a status is set, in the order the evidence drawer reads it. Static: it describes the product, not one run. */
@@ -128,10 +129,13 @@ export function Landing({
         <button type="button" className={styles.home} aria-label="Verity: the first screen" onClick={onHome}>
           <Brand />
         </button>
-        <span className={styles.preview}>
-          <span className={styles.previewDot} aria-hidden="true" />
-          {openPreview ? "Open preview" : privatePreview ? "Private preview" : "Preview"}
-        </span>
+        <div className={styles.topRight}>
+          <TopLinks />
+          <span className={styles.preview}>
+            <span className={styles.previewDot} aria-hidden="true" />
+            {openPreview ? "Open preview" : privatePreview ? "Private preview" : "Preview"}
+          </span>
+        </div>
       </header>
 
       <div className={`${styles.body} ${stage === "dragging" ? styles.dimmed : ""}`}>
