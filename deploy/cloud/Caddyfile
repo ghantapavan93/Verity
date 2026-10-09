@@ -1,3 +1,10 @@
+# Certificates come from Let's Encrypt. On the first bring-up set VERITY_ACME_CA to the staging directory
+# (https://acme-staging-v02.api.letsencrypt.org/directory) until the name resolves and ports 80/443 answer: failed
+# attempts against production count toward its rate limits and can lock the name out for hours.
+{
+	acme_ca {$VERITY_ACME_CA}
+}
+
 # One origin for the workbench: TLS here, /api to the API, everything else to the interface. Same origin means no CORS,
 # and the session cookie (__Host-, Secure, SameSite=Strict) stays first-party.
 {$VERITY_SITE} {

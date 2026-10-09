@@ -1,6 +1,7 @@
 # The API: FastAPI on one uvicorn worker. One process on purpose: SQLite, runs executed as in-process background tasks,
 # the run event bus and the request limiters all assume a single process (deploy/cloud/README.md).
-FROM python:3.13-slim
+# Pinned by digest: a rebuild runs on the base the rehearsal ran on, not whatever the tag points to that day.
+FROM python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
