@@ -38,9 +38,15 @@ def create_memo(body: MemoIn, response: Response, session: Session = Depends(get
     return _out(created.memo)
 
 
+# The memo page is served from the workbench's own origin and carries text from an uploaded contract, escaped when it was
+# written (memo.service). The policy is the second line: it runs nothing, loads nothing and is framed by no one; its one
+# inline <style> is all it may use.
+MEMO_POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
+
 @router.get("/{memo_id}/html", response_class=HTMLResponse)
 def memo_as_html(memo_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> HTMLResponse:
-    return HTMLResponse(require_memo(session, memo_id, workspace).html)
+    return HTMLResponse(require_memo(session, memo_id, workspace).html, headers={"Content-Security-Policy": MEMO_POLICY})
 
 
 @router.get("/{memo_id}/docx")
