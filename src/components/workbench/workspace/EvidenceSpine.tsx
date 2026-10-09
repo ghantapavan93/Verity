@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import styles from "../Workbench.module.css";
 import type { Highlight } from "./DocumentPane";
 import { codePointLength } from "@/lib/text";
@@ -31,14 +32,18 @@ export function EvidenceSpine({
   highlight: Highlight | null;
   onJump: (sectionId: string, span: LocatedSpan) => void;
 }) {
-  const starts = new Map<string, number>();
-  let total = 0;
-  for (const section of doc.sections) {
-    starts.set(section.id, total);
-    total += codePointLength(section.text) + 1;
-  }
+  // Where each section starts, once per document: recounting every code point of a long contract on each render was a
+  // share of the keystroke cost (2026-10-09).
+  const { starts, total, sections } = useMemo(() => {
+    const at = new Map<string, number>();
+    let length = 0;
+    for (const section of doc.sections) {
+      at.set(section.id, length);
+      length += codePointLength(section.text) + 1;
+    }
+    return { starts: at, total: length, sections: new Map(doc.sections.map((s) => [s.id, s])) };
+  }, [doc]);
   if (total <= 1) return null;
-  const sections = new Map(doc.sections.map((s) => [s.id, s]));
   const ticks: Tick[] = [];
   for (const finding of findings) {
     for (const span of finding.spans) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { Ref } from "react";
+import { memo, type Ref } from "react";
 import styles from "../Workbench.module.css";
 import { transitions } from "../shell/constants";
 import { formatWhen, plural } from "@/lib/format";
@@ -112,7 +112,19 @@ function readNotRelied(findings: FindingView[] | undefined, span: SpanView | nul
   return citing.length > 0 && citing.every((f) => f.evidenceKind === "coverage");
 }
 
-function SectionBlock({ section, lit, span, readOnly = false }: { section: SectionView; lit: boolean; span: SpanView | null; readOnly?: boolean }) {
+// Memoised: a keystroke in the composer re-rendered every block of the paper (O(characters) per key, 312 ms at p75 on a
+// 1.25M-character contract under 4x CPU, 2026-10-09). Its props are stable, so only a block whose highlight changes renders.
+const SectionBlock = memo(function SectionBlock({
+  section,
+  lit,
+  span,
+  readOnly = false,
+}: {
+  section: SectionView;
+  lit: boolean;
+  span: SpanView | null;
+  readOnly?: boolean;
+}) {
   // Offsets are code points (the API's), so the slice is by code points too (src/lib/text.ts).
   const located =
     span && span.verified && span.start >= 0 && span.end <= codePointLength(section.text) ? splitByCodePoints(section.text, span.start, span.end) : null;
@@ -146,4 +158,4 @@ function SectionBlock({ section, lit, span, readOnly = false }: { section: Secti
       {section.text && <p className={styles.clauseBody}>{body}</p>}
     </section>
   );
-}
+});
