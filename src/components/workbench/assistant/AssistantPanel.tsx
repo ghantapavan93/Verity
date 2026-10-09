@@ -149,7 +149,8 @@ export function AssistantPanel({
             <div className={styles.userTurn}>{question}</div>
             {runs.state.phase === "disconnected" && (
               <p className={styles.errorLine} role="alert">
-                {runs.state.error} The run continues on the server.{" "}
+                {/* The page cannot see the server: it may still be running the question, or it may have stopped (journey audit, 2026-10-09). */}
+                {runs.state.error} If the server is still running, so is the question; reconnect to see where it stands.{" "}
                 <button type="button" className={styles.linkButton} onClick={runs.resume}>
                   Reconnect
                 </button>
