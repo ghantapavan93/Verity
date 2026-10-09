@@ -68,6 +68,10 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         # For a streamed response this is the time to first byte, not the life of the stream.
         duration_ms = (time.perf_counter() - started) * 1000
         response.headers["X-Request-ID"] = request_id
+        # Every answer the API gives is one reader's (a contract, its findings, a memo) or about the live system: no
+        # cache on the way may keep it. A route that sets its own policy keeps it.
+        if request.url.path.startswith("/api") and "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
         if request.url.path != "/api/health":
             log.info(
                 "request_id=%s method=%s path=%s status=%d duration_ms=%.0f", request_id, request.method, request.url.path, response.status_code, duration_ms
