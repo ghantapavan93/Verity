@@ -44,19 +44,9 @@ export function FindingCard({
         <StatusChip status={finding.status} hasGuidance={hasGuidance} source={finding.statusSource} />
       </header>
       <p className={styles.resultText}>{finding.conclusion}</p>
-      {/* What was checked, by whom: one row per recorded fact (lib/checks). A located quote and a supported answer are
-          two facts; only the first is ever established by code. */}
-      <dl className={styles.checks} aria-label="What was checked">
-        {checkLedger(finding, hasGuidance, sectionsById, context).map((row) => (
-          <div key={row.key} className={styles.checkRow} data-by={row.by}>
-            <dt className={styles.checkKey}>{row.label}</dt>
-            <dd className={styles.checkText}>
-              <span className={styles.checkBy}>{row.by === "code" ? "code" : row.by === "model" ? "model" : row.by === "person" ? "person" : "—"}</span>
-              {row.text}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      {/* The passages come straight after the conclusion, whole (each is at most 150 characters), so the answer can be
+          read against its source on the card itself (frontend review, 2026-10-09: the quote was below the fold in 99 of 99
+          renders, behind the ledger). */}
       {evidence.length > 0 && (
         <div className={styles.evidenceList}>
           <div className={styles.evidenceHead}>
@@ -81,6 +71,19 @@ export function FindingCard({
           ))}
         </div>
       )}
+      {/* What was checked, by whom: one row per recorded fact (lib/checks). A located quote and a supported answer are
+          two facts; only the first is ever established by code. */}
+      <dl className={styles.checks} aria-label="What was checked">
+        {checkLedger(finding, hasGuidance, sectionsById, context).map((row) => (
+          <div key={row.key} className={styles.checkRow} data-by={row.by}>
+            <dt className={styles.checkKey}>{row.label}</dt>
+            <dd className={styles.checkText}>
+              <span className={styles.checkBy}>{row.by === "code" ? "code" : row.by === "model" ? "model" : row.by === "person" ? "person" : "—"}</span>
+              {row.text}
+            </dd>
+          </div>
+        ))}
+      </dl>
       <div className={styles.resultActions}>
         <button
           type="button"

@@ -891,6 +891,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin: 0 0 12px;
 }
 
 .evidenceHead {
@@ -903,10 +904,10 @@
 }
 
 .citationRow {
+  /* The label on its own line and the whole excerpt under it: the passage is read, not glimpsed. */
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 3px;
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -928,17 +929,16 @@
 .citationLabel {
   font-size: 12.5px;
   font-weight: 600;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .citationExcerpt {
   font-family: var(--font-serif);
   font-size: 13.5px;
   font-style: italic;
+  line-height: 1.5;
   color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .resultActions {
