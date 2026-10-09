@@ -7,7 +7,8 @@
  * from the ivo-experiments results file rather than retyped.
  */
 
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { PublicDemo } from "../access/PublicDemo";
 import wb from "../Workbench.module.css";
 import { WhyThisAnswer } from "../assistant/WhyThisAnswer";
 import { TERMINAL } from "../shell/constants";
@@ -85,6 +86,8 @@ export function RunsView({
   currentRunId?: string | null;
   onOpenRun: (runId: string) => void;
 }) {
+  // A public demo has no corpus tools: the API keeps them for the owner (backend api/access.owner_only).
+  const demo = useContext(PublicDemo) !== null;
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [experiments, setExperiments] = useState<ExperimentsView | null>(null);
   const [contractState, setContractState] = useState<ContractStateView | null>(null);
@@ -135,6 +138,11 @@ export function RunsView({
     getCitations()
       .then((record) => !cancelled && setCitations(record))
       .catch(() => !cancelled && setCitations(null));
+    if (demo) {
+      return () => {
+        cancelled = true;
+      };
+    }
     listBatches()
       .then((rows) => !cancelled && setBatches(rows))
       .catch(() => !cancelled && setBatches([]));
@@ -160,7 +168,7 @@ export function RunsView({
     return () => {
       cancelled = true;
     };
-  }, [attempt]);
+  }, [attempt, demo]);
 
   const select = async (id: string) => {
     setLoadingId(id);
