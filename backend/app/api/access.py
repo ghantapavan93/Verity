@@ -30,17 +30,24 @@ import base64
 import binascii
 import hmac
 import json
+import secrets
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session as DbSession
 
+from ..application.workspace import PUBLIC_PREFIX, is_public
 from ..config import settings
-from ..errors import AccessRequired, Forbidden, InvalidInput, TooManyRequests
+from ..db import SessionLocal, get_session
+from ..errors import AccessRequired, Forbidden, InvalidInput, NotFound, Paused, TooManyRequests
 from ..hashing import mac_sha256
+from ..models import DocumentAccess, Run, VisitorWorkspace, as_utc, utcnow
 from ..schemas import AccessOut, InviteIn
 
 SESSION_COOKIE = "__Host-verity_session"
@@ -56,6 +63,11 @@ CLOCK_SKEW_S = 60
 # preview, and a limit that forgets on restart is still a limit.
 EXCHANGE_LIMIT, EXCHANGE_WINDOW_S = 10, 600
 RUN_LIMIT, RUN_WINDOW_S = 20, 600
+# Public use: a new anonymous session costs nothing to ask for, so a per-session bound alone could be escaped by asking
+# again. These hold per client address (the address Cloudflare saw), across every session from it. New sessions have no
+# global ceiling on purpose: anyone could spend it and shut every new visitor out. What costs is bounded instead.
+VISIT_LIMIT, ADDRESS_UPLOAD_LIMIT, ADDRESS_RUN_LIMIT, ADDRESS_WINDOW_S = 20, 30, 30, 3600
+ANONYMOUS_PREFIX = "anon-"
 
 
 @dataclass(frozen=True)
@@ -135,7 +147,8 @@ OPEN_WORKSPACE = "open"
 def workspace_for(subject: str) -> str:
     """The workspace an invite subject works in: opaque, stable, derived from the verified subject and the secret, so it
     names no one in the record and cannot be chosen by a request. The typed reviewer name is never an identity."""
-    return "ws-" + mac_sha256(settings.access_secret, f"workspace:{subject}")[:16]
+    prefix = PUBLIC_PREFIX if subject.startswith(ANONYMOUS_PREFIX) else "ws-"
+    return prefix + mac_sha256(settings.access_secret, f"workspace:{subject}")[:16]
 
 
 def require_access(request: Request) -> None:
@@ -145,7 +158,7 @@ def require_access(request: Request) -> None:
         request.state.workspace = OPEN_WORKSPACE
         return
     session = current_session(request)
-    if session is None:
+    if session is None or not _visitor_workspace_open(session.subject):
         raise AccessRequired("This is a private preview. Open your invite link to enter.")
     if request.method not in ("GET", "HEAD", "OPTIONS") and not _same_origin(request):
         raise Forbidden("This request did not come from the workbench.")
@@ -191,6 +204,9 @@ class SlidingWindow:
 
 exchanges = SlidingWindow(EXCHANGE_LIMIT, EXCHANGE_WINDOW_S)
 run_starts = SlidingWindow(RUN_LIMIT, RUN_WINDOW_S)
+visits = SlidingWindow(VISIT_LIMIT, ADDRESS_WINDOW_S)
+address_uploads = SlidingWindow(ADDRESS_UPLOAD_LIMIT, ADDRESS_WINDOW_S)
+address_runs = SlidingWindow(ADDRESS_RUN_LIMIT, ADDRESS_WINDOW_S)
 
 
 def client_address(request: Request) -> str:
@@ -204,6 +220,17 @@ def limit_run_starts(request: Request) -> None:
     the gate on, so an open site had none, and the deployed site was open."""
     if request.method != "POST":
         return
+    refuse_if_paused()
+    workspace = getattr(request.state, "workspace", "")
+    if is_public_workspace(workspace):
+        _take(address_runs, client_address(request), "questions were asked from your network")
+        with SessionLocal() as session:
+            today = session.scalar(select(func.count(Run.id)).where(Run.workspace_id == workspace, Run.created_at >= _day_start())) or 0
+        if today >= settings.anonymous_max_runs_per_day:
+            raise TooManyRequests(
+                f"This demo workspace has asked {settings.anonymous_max_runs_per_day} questions today, its limit. Try again tomorrow (UTC).",
+                retry_after=_seconds_to_tomorrow(),
+            )
     wait = run_starts.take(getattr(request.state, "subject", None) or client_address(request))
     if wait is not None:
         raise TooManyRequests(
@@ -215,7 +242,17 @@ router = APIRouter(prefix="/api/access", tags=["access"])
 
 
 def _out(session: Session | None) -> AccessOut:
-    return AccessOut(required=enabled(), entered=not enabled() or session is not None, subject=session.subject if session else None)
+    if session is not None and not _visitor_workspace_open(session.subject):
+        session = None
+    shown = session.subject if session is not None and not session.subject.startswith(ANONYMOUS_PREFIX) else None
+    anonymous = enabled() and settings.anonymous_sessions
+    return AccessOut(
+        required=enabled(),
+        entered=not enabled() or session is not None,
+        subject=shown,
+        anonymous=anonymous,
+        retention_days=settings.anonymous_retention_days if anonymous else None,
+    )
 
 
 @router.get("", response_model=AccessOut)
@@ -252,3 +289,104 @@ def enter(body: InviteIn, request: Request, response: Response) -> AccessOut:
         samesite="strict",
     )
     return AccessOut(required=True, entered=True, subject=invited.subject)
+
+
+# ---------------------------------------------------------------------------- public use without an invite
+
+
+def is_public_workspace(workspace: str | None) -> bool:
+    """A workspace an anonymous visit made: it reads only its own records, never the curated ones
+    (application/workspace.py), and it is bounded and deleted on schedule (application/retention.py)."""
+    return is_public(workspace)
+
+
+def _visitor_workspace_open(subject: str) -> bool:
+    """An anonymous session opens its workspace only while the workspace is registered and has not ended. A session
+    never outlives its workspace: once retention deletes the row, the cookie opens nothing, and the next visit makes a
+    new subject, so a new workspace id. An invited reader's session is not affected."""
+    if not subject.startswith(ANONYMOUS_PREFIX):
+        return True
+    with SessionLocal() as session:
+        row = session.get(VisitorWorkspace, workspace_for(subject))
+        return row is not None and as_utc(row.expires_at) > utcnow()
+
+
+def _day_start() -> datetime:
+    now = utcnow()
+    return datetime(now.year, now.month, now.day, tzinfo=UTC)
+
+
+def _seconds_to_tomorrow() -> int:
+    return int((_day_start() + timedelta(days=1) - utcnow()).total_seconds()) + 1
+
+
+def _take(window: SlidingWindow, key: str, what: str) -> None:
+    wait = window.take(key)
+    if wait is not None:
+        raise TooManyRequests(f"Too many {what} in the last hour. Try again in {int(wait) // 60 + 1} minutes.", retry_after=int(wait) + 1)
+
+
+def paused() -> bool:
+    """The owner's switch: a file named public.paused in the data directory, read on every request, no restart."""
+    return (settings.data_dir / "public.paused").exists()
+
+
+def refuse_if_paused() -> None:
+    if paused():
+        raise Paused("New uploads and questions are paused on this demo for now. What you already added can still be read.")
+
+
+def owner_only(request: Request) -> None:
+    """Mounted on the corpus tools (goldens, families, batches): they read the store by content, across workspaces, and
+    mean nothing to a visitor. A public workspace is told they do not exist."""
+    if is_public_workspace(getattr(request.state, "workspace", None)):
+        raise NotFound("route", request.url.path)
+
+
+def admit_upload(request: Request, session: DbSession, workspace: str) -> None:
+    """Called before an upload is read. Every workspace: the owner's pause. A public workspace: its own bound, its
+    address's, and everyone's for the day."""
+    refuse_if_paused()
+    if not is_public_workspace(workspace):
+        return
+    held = session.scalar(select(func.count()).select_from(DocumentAccess).where(DocumentAccess.workspace_id == workspace)) or 0
+    if held >= settings.anonymous_max_documents:
+        raise TooManyRequests(
+            f"This demo workspace already holds {settings.anonymous_max_documents} contracts, its limit. Ask about one of them.", retry_after=3600
+        )
+    today = (
+        session.scalar(
+            select(func.count())
+            .select_from(DocumentAccess)
+            .where(DocumentAccess.workspace_id.like(f"{PUBLIC_PREFIX}%"), DocumentAccess.created_at >= _day_start())
+        )
+        or 0
+    )
+    if today >= settings.anonymous_max_uploads_per_day:
+        raise TooManyRequests("The demo has taken all the uploads it takes in a day. Try again tomorrow (UTC).", retry_after=_seconds_to_tomorrow())
+    _take(address_uploads, client_address(request), "uploads from your network")
+
+
+@router.post("/visit", response_model=AccessOut)
+def visit(request: Request, response: Response, session: DbSession = Depends(get_session)) -> AccessOut:
+    """A browser with no session is handed one of its own: an unpredictable subject the server makes (the client never
+    chooses it), signed like an invite's session, in a workspace no other session can read. A browser that already has
+    a working session keeps it, unrenewed, so a refresh or a second tab stays in the same workspace and the session
+    still ends with the workspace."""
+    response.headers["Cache-Control"] = "no-store"
+    if not enabled() or not settings.anonymous_sessions:
+        raise Forbidden("This workbench opens by invitation.")
+    if not _same_origin(request):
+        raise Forbidden("This request did not come from the workbench.")
+    existing = current_session(request)
+    if existing is not None and _visitor_workspace_open(existing.subject):
+        return _out(existing)
+    _take(visits, client_address(request), "new visits from your network")
+    subject = ANONYMOUS_PREFIX + secrets.token_urlsafe(24)
+    lifetime = settings.anonymous_retention_days * 86400
+    now = utcnow()
+    session.add(VisitorWorkspace(workspace_id=workspace_for(subject), created_at=now, expires_at=now + timedelta(seconds=lifetime)))
+    session.commit()
+    token = mint(subject, "verity-session", lifetime, settings.access_secret, now=now.timestamp())
+    response.set_cookie(SESSION_COOKIE, token, max_age=lifetime, path="/", secure=True, httponly=True, samesite="strict")
+    return AccessOut(required=True, entered=True, subject=None, anonymous=True, retention_days=settings.anonymous_retention_days)

@@ -72,13 +72,10 @@ def ensure_columns(target_engine: Engine) -> None:
                 connection.exec_driver_sql(f'DROP INDEX IF EXISTS "{name}"')
 
 
-def ensure_immutability(target_engine: Engine) -> None:
-    """A finished run, its stages, its findings and their spans cannot be updated or deleted: the
-    database refuses, not just the code. Reviews and memos are separate rows, so adjudicating a
-    finding or writing a memo never touches the record it is about. SQLite only; Postgres would
-    carry the same rule as a trigger function."""
-    if target_engine.url.get_backend_name() != "sqlite":
-        return
+def immutability_triggers() -> list[tuple[str, str]]:
+    """The triggers that make a finished run, its stages, its findings and their spans, and the text and document they
+    read, refuse UPDATE and DELETE: (name, CREATE statement). The one definition, used to create them and by the public
+    store's retention to put them back exactly as they were (application/retention.py)."""
     from .models import TERMINAL_STAGES
 
     finished = "(" + ", ".join(repr(stage) for stage in TERMINAL_STAGES) + ")"
@@ -94,14 +91,29 @@ def ensure_immutability(target_engine: Engine) -> None:
         "documents": f"EXISTS (SELECT 1 FROM runs WHERE runs.document_id = OLD.id AND runs.stage IN {finished})",
     }
     conditions = {table: f"{stage_of} IN {finished}" for table, stage_of in run_of_row.items()} | read_by_finished_run
+    triggers = []
+    for table, condition in conditions.items():
+        for action in ("UPDATE", "DELETE"):
+            name = f"trg_{table}_no_{action.lower()}_when_finished"
+            statement = (
+                f"CREATE TRIGGER IF NOT EXISTS {name} "
+                f"BEFORE {action} ON {table} WHEN {condition} "
+                f"BEGIN SELECT RAISE(ABORT, 'a finished run is immutable ({table})'); END"
+            )
+            triggers.append((name, statement))
+    return triggers
+
+
+def ensure_immutability(target_engine: Engine) -> None:
+    """A finished run, its stages, its findings and their spans cannot be updated or deleted: the
+    database refuses, not just the code. Reviews and memos are separate rows, so adjudicating a
+    finding or writing a memo never touches the record it is about. SQLite only; Postgres would
+    carry the same rule as a trigger function."""
+    if target_engine.url.get_backend_name() != "sqlite":
+        return
     with target_engine.begin() as connection:
-        for table, condition in conditions.items():
-            for action in ("UPDATE", "DELETE"):
-                connection.exec_driver_sql(
-                    f"CREATE TRIGGER IF NOT EXISTS trg_{table}_no_{action.lower()}_when_finished "
-                    f"BEFORE {action} ON {table} WHEN {condition} "
-                    f"BEGIN SELECT RAISE(ABORT, 'a finished run is immutable ({table})'); END"
-                )
+        for _name, statement in immutability_triggers():
+            connection.exec_driver_sql(statement)
 
 
 @contextmanager

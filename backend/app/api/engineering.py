@@ -31,7 +31,7 @@ from ..schemas import (
     StatePortfolio,
     StateSummary,
 )
-from .access import current_workspace
+from .access import current_workspace, owner_only
 
 router = APIRouter(prefix="/api/engineering", tags=["engineering"])
 # The recorded contract-state experiment, as the public research page shows it: no reader's data, so no session.
@@ -164,13 +164,13 @@ def citations(session: Session = Depends(get_session), workspace: str = Depends(
     return citation_record(session, workspace)
 
 
-@router.get("/families", response_model=FamiliesOut)
+@router.get("/families", response_model=FamiliesOut, dependencies=[Depends(owner_only)])
 def families(threshold: float = Query(default=DEFAULT_THRESHOLD, ge=0.0, le=1.0), session: Session = Depends(get_session)) -> FamiliesOut:
     """Structural families among the labeled corpus documents at a threshold, with the evaluation against the labels."""
     return families_report(session, threshold)
 
 
-@router.get("/goldens", response_model=GoldensOut)
+@router.get("/goldens", response_model=GoldensOut, dependencies=[Depends(owner_only)])
 def goldens(session: Session = Depends(get_session)) -> GoldensOut:
     """The golden set with each golden's run and verdict per prompt version, and the latest comparison."""
     return report(session)

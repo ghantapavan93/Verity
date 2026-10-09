@@ -13,9 +13,12 @@ from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
+from . import db as db_module
 from .api import access, batches, documents, engineering, findings, guidance, health, memos, runs, trust
 from .application.recover_runs import recover_interrupted_runs
+from .application.retention import purge_expired_workspaces, sweep_orphaned_files
 from .config import settings
 from .db import SessionLocal, init_db
 from .errors import WorkbenchError
@@ -27,17 +30,52 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("app")
 
 
+def refuse_a_store_with_owner_records() -> None:
+    """Anonymous visitors are served from a store of their own. A store holding anything that is not a visitor's (a
+    curated document or run, an invited reader's) is the owner's: refusing to start keeps a misplaced
+    WORKBENCH_DATA_DIR from putting the owner's record in front of the public."""
+    with db_module.engine.connect() as connection:
+        owned = connection.execute(
+            text(
+                "SELECT (SELECT COUNT(*) FROM runs WHERE workspace_id IS NULL OR workspace_id NOT LIKE 'pw-%') "
+                "+ (SELECT COUNT(*) FROM documents d WHERE NOT EXISTS (SELECT 1 FROM document_access a WHERE a.document_id = d.id)) "
+                "+ (SELECT COUNT(*) FROM document_access WHERE workspace_id NOT LIKE 'pw-%')"
+            )
+        ).scalar()
+    if owned:
+        raise RuntimeError(
+            f"WORKBENCH_ANONYMOUS_SESSIONS is on but this store holds {owned} owner or curated records; "
+            "point WORKBENCH_DATA_DIR at the public store. Refusing to start."
+        )
+
+
+async def _retain_hourly() -> None:
+    while True:
+        try:
+            await asyncio.to_thread(purge_expired_workspaces, db_module.engine)
+            await asyncio.to_thread(sweep_orphaned_files, db_module.engine)
+        except Exception:  # a failed pass is logged and tried again next hour; it never takes the API down
+            log.exception("retention pass failed")
+        await asyncio.sleep(3600)
+
+
 def create_app(provider: ModelProvider | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         init_db()
+        if settings.anonymous_sessions:
+            refuse_a_store_with_owner_records()
         with SessionLocal() as session:
             recovered = recover_interrupted_runs(session)
         if recovered:
             log.warning("recovered_runs=%d marked failed after restart", recovered)
         bus.bind_loop(asyncio.get_running_loop())
         app.state.provider = provider or make_provider()
+        # The public demo store deletes ended visitor workspaces: once now, then hourly (application/retention.py).
+        retention = asyncio.create_task(_retain_hourly()) if settings.anonymous_sessions else None
         yield
+        if retention is not None:
+            retention.cancel()
 
     access.check_configuration()
     app = FastAPI(title="Contract Workbench", version="0.1.0", lifespan=lifespan)
@@ -84,8 +122,10 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
     app.include_router(access.router)
     app.include_router(engineering.public_router)
     gate = [Depends(access.require_access)]
-    for router in (documents.router, guidance.router, findings.router, memos.router, batches.router, engineering.router, trust.router):
+    for router in (documents.router, guidance.router, findings.router, memos.router, engineering.router, trust.router):
         app.include_router(router, dependencies=gate)
+    # Corpus jobs read the store by content across workspaces: the owner's tool, not a visitor's (api/access.owner_only).
+    app.include_router(batches.router, dependencies=[*gate, Depends(access.owner_only)])
     app.include_router(runs.router, dependencies=[*gate, Depends(access.limit_run_starts)])
     return app
 

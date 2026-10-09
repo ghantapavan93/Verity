@@ -21,7 +21,7 @@ from tests.support import CONTRACT, upload_and_ask
 
 SECRET = "test-secret-" + "x" * 40
 ORIGIN = "https://testserver"
-OPEN = {"/api/health", "/api/access", "/api/access/session", "/api/engineering/contract-state"}
+OPEN = {"/api/health", "/api/access", "/api/access/session", "/api/access/visit", "/api/engineering/contract-state"}
 
 
 @pytest.fixture
@@ -46,7 +46,7 @@ def enter(client: TestClient, token: str | None = None) -> None:
 
 
 def test_with_no_secret_the_gate_is_off_and_says_so(client: TestClient) -> None:
-    assert client.get("/api/access").json() == {"required": False, "entered": True, "subject": None}
+    assert client.get("/api/access").json() == {"required": False, "entered": True, "subject": None, "anonymous": False, "retentionDays": None}
     assert client.get("/api/health").json()["access"] == "off"
     assert client.get("/api/runs").status_code == 200
     assert client.post("/api/access/session", json={"invite": "anything"}).json()["entered"] is True, "nothing to exchange, nothing refused"
@@ -83,7 +83,7 @@ def test_every_route_but_health_and_the_gate_refuses_a_request_with_no_session(g
 
 
 def test_an_invite_is_exchanged_for_a_session_cookie_and_the_workbench_works(gated: TestClient, caplog: pytest.LogCaptureFixture) -> None:
-    assert gated.get("/api/access").json() == {"required": True, "entered": False, "subject": None}
+    assert gated.get("/api/access").json() == {"required": True, "entered": False, "subject": None, "anonymous": False, "retentionDays": None}
     before = gated.get("/api/health").json()
     assert (before["access"], before["provider"], before["model"]) == ("required", "", ""), "before the gate, health names nothing"
 
@@ -91,7 +91,7 @@ def test_an_invite_is_exchanged_for_a_session_cookie_and_the_workbench_works(gat
     with caplog.at_level(logging.INFO):
         # The whole link works as well as the bare token: it is what a reader has to paste.
         entered = gated.post("/api/access/session", json={"invite": f"{ORIGIN}/?document=d1&run=r1#invite={token}"})
-    assert entered.status_code == 200 and entered.json() == {"required": True, "entered": True, "subject": "min-kyu"}
+    assert entered.status_code == 200 and entered.json() == {"required": True, "entered": True, "subject": "min-kyu", "anonymous": False, "retentionDays": None}
     assert token not in caplog.text and SECRET not in caplog.text, "neither the invite nor the secret reaches a log"
 
     cookie = entered.headers["set-cookie"]
@@ -101,7 +101,7 @@ def test_an_invite_is_exchanged_for_a_session_cookie_and_the_workbench_works(gat
     assert "Domain" not in cookie, "a __Host- cookie belongs to this host alone"
     assert entered.headers["cache-control"] == "no-store"
 
-    assert gated.get("/api/access").json() == {"required": True, "entered": True, "subject": "min-kyu"}
+    assert gated.get("/api/access").json() == {"required": True, "entered": True, "subject": "min-kyu", "anonymous": False, "retentionDays": None}
     after = gated.get("/api/health").json()
     assert after["access"] == "entered" and after["model"] == "fake-1"
 

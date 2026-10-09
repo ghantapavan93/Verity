@@ -133,6 +133,17 @@ class DocumentAccess(Base):
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
+class VisitorWorkspace(Base):
+    """A workspace an anonymous visit made (api/access.py visit), and when it ends. Retention deletes exactly the
+    workspaces listed here, and only once they have ended; nothing else in the store is ever a candidate."""
+
+    __tablename__ = "visitor_workspaces"
+
+    workspace_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class DocumentVersion(Base):
     """A workspace's statement that one document is a version in a line of versions, and which one it supersedes.
 

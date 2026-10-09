@@ -39,6 +39,12 @@ class Busy(WorkbenchError):
     status_code = 503
 
 
+class Paused(WorkbenchError):
+    """The owner has paused new uploads and runs (a `public.paused` file in the data directory); reading still works."""
+
+    status_code = 503
+
+
 class AccessRequired(WorkbenchError):
     """No valid session: the reader has not come through an invite, or the session has ended."""
 

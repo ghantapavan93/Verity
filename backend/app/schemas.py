@@ -384,6 +384,10 @@ class AccessOut(ApiModel):
     entered: bool
     # The name the invite was made for; null until entered, and when the gate is off.
     subject: str | None = None
+    # Whether a browser with no session is handed one of its own (a public demo) instead of being asked for an invite.
+    anonymous: bool = False
+    # With anonymous sessions: how many days a visitor's workspace lasts before it and what it holds are deleted.
+    retention_days: int | None = None
 
 
 class CitationRecordOut(ApiModel):

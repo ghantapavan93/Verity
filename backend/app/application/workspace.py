@@ -24,23 +24,31 @@ from sqlalchemy.sql.elements import ColumnElement
 from ..errors import Forbidden, NotFound
 from ..models import Document, DocumentAccess, Finding, Guidance, Memo, Run
 
+# A workspace an anonymous visit made (api/access.py visit). It reads its own records and nothing curated: the public
+# store holds none, and if one ever did, a visitor still would not read it.
+PUBLIC_PREFIX = "pw-"
+
+
+def is_public(workspace: str | None) -> bool:
+    return bool(workspace) and str(workspace).startswith(PUBLIC_PREFIX)
+
 
 def document_is_curated(session: Session, document_id: str) -> bool:
     return session.query(DocumentAccess.document_id).filter(DocumentAccess.document_id == document_id).first() is None
 
 
 def can_read_document(session: Session, document: Document, workspace: str) -> bool:
-    if document_is_curated(session, document.id):
+    if not is_public(workspace) and document_is_curated(session, document.id):
         return True
     return session.get(DocumentAccess, (workspace, document.id)) is not None
 
 
 def can_read_run(run: Run, workspace: str) -> bool:
-    return run.workspace_id is None or run.workspace_id == workspace
+    return run.workspace_id == workspace or (run.workspace_id is None and not is_public(workspace))
 
 
 def can_read_guidance(guidance: Guidance, workspace: str) -> bool:
-    return guidance.workspace_id is None or guidance.workspace_id == workspace
+    return guidance.workspace_id == workspace or (guidance.workspace_id is None and not is_public(workspace))
 
 
 def grant_document(session: Session, document: Document, workspace: str, name: str | None = None) -> bool:
@@ -102,10 +110,14 @@ def require_own_run(run: Run, workspace: str) -> None:
 
 
 def visible_runs(workspace: str) -> ColumnElement[bool]:
+    if is_public(workspace):
+        return Run.workspace_id == workspace
     return or_(Run.workspace_id.is_(None), Run.workspace_id == workspace)
 
 
 def visible_documents(workspace: str) -> ColumnElement[bool]:
     granted = select(DocumentAccess.document_id).where(DocumentAccess.document_id == Document.id)
     mine = select(DocumentAccess.document_id).where(DocumentAccess.document_id == Document.id, DocumentAccess.workspace_id == workspace)
+    if is_public(workspace):
+        return exists(mine)
     return or_(~exists(granted), exists(mine))

@@ -12,6 +12,7 @@ from ..errors import InvalidInput
 from ..hashing import sha256_text
 from ..ingest.invisible import visible_text
 from ..models import Guidance
+from .workspace import is_public
 
 
 @dataclass(frozen=True)
@@ -21,9 +22,10 @@ class SavedGuidance:
 
 
 def stored_guidance(session: Session, sha256: str, workspace: str | None = None) -> Guidance | None:
-    """The guidance with these words that this workspace may use: its own, or a curated one (no workspace)."""
+    """The guidance with these words that this workspace may use: its own, or a curated one (no workspace), the same
+    rule as reading it (workspace.can_read_guidance): a public workspace uses only its own."""
     rows = session.query(Guidance).filter(Guidance.sha256 == sha256).order_by(Guidance.created_at).all()
-    return next((g for g in rows if g.workspace_id is None or g.workspace_id == workspace), None)
+    return next((g for g in rows if g.workspace_id == workspace or (g.workspace_id is None and not is_public(workspace))), None)
 
 
 def save_guidance(session: Session, text: str, source: str = "pasted", workspace: str | None = None) -> SavedGuidance:

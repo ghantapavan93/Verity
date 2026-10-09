@@ -85,6 +85,17 @@ class Settings(BaseModel):
     access_required: bool = os.environ.get("WORKBENCH_ACCESS_REQUIRED", "").lower() in ("1", "true", "yes")
     # Readers whose invites and sessions no longer open anything, by the name their invite was made for.
     access_revoked: list[str] = [s.strip() for s in os.environ.get("WORKBENCH_ACCESS_REVOKED", "").split(",") if s.strip()]
+    # Public use without an invite (api/access.py visit): a browser with no session is handed one of its own, an
+    # unpredictable subject in a workspace no one else can read. The gate stays required; anonymous never means shared.
+    anonymous_sessions: bool = os.environ.get("WORKBENCH_ANONYMOUS_SESSIONS", "").lower() in ("1", "true", "yes")
+    # A visitor's session and workspace last this long; then the workspace and what it holds are deleted
+    # (application/retention.py).
+    anonymous_retention_days: int = int(os.environ.get("WORKBENCH_ANONYMOUS_RETENTION_DAYS", "7"))
+    # Bounds on what one anonymous workspace may hold and start, and on everyone together; each refusal is a 429 that
+    # says which bound and when it lifts. Per-address bounds are in api/access.py.
+    anonymous_max_documents: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_DOCUMENTS", "10"))
+    anonymous_max_runs_per_day: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_RUNS_PER_DAY", "30"))
+    anonymous_max_uploads_per_day: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_UPLOADS_PER_DAY", "300"))
     # Optional: the results.json of the ivo-experiments repository, for the Runs surface, and the
     # published page it was built for (links become "Open experiment" → <url>#<id>).
     experiments_results: Path | None = Path(os.environ["WORKBENCH_EXPERIMENTS_RESULTS"]) if os.environ.get("WORKBENCH_EXPERIMENTS_RESULTS") else None

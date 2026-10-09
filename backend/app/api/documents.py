@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Request, Response, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -14,7 +14,7 @@ from ..document_names import display_created, display_name
 from ..ingest.readers import SUFFIX_OF
 from ..models import Document, Finding, FindingReview, Run, Section, iso
 from ..schemas import CoverageReport, DocumentOut, DocumentSummary, SectionOut
-from .access import current_workspace
+from .access import admit_upload, current_workspace
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -37,9 +37,10 @@ def to_document_out(session: Session, document: Document, workspace: str) -> Doc
 
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload_document(
-    file: UploadFile, response: Response, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)
+    file: UploadFile, request: Request, response: Response, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)
 ) -> DocumentOut:
     """201 with a document new to this workspace, or 200 with the one it already holds that has exactly these bytes."""
+    admit_upload(request, session, workspace)  # the owner's pause; a public workspace's bounds
     refuse_if_too_large(file.size)  # the declared size, before a byte is read; the bytes are checked again once read
     data = await file.read()
     # Parsing is CPU work of up to seconds (docs/PARSER-COMPARISON.md: 44 s on a 1.25-million-character contract); it leaves the event loop.

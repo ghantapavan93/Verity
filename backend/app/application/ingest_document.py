@@ -23,7 +23,7 @@ from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, base_name,
 from ..ingest.coverage import coverage_report
 from ..ingest.readers import SUFFIX_OF, file_type, read
 from ..models import Document, Section
-from .workspace import document_is_curated, grant_document
+from .workspace import document_is_curated, grant_document, is_public
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
@@ -119,7 +119,9 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
     parse_ms = round((time.perf_counter() - started) * 1000, 1)
 
     document = Document(
-        name=parsed.name,
+        # In a public workspace the shared row is named by its type only: identical bytes from another visitor share
+        # it, and the uploader's name lives on the uploader's grant, deleted with it (application/retention.py).
+        name=f"document{SUFFIX_OF.get(parsed.media_type, '')}" if is_public(workspace) else parsed.name,
         media_type=parsed.media_type,
         sha256=parsed.sha256,
         pages=parsed.pages,
