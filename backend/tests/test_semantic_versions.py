@@ -50,7 +50,7 @@ RECORDED: dict[str, str] = {
     "policy-v2": "f680f205d5dca0c0",
     "policy-v3": "157d0c3d7711b18b",
     "v6": "d73590a20b16ec34",
-    "v7": "0cd8cdc198a74867",
+    "v7": "e9127a10c244afaa",
     "retrieval-v1": "12dfe9555e1c2275",  # 2026-10-09: the embed call carries the endpoint's credentials; what retrieval decides is unchanged
 }
 

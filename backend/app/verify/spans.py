@@ -32,10 +32,11 @@ Offsets always index the ORIGINAL text, so the interface highlights the characte
 
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass
 
-from .tokens import locate_tokens
+from .tokens import Kind, locate_tokens, tokenize
 
 VERIFIER_VERSION = "v7"
 
@@ -158,7 +159,34 @@ def _find_bounded(haystack: str, needle: str, index_map: list[int] | None, text:
     return None if first is None else (first[0], first[1], count)
 
 
+# Characters normalisation deletes, derived from the one map so the prefilter and the tiers never drift.
+_DELETED = {code: None for code, mapped in _QUOTE_MAP.items() if mapped in (None, "")}
+
+
+@functools.lru_cache(maxsize=1024)
+def _quote_words(quote: str) -> tuple[str, ...]:
+    """The quote's words, casefolded, longest first (the likeliest to be absent)."""
+    return tuple(sorted({t.canonical for t in tokenize(quote) if t.kind is Kind.WORD}, key=len, reverse=True))
+
+
+def _cannot_hold(quote: str, text: str) -> bool:
+    """A condition every tier needs, checked at C speed: each word of the quote stands in the text, casefolded, once
+    the characters normalisation deletes are deleted. No tier changes a letter (exact, normalized and casefold keep
+    words whole; typed compares words whole, casefolded), so a text without one of the words cannot hold the quote.
+    Counting a quote's places across a 1.25M-character document ran every tier on every section: 1.9 s a quote; with
+    this, 0.11 s, and outcomes identical on 212,248 pairs (2026-10-09)."""
+    words = _quote_words(quote)
+    if not words:
+        return False
+    folded = text.translate(_DELETED).casefold()
+    return not all(word in folded for word in words)
+
+
 def _ladder(quote: str, text: str) -> Located | None:
+    return None if _cannot_hold(quote, text) else _tiers(quote, text)
+
+
+def _tiers(quote: str, text: str) -> Located | None:
     found = _find_bounded(text, quote, None, text)
     if found is not None:
         return Located(found[0], found[1], "exact", found[2])
@@ -210,12 +238,26 @@ def strip_label(quote: str, label: str) -> str | None:
     return remainder or None
 
 
+@functools.lru_cache(maxsize=1024)
+def _alnum(text: str) -> str:
+    return alnum_with_map(text)[0]
+
+
+def _may_carry_label(quote: str, label: str) -> bool:
+    """strip_label can succeed only when the heading's letters and digits stand in the quote's: checked first, once per
+    quote and label, instead of normalising the quote again for every section it is tried against."""
+    first, _, rest = label.partition(" ")
+    heading = rest if _SECTION_NUMBER.fullmatch(first) else label
+    heading_alnum = _alnum(heading)
+    return len(heading_alnum) >= 2 and heading_alnum in _alnum(quote)
+
+
 def locate(quote: str, text: str, label: str | None = None) -> Located | None:
     """Find ``quote`` in ``text``; None when it is not there under the rules above."""
     if not quote or not quote.strip():
         return None
     found = _ladder(quote, text)
-    if found is None and label:
+    if found is None and label and _may_carry_label(quote, label):
         stripped = strip_label(quote, label)
         if stripped is not None:
             found = _ladder(stripped, text)
