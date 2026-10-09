@@ -9,13 +9,14 @@ import { Brand, Shimmer, StatusChip } from "../shell/primitives";
 import { OneRun, RecordPipeline, Refusals } from "./LandingStory";
 import { getCitations, getRun, listDocuments, type Health } from "@/lib/api";
 import { plural } from "@/lib/format";
+import { modelPlace } from "@/lib/modelPlace";
 import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
 /** How a status is set, in the order the evidence drawer reads it. Static: it describes the product, not one run. */
 const LAYERS = [
   {
     name: "Model proposed",
-    text: "A local model reads the sections retrieval chose for the question and proposes an answer, quoting the contract.",
+    text: "An open-weights model reads the sections retrieval chose for the question and proposes an answer, quoting the contract.",
   },
   { name: "Source checked", text: "Code looks for every quote in the document text. A quote it cannot find is withheld, not shown." },
   {
@@ -107,6 +108,8 @@ export function Landing({
   // first seconds of an open site (QA review, 2026-10-08).
   const openPreview = accessKnown && apiHealth?.access === "off";
   const privatePreview = accessKnown && (apiHealth?.access === "required" || apiHealth?.access === "entered");
+  // Where the model runs, as the API says; nothing about a contract's whereabouts is claimed before it has said.
+  const place = modelPlace(accessKnown ? apiHealth : null);
 
   return (
     <motion.section
@@ -143,8 +146,8 @@ export function Landing({
             Ask about a contract. <span className={styles.titleQuiet}>See who decided each answer.</span>
           </motion.h1>
           <motion.p className={styles.lead} {...rise(0.12)}>
-            Verity hands a local model the sections your question needs, checks every passage it quotes against the document text, and lets code compare the day
-            counts it can compute. A person has the last word on every finding.
+            Verity hands an open-weights model the sections your question needs, checks every passage it quotes against the document text, and lets code compare
+            the day counts it can compute. A person has the last word on every finding.
           </motion.p>
 
           <motion.div layoutId="composer" className={`${styles.drop} ${stage !== "empty" ? styles.dropActive : ""}`} transition={morph}>
@@ -196,7 +199,7 @@ export function Landing({
                   <div className={styles.dropText}>
                     <div className={styles.dropTitle}>Drop a contract here</div>
                     <div className={styles.dropHint}>
-                      PDF, DOCX or TXT. It is read into numbered sections and stored with its SHA-256 on this machine
+                      PDF, DOCX or TXT. It is read into numbered sections and stored with its SHA-256 on the Verity server
                       {openPreview
                         ? ", where anyone with this address can open it: this preview is open."
                         : privatePreview
@@ -336,18 +339,19 @@ export function Landing({
         <div className={styles.below}>
           <RecordPipeline citations={citations} documents={documents} reduceMotion={reduceMotion} />
           {proof && <OneRun proof={proof} lead={lead} onOpen={onOpenProof} reduceMotion={reduceMotion} />}
-          <Refusals reduceMotion={reduceMotion} />
+          <Refusals reduceMotion={reduceMotion} place={place} />
         </div>
       )}
 
       <footer className={styles.footer}>
         <span>
-          {apiHealth?.model ? (
+          {apiHealth?.model && place ? (
             <>
-              Model <code>{apiHealth.model}</code>, run on this machine. No contract is sent to a hosted model.
+              Model <code>{apiHealth.model}</code>, run on {place.place}.{" "}
+              {place.hosted ? "The question, the guidance and the sections it reads are sent there to be answered." : "No contract is sent to a hosted model."}
             </>
           ) : (
-            "The model runs on this machine."
+            "Every answer is checked against the document text."
           )}
         </span>
         <span>Every run is kept as a record: what the model saw, what it said, what code checked.</span>

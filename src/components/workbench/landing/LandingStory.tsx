@@ -284,7 +284,22 @@ export function OneRun({
 }
 
 /** What Verity will not do, stated as plainly as what it does. Each line is a property of the code, not a promise. */
-export function Refusals({ reduceMotion }: { reduceMotion: boolean }) {
+const COUNT_WORDS = ["None", "One", "Two", "Three", "Four", "Five"];
+
+/** The fourth refusal is about where a contract's text goes, so it is said only once the API has said where its model
+ * runs (lib/modelPlace), and said truthfully for a hosted one. */
+function whereItGoes(place: { hosted: boolean; place: string } | null): { head: string; text: string } | null {
+  if (!place) return null;
+  const record = "The run keeps the hash of every input, and the evidence pack checks itself without this service.";
+  return place.hosted
+    ? {
+        head: "It sends the contract to its model and nowhere else.",
+        text: `The model runs on ${place.place}: the question, the guidance and the sections retrieval chose go there to be answered. ${record}`,
+      }
+    : { head: "It does not send the contract anywhere.", text: `The model runs on ${place.place}. ${record}` };
+}
+
+export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place: { hosted: boolean; place: string } | null }) {
   const lines = [
     {
       head: "It does not read the whole agreement.",
@@ -298,11 +313,8 @@ export function Refusals({ reduceMotion }: { reduceMotion: boolean }) {
       head: "It does not hide a miss.",
       text: "A quote code cannot find in the document is withheld and shown struck through, beside the model's words, not deleted.",
     },
-    {
-      head: "It does not send the contract anywhere.",
-      text: "The model runs on this machine. The run keeps the hash of every input, and the evidence pack checks itself without this service.",
-    },
-  ];
+    whereItGoes(place),
+  ].filter((line): line is { head: string; text: string } => line !== null);
   return (
     <section className={styles.story} aria-labelledby="refusals-title">
       <Reveal reduceMotion={reduceMotion}>
@@ -311,7 +323,7 @@ export function Refusals({ reduceMotion }: { reduceMotion: boolean }) {
           Said plainly
         </p>
         <h2 id="refusals-title" className={styles.storyTitle}>
-          Four things it refuses to do.
+          {COUNT_WORDS[lines.length]} things it refuses to do.
         </h2>
       </Reveal>
       <ul className={styles.refusals}>

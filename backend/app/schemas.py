@@ -366,6 +366,10 @@ class HealthOut(ApiModel):
     detail: str
     # The gate (api/access.py): off, required (this browser has not entered; provider and model are then left blank), or entered.
     access: Literal["off", "required", "entered"] = "off"
+    # Where the model runs: on the server itself, or hosted elsewhere, so the interface says truthfully where a contract's
+    # text goes (config: a loopback model URL is the server). modelHost names a hosted one, when the deployment does.
+    model_location: Literal["server", "hosted"] = "server"
+    model_host: str = ""
 
 
 class InviteIn(ApiModel):

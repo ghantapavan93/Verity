@@ -60,6 +60,7 @@ export function AssistantPanel({
   onOpenEvidence,
   onCloseEvidence,
   onReviewed,
+  modelPlace = null,
   drawerCloseRef,
   sectionsById,
   onJump,
@@ -79,6 +80,8 @@ export function AssistantPanel({
   onOpenEvidence: (finding: FindingView, trigger: HTMLElement | null) => void;
   onCloseEvidence: () => void;
   onReviewed: (findingId: string, review: ReviewView | null | undefined, latestReviewId?: number) => void;
+  /** Where the model runs, as the API said (lib/modelPlace); null says nothing about it. */
+  modelPlace?: string | null;
   drawerCloseRef: Ref<HTMLButtonElement>;
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
@@ -162,7 +165,13 @@ export function AssistantPanel({
                   exit={{ opacity: 0 }}
                   transition={quick}
                 >
-                  <StageList current={liveStage ?? "reading"} details={stageDetails} checkingLabel={checkingLabel} reduceMotion={reduceMotion} />
+                  <StageList
+                    current={liveStage ?? "reading"}
+                    details={stageDetails}
+                    checkingLabel={checkingLabel}
+                    reduceMotion={reduceMotion}
+                    modelPlace={modelPlace}
+                  />
                 </motion.div>
               ) : run && run.stage === "complete" && run.findings.length > 0 ? (
                 <motion.div

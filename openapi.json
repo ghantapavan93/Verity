@@ -2771,6 +2771,20 @@
             "title": "Model",
             "type": "string"
           },
+          "modelHost": {
+            "default": "",
+            "title": "Modelhost",
+            "type": "string"
+          },
+          "modelLocation": {
+            "default": "server",
+            "enum": [
+              "server",
+              "hosted"
+            ],
+            "title": "Modellocation",
+            "type": "string"
+          },
           "ok": {
             "title": "Ok",
             "type": "boolean"
@@ -6451,7 +6465,7 @@
     },
     "/api/health": {
       "get": {
-        "description": "Open to everyone, because the supervisor and the page ask before anyone has entered. Past the gate it names\nthe model and its state; before it, only whether the workbench is up and that the gate is on.",
+        "description": "Open to everyone, because the supervisor and the page ask before anyone has entered. Past the gate it names\nthe model and its state; before it, only whether the workbench is up and that the gate is on. A store that cannot\ntake a write is not healthy, whatever the model's state. A visitor who has not entered never makes it ask the\nmodel, and a deployment whose model bills by the second can leave the model to the answer itself.",
         "operationId": "health_api_health_get",
         "responses": {
           "200": {

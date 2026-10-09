@@ -32,11 +32,14 @@ export function StageList({
   details,
   checkingLabel,
   reduceMotion,
+  modelPlace = null,
 }: {
   current: RunStage;
   details: Partial<Record<RunStage, string>>;
   checkingLabel: string;
   reduceMotion: boolean;
+  /** Where the model runs, as the API said (lib/modelPlace); null says nothing about it. */
+  modelPlace?: string | null;
 }) {
   const index = (STAGE_ORDER as readonly string[]).indexOf(current);
   const shown = index >= 0 ? STAGE_ORDER.slice(0, index + 1) : STAGE_ORDER;
@@ -62,7 +65,9 @@ export function StageList({
         })}
       </ol>
       {current === "checking" && (
-        <p className={styles.stageNote}>The model runs on this machine. Most answers take under two minutes; the stages above are the API&apos;s own.</p>
+        <p className={styles.stageNote}>
+          {modelPlace ? `The model runs on ${modelPlace}. ` : ""}Most answers take under two minutes; the stages above are the API&apos;s own.
+        </p>
       )}
     </>
   );

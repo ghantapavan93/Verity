@@ -73,3 +73,27 @@ describe("Landing: the door", () => {
     expect(document.body.textContent).toContain("readable through your invite and no other");
   });
 });
+
+describe("Landing: where the model runs", () => {
+  const at = (location: Health["modelLocation"], host = ""): Health => ({ ...health("off"), modelLocation: location, modelHost: host }) as Health;
+
+  it("names the hosted model and says what is sent to it", () => {
+    renderLanding(at("hosted", "a Modal GPU in the US"), true);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("run on a Modal GPU in the US");
+    expect(text).toContain("are sent there to be answered");
+    expect(text).not.toMatch(/No contract is sent to a hosted model|does not send the contract anywhere|this machine/);
+  });
+
+  it("says a model on the server keeps the contract there", () => {
+    renderLanding(at("server"), true);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("run on the Verity server. No contract is sent to a hosted model.");
+    expect(text).not.toContain("this machine");
+  });
+
+  it("control: claims no place before the API has said", () => {
+    renderLanding(null, false);
+    expect(document.body.textContent).not.toMatch(/this machine|No contract is sent|sent there|does not send the contract anywhere/);
+  });
+});

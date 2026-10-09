@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import shutil
+from typing import Literal
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Request
 
@@ -32,15 +34,45 @@ def storage_problem() -> str | None:
     return None
 
 
+LOOPBACK = {"localhost", "127.0.0.1", "::1"}
+
+
+def model_location() -> tuple[Literal["server", "hosted"], str]:
+    """("server", "") when the model URL is this machine's loopback; ("hosted", label) for anywhere else."""
+    host = (urlsplit(settings.ollama_url).hostname or "").lower()
+    return ("server", "") if host in LOOPBACK else ("hosted", settings.model_host)
+
+
 @router.get("/health", response_model=HealthOut)
 def health(request: Request, provider: ModelProvider = Depends(get_provider)) -> HealthOut:
     """Open to everyone, because the supervisor and the page ask before anyone has entered. Past the gate it names
     the model and its state; before it, only whether the workbench is up and that the gate is on. A store that cannot
-    take a write is not healthy, whatever the model's state."""
-    ok, detail = provider.healthy()
+    take a write is not healthy, whatever the model's state. A visitor who has not entered never makes it ask the
+    model, and a deployment whose model bills by the second can leave the model to the answer itself."""
+    location, host = model_location()
     problem = storage_problem()
+    if access.enabled() and access.current_session(request) is None:
+        return HealthOut(
+            ok=problem is None,
+            provider="",
+            model="",
+            detail=problem or "private preview: an invite is needed",
+            access="required",
+            model_location=location,
+            model_host=host,
+        )
+    if settings.health_probes_model:
+        ok, detail = provider.healthy()
+    else:
+        ok, detail = True, f"{provider.model}: checked before every answer, not by health"
     if problem is not None:
         ok, detail = False, problem
-    if access.enabled() and access.current_session(request) is None:
-        return HealthOut(ok=ok, provider="", model="", detail=problem or "private preview: an invite is needed", access="required")
-    return HealthOut(ok=ok, provider=provider.name, model=provider.model, detail=detail, access="entered" if access.enabled() else "off")
+    return HealthOut(
+        ok=ok,
+        provider=provider.name,
+        model=provider.model,
+        detail=detail,
+        access="entered" if access.enabled() else "off",
+        model_location=location,
+        model_host=host,
+    )

@@ -26,6 +26,7 @@ import { useRunFollower } from "./hooks/useRunFollower";
 import { useUrlState } from "./hooks/useUrlState";
 import { Landing } from "./landing/Landing";
 import { chooseProof } from "./landing/proofRun";
+import { modelPlace } from "@/lib/modelPlace";
 import { Rail } from "./shell/Rail";
 import { type Stage, TERMINAL, type View, transitions } from "./shell/constants";
 import { DocumentsView } from "./views/DocumentsView";
@@ -118,7 +119,8 @@ function WorkbenchSurface() {
         if (cancelled) return;
         // The API could not be asked, so nothing is known about its door: the first screen claims neither open nor private.
         setAccessKnown(false);
-        setApiHealth({ ok: false, provider: "", model: "", detail: errorMessage(error), access: "off" });
+        // The model's whereabouts are unknown too; with accessKnown false nothing reads them (landing/Landing.tsx place).
+        setApiHealth({ ok: false, provider: "", model: "", detail: errorMessage(error), access: "off", modelLocation: "server", modelHost: "" });
       });
     return () => {
       cancelled = true;
@@ -540,6 +542,7 @@ function WorkbenchSurface() {
                     />
                     <Divider docWidth={split.docWidth} setDocWidth={split.setDocWidth} onPointerDown={split.startDrag} />
                     <AssistantPanel
+                      modelPlace={accessKnown ? (modelPlace(apiHealth)?.place ?? null) : null}
                       doc={doc}
                       runs={runs}
                       guidance={guidance}

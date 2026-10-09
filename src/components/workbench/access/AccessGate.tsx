@@ -108,7 +108,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
           </p>
           <h1 className={door.title}>Private engineering preview</h1>
           <p className={door.lead}>
-            This is the working system, not a recording of one: real uploads, real model runs on a local model, one store. It opens from the invite link you
+            This is the working system, not a recording of one: real uploads, real runs of an open-weights model, one store. It opens from the invite link you
             were sent.
           </p>
           <form className={door.gateForm} onSubmit={enter}>

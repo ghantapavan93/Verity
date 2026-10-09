@@ -37,6 +37,12 @@ class Settings(BaseModel):
     # The model build the deployment names (an Ollama digest prefix, e.g. 500a1f067a9f for qwen3:8b Q4_K_M). Set, every
     # answer is preceded by a check that the endpoint's tag is that build; a run against another build fails with the reason.
     model_digest: str = os.environ.get("WORKBENCH_MODEL_DIGEST", "").strip().lower()
+    # Where a model on another machine runs, in words a reader can weigh ("a Modal GPU in the US"); shown wherever the
+    # interface says where a contract's text goes. Empty for a model on the server itself.
+    model_host: str = os.environ.get("WORKBENCH_MODEL_HOST", "").strip()
+    # Whether /api/health asks the model endpoint. Off where the endpoint bills by the second and starts cold: every
+    # answer still checks the model first (providers.ollama._check_build), and health reports the store and the gate.
+    health_probes_model: bool = os.environ.get("WORKBENCH_HEALTH_PROBES_MODEL", "1").strip().lower() not in ("0", "false", "no")
     # The same decoding settings that produced schema-valid output across 250 calls in A1-lite.
     temperature: float = 0.0
     seed: int = 42

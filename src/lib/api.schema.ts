@@ -363,7 +363,9 @@ export interface paths {
         /**
          * Health
          * @description Open to everyone, because the supervisor and the page ask before anyone has entered. Past the gate it names
-         *     the model and its state; before it, only whether the workbench is up and that the gate is on.
+         *     the model and its state; before it, only whether the workbench is up and that the gate is on. A store that cannot
+         *     take a write is not healthy, whatever the model's state. A visitor who has not entered never makes it ask the
+         *     model, and a deployment whose model bills by the second can leave the model to the answer itself.
          */
         get: operations["health_api_health_get"];
         put?: never;
@@ -1642,6 +1644,17 @@ export interface components {
             detail: string;
             /** Model */
             model: string;
+            /**
+             * Modelhost
+             * @default
+             */
+            modelHost: string;
+            /**
+             * Modellocation
+             * @default server
+             * @enum {string}
+             */
+            modelLocation: "server" | "hosted";
             /** Ok */
             ok: boolean;
             /** Provider */
