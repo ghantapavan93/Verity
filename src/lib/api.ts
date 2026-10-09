@@ -206,8 +206,20 @@ export function getExperiments(): Promise<ExperimentsView> {
   return request<ExperimentsView>("/api/engineering/experiments");
 }
 
-export function getContractState(): Promise<ContractStateView> {
-  return request<ContractStateView>("/api/engineering/contract-state");
+/** The public artifact is a static site: its record is a file beside the page, written from the committed experiment
+ * record by backend/scripts/export_state.py through the same loader the API uses. */
+export const STATE_RECORD_FILE = "/contract-state.json";
+
+export async function getContractState(): Promise<ContractStateView> {
+  if (process.env.NEXT_PUBLIC_EXPORT !== "state") return request<ContractStateView>("/api/engineering/contract-state");
+  let response: Response;
+  try {
+    response = await fetch(STATE_RECORD_FILE);
+  } catch {
+    throw new Error("The recorded experiment could not be loaded.");
+  }
+  if (!response.ok) throw new Error(`The recorded experiment could not be loaded (${response.status}).`);
+  return (await response.json()) as ContractStateView;
 }
 
 export function getGoldens(): Promise<GoldensView> {
