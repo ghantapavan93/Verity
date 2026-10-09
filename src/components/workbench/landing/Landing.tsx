@@ -116,6 +116,9 @@ export function Landing({
   const privatePreview = accessKnown && (apiHealth?.access === "required" || apiHealth?.access === "entered");
   // A public demo: this browser's own workspace, deleted on schedule (access/AccessGate.tsx, backend retention).
   const demo = useContext(PublicDemo);
+  // The API could not be asked at all: nothing that needs it is offered. A model that is offline is something else:
+  // the API still reads documents, and only questions fail (2026-10-09: an outage read "Model offline: 502").
+  const unreachable = apiHealth !== null && !apiHealth.ok && !accessKnown;
   // Where the model runs, as the API says; nothing about a contract's whereabouts is claimed before it has said.
   const place = modelPlace(accessKnown ? apiHealth : null);
 
@@ -220,7 +223,7 @@ export function Landing({
                             : "."}
                     </div>
                   </div>
-                  <button type="button" className={styles.primary} aria-label="Add a contract" onClick={onPickFile}>
+                  <button type="button" className={styles.primary} aria-label="Add a contract" onClick={onPickFile} disabled={unreachable}>
                     Add a contract
                   </button>
                 </div>
@@ -232,7 +235,7 @@ export function Landing({
             <>
               <p className={styles.after}>
                 No contract to hand? Use the sample, a real standard agreement:{" "}
-                <button type="button" className={styles.link} onClick={onLoadSample}>
+                <button type="button" className={styles.link} onClick={onLoadSample} disabled={unreachable}>
                   try a sample agreement
                 </button>
               </p>
@@ -247,10 +250,18 @@ export function Landing({
                   {uploadError}
                 </p>
               )}
-              {apiHealth && !apiHealth.ok && (
+              {unreachable ? (
                 <p className={styles.error} role="status">
-                  Model offline: {apiHealth.detail}
+                  The workbench is not reachable right now, so contracts cannot be added or asked about. The recorded research still opens; try again in a
+                  minute.
                 </p>
+              ) : (
+                apiHealth &&
+                !apiHealth.ok && (
+                  <p className={styles.error} role="status">
+                    The model is offline ({apiHealth.detail}). Contracts can still be added and read; questions will fail until it is back.
+                  </p>
+                )
               )}
               {viewError && (
                 <p className={styles.error} role="alert">

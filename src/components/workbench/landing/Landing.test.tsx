@@ -177,3 +177,19 @@ describe("Landing: a public demo", () => {
     expect(text).not.toMatch(/invite/i);
   });
 });
+
+describe("Landing: when the workbench cannot be reached", () => {
+  it("says the workbench is unreachable in a sentence, and offers nothing that would fail", () => {
+    renderLanding({ ok: false, provider: "", model: "", detail: "The workbench API answered 502", access: "off" } as Health, false);
+    expect(screen.getByText(/The workbench is not reachable right now/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/Model offline: /);
+    expect((screen.getByRole("button", { name: "Add a contract" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "try a sample agreement" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("control: a reachable workbench whose model is offline still reads documents", () => {
+    renderLanding({ ok: false, provider: "ollama", model: "qwen3:8b", detail: "Ollama not reachable", access: "entered" } as Health, true);
+    expect(screen.getByText(/The model is offline/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Add a contract" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});

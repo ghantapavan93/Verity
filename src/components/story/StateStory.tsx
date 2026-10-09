@@ -362,7 +362,7 @@ function Hero({ view, evidence }: { view: ContractStateView; evidence: Evidence 
   const cert = evidence.comparison?.arrivals?.certificate;
   const total = cert?.rebuild.objects ?? view.portfolio!.objectsAtStart;
   const steps: [string, number, string, number][] = [
-    ["Derived objects", total, "what a full rebuild recomputes", 0],
+    ["Derived objects", total, cert ? "what one full rebuild recomputed, in the comparison run" : "before the first recorded arrival", 0],
     ["Impact envelope", s.impactEnvelopeMean, "what one arrival could reach, on average", 0],
     ["Recompute plan", s.recomputePlanMean, "what needed another look, on average", 1],
     ["State delta", s.stateDeltaMean, "what actually changed, on average", 1],
@@ -557,8 +557,8 @@ function ArrivalMoment({
       "Everything else",
       `at least ${grouped.format(outside)} untouched`,
       arrival.verified
-        ? `of ${grouped.format(arrival.objectsBefore)} existing objects, outside the envelope and never looked at. Checked against a full rebuild: ${arrival.verified.stateEqualToRebuild ? "equal" : "DIFFERENT"}, ${arrival.verified.changedOutsideEnvelope} changed outside the envelope.`
-        : `of ${grouped.format(arrival.objectsBefore)} existing objects, outside the envelope and never looked at. This arrival was not checked one by one; the state after all ${view.arrivals.length} arrivals equals a rebuild.`,
+        ? `of the ${grouped.format(arrival.objectsBefore)} objects that existed just before this arrival, outside the envelope and never looked at. Checked against a full rebuild: ${arrival.verified.stateEqualToRebuild ? "equal" : "DIFFERENT"}, ${arrival.verified.changedOutsideEnvelope} changed outside the envelope.`
+        : `of the ${grouped.format(arrival.objectsBefore)} objects that existed just before this arrival, outside the envelope and never looked at. This arrival was not checked one by one; the state after all ${view.arrivals.length} arrivals equals a rebuild.`,
     ],
   ];
   return (

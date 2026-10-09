@@ -1099,9 +1099,10 @@
     box-shadow var(--dur) var(--ease);
 }
 
+/* The solid accent: the translucent line it replaced measured 2.4:1 against the panel, under WCAG 1.4.11's 3:1. */
 .composer:focus-within {
-  border-color: var(--accent-line);
-  box-shadow: 0 0 0 4px rgba(216, 180, 106, 0.07);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(216, 180, 106, 0.1);
 }
 
 .assistantComposer {

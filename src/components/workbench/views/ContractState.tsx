@@ -119,7 +119,11 @@ export function ContractState({ view }: { view: ContractStateView }) {
         label="The portfolio, and what every arrival was held to"
         items={[
           { label: "Documents", value: portfolio.documentsAtStart },
-          { label: "Derived objects", value: portfolio.objectsAtStart, note: "edges, families, effective states, findings, templates, cohorts" },
+          {
+            label: "Derived objects at the start",
+            value: portfolio.objectsAtStart,
+            note: "before the first recorded arrival: edges, families, effective states, findings, templates, cohorts",
+          },
           { label: "Arrivals recorded", value: summary.arrivals },
           {
             label: "Checked against a rebuild",

@@ -103,6 +103,9 @@ function WorkbenchSurface() {
   const docPaneRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement>(null);
+  // A document that has just opened hands focus to the question box: the next thing a person does is ask. Until
+  // 2026-10-09 focus fell to the page body, fifteen Tab presses from the box (frontend review).
+  const focusComposerOnOpen = useRef(false);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
   const evidenceTriggerRef = useRef<HTMLElement | null>(null);
   const litTimer = useRef<number | null>(null);
@@ -167,6 +170,7 @@ function WorkbenchSurface() {
         setEvidence(null);
         setProcessingLabel("Ready");
         window.setTimeout(() => {
+          focusComposerOnOpen.current = true;
           setStage("workspace");
           if (!question) return;
           setComposerText("");
@@ -181,6 +185,12 @@ function WorkbenchSurface() {
     },
     [showRun, resetMemo, stage, composerText, startRun, guidanceRecord],
   );
+
+  useEffect(() => {
+    if (stage !== "workspace" || !focusComposerOnOpen.current) return;
+    focusComposerOnOpen.current = false;
+    assistantInputRef.current?.focus({ preventScroll: true });
+  }, [stage, doc]);
 
   const loadSample = useCallback(async () => {
     setUploadError(null);

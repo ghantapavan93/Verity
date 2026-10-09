@@ -146,7 +146,24 @@ export function AccessGate({ children }: { children: ReactNode }) {
 
   const place = modelPlace(apiHealth);
   if (state === "open") return <PublicDemo.Provider value={demo}>{children}</PublicDemo.Provider>;
-  if (state === "checking") return <div className={styles.root} data-stage="empty" aria-busy="true" />;
+  // While the API is asked, the frame the visitor is about to see, not an empty page (the first paint on a slow phone
+  // was blank until the session answered: lab LCP 4.4 s, 2026-10-09).
+  if (state === "checking")
+    return (
+      <div className={styles.root} data-stage="empty" aria-busy="true">
+        <section className={door.page} aria-label="Live workbench">
+          <header className={door.topbar}>
+            <Brand />
+            <div className={door.topRight}>
+              <TopLinks />
+            </div>
+          </header>
+          <p className={door.opening} role="status">
+            Opening the workbench
+          </p>
+        </section>
+      </div>
+    );
   if (state === "unavailable" || state === "ended") {
     return (
       <div className={styles.root} data-stage="empty">
