@@ -122,8 +122,11 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
     app.include_router(access.router)
     app.include_router(engineering.public_router)
     gate = [Depends(access.require_access)]
-    for router in (documents.router, guidance.router, findings.router, memos.router, engineering.router, trust.router):
+    writes = [*gate, Depends(access.limit_public_writes)]
+    for router in (documents.router, engineering.router):
         app.include_router(router, dependencies=gate)
+    for router in (guidance.router, findings.router, memos.router, trust.router):
+        app.include_router(router, dependencies=writes)
     # Corpus jobs read the store by content across workspaces: the owner's tool, not a visitor's (api/access.owner_only).
     app.include_router(batches.router, dependencies=[*gate, Depends(access.owner_only)])
     app.include_router(runs.router, dependencies=[*gate, Depends(access.limit_run_starts)])

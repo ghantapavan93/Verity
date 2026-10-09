@@ -44,6 +44,15 @@ its guidance, versions and grants, and a document with its sections and original
 bytes. A workspace with a question still running waits for the next pass. Files go only after the database commits,
 and an hourly sweep removes any file no row names, so a crash in between cannot keep a visitor's file.
 
+Reviews, memos and guidance from a visitor share an hourly bound too (60 per workspace, 120 per address), and every
+upload or write is paused while the public store's disk has under 2 GiB free (`WORKBENCH_PUBLIC_MIN_FREE_BYTES`). The
+public API serves anonymous sessions only: an invite exchange is refused and an invited session opens nothing there.
+
+A backup of the public store holds visitors' contracts: delete it within seven days of taking it, or the promise on
+the first screen is not kept. No nightly backup is scheduled for the public store. Known limit: deduplicating
+identical bytes means an upload of a file someone else already added returns faster, which tells the uploader that the
+same bytes exist; it says nothing about who added them or under what name.
+
 ## Before the public demo
 
 Since 2026-10-09 `https://ivo.pavankg.dev` is this workbench again, as before: the invite gate in front, the recorded

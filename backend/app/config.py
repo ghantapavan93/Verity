@@ -96,6 +96,8 @@ class Settings(BaseModel):
     anonymous_max_documents: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_DOCUMENTS", "10"))
     anonymous_max_runs_per_day: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_RUNS_PER_DAY", "30"))
     anonymous_max_uploads_per_day: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_UPLOADS_PER_DAY", "300"))
+    # Free space the public store keeps: below it new uploads and writes are paused, reading still works (2 GiB).
+    public_min_free_bytes: int = int(os.environ.get("WORKBENCH_PUBLIC_MIN_FREE_BYTES", str(2 * 1024**3)))
     # Optional: the results.json of the ivo-experiments repository, for the Runs surface, and the
     # published page it was built for (links become "Open experiment" → <url>#<id>).
     experiments_results: Path | None = Path(os.environ["WORKBENCH_EXPERIMENTS_RESULTS"]) if os.environ.get("WORKBENCH_EXPERIMENTS_RESULTS") else None

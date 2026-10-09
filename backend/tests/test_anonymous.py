@@ -77,6 +77,8 @@ def public(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     access.visits.reset()
     access.address_uploads.reset()
     access.address_runs.reset()
+    access.workspace_writes.reset()
+    access.address_writes.reset()
     client.base_url = ORIGIN
     return client
 
@@ -267,3 +269,40 @@ def test_a_visit_registers_its_workspace_for_retention(public: TestClient) -> No
     with SessionLocal() as session:
         row = session.get(VisitorWorkspace, workspace_for(a.subject))
         assert row is not None and row.expires_at > row.created_at
+
+
+def test_the_public_store_serves_no_invited_reader(public: TestClient) -> None:
+    """An invite signed under the same secret would open a ws- workspace in the public store: past every bound, never
+    purged, and the next start refused on a store "holding owner records" (audit 2026-10-09). In public mode only an
+    anonymous session opens anything; an invite exchange is refused and an invited session is no session."""
+    invite = mint("reviewer-a", "verity-invite", 3600, SECRET)
+    exchanged = public.post("/api/access/session", json={"invite": invite}, headers={"Origin": ORIGIN})
+    assert exchanged.status_code == 403 and "set-cookie" not in exchanged.headers
+    invited = Visitor(public, mint("reviewer-a", "verity-session", 3600, SECRET))
+    assert invited.get("/api/documents").status_code == 401
+    assert invited.post("/api/documents", files={"file": ("a.txt", CONTRACT.encode(), "text/plain")}).status_code == 401
+    fresh, response = arrive(public, cookie=invited.cookie)
+    assert response.status_code == 200 and fresh.subject.startswith("anon-"), "the invited cookie is replaced by a visit"
+
+
+def test_a_workspace_cannot_write_without_bound(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reviews, memos and guidance had no bound: one workspace wrote about 1.5 GB of memo files an hour (audit
+    2026-10-09). They now share a per-workspace and a per-address hourly bound, the owner's pause and the disk check."""
+    monkeypatch.setattr(access.workspace_writes, "limit", 3)
+    a, _ = arrive(public)
+    ids = work(cast(Reviewer, a))  # one guidance, one review, one memo: three writes
+    refused = a.post("/api/memos", json={"runId": ids["run"]})
+    assert refused.status_code == 429, refused.text
+    b, _ = arrive(public, address="198.51.100.8")
+    assert b.post("/api/guidance", json={"text": "Notice must be at least 30 days."}).status_code in (200, 201), "another workspace is its own bound"
+
+
+def test_a_nearly_full_disk_pauses_uploads_and_writes(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    a, _ = arrive(public)
+    document = a.post("/api/documents", files={"file": ("a.txt", CONTRACT.encode(), "text/plain")}).json()
+    monkeypatch.setattr(config.settings, "public_min_free_bytes", 10**18)
+    upload = a.post("/api/documents", files={"file": ("b.txt", b"other text entirely", "text/plain")})
+    guidance = a.post("/api/guidance", json={"text": "Notice must be at least 30 days."})
+    assert upload.status_code == 503 and guidance.status_code == 503
+    assert "disk" in upload.json()["detail"].lower()
+    assert a.get(f"/api/documents/{document['id']}").status_code == 200, "reading still works"

@@ -31,6 +31,7 @@ import binascii
 import hmac
 import json
 import secrets
+import shutil
 import threading
 import time
 from collections import deque
@@ -67,6 +68,9 @@ RUN_LIMIT, RUN_WINDOW_S = 20, 600
 # again. These hold per client address (the address Cloudflare saw), across every session from it. New sessions have no
 # global ceiling on purpose: anyone could spend it and shut every new visitor out. What costs is bounded instead.
 VISIT_LIMIT, ADDRESS_UPLOAD_LIMIT, ADDRESS_RUN_LIMIT, ADDRESS_WINDOW_S = 20, 30, 30, 3600
+# Reviews, memos and guidance: every other write a visitor can make (one workspace wrote about 1.5 GB of memos an
+# hour before these, audit 2026-10-09).
+WORKSPACE_WRITE_LIMIT, ADDRESS_WRITE_LIMIT = 60, 120
 ANONYMOUS_PREFIX = "anon-"
 
 
@@ -158,7 +162,7 @@ def require_access(request: Request) -> None:
         request.state.workspace = OPEN_WORKSPACE
         return
     session = current_session(request)
-    if session is None or not _visitor_workspace_open(session.subject):
+    if session is None or not _session_serves_here(session.subject):
         raise AccessRequired("This is a private preview. Open your invite link to enter.")
     if request.method not in ("GET", "HEAD", "OPTIONS") and not _same_origin(request):
         raise Forbidden("This request did not come from the workbench.")
@@ -207,6 +211,8 @@ run_starts = SlidingWindow(RUN_LIMIT, RUN_WINDOW_S)
 visits = SlidingWindow(VISIT_LIMIT, ADDRESS_WINDOW_S)
 address_uploads = SlidingWindow(ADDRESS_UPLOAD_LIMIT, ADDRESS_WINDOW_S)
 address_runs = SlidingWindow(ADDRESS_RUN_LIMIT, ADDRESS_WINDOW_S)
+workspace_writes = SlidingWindow(WORKSPACE_WRITE_LIMIT, ADDRESS_WINDOW_S)
+address_writes = SlidingWindow(ADDRESS_WRITE_LIMIT, ADDRESS_WINDOW_S)
 
 
 def client_address(request: Request) -> str:
@@ -242,7 +248,7 @@ router = APIRouter(prefix="/api/access", tags=["access"])
 
 
 def _out(session: Session | None) -> AccessOut:
-    if session is not None and not _visitor_workspace_open(session.subject):
+    if session is not None and not _session_serves_here(session.subject):
         session = None
     shown = session.subject if session is not None and not session.subject.startswith(ANONYMOUS_PREFIX) else None
     anonymous = enabled() and settings.anonymous_sessions
@@ -269,6 +275,8 @@ def enter(body: InviteIn, request: Request, response: Response) -> AccessOut:
     response.headers["Cache-Control"] = "no-store"
     if not enabled():
         return _out(None)
+    if settings.anonymous_sessions:
+        raise Forbidden("This demo opens without an invitation; an invite does not apply here.")
     wait = exchanges.take(client_address(request))
     if wait is not None:
         raise TooManyRequests(f"Too many attempts. Try again in {int(wait) + 1} seconds.", retry_after=int(wait) + 1)
@@ -298,6 +306,15 @@ def is_public_workspace(workspace: str | None) -> bool:
     """A workspace an anonymous visit made: it reads only its own records, never the curated ones
     (application/workspace.py), and it is bounded and deleted on schedule (application/retention.py)."""
     return is_public(workspace)
+
+
+def _session_serves_here(subject: str) -> bool:
+    """In public mode only an anonymous session opens anything: an invited session signed under the same secret would
+    write a ws- workspace into the public store, past every bound, never purged, and the next start would refuse the
+    store (audit 2026-10-09). Elsewhere, any valid session; an anonymous one while its workspace is open."""
+    if settings.anonymous_sessions and not subject.startswith(ANONYMOUS_PREFIX):
+        return False
+    return _visitor_workspace_open(subject)
 
 
 def _visitor_workspace_open(subject: str) -> bool:
@@ -331,6 +348,26 @@ def paused() -> bool:
     return (settings.data_dir / "public.paused").exists()
 
 
+def refuse_if_disk_low() -> None:
+    """The public store keeps free space on its disk: daily caps count files, not bytes."""
+    if shutil.disk_usage(settings.data_dir).free < settings.public_min_free_bytes:
+        raise Paused("The demo's disk is nearly full, so new uploads and changes are paused. What you already added can still be read.")
+
+
+def limit_public_writes(request: Request) -> None:
+    """Mounted on the routers that write besides uploads and runs (reviews, memos, guidance, versions): a public
+    workspace's writes share an hourly bound per workspace and per address, the owner's pause and the disk check."""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    workspace = getattr(request.state, "workspace", None)
+    if not is_public_workspace(workspace):
+        return
+    refuse_if_paused()
+    refuse_if_disk_low()
+    _take(workspace_writes, str(workspace), "changes from this demo workspace")
+    _take(address_writes, client_address(request), "changes from your network")
+
+
 def refuse_if_paused() -> None:
     if paused():
         raise Paused("New uploads and questions are paused on this demo for now. What you already added can still be read.")
@@ -349,6 +386,7 @@ def admit_upload(request: Request, session: DbSession, workspace: str) -> None:
     refuse_if_paused()
     if not is_public_workspace(workspace):
         return
+    refuse_if_disk_low()
     held = session.scalar(select(func.count()).select_from(DocumentAccess).where(DocumentAccess.workspace_id == workspace)) or 0
     if held >= settings.anonymous_max_documents:
         raise TooManyRequests(
@@ -379,7 +417,7 @@ def visit(request: Request, response: Response, session: DbSession = Depends(get
     if not _same_origin(request):
         raise Forbidden("This request did not come from the workbench.")
     existing = current_session(request)
-    if existing is not None and _visitor_workspace_open(existing.subject):
+    if existing is not None and _session_serves_here(existing.subject):
         return _out(existing)
     _take(visits, client_address(request), "new visits from your network")
     subject = ANONYMOUS_PREFIX + secrets.token_urlsafe(24)

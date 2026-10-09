@@ -140,9 +140,12 @@ def test_a_workspace_with_a_question_in_progress_waits(public: TestClient) -> No
         assert session.get(VisitorWorkspace, workspace) is not None and session.get(Document, document["id"]) is not None
 
 
-def test_the_owner_and_the_curated_record_are_never_candidates(public: TestClient) -> None:  # noqa: F811
+def test_the_owner_and_the_curated_record_are_never_candidates(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: F811
     curated = make_curated(public)
+    # An invited reader's record, made as an owner instance makes it (a public one refuses invited readers).
+    monkeypatch.setattr(config.settings, "anonymous_sessions", False)
     invited = work(Reviewer(public, "reviewer-a"))
+    monkeypatch.setattr(config.settings, "anonymous_sessions", True)
     visitor, _ = arrive(public)
     work(cast(Reviewer, visitor), contract=CONTRACT + " A visitor's own clause.")
     end(visitor)
@@ -169,10 +172,11 @@ def test_the_sweep_removes_only_old_files_no_row_names(public: TestClient) -> No
     assert not orphan_old.exists() and orphan_young.exists() and named.exists()
 
 
-def test_the_corpus_tools_are_not_a_visitors(public: TestClient) -> None:  # noqa: F811
+def test_the_corpus_tools_are_not_a_visitors(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: F811
     visitor, _ = arrive(public)
     for path in ("/api/engineering/goldens", "/api/engineering/families", "/api/batches"):
         assert visitor.get(path).status_code == 404, path
+    monkeypatch.setattr(config.settings, "anonymous_sessions", False)  # an owner instance, where invited readers work
     invited = Reviewer(public, "reviewer-a")
     assert invited.get("/api/batches").status_code == 200, "control: an invited reader still has them"
 
