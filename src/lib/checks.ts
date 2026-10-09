@@ -20,7 +20,12 @@ function located(method: string): string {
   return VERBATIM.has(base) ? "word for word" : "with the same words and numbers, spacing and punctuation aside";
 }
 
-export function checkLedger(finding: FindingView, hasGuidance: boolean, sectionsById: Map<string, SectionView>, context: string | null): CheckRow[] {
+export function checkLedger(
+  finding: FindingView,
+  hasGuidance: boolean,
+  sectionsById: Map<string, SectionView>,
+  context: { text: string; partial: boolean } | null,
+): CheckRow[] {
   const cited = finding.spans.length;
   const found = finding.spans.filter((s) => s.verified);
   const rows: CheckRow[] = [];
@@ -73,6 +78,10 @@ export function checkLedger(finding: FindingView, hasGuidance: boolean, sections
       text: finding.statusReason ? `${account.role}: ${finding.statusReason}` : account.sentence,
       by: "code",
     });
+  } else if (source === "model_hint" && finding.statusReason) {
+    // Code compared the periods and left the model's status standing: policy v3 lowers, never confirms. The comparison
+    // is code's and is said; the status is not (round 2 review: AD15 read "Nothing" while code had compared 120 with 90).
+    rows.push({ key: "comparison", label: "Compared", text: `Code compared: ${finding.statusReason}. The status is still the model's view.`, by: "code" });
   } else if (source === "no_evidence") {
     rows.push({ key: "comparison", label: "Compared", text: "Nothing: no passage was found to compare", by: "nobody" });
   } else {
@@ -86,7 +95,10 @@ export function checkLedger(finding: FindingView, hasGuidance: boolean, sections
     });
   }
 
-  if (context) rows.push({ key: "context", label: "Read", text: context.charAt(0).toUpperCase() + context.slice(1), by: "nobody" });
+  if (context) {
+    const said = context.text.charAt(0).toUpperCase() + context.text.slice(1);
+    rows.push({ key: "context", label: "Read", text: context.partial ? `${said}; the other sections were not read` : said, by: "nobody" });
+  }
 
   rows.push(
     finding.review
@@ -106,7 +118,8 @@ export function runOutcome(outcomes: Record<string, number> | undefined, hasGuid
   const words: Record<string, string> = {
     needs_review: "needs review",
     missing: "not found",
-    pass: hasGuidance ? "within guidance" : "answered",
+    // Under policy v3 code lowers a status and never confirms one: a pass is the model's view.
+    pass: hasGuidance ? "within guidance (model's view)" : "answered",
   };
   const parts = Object.entries(outcomes ?? {})
     .filter(([status, n]) => n > 0 && status in words)

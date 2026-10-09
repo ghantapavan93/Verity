@@ -187,7 +187,14 @@ export function AssistantPanel({
                       finding={finding}
                       hasGuidance={run.hasGuidance}
                       sectionsById={sectionsById}
-                      context={run.sectionsRead != null && doc ? sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length) : null}
+                      context={
+                        run.sectionsRead != null && doc
+                          ? {
+                              text: sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length),
+                              partial: run.sectionsRead < doc.sections.length,
+                            }
+                          : null
+                      }
                       onJump={onJump}
                       onEvidence={(trigger) => onOpenEvidence(finding, trigger)}
                       onFollowUp={onFollowUp}

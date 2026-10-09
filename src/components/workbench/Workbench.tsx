@@ -189,7 +189,16 @@ function WorkbenchSurface() {
   useEffect(() => {
     if (stage !== "workspace" || !focusComposerOnOpen.current) return;
     focusComposerOnOpen.current = false;
-    assistantInputRef.current?.focus({ preventScroll: true });
+    // The workspace mounts after the landing's exit animation: wait for the box, a frame at a time, for up to a second.
+    let frame = 0;
+    let handle = 0;
+    const tryFocus = () => {
+      const box = assistantInputRef.current;
+      if (box) box.focus({ preventScroll: true });
+      else if (frame++ < 60) handle = window.requestAnimationFrame(tryFocus);
+    };
+    tryFocus();
+    return () => window.cancelAnimationFrame(handle);
   }, [stage, doc]);
 
   const loadSample = useCallback(async () => {
@@ -205,7 +214,9 @@ function WorkbenchSurface() {
     }
   }, [loadFile]);
 
-  useDropZone(stage !== "workspace" && stage !== "processing", setStage, loadFile);
+  // The API could not be asked: a dropped or picked file would only fail (round 2: a drop still said "Release to add").
+  const unreachable = apiHealth !== null && !apiHealth.ok && !accessKnown;
+  useDropZone(stage !== "workspace" && stage !== "processing" && !unreachable, setStage, loadFile);
 
   // ---- asking -----------------------------------------------------------------------------
 
@@ -245,6 +256,7 @@ function WorkbenchSurface() {
     async (id: string, show = true) => {
       setViewError(null);
       if (doc?.id === id) {
+        focusComposerOnOpen.current = show;
         setStage("workspace");
         if (show) setView("assistant");
         return;
@@ -259,6 +271,7 @@ function WorkbenchSurface() {
         setRunError(null);
         setHighlight(null);
         setEvidence(null);
+        focusComposerOnOpen.current = show;
         setStage("workspace");
         if (show) setView("assistant");
       } catch (error) {
@@ -503,7 +516,7 @@ function WorkbenchSurface() {
             composerText={composerText}
             setComposerText={setComposerText}
             onHome={goHome}
-            onPickFile={() => fileInputRef.current?.click()}
+            onPickFile={() => !unreachable && fileInputRef.current?.click()}
             onLoadSample={() => void loadSample()}
             proof={proof}
             proofStory={Boolean(PROOF_RUN_ID) && proof?.id === PROOF_RUN_ID}

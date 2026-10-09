@@ -27,7 +27,7 @@ export function FindingCard({
   hasGuidance: boolean;
   sectionsById: Map<string, SectionView>;
   /** How much of the document the model was handed (lib/types sectionsReadNote); null when the run did not record it. */
-  context?: string | null;
+  context?: { text: string; partial: boolean } | null;
   onJump: (sectionId: string, span: SpanView | null) => void;
   onEvidence: (trigger: HTMLElement | null) => void;
   onFollowUp: () => void;

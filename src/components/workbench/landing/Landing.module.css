@@ -299,6 +299,12 @@
   text-decoration-color: var(--accent);
 }
 
+.link:disabled {
+  color: var(--text-3);
+  text-decoration-color: transparent;
+  cursor: not-allowed;
+}
+
 .error {
   margin: 12px 0 0;
   font-size: 13px;

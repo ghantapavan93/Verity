@@ -142,14 +142,27 @@ function EvidenceBody({
           {
             who: "Model",
             what: proposal ? plainLabel(statusLabel(proposal.statusHint as FindingStatus, hasGuidance, "model_hint")) : "not rebuilt",
-            tone: proposal ? toneOf(proposal.statusHint as FindingStatus) : "muted",
+            // The model's proposal is never in the pass colour: a pass it proposes is its view (round 2 review).
+            tone: proposal && proposal.statusHint === "needs_review" ? "review" : "muted",
             note: proposal ? "its proposal" : undefined,
             struck: overruled,
           },
           {
             who: "Source",
-            what: finding.spans.length ? `${verified} of ${finding.spans.length} found` : "nothing cited",
-            tone: finding.spans.length && verified === finding.spans.length ? "pass" : finding.spans.length ? "review" : "muted",
+            what:
+              finding.evidenceKind === "coverage"
+                ? `${verified} read, not relied on`
+                : finding.spans.length
+                  ? `${verified} of ${finding.spans.length} found`
+                  : "nothing cited",
+            tone:
+              finding.evidenceKind === "coverage"
+                ? "muted"
+                : finding.spans.length && verified === finding.spans.length
+                  ? "pass"
+                  : finding.spans.length
+                    ? "review"
+                    : "muted",
             note: relocated ? "in another section" : finding.spans.length ? "where it was cited" : undefined,
           },
           {

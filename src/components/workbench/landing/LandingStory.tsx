@@ -303,7 +303,7 @@ export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place
   const lines = [
     {
       head: "It does not read the whole agreement.",
-      text: "Six sections per question, chosen by retrieval. Every answer says how many it was handed, and the memo repeats it.",
+      text: "Up to six sections per question, chosen by retrieval; the rest of the contract is not read. Every answer says how many it was handed, and the memo repeats it.",
     },
     {
       head: "It does not pass a clause on its own.",

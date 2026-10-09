@@ -175,13 +175,14 @@
   background: var(--border);
 }
 
-/* The button is the 24 px target; the 15 x 7 px mark is drawn inside it (WCAG 2.5.8; it was the mark alone). */
+/* The button is a 24 x 14 px target with the 15 x 7 px mark drawn inside it (it was the mark alone). 14 px, not 24: a
+   taller target let neighbouring passages (§5.3, §5.3.1) swallow each other's clicks (round 2). */
 .spineTick {
   position: absolute;
   left: -1px;
   width: 24px;
-  height: 24px;
-  margin-top: -12px;
+  height: 14px;
+  margin-top: -7px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -191,7 +192,7 @@
 .spineTick::before {
   content: "";
   position: absolute;
-  top: 8.5px;
+  top: 3.5px;
   left: 4px;
   width: 15px;
   height: 7px;
@@ -2103,12 +2104,19 @@
   color: var(--text);
 }
 
-@media (max-width: 420px) {
+/* Stacked by the card's own width, not the window's: at 768 px the side pane is narrow while the window is not
+   (round 2: the ledger was squeezed into a 75 px column, 792 px tall). */
+.result {
+  container-type: inline-size;
+}
+
+@container (max-width: 460px) {
   .checks {
     grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
   }
 
   .checkKey {
-    margin-top: 4px;
+    margin-top: 6px;
   }
 }

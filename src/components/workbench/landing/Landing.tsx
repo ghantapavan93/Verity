@@ -294,11 +294,12 @@ export function Landing({
         </div>
 
         {stage === "empty" && (
-          <motion.aside className={styles.aside} aria-label="A finished review" {...rise(0.18)}>
+          <motion.aside className={styles.aside} aria-label={proofStory ? "A finished review" : "Your latest run"} {...rise(0.18)}>
             {proof && (
               <article className={styles.receipt}>
                 <div className={styles.receiptHead}>
-                  <span>A finished review</span>
+                  {/* "Finished review" only for the proof run, which a person reviewed; a visitor's own run may have no review. */}
+                  <span>{proofStory ? "A finished review" : "Your latest run"}</span>
                   <span className={styles.receiptId}>run {proof.id.slice(0, 8)}</span>
                 </div>
                 <div className={styles.receiptBody}>
@@ -342,7 +343,7 @@ export function Landing({
                   )}
                 </div>
                 <div className={styles.receiptFoot}>
-                  <span>{proof.hasGuidance ? "Checked against written guidance" : "Answered from the contract alone"}</span>
+                  <span>{proof.hasGuidance ? "Asked with written guidance" : "Answered from the contract alone"}</span>
                   <button type="button" className={styles.receiptOpen} onClick={() => onOpenProof(proof.id, lead?.id)} title={`Open run ${proof.id}`}>
                     Open the review <IconArrowRight />
                   </button>

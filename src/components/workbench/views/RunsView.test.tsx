@@ -64,7 +64,7 @@ describe("RunsView in a public demo", () => {
 describe("runOutcome", () => {
   it("says what a run concluded, not only that it finished", () => {
     expect(runOutcome({ needs_review: 1, missing: 1 }, true)).toBe("1 needs review · 1 not found");
-    expect(runOutcome({ pass: 2 }, true)).toBe("2 within guidance");
+    expect(runOutcome({ pass: 2 }, true)).toBe("2 within guidance (model's view)");
     expect(runOutcome({ pass: 1 }, false)).toBe("1 answered");
     expect(runOutcome({}, true)).toBe("no finding");
     expect(runOutcome(undefined, true)).toBe("no finding");

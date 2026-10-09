@@ -42,14 +42,14 @@ const row = (rows: CheckRow[], key: CheckRow["key"]) => rows.find((r) => r.key =
 
 describe("checkLedger: what was checked, and by whom", () => {
   it("never lets a located quote stand for a supported answer (quote 10%, answer 5%)", () => {
-    const rows = checkLedger(finding(), true, sections, "the model was handed 6 of this document's 123 sections");
+    const rows = checkLedger(finding(), true, sections, { text: "the model was handed 6 of this document's 123 sections", partial: true });
     expect(row(rows, "quote")).toMatchObject({ by: "code" });
     expect(row(rows, "quote")?.text).toMatch(/^Found in the document text at §5.3 · Termination, word for word/);
     expect(row(rows, "support")).toMatchObject({ by: "model" });
     expect(row(rows, "support")?.text).toMatch(/^Not checked by code/);
     expect(row(rows, "comparison")).toMatchObject({ by: "nobody" });
     expect(row(rows, "comparison")?.text).toMatch(/the status is the model's view/);
-    expect(row(rows, "context")?.text).toBe("The model was handed 6 of this document's 123 sections");
+    expect(row(rows, "context")?.text).toBe("The model was handed 6 of this document's 123 sections; the other sections were not read");
     expect(row(rows, "person")).toMatchObject({ text: "Not reviewed yet", by: "nobody" });
     // Nothing the code did not do is attributed to it.
     expect(rows.filter((r) => r.by === "code").map((r) => r.key)).toEqual(["quote"]);
@@ -116,5 +116,20 @@ describe("checkLedger: what was checked, and by whom", () => {
   it("names the person who decided", () => {
     const rows = checkLedger(finding({ review: { verdict: "confirmed", reviewer: "Didier", at: "" } }), true, sections, null);
     expect(row(rows, "person")).toMatchObject({ text: "Confirmed by Didier", by: "person" });
+  });
+
+  it("credits code for a comparison it made even when it left the model's status standing (round 2, AD15)", () => {
+    const reason =
+      'the contract provides 120 calendar days; the guidance requires at least 90 calendar days, but code does not confirm that as a pass: the clause carries a condition or an exception ("except")';
+    const rows = checkLedger(finding({ statusSource: "model_hint", statusReason: reason }), true, sections, null);
+    expect(row(rows, "comparison")).toMatchObject({ by: "code" });
+    expect(row(rows, "comparison")?.text).toBe(`Code compared: ${reason}. The status is still the model's view.`);
+  });
+
+  it("says when the model answered from part of the document", () => {
+    const rows = checkLedger(finding(), true, sections, { text: "the model was handed 1 of this document's 4 sections", partial: true });
+    expect(row(rows, "context")?.text).toBe("The model was handed 1 of this document's 4 sections; the other sections were not read");
+    const whole = checkLedger(finding(), true, sections, { text: "the model was handed 4 of this document's 4 sections", partial: false });
+    expect(row(whole, "context")?.text).toBe("The model was handed 4 of this document's 4 sections");
   });
 });
