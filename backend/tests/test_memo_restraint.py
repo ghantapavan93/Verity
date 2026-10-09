@@ -32,7 +32,8 @@ class CompliantProvider(FakeProvider):
 
 def memo_html(client: TestClient, run_id: str) -> str:
     memo = client.post("/api/memos", json={"runId": run_id}).json()
-    return client.get(f"/api/memos/{memo['id']}/html").text
+    html: str = client.get(f"/api/memos/{memo['id']}/html").text
+    return html
 
 
 def test_a_finding_that_needs_review_carries_the_models_suggestion(client: TestClient) -> None:

@@ -14,7 +14,7 @@ from hypothesis import strategies as st
 from app.verify import spans
 from app.verify.spans import Located, strip_label
 
-ALPHABET = list("abcXYZ019 .,;-'\"") + ["’", "“", "”", "—", " ", "​", "ß", "İ", "\n"]
+ALPHABET = [*"abcXYZ019 .,;-'\"", "’", "“", "”", "—", " ", "​", "ß", "İ", "\n"]
 text_strategy = st.text(alphabet=st.sampled_from(ALPHABET), min_size=1, max_size=120)
 
 
