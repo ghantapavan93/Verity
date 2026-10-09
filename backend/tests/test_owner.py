@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 
-from app.runs.owner import ProcessIdentity, owner_is_gone, this_process
+from app.runs.owner import ProcessIdentity, owner_is_alive_here, owner_is_gone, this_process
 
 
 def test_this_process_identifies_itself_and_is_never_gone() -> None:
@@ -43,3 +43,16 @@ def test_a_pid_reused_by_a_later_process_is_gone_when_the_start_token_differs() 
         return
     # The parent is alive with its own start token, which is not "1": the row was written by an earlier process with that pid.
     assert owner_is_gone(reused.render())
+
+
+def test_an_earlier_process_with_this_pid_is_gone_and_not_this_one() -> None:
+    """In a container the API is pid 1 under the same hostname after every restart. A stage opened by the previous pid 1
+    was taken for this process's own live work, so a run interrupted by the restart stayed in progress for good and every
+    identical question was handed it (cloud rehearsal, 2026-10-09). The start token tells the two apart."""
+    me = this_process()
+    if not me.started:
+        return  # the platform gives no start token; pid liveness alone applies
+    earlier = ProcessIdentity(me.host, me.pid, "1")
+    assert owner_is_gone(earlier.render())
+    assert not owner_is_alive_here(earlier.render())
+    assert owner_is_alive_here(me.render()) and not owner_is_gone(me.render()), "this process itself is alive and here"

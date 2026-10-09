@@ -88,6 +88,12 @@ def this_process() -> ProcessIdentity:
     return ProcessIdentity(socket.gethostname(), os.getpid(), _start_token(os.getpid()) or "")
 
 
+def _is_this_process(identity: ProcessIdentity) -> bool:
+    """The identity is this process: the same pid and, where the platform gives one, the same start token."""
+    me = this_process()
+    return identity.pid == me.pid and (identity.started == me.started or not identity.started or not me.started)
+
+
 def owner_is_alive_here(owner: str | None) -> bool:
     """True when the owner is a process on this host that still exists with the same start time: a run it holds is
     waiting its turn or on the model, however long, and must not be declared stale (hostile review, 2026-10-01)."""
@@ -96,8 +102,10 @@ def owner_is_alive_here(owner: str | None) -> bool:
     identity = ProcessIdentity.parse(owner)
     if identity is None or identity.host != this_process().host:
         return False
-    if identity.pid == this_process().pid:
+    if _is_this_process(identity):
         return True
+    if identity.pid == this_process().pid:
+        return False  # this pid, another start: an earlier process (a restarted container is pid 1 every time)
     token = _start_token(identity.pid)
     return token is not None and token == identity.started
 
@@ -110,8 +118,12 @@ def owner_is_gone(owner: str | None) -> bool:
     identity = ProcessIdentity.parse(owner)
     if identity is None or identity.host != this_process().host:
         return False
-    if identity.pid == this_process().pid:
+    if _is_this_process(identity):
         return False
+    if identity.pid == this_process().pid:
+        # The same pid with another start token is an earlier process: a container's API is pid 1 under the same
+        # hostname after every restart, and its interrupted runs were taken for this process's live work (2026-10-09).
+        return bool(identity.started) and bool(this_process().started)
     token = _start_token(identity.pid)
     if token is None:
         return True
