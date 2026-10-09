@@ -12,6 +12,8 @@ param(
   [string]$Origin = "https://ivo.pavankg.dev",
   # The run the first screen offers as a finished review (docs/DEMO-PROOF.md); empty means the latest complete run.
   [string]$ProofRun = "e5a20e2283e8416e",
+  # A public demo's own store (deploy/README.md): set it, and build with -ProofRun "" (the owner's proof run is not in it).
+  [string]$PublicDataDir = "",
   [switch]$Build,
   [switch]$Uninstall
 )
@@ -40,9 +42,10 @@ if ($Build) {
 }
 
 New-Item -ItemType Directory -Force $logs | Out-Null
+$publicArg = if ($PublicDataDir) { " -PublicDataDir `"$PublicDataDir`"" } else { "" }
 foreach ($name in $tasks.Keys) {
   Remove-Item (Join-Path $logs "$name.stop") -Force -ErrorAction SilentlyContinue
-  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$supervise`" -Name $name -Origin $Origin"
+  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$supervise`" -Name $name -Origin $Origin$publicArg"
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
   # No execution time limit (the default of three days would end a healthy supervisor); battery makes no difference.
   $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew

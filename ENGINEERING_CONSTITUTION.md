@@ -77,7 +77,10 @@ at its measurement or its requirement is removed.
     model, the raw structured output, each quote's location method and offsets, stage
     timestamps, the outcome and its reason.
 11. Completed runs are immutable history. A changed prompt, model or document creates a new
-    run. Historical runs keep their own prompt version and hash.
+    run. Historical runs keep their own prompt version and hash. One scoped exception, an owner
+    decision (2026-10-09): in the public demo's own store, a visitor's workspace is deleted with
+    its runs when it ends (`application/retention.py`), as the visitor is told. Only registered,
+    ended visitor workspaces are candidates; the owner's store is never touched.
 12. Repeating a request must not repeat a model call. Identical inputs return the existing
     running or completed run; the database enforces this with a unique index over non-failed
     runs; failed runs stay retryable.

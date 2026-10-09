@@ -16,7 +16,7 @@ or dismiss each finding under a name they type. It runs at $0: Qwen3 8B through 
 
 | | Where | Who |
 |---|---|---|
-| The live workbench: upload a contract or the sample, ask, open the cited passage, review | [ivo.pavankg.dev](https://ivo.pavankg.dev) | a personal invite link; up while the host machine is on |
+| The live workbench: upload a contract or the sample, ask, open the cited passage, review | [ivo.pavankg.dev](https://ivo.pavankg.dev) | anyone, no sign-in: each browser gets a workspace of its own, deleted after 7 days; up while the host machine is on |
 | The recorded Contract State research | [ivo.pavankg.dev/state](https://ivo.pavankg.dev/state), and always available as static files at [verity-state.pages.dev](https://verity-state.pages.dev) | anyone |
 
 The two are separate pieces of work that share one rule, that a claim is kept only with the source evidence that

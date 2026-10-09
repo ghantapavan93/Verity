@@ -17,6 +17,8 @@ param(
   [Parameter(Mandatory = $true)][ValidateSet("api", "web")][string]$Name,
   [string]$Origin = "https://ivo.pavankg.dev",
   [int]$Port = 0,
+  # A public demo: every visitor gets a workspace of their own, served from this store, never the owner's (backend/data).
+  [string]$PublicDataDir = "",
   [string]$Tag = ""
 )
 $ErrorActionPreference = "Stop"
@@ -59,6 +61,14 @@ while ($true) {
     # This API is reachable from the internet through the tunnel: it must never run open. Without a secret of 32+
     # characters the API refuses to start, and the supervisor keeps retrying on its backoff until one is made.
     $env:WORKBENCH_ACCESS_REQUIRED = "1"
+    if ($PublicDataDir) {
+      # The public store, anonymous sessions on, and a ceiling on the model's day (deploy/README.md, public demo).
+      $env:WORKBENCH_DATA_DIR = $PublicDataDir
+      $env:WORKBENCH_ANONYMOUS_SESSIONS = "1"
+      $env:WORKBENCH_MAX_RUNS_PER_DAY = "200"
+    } else {
+      Remove-Item Env:WORKBENCH_DATA_DIR, Env:WORKBENCH_ANONYMOUS_SESSIONS, Env:WORKBENCH_MAX_RUNS_PER_DAY -ErrorAction SilentlyContinue
+    }
     if ($env:WORKBENCH_ACCESS_SECRET.Length -lt 32) { Write-Line "no access secret at ${secretFile}: the API will refuse to start (WORKBENCH_ACCESS_REQUIRED=1)" }
     $env:WORKBENCH_ACCESS_REVOKED = if (Test-Path $revokedFile) { ((Get-Content $revokedFile) | Where-Object { $_.Trim() } | ForEach-Object { $_.Trim() }) -join "," } else { "" }
     $process = Start-Process -FilePath (Join-Path $backend ".venv\Scripts\python.exe") `

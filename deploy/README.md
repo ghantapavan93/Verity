@@ -1,5 +1,47 @@
 # Publishing the workbench for one audience
 
+## The public demo (since 2026-10-09)
+
+`https://ivo.pavankg.dev` opens for anyone, with no invite, sign-in or account. Each browser that arrives without a
+session is handed one of its own (`POST /api/access/visit`): an unpredictable subject the server makes, a signed
+`__Host-` cookie (HttpOnly, Secure, SameSite=Strict), and a workspace no other browser can read. Anonymous never means
+shared: the gate stays required, and every route serves the session's own workspace exactly as it serves an invited
+reader's. The API runs on a store of its own, never the owner's:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Build -Origin https://ivo.pavankg.dev -ProofRun "" -PublicDataDir "C:\Verity\public-data"
+```
+
+The owner's store (`backend/data`, every historical run) is left as it was. The API refuses to start with anonymous
+sessions on if its store holds any owner or curated record, so a misplaced `WORKBENCH_DATA_DIR` cannot put it in
+front of the public. A visitor's workspace reads only its own records, never curated ones.
+
+| Bound | Value | Where |
+|---|---|---|
+| A visitor's workspace and session | 7 days, then deleted with everything in it (`WORKBENCH_ANONYMOUS_RETENTION_DAYS`) | `application/retention.py`, hourly and at start |
+| Contracts per workspace | 10 (`WORKBENCH_ANONYMOUS_MAX_DOCUMENTS`) | `api/access.py admit_upload` |
+| Questions per workspace per UTC day | 30 (`WORKBENCH_ANONYMOUS_MAX_RUNS_PER_DAY`) | `api/access.py limit_run_starts` |
+| New sessions, uploads, questions per network address | 20, 30, 30 an hour | `api/access.py`, keyed by the address Cloudflare saw |
+| Uploads, everyone, per UTC day | 300 (`WORKBENCH_ANONYMOUS_MAX_UPLOADS_PER_DAY`) | `api/access.py admit_upload` |
+| Questions, everyone, per UTC day | 200 (`WORKBENCH_MAX_RUNS_PER_DAY`, set by the supervisor) | `application/start_run.py` |
+| Upload size and type | 25 MB; PDF, DOCX, TXT, checked against the bytes; stored under its hash | `application/ingest_document.py` |
+| Model calls at once, model timeout | the admission bound; 600 s | `providers` |
+
+The owner's switch: create an empty file `public.paused` in the public data directory. New uploads and questions are
+refused at once with a plain sentence (503); reading and the research stay up. Delete the file to resume; no restart.
+
+New sessions have no daily ceiling on purpose: anyone could spend it and shut every new visitor out. What costs (an
+upload, a question) is bounded instead. An office behind one address shares its 30 questions an hour; a farm of
+addresses can still reach the 200 a day, and the switch is the answer to that. Cloudflare Turnstile is not used; it is
+the next step if automated abuse appears, on the first upload or question, verified on the server.
+
+What retention deletes: the workspace's runs with their stages, findings, spans, reviews and memos (rows and files),
+its guidance, versions and grants, and a document with its sections and original once nothing else holds the same
+bytes. A workspace with a question still running waits for the next pass. Files go only after the database commits,
+and an hourly sweep removes any file no row names, so a crash in between cannot keep a visitor's file.
+
+## Before the public demo
+
 Since 2026-10-09 `https://ivo.pavankg.dev` is this workbench again, as before: the invite gate in front, the recorded
 research readable without an invite at `/state`. It is up only while this machine is on. The same research, as static
 files that need no server, stays on Cloudflare Pages at `https://verity-state.pages.dev`

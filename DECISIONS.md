@@ -642,3 +642,18 @@ bytes'. Each grant now keeps the name its workspace gave (`DocumentAccess.name`,
 workspace, and the model's input for its runs, uses it (`app/document_names.py`). Grants from before carry no name:
 the first workspace on a document still sees the stored name, a later one sees "uploaded file (name not recorded)",
 and every earlier run's input rebuilds unchanged, since it was given the stored name and still is.
+
+**The workbench opens for anyone, each visitor in a workspace of their own (2026-10-09).** The owner decided the
+workbench must be usable with no invite, sign-in or account. Switching the gate off was not an option: that is one
+shared workspace. Instead a browser with no session is handed one (`POST /api/access/visit`): a server-made,
+unpredictable subject signed like an invite's session, in a workspace (`pw-` prefix) that reads only its own records,
+never curated ones. The session ends with its workspace and is never renewed, so a purged workspace's id is never
+written again; the next visit is a new subject. The public API runs on its own store and refuses to start on one
+holding owner or curated records. Costs are bounded per workspace, per network address and per day for everyone;
+new sessions are not, since a ceiling on them is a lockout anyone can trigger. The one exception to "completed runs
+are immutable" (constitution, rule 11): retention deletes an ended visitor workspace with its runs, in the public
+store only, by dropping the immutability triggers, deleting and recreating the same triggers in one transaction.
+Found on the way: a public workspace would have been handed curated guidance with the same words, and in a store with
+curated documents a visitor's upload of the same bytes would have been unreadable to them; the first is fixed, the
+second is why the public store may hold none.
+
