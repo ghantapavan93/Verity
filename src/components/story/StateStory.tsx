@@ -948,7 +948,7 @@ function EngineeringView({ view, evidence, arrival }: { view: ContractStateView;
         </details>
       )}
       <details className={styles.details}>
-        <summary>Reproduce</summary>
+        <summary>How these numbers were made</summary>
         <div className={styles.detailBody}>
           <pre className={styles.code}>
             {[
@@ -960,7 +960,11 @@ function EngineeringView({ view, evidence, arrival }: { view: ContractStateView;
               "python -m evals.export_state",
             ].join("\n")}
           </pre>
-          <p className={styles.quiet}>From the contract-lineage experiment, with the EDGAR corpus outside the repository.</p>
+          <p className={styles.quiet}>
+            These ran in the contract-lineage experiment, a private research repository, over SEC EDGAR filings kept outside it. Neither is published, so these
+            commands cannot be run from this page or from Verity&apos;s repository; they record what produced each number. The record itself, with its sha256,
+            is named at the foot of this page.
+          </p>
         </div>
       </details>
     </Section>
