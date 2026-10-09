@@ -91,7 +91,8 @@ export function checkLedger(
       key: "comparison",
       label: "Compared",
       text: hasGuidance
-        ? "Nothing: code found no period in the passage and the guidance to compare; the status is the model's view"
+        ? // Policy v4 leaves a guidance period unread when its wording is ambiguous ("less than 60 days"), so "no period" would be untrue.
+          "Nothing: code found no period it could read in both the passage and the guidance; the status is the model's view"
         : "Nothing: no guidance was given to compare against; the status is the model's view",
       by: "nobody",
     });

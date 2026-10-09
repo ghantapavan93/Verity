@@ -49,6 +49,8 @@ describe("checkLedger: what was checked, and by whom", () => {
     expect(row(rows, "support")?.text).toMatch(/^Not checked by code/);
     expect(row(rows, "comparison")).toMatchObject({ by: "nobody" });
     expect(row(rows, "comparison")?.text).toMatch(/the status is the model's view/);
+    // Policy v4 can leave a guidance period unread on purpose; the row never says the guidance has none.
+    expect(row(rows, "comparison")?.text).toMatch(/no period it could read/);
     expect(row(rows, "context")?.text).toBe("The model was handed 6 of this document's 123 sections; the other sections were not read");
     expect(row(rows, "person")).toMatchObject({ text: "Not reviewed yet", by: "nobody" });
     // Nothing the code did not do is attributed to it.
