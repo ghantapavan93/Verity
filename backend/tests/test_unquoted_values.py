@@ -79,6 +79,10 @@ def test_a_date_is_one_value_shown_as_written() -> None:
     assert unquoted_values("Signed 13/01/2024 for 3 years.", ["for three years"], []) == ["13/01/2024"]
     assert unquoted_values("Signed 01/13/2024 for 3 years.", ["January 13, 2024; three years"], []) == []
     assert unquoted_values("Signed 01/02/2024 for 3 years.", ["for three years"], []) == [], "day and month ambiguous: set aside"
+    assert unquoted_values("Signed 2024/01/13 for 3 years.", ["for three years"], []) == ["2024/01/13"]
+    assert unquoted_values("Signed 2024.01.13 for 3 years.", ["dated January 13, 2024 for three years"], []) == []
+    for ambiguous in ("1/2/24", "13/1/24", "3-4-25"):
+        assert unquoted_values(f"Signed {ambiguous} for 3 years.", ["for three years"], []) == [], ambiguous
 
 
 def test_the_readers_own_numbers_are_not_reported() -> None:

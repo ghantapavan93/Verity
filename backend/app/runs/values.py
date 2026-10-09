@@ -58,9 +58,9 @@ _DATE = re.compile(
     rf"|\b{_MONTH.replace('month', 'month3')},?\s+(?P<year3>\d{{4}})\b",
     re.IGNORECASE,
 )
-# "2024-01-01" and "13/01/2024" are one value each too (triage, 2026-10-09: an ISO date showed as 2024 and 01).
-_ISO_DATE = re.compile(r"\b(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})\b")
-_SLASH_DATE = re.compile(r"\b(?P<a>\d{1,2})[/.](?P<b>\d{1,2})[/.](?P<year>\d{4})\b")
+# Any run of three numbers joined by one separator ("2024-01-01", "13/01/2024", "1/2/24") is a date: one value when its
+# order is certain, set aside when not, never loose numbers (triage, 2026-10-09: "2024-01-01" showed as 2024 and 01).
+_NUMERIC_DATE = re.compile(r"\b(?P<a>\d{1,4})(?P<sep>[-/.])(?P<b>\d{1,2})(?P=sep)(?P<c>\d{1,4})\b")
 
 # Letters in a pointer are capitals or a bracketed sub-item: "Schedule B", "8.1(a)", never the next word ("fees").
 _REF = r"(?-i:[\dA-Z]{1,6})(?![A-Za-z])(?:\.\d{1,6}){0,6}(?:\([a-z0-9]{1,4}\)){0,4}"
@@ -92,20 +92,28 @@ def _month(name: str) -> int:
     return next(i for i, full in enumerate(_MONTH_NAMES, start=1) if full.startswith(name.lower().rstrip(".")[:3]))
 
 
+def _numeric_date_key(first: str, middle: str, last: str) -> str | None:
+    """A key for a numeric date whose order is certain: year first (y-m-d), or a four-digit year last with a day above 12
+    (or day and month equal). Two-digit years and either-way-round days are None."""
+    b = int(middle)
+    if len(first) == 4 and len(last) <= 2:
+        month, day = b, int(last)
+        return f"d:{first}-{month:02d}-{day:02d}" if 1 <= month <= 12 and 1 <= day <= 31 else None
+    if len(last) == 4 and len(first) <= 2:
+        a = int(first)
+        if a > 12 >= b >= 1 and a <= 31:
+            return f"d:{last}-{b:02d}-{a:02d}"
+        if (b > 12 >= a >= 1 and b <= 31) or (a == b and 1 <= a <= 12):
+            return f"d:{last}-{a:02d}-{b:02d}"
+    return None
+
+
 def _dates(text: str) -> list[tuple[str | None, int, int]]:
     """Each date in ``text`` as (key, start, end). The key is None for a slash date whose day and month could be either
     way round ("01/02/2024"): it is set aside, never compared and never split into numbers."""
     found: list[tuple[str | None, int, int]] = []
-    for iso in _ISO_DATE.finditer(text):
-        found.append((f"d:{iso['year']}-{int(iso['month']):02d}-{int(iso['day']):02d}", iso.start(), iso.end()))
-    for slash in _SLASH_DATE.finditer(text):
-        a, b = int(slash["a"]), int(slash["b"])
-        key: str | None = None
-        if a > 12 >= b:
-            key = f"d:{slash['year']}-{b:02d}-{a:02d}"
-        elif b > 12 >= a or a == b:
-            key = f"d:{slash['year']}-{a:02d}-{b:02d}"
-        found.append((key, slash.start(), slash.end()))
+    for numeric in _NUMERIC_DATE.finditer(text):
+        found.append((_numeric_date_key(numeric["a"], numeric["b"], numeric["c"]), numeric.start(), numeric.end()))
     for match in _DATE.finditer(text):
         groups = match.groupdict()
         if groups["year"]:
