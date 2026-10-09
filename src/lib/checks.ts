@@ -13,11 +13,13 @@ export type CheckBy = "code" | "model" | "person" | "nobody";
 
 export type CheckRow = { key: "quote" | "support" | "comparison" | "context" | "person"; label: string; text: string; by: CheckBy };
 
-const VERBATIM = new Set(["exact", "normalized", "casefold"]);
+const VERBATIM = new Set(["exact", "normalized"]);
 
 function located(method: string): string {
   const base = method.split(":").pop() ?? method;
-  return VERBATIM.has(base) ? "word for word" : "with the same words and numbers, spacing and punctuation aside";
+  if (VERBATIM.has(base)) return "word for word";
+  if (base === "casefold") return "word for word, case aside";
+  return "with the same words and numbers, spacing and punctuation aside";
 }
 
 export function checkLedger(

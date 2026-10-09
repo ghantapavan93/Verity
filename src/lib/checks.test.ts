@@ -132,4 +132,9 @@ describe("checkLedger: what was checked, and by whom", () => {
     const whole = checkLedger(finding(), true, sections, { text: "the model was handed 4 of this document's 4 sections", partial: false });
     expect(row(whole, "context")?.text).toBe("The model was handed 4 of this document's 4 sections");
   });
+
+  it("does not call a match that differs in case word for word without saying so", () => {
+    const spans = [{ ...finding().spans[0], method: "casefold" }];
+    expect(row(checkLedger(finding({ spans }), true, sections, null), "quote")?.text).toMatch(/word for word, case aside$/);
+  });
 });

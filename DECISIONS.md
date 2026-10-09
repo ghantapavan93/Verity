@@ -667,3 +667,14 @@ outcome differs: the "3,0 days" span, now withheld. On 218 glued units in 150 ex
 found as before (218 of 218); one dropping the unit is no longer forgiven where it never occurred. Recorded runs keep
 v6; the evidence pack's own checker applies the same comma rule, so its PASS never accepts what v7 refuses.
 
+**What an answer's card says was checked (2026-10-09).** Four independent reviews (product, interface, 32 pre-registered
+real-model cases, algorithms) found one pattern under most failures: a located quote was shown as if it proved the
+answer. A quote saying 10% stood under an answer saying 5% in the pass colour; a pass stood on 1 of 4 sections read.
+The verifier was right each time; the screen claimed more than it checked. Each card now carries a ledger built only
+from recorded fields: where code located the quote; that its support for the answer is the model's reading, not
+checked by code; what code compared, or that it compared nothing; how much of the document the model was handed; and
+the person's decision. A not-found answer has its own chip, and the provisions it read are shown as read, not as
+evidence. The memo carries the model's suggested change only where review is needed. Prompts, model, reader and
+policy are unchanged; the policy work the evaluation pointed at (a carve-out the quote boundary cut, "without cause"
+read as convenience) is deferred because it changes status semantics and needs the goldens.
+
