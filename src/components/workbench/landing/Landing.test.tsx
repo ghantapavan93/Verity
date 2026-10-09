@@ -5,7 +5,7 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Health } from "@/lib/types";
+import type { Health, RunSummary } from "@/lib/types";
 
 import { Landing } from "./Landing";
 
@@ -23,7 +23,7 @@ vi.stubGlobal(
   },
 );
 
-function renderLanding(apiHealth: Health | null, accessKnown: boolean) {
+function renderLanding(apiHealth: Health | null, accessKnown: boolean, proof: RunSummary | null = null, proofStory = false) {
   return render(
     <Landing
       stage="empty"
@@ -34,7 +34,8 @@ function renderLanding(apiHealth: Health | null, accessKnown: boolean) {
       onHome={vi.fn()}
       onPickFile={vi.fn()}
       onLoadSample={vi.fn()}
-      proof={null}
+      proof={proof}
+      proofStory={proofStory}
       onOpenProof={vi.fn()}
       uploadError={null}
       apiHealth={apiHealth}
@@ -95,5 +96,37 @@ describe("Landing: where the model runs", () => {
   it("control: claims no place before the API has said", () => {
     renderLanding(null, false);
     expect(document.body.textContent).not.toMatch(/this machine|No contract is sent|sent there|does not send the contract anywhere/);
+  });
+});
+
+describe("Landing: the finished review it shows", () => {
+  const run = {
+    id: "run1",
+    question: "Which law governs?",
+    stage: "complete",
+    shared: false,
+    model: "qwen3:8b",
+    promptVersion: "answer-v2",
+    promptHash: "h",
+    latencyMs: 1000,
+    reason: null,
+    findings: 1,
+    hasGuidance: false,
+    documentId: "doc1",
+    documentName: "agreement.docx",
+    createdAt: "2026-10-09T00:00:00+00:00",
+  } as RunSummary;
+
+  it("tells the four-step story only of the proof run it was written for", () => {
+    renderLanding({ ...health("off"), modelLocation: "server", modelHost: "" } as Health, true, run, true);
+    expect(document.body.textContent).toContain("Code checks the quote, then the arithmetic");
+  });
+
+  it("shows another run's receipt without a story that is not its own", () => {
+    // Release rehearsal, 2026-10-09: with no proof run configured, the latest run took the story's place, and the story
+    // says the quote was found in another section and the days were compared, true only of the proof run.
+    renderLanding({ ...health("off"), modelLocation: "server", modelHost: "" } as Health, true, run, false);
+    expect(document.body.textContent).toContain("Which law governs?");
+    expect(document.body.textContent).not.toContain("Code checks the quote, then the arithmetic");
   });
 });

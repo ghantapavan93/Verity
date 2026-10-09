@@ -37,6 +37,7 @@ export function Landing({
   onPickFile,
   onLoadSample,
   proof,
+  proofStory = false,
   onOpenProof,
   uploadError,
   apiHealth,
@@ -56,6 +57,8 @@ export function Landing({
   onPickFile: () => void;
   onLoadSample: () => void;
   proof: RunSummary | null;
+  /** The proof is the configured proof run (NEXT_PUBLIC_PROOF_RUN): the four-step story is written about that run alone. */
+  proofStory?: boolean;
   onOpenProof: (runId: string, findingId?: string) => void;
   uploadError: string | null;
   apiHealth: Health | null;
@@ -338,7 +341,7 @@ export function Landing({
       {stage === "empty" && (
         <div className={styles.below}>
           <RecordPipeline citations={citations} documents={documents} reduceMotion={reduceMotion} />
-          {proof && <OneRun proof={proof} lead={lead} onOpen={onOpenProof} reduceMotion={reduceMotion} />}
+          {proof && proofStory && <OneRun proof={proof} lead={lead} onOpen={onOpenProof} reduceMotion={reduceMotion} />}
           <Refusals reduceMotion={reduceMotion} place={place} />
         </div>
       )}

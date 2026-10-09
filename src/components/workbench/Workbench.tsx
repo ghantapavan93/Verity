@@ -496,6 +496,7 @@ function WorkbenchSurface() {
             onPickFile={() => fileInputRef.current?.click()}
             onLoadSample={() => void loadSample()}
             proof={proof}
+            proofStory={Boolean(PROOF_RUN_ID) && proof?.id === PROOF_RUN_ID}
             onOpenProof={(id, findingId) => void openRun(id, findingId)}
             uploadError={uploadError}
             apiHealth={apiHealth}
