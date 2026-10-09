@@ -26,7 +26,10 @@ Rejected: Kubernetes, Postgres, Redis, queues; Vercel in front (a 300 s function
    and Cloudflare's proxy cuts an origin response at 125 s); a Pages custom domain for the evidence page.
 4. Who may enter: `WORKBENCH_ACCESS_REQUIRED=1` (in `env.example`; it refuses to start open) and the invites you send.
 5. The proof run the first screen shows: record one on this deployment, or restore the curated store (a production data
-   migration). Until one exists, build with `VERITY_PROOF_RUN` unset: the first screen then shows no stranger's run.
+   migration). Until one exists, build with `VERITY_PROOF_RUN` unset: the first screen then shows the reader's own latest
+   run, without the proof run's story.
+6. The words for `WORKBENCH_MODEL_HOST` (shown wherever the interface says where a contract's text goes), the daily
+   ceiling `WORKBENCH_MAX_RUNS_PER_DAY`, budget alerts in Modal, and a weekly copy of `/backups` off the machine.
 
 ## The droplet
 
@@ -34,6 +37,7 @@ Rejected: Kubernetes, Postgres, Redis, queues; Vercel in front (a 300 s function
 # as root, once
 apt-get update && apt-get -y install docker.io docker-compose-v2 unattended-upgrades
 ufw default deny incoming && ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw enable
+# Docker publishes ports around ufw: never add a `ports:` entry to any service but Caddy.
 sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config && systemctl reload ssh
 ```
 
@@ -48,7 +52,9 @@ scp verity-images.tar.gz compose.yml Caddyfile env.example root@<droplet>:/opt/v
 # on the droplet
 cd /opt/verity && gunzip -c verity-images.tar.gz | docker load
 cp env.example .env && chmod 600 .env    # fill in; make the secret with the line in env.example
-VERITY_SITE=try.ivo.pavankg.dev docker compose up -d
+# first boot: Let's Encrypt staging until the name resolves and 80/443 answer, then production
+VERITY_SITE=try.ivo.pavankg.dev VERITY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory docker compose up -d
+VERITY_SITE=try.ivo.pavankg.dev docker compose up -d --force-recreate caddy
 ```
 
 ## Environment
@@ -62,8 +68,10 @@ built with no API address: it calls its own origin, and Caddy sends `/api` to th
 
 - GPU: one container at most, released 60 s after the last request, under the Modal workspace budget (a hard cap).
   Estimated $25–50/month at 50 runs a day; less at demo traffic.
-- Runs: invite-only; 20 run starts per 10 minutes per reader; one model call at a time per API; 25 MB per upload;
-  600 s per model call.
+- Runs: invite-only; 20 run starts per 10 minutes per reader; `WORKBENCH_MAX_RUNS_PER_DAY` new questions a day for
+  everyone together (the owner's number); one model call at a time per API; 25 MB per upload; 600 s per model call.
+- Health never wakes the GPU: a visitor who has not entered never makes it ask the model, and with
+  `WORKBENCH_HEALTH_PROBES_MODEL=0` no one does; every answer still checks the pinned build first.
 - VM: $12/month plus $2.40 backups. Pages: free. Total at demo traffic: about $15–65/month, bounded by the GPU budget.
 
 ## Backups and restore
@@ -78,7 +86,8 @@ docker run --rm -v verity_verity-backups:/backups -v verity_restored:/restore -u
   python scripts/backup.py restore /backups/<date> --to /restore/data
 ```
 
-Nightly backups sit on the droplet's own disk; the droplet's weekly backup is what survives losing the droplet, so the
+Rehearse a restore once a month: restore the latest backup into a fresh volume (above) and compare its runs with the
+live store's. Nightly backups sit on the droplet's own disk; the droplet's weekly backup is what survives losing the droplet, so the
 gap is up to a week. Copying `/backups` off the machine (R2 or B2, about free at this size) closes it and needs an account.
 
 ## Rollback
@@ -97,7 +106,11 @@ real streamed run (66 s, cited passages verified); every request to the page's o
 and by id; two readers at once; a forged `Cf-Connecting-Ip` ignored; unknown ids; a stale session; the API restarting
 mid-run (the run ends failed, never complete); history surviving restarts; the interface restarting; the model endpoint
 down; another model build behind the tag (refused before any answer); a read-only store (health false, upload refused);
-a backup taken in the deployment restored into a fresh volume with the same runs and findings.
+a backup taken in the deployment restored into a fresh volume with the same runs and findings; a refresh mid-run
+reattaching to the same run, with one result on screen; health never asking an unreachable model for a visitor who has
+not entered (0.00 s) or with probes off, and asking it (5 s, false) when on; the interface naming the hosted model and
+what is sent to it. Found by the rehearsal and fixed: interrupted runs of a restarted container stayed in progress
+forever (pid 1 under one hostname), and the lock file could not be installed on Linux.
 
 Not rehearsed: the Modal endpoint itself, public DNS and Let's Encrypt, a remote phone on the real hostname.
 

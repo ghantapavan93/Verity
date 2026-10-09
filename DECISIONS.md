@@ -594,3 +594,28 @@ before it was made and reviewed again as a diff; each names the class it closes,
 expert-answer coverage on the labelled sets, so only the label changed); a reference check that lowers a status for a
 clause written inline (a policy change with its own gate); an address or quantity inside the numbering bound; a heading
 that names a clause read as a cross-reference; the run-start limit counting reused runs.
+
+**Laptop independence: a static evidence page, one VM, a pinned GPU model; nothing created or deployed (2026-10-09).**
+The live site ran from the workstation (tunnel, OneDrive store, local Ollama), with its web build missing the public API
+address, no supervisor running, and the gate off, so every visitor shared one workspace. Decided, each through the
+triage reviewer, and rehearsed locally with Docker; every account, purchase, DNS record and access change is the owner's.
+
+1. *The public experience is static.* `/state` exports as files (`export_state.py`): the record is written by the API's
+   own loader, refused unless it is the frozen record by hash, and the page makes no request to an API. It stays up when
+   everything else is down. Hosted on Cloudflare Pages once the owner adds the domain.
+2. *The live workbench is one VM with Caddy, invite-only.* Same origin (no CORS, the cookie first-party); the gate is
+   required, so a missing secret stops the start instead of opening the site. SQLite stays: one process, local disk,
+   measured traffic an invited demo. Rejected: managed containers with short stream limits, a separate frontend host,
+   Postgres, queues, Kubernetes.
+3. *The model keeps its identity or says it does not.* No managed provider serves the reference weights (qwen3:8b,
+   Ollama digest 500a1f067a9f); the plan is Ollama on a scale-to-zero GPU with the digest checked before every answer.
+   No claim of equivalence until a pre-registered comparison on the goldens and the false-premise controls has run.
+4. *What the rehearsal found and closed:* a production build reaching for the browser's own loopback; a restarted
+   container's interrupted runs kept in progress forever; a lock file Linux could not install; health waking the model
+   for every visitor; the interface claiming the contract never leaves the machine whatever the deployment; the proof
+   run's story told of other runs; no cache policy on private responses; no ceiling on a day's model spend.
+5. *Backups are the rollback.* `backup.py` takes a consistent copy while the API writes, restores only into an empty
+   store after checking every hash, and was rehearsed into a fresh volume with the same runs and findings.
+
+*Deferred:* a site-wide content-security policy; per-reader invite revocation (today: rotate the secret); a plain-500
+upload when the store is read-only; off-machine backups until an object store exists.
