@@ -73,6 +73,12 @@ def test_a_date_is_one_value_shown_as_written() -> None:
     assert unquoted_values("The term starts on January 1, 2024.", ["commencing on the 1st day of January, 2024"], []) == []
     assert unquoted_values("The term starts on 1 January 2024.", ["Effective Date: January 1, 2024"], []) == []
     assert unquoted_values("Renewal is due in March 2025.", ["renews each March"], []) == ["March 2025"]
+    # Numeric dates (triage): ISO and unambiguous slash dates are one value; an ambiguous one is set aside, never split.
+    assert unquoted_values("Signed 2024-01-01 for 3 years.", ["for three (3) years"], []) == ["2024-01-01"]
+    assert unquoted_values("Signed 2024-01-01 for 3 years.", ["dated January 1, 2024, for three years"], []) == []
+    assert unquoted_values("Signed 13/01/2024 for 3 years.", ["for three years"], []) == ["13/01/2024"]
+    assert unquoted_values("Signed 01/13/2024 for 3 years.", ["January 13, 2024; three years"], []) == []
+    assert unquoted_values("Signed 01/02/2024 for 3 years.", ["for three years"], []) == [], "day and month ambiguous: set aside"
 
 
 def test_the_readers_own_numbers_are_not_reported() -> None:

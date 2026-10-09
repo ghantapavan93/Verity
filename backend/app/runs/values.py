@@ -58,6 +58,9 @@ _DATE = re.compile(
     rf"|\b{_MONTH.replace('month', 'month3')},?\s+(?P<year3>\d{{4}})\b",
     re.IGNORECASE,
 )
+# "2024-01-01" and "13/01/2024" are one value each too (triage, 2026-10-09: an ISO date showed as 2024 and 01).
+_ISO_DATE = re.compile(r"\b(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})\b")
+_SLASH_DATE = re.compile(r"\b(?P<a>\d{1,2})[/.](?P<b>\d{1,2})[/.](?P<year>\d{4})\b")
 
 # Letters in a pointer are capitals or a bracketed sub-item: "Schedule B", "8.1(a)", never the next word ("fees").
 _REF = r"(?-i:[\dA-Z]{1,6})(?![A-Za-z])(?:\.\d{1,6}){0,6}(?:\([a-z0-9]{1,4}\)){0,4}"
@@ -89,8 +92,20 @@ def _month(name: str) -> int:
     return next(i for i, full in enumerate(_MONTH_NAMES, start=1) if full.startswith(name.lower().rstrip(".")[:3]))
 
 
-def _dates(text: str) -> list[tuple[str, int, int]]:
-    found: list[tuple[str, int, int]] = []
+def _dates(text: str) -> list[tuple[str | None, int, int]]:
+    """Each date in ``text`` as (key, start, end). The key is None for a slash date whose day and month could be either
+    way round ("01/02/2024"): it is set aside, never compared and never split into numbers."""
+    found: list[tuple[str | None, int, int]] = []
+    for iso in _ISO_DATE.finditer(text):
+        found.append((f"d:{iso['year']}-{int(iso['month']):02d}-{int(iso['day']):02d}", iso.start(), iso.end()))
+    for slash in _SLASH_DATE.finditer(text):
+        a, b = int(slash["a"]), int(slash["b"])
+        key: str | None = None
+        if a > 12 >= b:
+            key = f"d:{slash['year']}-{b:02d}-{a:02d}"
+        elif b > 12 >= a or a == b:
+            key = f"d:{slash['year']}-{a:02d}-{b:02d}"
+        found.append((key, slash.start(), slash.end()))
     for match in _DATE.finditer(text):
         groups = match.groupdict()
         if groups["year"]:
@@ -112,8 +127,9 @@ def _blank(text: str, spans: Iterable[tuple[int, int]]) -> str:
 
 def _stated(text: str, words: re.Pattern[str]) -> list[tuple[str, int, int]]:
     """(key, start, end) of each value ``text`` states, offsets into ``text``. Dates first, then what is left."""
-    found = _dates(text)
-    rest = _blank(text, ((start, end) for _, start, end in found))
+    dates = _dates(text)
+    found = [(key, start, end) for key, start, end in dates if key is not None]
+    rest = _blank(text, ((start, end) for _, start, end in dates))
     for token in tokenize(rest):
         if token.kind in (Kind.NUMBER, Kind.CURRENCY, Kind.PERCENT):
             value = _number(rest[token.start : token.end])
