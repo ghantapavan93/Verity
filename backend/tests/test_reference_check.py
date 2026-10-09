@@ -80,3 +80,13 @@ def test_a_titled_whole_number_clause_is_known() -> None:
     stated = stated_clause_numbers(["Recitals here.\n\n6. WRF Patents. Washington shall file the applications."])
     assert "6" in stated
     assert unknown_references("Under Section 6 the patents are filed.", ["1"], [], stated) == []
+
+
+def test_a_hostile_line_is_read_in_linear_time() -> None:
+    """Security audit, 2026-10-09: one long line of whole-number openings cost seconds per run."""
+    import time
+
+    for hostile in ("1. A " * 20_000, "Fees are due. 1. Title. " * 8_000, "1." * 30_000):
+        started = time.perf_counter()
+        stated_clause_numbers([hostile])
+        assert time.perf_counter() - started < 0.5, hostile[:20]

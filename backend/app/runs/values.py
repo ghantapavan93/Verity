@@ -34,12 +34,12 @@ _UNIT = (
     r"(?:calendar\s+|business\s+|working\s+)?(?:days?|weeks?|fortnights?|months?|years?|hours?|minutes?|seconds?"
     r"|percent|per\s+cent|times|dollars?|euros?|pounds?)\b"
 )
-# Number words the answer states as a value: before a unit, "one (1) day", "two years".
-_ANSWER_WORDS = re.compile(rf"(?P<words>{_WORD_RUN})(?=(?:\s*\(\s*[\d.,]+\s*\))?[\s-]*{_UNIT})", re.IGNORECASE)
-# Every run of number words, for a quote or the reader's text.
+# Every run of number words. The answer keeps only those a unit follows ("one (1) day", "two years"), checked at the
+# run's end: a lookahead after the run was retried from every word of it, quadratic, and a 50 KB answer of "one one
+# one …" held the API for 13 s (security audit, 2026-10-09).
 _ANY_WORDS = re.compile(rf"(?P<words>{_WORD_RUN})", re.IGNORECASE)
 # What follows a value and belongs to it when it is shown: its unit, with the digits a contract repeats in brackets.
-_TRAILING_UNIT = re.compile(rf"(?:\s*\(\s*[\d.,]+\s*\))?[\s-]*{_UNIT}", re.IGNORECASE)
+_TRAILING_UNIT = re.compile(rf"(?:\s*\(\s*[\d.,]{{1,24}}\s*\))?[\s-]*{_UNIT}", re.IGNORECASE)
 # "$1.5 million" is 1,500,000: the word is part of the value, on both sides (triage, 2026-10-09).
 _MAGNITUDE = re.compile(r"\s*(thousand|million|billion|trillion)\b", re.IGNORECASE)
 _SCALE = {"thousand": Decimal(10) ** 3, "million": Decimal(10) ** 6, "billion": Decimal(10) ** 9, "trillion": Decimal(10) ** 12}
@@ -133,8 +133,9 @@ def _blank(text: str, spans: Iterable[tuple[int, int]]) -> str:
     return "".join(chars)
 
 
-def _stated(text: str, words: re.Pattern[str]) -> list[tuple[str, int, int]]:
-    """(key, start, end) of each value ``text`` states, offsets into ``text``. Dates first, then what is left."""
+def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int]]:
+    """(key, start, end) of each value ``text`` states, offsets into ``text``. Dates first, then what is left. Number
+    words count only before a unit when ``words_need_a_unit`` (an answer); everywhere otherwise (a quote)."""
     dates = _dates(text)
     found = [(key, start, end) for key, start, end in dates if key is not None]
     rest = _blank(text, ((start, end) for _, start, end in dates))
@@ -148,7 +149,9 @@ def _stated(text: str, words: re.Pattern[str]) -> list[tuple[str, int, int]]:
             if scale:
                 value, end = value * _SCALE[scale.group(1).lower()], scale.end()
             found.append((_key(value), token.start, end))
-    for match in words.finditer(rest):
+    for match in _ANY_WORDS.finditer(rest):
+        if words_need_a_unit and not _TRAILING_UNIT.match(rest, match.end()):
+            continue
         value = words_to_number(match.group("words"))
         if value is None:
             continue
@@ -161,7 +164,7 @@ def _stated(text: str, words: re.Pattern[str]) -> list[tuple[str, int, int]]:
 
 
 def _keys(text: str) -> set[str]:
-    return {key for key, _, _ in _stated(text, _ANY_WORDS)}
+    return {key for key, _, _ in _stated(text, words_need_a_unit=False)}
 
 
 def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = ()) -> list[str]:
@@ -176,7 +179,7 @@ def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Ite
     blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
     shown: list[str] = []
     seen: set[str] = set()
-    for key, start, end in sorted(_stated(blanked, _ANSWER_WORDS), key=lambda found: found[1]):
+    for key, start, end in sorted(_stated(blanked, words_need_a_unit=True), key=lambda found: found[1]):
         if key in given or key in seen:
             continue
         seen.add(key)

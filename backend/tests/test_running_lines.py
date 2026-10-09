@@ -64,3 +64,12 @@ def test_numbered_headings_that_repeat_are_still_headings() -> None:
         b for n in (3, 2, 1) for b in (Block("heading", f"{n} LEASE", 1, implicit_number=False), Block("text", "Body."))
     ]
     assert len([s for s in build_sections(falling) if s.number]) == 3, "numbers that fall are not pages"
+
+
+def test_a_heading_of_thousands_of_digits_is_read_not_refused() -> None:
+    """Security audit, 2026-10-09: a heading holding a 4,300-digit number made int() refuse it and the upload a 500."""
+    huge = "9" * 5_000
+    blocks = [Block("heading", "LEASE", 1, implicit_number=False)] + [
+        b for _ in range(3) for b in (Block("heading", f"{huge} LEASE", 1, implicit_number=False), Block("text", "Body."))
+    ]
+    assert build_sections(blocks)

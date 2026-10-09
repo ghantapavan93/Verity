@@ -102,13 +102,25 @@ def test_a_right_number_in_the_wrong_band_is_not_claimed_as_caught() -> None:
     assert unquoted_values("A credit of 5% applies at 98.7% availability.", [quote], ["What credit applies at 98.7%?"]) == []
 
 
-@pytest.mark.parametrize("hostile", ["9" * 5000, "one and " * 3000, "§" + "1." * 4000])
-def test_hostile_answers_are_read_in_linear_time(hostile: str) -> None:
+HOSTILE = [
+    "9" * 50_000,
+    "one and " * 6_000,
+    "one " * 12_500,  # security audit, 2026-10-09: 13.3 s, and every other request waited behind it
+    "twenty-one " * 4_500,
+    "thirty (30) " * 4_000,
+    "§" + "1." * 20_000,
+    "Sections 1, " * 4_000,
+]
+
+
+@pytest.mark.parametrize("hostile", HOSTILE, ids=[f"hostile-{i}" for i in range(len(HOSTILE))])
+def test_hostile_answers_and_quotes_are_read_in_linear_time(hostile: str) -> None:
+    """Every finding read runs this, in the API's process: a long answer or quote must not stall other requests."""
     import time
 
     started = time.perf_counter()
-    unquoted_values(hostile, [hostile[:100]], [])
-    assert time.perf_counter() - started < 1.0
+    unquoted_values(hostile, [hostile], [hostile])
+    assert time.perf_counter() - started < 0.5, len(hostile)
 
 
 def test_the_run_detail_carries_them_on_a_passage_finding(client: TestClient) -> None:

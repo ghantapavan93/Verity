@@ -125,6 +125,9 @@ _CLAUSE_OPENING = re.compile(
 )
 
 
+OPENING_WINDOW = 200  # characters: a number, a title of at most eight words, its stop
+
+
 def stated_clause_numbers(texts: Sequence[str]) -> set[str]:
     """Every number the texts open a clause with, as printed: what a reference may name although no section of this
     reading carries it (a numbered paragraph inside a stored section, or a document read without numbering). A dotted
@@ -136,8 +139,11 @@ def stated_clause_numbers(texts: Sequence[str]) -> set[str]:
             index = next(i for i, group in enumerate(match.groups(), start=1) if group)
             number = match.group(index)
             if "." not in number:
-                end = text.find("\n", match.start(index))
-                line = text[match.start(index) : end if end >= 0 else len(text)]
+                # A clause title is read from at most OPENING_WINDOW characters: one line of thousands of openings cost
+                # a scan to its end per opening, quadratic (security audit, 2026-10-09).
+                start = match.start(index)
+                end = text.find("\n", start, start + OPENING_WINDOW)
+                line = text[start : end if end >= 0 else start + OPENING_WINDOW]
                 if inline_clause(line, int(number)) is None:
                     continue
             stated.add(number)
@@ -277,7 +283,7 @@ def looks_like_sentence(text: str) -> bool:
     return len(text.split()) >= SENTENCE_MIN_WORDS and text.rstrip().endswith((".", ";", ":"))
 
 
-_DIGITS = re.compile(r"\d+")
+_DIGITS = re.compile(r"\d{1,9}")  # a page number; nine digits keeps int() from refusing a hostile heading
 _NOT_LETTERS = re.compile(r"[^a-z ]+")
 # A running line names the page or the document, never a part of it: "EXHIBIT B-1", "B-2", "B-3" are headings.
 _STRUCTURAL = frozenset({"exhibit", "schedule", "annex", "appendix", "article", "section", "part", "attachment", "chapter", "clause"})
