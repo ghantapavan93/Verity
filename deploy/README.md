@@ -30,6 +30,10 @@ front of the public. A visitor's workspace reads only its own records, never cur
 The owner's switch: create an empty file `public.paused` in the public data directory. New uploads and questions are
 refused at once with a plain sentence (503); reading and the research stay up. Delete the file to resume; no restart.
 
+The per-address bounds trust `Cf-Connecting-Ip`, which Cloudflare sets on every request through the tunnel; the API
+listens on 127.0.0.1 only and only the token tunnel routes to it. No other tunnel may point at port 8000, and any host
+without Cloudflare in front must overwrite the header at its proxy, as `deploy/cloud/Caddyfile` does.
+
 New sessions have no daily ceiling on purpose: anyone could spend it and shut every new visitor out. What costs (an
 upload, a question) is bounded instead. An office behind one address shares its 30 questions an hour; a farm of
 addresses can still reach the 200 a day, and the switch is the answer to that. Cloudflare Turnstile is not used; it is

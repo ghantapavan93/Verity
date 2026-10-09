@@ -105,6 +105,27 @@ def test_the_triggers_come_back_exactly_and_still_refuse(public: TestClient) -> 
         connection.execute(text("DELETE FROM runs WHERE id = :r"), {"r": kept["run"]})
 
 
+def test_a_purge_that_fails_part_way_leaves_the_triggers_and_the_rows(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: F811
+    """The drop, the deletes and the recreation are one transaction under the write lock: a failure after the triggers
+    were dropped puts them back with everything else (python's sqlite3 does not begin a transaction before DDL)."""
+    from app.application import retention
+
+    a, _ = arrive(public)
+    ids = work(cast(Reviewer, a))
+    workspace = end(a)
+    before = triggers()
+
+    def broken(column: str, values: list[str]) -> tuple[str, dict[str, object]]:
+        raise RuntimeError("the disk filled up")
+
+    monkeypatch.setattr(retention, "_in", broken)
+    with pytest.raises(RuntimeError, match="disk filled"):
+        purge_expired_workspaces(db_module.engine)
+    assert triggers() == before, "every immutability trigger is still there"
+    with SessionLocal() as session:
+        assert session.get(Run, ids["run"]) is not None and session.get(VisitorWorkspace, workspace) is not None
+
+
 def test_a_workspace_with_a_question_in_progress_waits(public: TestClient) -> None:  # noqa: F811
     a, _ = arrive(public)
     document = a.post("/api/documents", files={"file": ("a.txt", CONTRACT.encode(), "text/plain")}).json()

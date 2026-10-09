@@ -60,6 +60,10 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None) -> Pur
     deleted_documents: list[tuple[str, str]] = []  # (sha256, media_type)
     memo_files: list[str] = []
     with engine.begin() as connection:
+        # One transaction under the write lock, begun before anything is read: python's sqlite3 begins none before
+        # DDL, so without this the DROP TRIGGERs below would commit on their own and a failure after them would leave
+        # the store without its immutability triggers (triage review, 2026-10-09).
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
         expired = _ids(connection, "SELECT workspace_id FROM visitor_workspaces WHERE expires_at <= :now", now=moment)
         purgeable: list[str] = []
         for workspace in expired:
