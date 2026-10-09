@@ -32,7 +32,12 @@ def ollama_embed(texts: list[str], model: str | None = None) -> list[list[float]
     vectors: list[list[float]] = []
     for start in range(0, len(texts), EMBED_BATCH):
         try:
-            response = httpx.post(f"{settings.ollama_url}/api/embed", json={"model": name, "input": texts[start : start + EMBED_BATCH]}, timeout=600.0)
+            response = httpx.post(
+                f"{settings.ollama_url}/api/embed",
+                json={"model": name, "input": texts[start : start + EMBED_BATCH]},
+                timeout=600.0,
+                headers=settings.ollama_headers,
+            )
             response.raise_for_status()
             vectors += response.json()["embeddings"]
         except (httpx.HTTPError, KeyError, ValueError) as error:

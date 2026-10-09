@@ -6,9 +6,24 @@ import json
 import os
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+
+def json_headers(raw: str) -> dict[str, str]:
+    """WORKBENCH_OLLAMA_HEADERS: the headers a model endpoint behind an authenticating proxy needs (a JSON object of
+    names to values, from the secret store). Anything else stops the start: a model call without its credentials would
+    fail on every run instead."""
+    if not raw.strip():
+        return {}
+    try:
+        value = json.loads(raw)
+    except ValueError as error:
+        raise RuntimeError("WORKBENCH_OLLAMA_HEADERS must be a JSON object of header names to string values") from error
+    if not isinstance(value, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
+        raise RuntimeError("WORKBENCH_OLLAMA_HEADERS must be a JSON object of header names to string values")
+    return value
 
 
 class Settings(BaseModel):
@@ -17,6 +32,11 @@ class Settings(BaseModel):
     provider: str = os.environ.get("WORKBENCH_PROVIDER", "ollama")
     model: str = os.environ.get("WORKBENCH_MODEL", "qwen3:8b")
     ollama_url: str = os.environ.get("WORKBENCH_OLLAMA_URL", "http://localhost:11434")
+    # Credentials for a model endpoint behind an authenticating proxy; never printed (repr) or logged.
+    ollama_headers: dict[str, str] = Field(default_factory=lambda: json_headers(os.environ.get("WORKBENCH_OLLAMA_HEADERS", "")), repr=False)
+    # The model build the deployment names (an Ollama digest prefix, e.g. 500a1f067a9f for qwen3:8b Q4_K_M). Set, every
+    # answer is preceded by a check that the endpoint's tag is that build; a run against another build fails with the reason.
+    model_digest: str = os.environ.get("WORKBENCH_MODEL_DIGEST", "").strip().lower()
     # The same decoding settings that produced schema-valid output across 250 calls in A1-lite.
     temperature: float = 0.0
     seed: int = 42

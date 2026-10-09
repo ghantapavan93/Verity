@@ -33,7 +33,7 @@ REFUSAL = (
 def test_the_model_server_is_told_not_to_cut_the_prompt_and_its_refusal_is_a_context_overflow(monkeypatch: pytest.MonkeyPatch) -> None:
     sent: list[dict[str, Any]] = []
 
-    def refuse(url: str, json: dict[str, Any], timeout: float) -> httpx.Response:
+    def refuse(url: str, json: dict[str, Any], timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
         sent.append(json)
         return httpx.Response(400, text=REFUSAL, request=httpx.Request("POST", url))
 
@@ -46,7 +46,9 @@ def test_the_model_server_is_told_not_to_cut_the_prompt_and_its_refusal_is_a_con
 
 
 def test_any_other_refusal_stays_an_ordinary_provider_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "post", lambda url, json, timeout: httpx.Response(400, text='{"error":"model not found"}', request=httpx.Request("POST", url)))
+    monkeypatch.setattr(
+        httpx, "post", lambda url, json, timeout, headers=None: httpx.Response(400, text='{"error":"model not found"}', request=httpx.Request("POST", url))
+    )
     with pytest.raises(ProviderError) as failed:
         OllamaProvider().generate_json("system", "user", ANALYSIS_SCHEMA)
     assert not isinstance(failed.value, ContextOverflow)

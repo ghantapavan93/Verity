@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from collections.abc import Mapping
@@ -11,6 +12,8 @@ import httpx
 
 from ..config import settings
 from .base import ContextOverflow, Generation, ProviderError
+
+log = logging.getLogger(__name__)
 
 
 def _overflow_message(body: str, limit: int) -> str:
@@ -44,16 +47,49 @@ class OllamaProvider:
         made with those and not with whatever the process's settings have since become."""
         return OllamaProvider(model=str(options.get("model") or self.model), base_url=self.base_url, timeout_s=self.timeout_s, decoding=options)
 
+    def _tags(self) -> list[dict[str, Any]]:
+        response = httpx.get(f"{self.base_url}/api/tags", timeout=5.0, headers=settings.ollama_headers)
+        response.raise_for_status()
+        models: list[dict[str, Any]] = response.json().get("models", [])
+        return models
+
+    def _build_problem(self, models: list[dict[str, Any]]) -> str | None:
+        """Why the endpoint's tag is not the build the deployment pinned (settings.model_digest), or None."""
+        pinned = settings.model_digest
+        if not pinned:
+            return None
+        found = next((m for m in models if m.get("name") in (self.model, f"{self.model}:latest")), None)
+        digest = str((found or {}).get("digest", "")).lower()
+        if not digest.startswith(pinned):
+            return f"the model endpoint serves {self.model} build {digest[:12] or 'unknown'}, not the pinned build {pinned[:12]}"
+        return None
+
     def healthy(self) -> tuple[bool, str]:
         try:
-            response = httpx.get(f"{self.base_url}/api/tags", timeout=5.0)
-            response.raise_for_status()
-            names = [m.get("name", "") for m in response.json().get("models", [])]
+            models = self._tags()
         except (httpx.HTTPError, ValueError) as error:
-            return False, f"Ollama not reachable at {self.base_url}: {error}"
+            # The endpoint's address stays in the server log; /api/health is public and never names it.
+            log.warning("model endpoint %s not reachable: %s", self.base_url, type(error).__name__)
+            return False, f"the model endpoint is not reachable ({type(error).__name__})"
+        names = [m.get("name", "") for m in models]
         if self.model not in names and f"{self.model}:latest" not in names:
             return False, f"model {self.model} is not pulled (have: {', '.join(names) or 'none'})"
+        problem = self._build_problem(models)
+        if problem:
+            return False, problem
         return True, f"{self.model} ready"
+
+    def _check_build(self) -> None:
+        """Before an answer, when a build is pinned: the endpoint can change under a long-lived process (a serverless
+        container replaced, a tag pulled again), so it is asked each time, not once."""
+        if not settings.model_digest:
+            return
+        try:
+            problem = self._build_problem(self._tags())
+        except (httpx.HTTPError, ValueError) as error:
+            raise ProviderError(f"the model endpoint could not confirm its build ({type(error).__name__})") from error
+        if problem:
+            raise ProviderError(problem)
 
     def generate_json(self, system: str, user: str, schema: dict[str, Any]) -> Generation:
         payload = {
@@ -71,9 +107,10 @@ class OllamaProvider:
             "shift": False,
             "options": self.options(),
         }
+        self._check_build()
         started = time.perf_counter()
         try:
-            response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout_s)
+            response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout_s, headers=settings.ollama_headers)
             if response.status_code == 400 and "exceed" in response.text and "context" in response.text:
                 raise ContextOverflow(_overflow_message(response.text, int(self.options()["num_ctx"])))
             response.raise_for_status()
