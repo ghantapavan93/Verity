@@ -15,7 +15,7 @@
 #>
 param(
   [Parameter(Mandatory = $true)][ValidateSet("api", "web")][string]$Name,
-  [string]$Origin = "https://verity.pavankg.dev",
+  [string]$Origin = "https://ivo.pavankg.dev",
   [int]$Port = 0,
   [string]$Tag = ""
 )

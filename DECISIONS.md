@@ -626,3 +626,11 @@ Cloudflare Pages (no server, no store, no model; it stays up when the laptop is 
 paid certificate. Moving the host signs readers out (the session cookie is host-only); invite links still work. The
 supervisor sets `WORKBENCH_ACCESS_REQUIRED=1`, so the tunnelled API refuses to start without the gate's secret. The
 `ci` workflows stay on their branch until they have run green on GitHub; a red check on main is worse than none.
+
+**One address again (2026-10-09).** The owner chose to put `ivo.pavankg.dev` back on this machine, as before: the
+invite gate in front, the workbench first, the recorded research at `/state`. The day with research on Pages at that
+address made the workbench hard to find. The gate stays on; the one thing that opened is the contract-state record
+(`GET /api/engineering/contract-state`), which is already public and holds no reader's data, parsed once per file
+version so a reload re-reads nothing. The door now says what the workbench does, where the model runs (as health
+reports it) and where to go without an invite. The address is up only while the machine is on;
+`verity-state.pages.dev` keeps the static research up regardless, and `verity.pavankg.dev` redirects here.

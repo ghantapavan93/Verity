@@ -18,7 +18,7 @@
 #>
 param(
   [switch]$Local,
-  [string]$Hostname = "verity.pavankg.dev",
+  [string]$Hostname = "ivo.pavankg.dev",
   [string]$Tunnel = "ivo-workbench"
 )
 

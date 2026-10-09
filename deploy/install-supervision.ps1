@@ -9,7 +9,7 @@
   service (cloudflared) and is not touched. The laptop must stay logged in for logon tasks to run.
 #>
 param(
-  [string]$Origin = "https://verity.pavankg.dev",
+  [string]$Origin = "https://ivo.pavankg.dev",
   # The run the first screen offers as a finished review (docs/DEMO-PROOF.md); empty means the latest complete run.
   [string]$ProofRun = "e5a20e2283e8416e",
   [switch]$Build,

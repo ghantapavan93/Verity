@@ -1,13 +1,15 @@
 # Publishing the workbench for one audience
 
-Since 2026-10-08 the live workbench answers `https://verity.pavankg.dev` and `https://ivo.pavankg.dev` is the static
-evidence page on Cloudflare Pages (`backend/scripts/export_state.py --build`). The workbench needs a first-level name:
-the zone's free certificate covers `*.pavankg.dev`, not `*.ivo.pavankg.dev`. The API is supervised with
-`WORKBENCH_ACCESS_REQUIRED=1`, so it does not start without the gate's secret.
+Since 2026-10-09 `https://ivo.pavankg.dev` is this workbench again, as before: the invite gate in front, the recorded
+research readable without an invite at `/state`. It is up only while this machine is on. The same research, as static
+files that need no server, stays on Cloudflare Pages at `https://verity-state.pages.dev`
+(`backend/scripts/export_state.py --build`). `https://verity.pavankg.dev`, where the workbench answered for a day,
+redirects here. The API is supervised with `WORKBENCH_ACCESS_REQUIRED=1`, so it does not start without the gate's
+secret.
 
 The stack that was measured is the stack that is published: the FastAPI process on this machine, the
 Next production build beside it, Qwen3 8B through Ollama, one SQLite store. A named Cloudflare Tunnel
-connects outward from this machine and answers `https://verity.pavankg.dev`; Cloudflare Access in front of
+connects outward from this machine and answers `https://ivo.pavankg.dev`; Cloudflare Access in front of
 it decides who may open the page. Nothing in the application changes for this: the API reads its
 origin settings from the environment, the interface bakes the API origin in at build time, and access
 control lives at the deployment boundary, not in the product.
@@ -16,10 +18,10 @@ control lives at the deployment boundary, not in the product.
 person with an allowed email
         │
         ▼
-https://verity.pavankg.dev            Cloudflare Access (email allowlist), then the named tunnel
+https://ivo.pavankg.dev            Cloudflare Access (email allowlist), then the named tunnel
         │
-        ├── /api/*     → 127.0.0.1:8000   FastAPI (uvicorn), WORKBENCH_APP_URL=https://verity.pavankg.dev
-        └── /*         → 127.0.0.1:3900   Next production build, NEXT_PUBLIC_API_URL=https://verity.pavankg.dev
+        ├── /api/*     → 127.0.0.1:8000   FastAPI (uvicorn), WORKBENCH_APP_URL=https://ivo.pavankg.dev
+        └── /*         → 127.0.0.1:3900   Next production build, NEXT_PUBLIC_API_URL=https://ivo.pavankg.dev
                                 │
                                 └── 127.0.0.1:11434   Ollama, qwen3:8b
 ```
@@ -37,11 +39,11 @@ used: it does not carry server-sent events, and the run follower depends on them
 $cf = "$env:LOCALAPPDATA\Programs\cloudflared\cloudflared.exe"    # cloudflared 2026.9.1, portable
 & $cf tunnel login                                                   # opens the browser; choose the pavankg.dev zone
 & $cf tunnel create ivo-workbench                                    # writes ~/.cloudflared/<id>.json
-& $cf tunnel route dns ivo-workbench verity.pavankg.dev                   # the CNAME, proxied
+& $cf tunnel route dns ivo-workbench ivo.pavankg.dev                   # the CNAME, proxied
 ```
 
 Then, in the Cloudflare dashboard, Zero Trust → Access → Applications → add a self-hosted
-application for `verity.pavankg.dev` (every path), with one policy, action Allow, include Emails:
+application for `ivo.pavankg.dev` (every path), with one policy, action Allow, include Emails:
 Pavan's address and the addresses the link is sent to; or Emails ending in `@ivo.ai` if any Ivo
 employee should be able to open it. Session duration: a day is enough. Nothing else on the account
 needs to change; the tunnel opens no inbound port and the machine's address is not published.
@@ -63,7 +65,7 @@ desktop app's keep-awake).
 
 ## Before the link is sent: the smoke test, from a device that is not the development browser
 
-1. Open `https://verity.pavankg.dev` in a private window or on a phone.
+1. Open `https://ivo.pavankg.dev` in a private window or on a phone.
 2. Authenticate at the Access page with an allowed email.
 3. Load a licensed agreement: "try a sample agreement" (Common Paper CSA, CC BY 4.0), or upload one.
 4. Add guidance and ask the Phase 1 question (`docs/DEMO-PROOF.md`).
@@ -87,7 +89,7 @@ that is two screens too many. The application now has a gate of its own (`backen
 can publish the host without Access and the store is still not public:
 
 ```
-invite link     https://verity.pavankg.dev/?document=…&run=…#invite=<token>     one per reader, made by scripts/access.py
+invite link     https://ivo.pavankg.dev/?document=…&run=…#invite=<token>     one per reader, made by scripts/access.py
 on arrival      the page exchanges the token for a session cookie and removes it from the address bar
 session         __Host-verity_session: Secure, HttpOnly, SameSite=Strict, seven days
 every route     401 without the session: /api/documents, /api/runs, the event stream, memos, evidence packs, all of them
@@ -120,10 +122,10 @@ cd backend
 
 5. Open that link in a browser that is already through Access: the hero run opens, the address bar has no
    `#invite`, a new question runs, the stages arrive over the event stream, the memo and the evidence pack download.
-6. Only now, in the Cloudflare dashboard: remove the Access application for `verity.pavankg.dev` (or set its policy to
+6. Only now, in the Cloudflare dashboard: remove the Access application for `ivo.pavankg.dev` (or set its policy to
    Bypass). The tunnel stays as it is.
 7. In a private window, with no invite: the page shows "Private engineering preview" and nothing else.
-8. From anywhere: `curl.exe -s -o NUL -w "%{http_code}" https://verity.pavankg.dev/api/runs` says 401, and so do
+8. From anywhere: `curl.exe -s -o NUL -w "%{http_code}" https://ivo.pavankg.dev/api/runs` says 401, and so do
    `/api/documents` and `/api/runs/<id>/events`.
 9. In that private window, open the invite link: the hero run, an upload and a real run all work.
 10. Make one invite per reader (`scripts\access.py invite <name> --path "…"`), send each to that reader only, and stop.

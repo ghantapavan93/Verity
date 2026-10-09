@@ -12,6 +12,19 @@ or dismiss each finding under a name they type. It runs at $0: Qwen3 8B through 
 
 ![The evidence drawer on a recorded run: what the model proposed, what the source says, what code decided, what a person decided](docs/img/evidence-drawer.png)
 
+## Open it
+
+| | Where | Who |
+|---|---|---|
+| The live workbench: upload a contract or the sample, ask, open the cited passage, review | [ivo.pavankg.dev](https://ivo.pavankg.dev) | a personal invite link; up while the host machine is on |
+| The recorded Contract State research | [ivo.pavankg.dev/state](https://ivo.pavankg.dev/state), and always available as static files at [verity-state.pages.dev](https://verity-state.pages.dev) | anyone |
+
+The two are separate pieces of work that share one rule, that a claim is kept only with the source evidence that
+supports it. The workbench checks each answer's quoted passages against the uploaded contract. The research is a
+recorded experiment on real SEC exhibits: when one contract arrives, which derived facts must be recomputed and which
+provably need not, each with a certificate. On the held-out set its relationship audit met the precision gate (1.00)
+and missed the recall gate (0.836 against 0.85); the page shows the misses. The workbench does not run the research engine.
+
 ## One run, as recorded
 
 The run in the picture is real and is walked through in [`docs/DEMO-PROOF.md`](docs/DEMO-PROOF.md):
