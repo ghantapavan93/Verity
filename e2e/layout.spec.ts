@@ -36,7 +36,7 @@ test("an answer, its record and the drawer stay inside their boxes from 768 px u
   const composer = page.getByPlaceholder("Ask a question about this contract");
   await composer.fill(LIABILITY);
   await composer.press("Enter");
-  await expect(page.getByText(/Evidence · \d+ passages? found in the document text/).first()).toBeVisible();
+  await expect(page.getByText(/Found in the document text at /).first()).toBeVisible();
   for (const width of [768, 900, 1024, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.waitForTimeout(300);
