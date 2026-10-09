@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from ..application.ingest_document import coverage_of, ingest_document, refuse_if_too_large
 from ..application.workspace import require_document, visible_documents, visible_runs
 from ..db import get_session
+from ..document_names import display_created, display_name
 from ..ingest.readers import SUFFIX_OF
 from ..models import Document, Finding, FindingReview, Run, Section, iso
 from ..schemas import CoverageReport, DocumentOut, DocumentSummary, SectionOut
@@ -18,10 +19,10 @@ from .access import current_workspace
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 
-def to_document_out(document: Document) -> DocumentOut:
+def to_document_out(session: Session, document: Document, workspace: str) -> DocumentOut:
     return DocumentOut(
         id=document.id,
-        name=document.name,
+        name=display_name(session, document, workspace),
         pages=document.pages,
         sha256=document.sha256,
         parse_ms=document.parse_ms,
@@ -29,7 +30,7 @@ def to_document_out(document: Document) -> DocumentOut:
         tracked_changes=document.tracked_changes,
         hidden_runs=document.hidden_runs,
         coverage=CoverageReport.model_validate(report) if (report := coverage_of(document)) else None,
-        created_at=iso(document.created_at) or "",
+        created_at=iso(display_created(session, document, workspace)) or "",
         sections=[SectionOut(id=s.id, number=s.number, heading=s.heading, text=s.text) for s in document.sections],
     )
 
@@ -45,7 +46,7 @@ async def upload_document(
     ingested = await run_in_threadpool(ingest_document, session, file.filename or "upload", data, workspace)
     if not ingested.created:
         response.status_code = status.HTTP_200_OK
-    out = to_document_out(ingested.document)
+    out = to_document_out(session, ingested.document, workspace)
     out.reused = not ingested.created
     return out
 
@@ -88,14 +89,14 @@ def list_documents(session: Session = Depends(get_session), workspace: str = Dep
     return [
         DocumentSummary(
             id=d.id,
-            name=d.name,
+            name=display_name(session, d, workspace),
             file_type=SUFFIX_OF.get(d.media_type, "").lstrip(".") or None,
             pages=d.pages,
             sections=count,
             findings=int(finding_counts.get(d.id, 0)),
             reviewed_findings=int(reviewed_counts.get(d.id, 0)),
             last_run_at=_iso_any(last_runs.get(d.id)),
-            created_at=iso(d.created_at) or "",
+            created_at=iso(display_created(session, d, workspace)) or "",
         )
         for d, count in rows
     ]
@@ -112,4 +113,4 @@ def _iso_any(value: datetime | str | None) -> str | None:
 
 @router.get("/{document_id}", response_model=DocumentOut)
 def get_document(document_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> DocumentOut:
-    return to_document_out(require_document(session, document_id, workspace))
+    return to_document_out(session, require_document(session, document_id, workspace), workspace)

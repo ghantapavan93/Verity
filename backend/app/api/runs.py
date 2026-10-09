@@ -18,6 +18,7 @@ from ..application.review_finding import latest_review_id, review_out
 from ..application.start_run import start_run
 from ..application.workspace import require_run, visible_runs
 from ..db import SessionLocal, get_session
+from ..document_names import run_document_name
 from ..models import Finding, Run, iso
 from ..providers import make_provider
 from ..providers.base import ModelProvider
@@ -106,7 +107,7 @@ def run_detail(run: Run) -> RunDetail:
         guidance_id=run.guidance_id,
         provider=run.provider,
         options=json.loads(run.options_json or "{}"),
-        document_name=run.document.name,
+        document_name=run_document_name(run),
         document_parse_ms=run.document.parse_ms,
         task=run.task,
         routing_reason=run.routing_reason,
@@ -153,7 +154,7 @@ def run_summary(run: Run) -> RunSummary:
         findings=len(shown),
         has_guidance=run.guidance_id is not None,
         document_id=run.document_id,
-        document_name=run.document.name,
+        document_name=run_document_name(run),
         created_at=iso(run.created_at) or "",
     )
 

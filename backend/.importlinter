@@ -31,4 +31,4 @@ layers =
     app.runs | app.routing
     app.analysis | app.retrieval | app.verify | app.ingest | app.memo | app.policy
     app.providers
-    app.models : app.db : app.schemas : app.config : app.hashing : app.errors
+    app.document_names : app.models : app.db : app.schemas : app.config : app.hashing : app.errors

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, SectionForPrompt, analyze, build_user_message, load_prompt, window_of
 from ..config import settings
+from ..document_names import run_prompt_name
 from ..hashing import sha256_text
 from ..models import (
     RUN_STAGES,
@@ -244,7 +245,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         user_message = build_user_message(
             run.question,
             guidance_text,
-            document.name,
+            run_prompt_name(run),
             [SectionForPrompt(label, s.number, s.heading, s.text) for label, s in by_label.items()],
             window=window,
         )

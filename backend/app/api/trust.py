@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from ..application.trust_run import diff_against, document_snapshot, manifest_of
 from ..application.versions import declare_supersedes, lineage
 from ..application.workspace import require_run
 from ..db import get_session
+from ..document_names import display_name
 from ..models import DocumentVersion, iso
 from ..schemas import (
     DocumentVersionOut,
@@ -119,10 +120,11 @@ def diff_out(diff: TrustDiff, from_document_id: str, to_document_id: str) -> Tru
 
 def version_out(version: DocumentVersion) -> DocumentVersionOut:
     document = version.document
+    session = object_session(version)
     return DocumentVersionOut(
         lineage_id=version.lineage_id,
         document_id=document.id,
-        name=document.name,
+        name=display_name(session, document, version.workspace_id) if session is not None else document.name,
         sha256=document.sha256,
         snapshot_hash=document_snapshot(document),
         reader_version=document.parser_version,

@@ -634,3 +634,11 @@ address made the workbench hard to find. The gate stays on; the one thing that o
 version so a reload re-reads nothing. The door now says what the workbench does, where the model runs (as health
 reports it) and where to go without an invite. The address is up only while the machine is on;
 `verity-state.pages.dev` keeps the static research up regardless, and `verity.pavankg.dev` redirects here.
+
+**A workspace sees the name it gave a file (2026-10-09).** Driving the deployed site, an invited reader who loaded the
+sample saw it under the file name a test reader had given the same bytes the day before, with that reader's upload
+date. Documents stay deduplicated by bytes and reader version, but the name and the date are the uploader's, not the
+bytes'. Each grant now keeps the name its workspace gave (`DocumentAccess.name`, set once); everything shown to a
+workspace, and the model's input for its runs, uses it (`app/document_names.py`). Grants from before carry no name:
+the first workspace on a document still sees the stored name, a later one sees "uploaded file (name not recorded)",
+and every earlier run's input rebuilds unchanged, since it was given the stored name and still is.

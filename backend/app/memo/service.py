@@ -30,6 +30,7 @@ from docx.text.paragraph import Paragraph
 from lxml import etree
 
 from ..config import settings
+from ..document_names import run_document_name
 from ..hashing import sha256_file
 from ..models import EvidenceSpan, Finding, Run, as_utc, iso, utcnow
 
@@ -166,7 +167,7 @@ def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str],
         "@media (max-width:700px){body{margin:0;padding:28px 20px;border-radius:0}dl{grid-template-columns:1fr}}"
         "</style></head><body>",
         "<div class='kicker'>Verity · contract review memo</div><h1>Contract Review Memo</h1>",
-        f"<dl><dt>Agreement</dt><dd>{escape(run.document.name)}</dd><dt>Date</dt><dd>{date}</dd><dt>Question</dt><dd>{escape(run.question)}</dd>",
+        f"<dl><dt>Agreement</dt><dd>{escape(run_document_name(run))}</dd><dt>Date</dt><dd>{date}</dd><dt>Question</dt><dd>{escape(run.question)}</dd>",
         f"<dt>Guidance</dt><dd>{escape(run.guidance.text) if run.guidance else 'none supplied'}</dd>"
         f"<dt>Sections read</dt><dd>{escape(reading_line(run))}</dd></dl>",
         f"<h2>Issues requiring review ({len(issues)})</h2>",
@@ -282,7 +283,7 @@ def _custom_properties(document: WordDocument, values: dict[str, str]) -> None:
 
 def _properties(document: WordDocument, run: Run, verified: int, total: int, review_head: str = "") -> None:
     core = document.core_properties
-    core.title = xml_safe(f"Contract review memo · {run.document.name}")
+    core.title = xml_safe(f"Contract review memo · {run_document_name(run)}")
     core.subject = xml_safe(run.question)
     core.author = AUTHOR
     core.last_modified_by = AUTHOR
@@ -328,7 +329,7 @@ def memo_docx(
     table = document.add_table(rows=0, cols=2)
     table.style = "Table Grid"
     for label, value in (
-        ("Agreement", run.document.name),
+        ("Agreement", run_document_name(run)),
         ("Date", date),
         ("Question", run.question),
         ("Guidance", run.guidance.text if run.guidance else "none supplied"),

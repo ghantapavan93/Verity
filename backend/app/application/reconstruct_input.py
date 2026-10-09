@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 
 from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, PROMPTS_DIR, SectionForPrompt, build_user_message, load_prompt, window_of
+from ..document_names import run_prompt_name
 from ..errors import NotFound
 from ..hashing import sha256_text
 from ..models import Run, RunStage, Section
@@ -107,7 +108,7 @@ def reconstruct_input(session: Session, run_id: str) -> Reconstruction:
 
     guidance_text = run.guidance.text if run.guidance else None
     result.system = prompt.system
-    result.user = build_user_message(run.question, guidance_text, run.document.name, sections, window=window)
+    result.user = build_user_message(run.question, guidance_text, run_prompt_name(run), sections, window=window)
     result.input_sha256 = sha256_text(prompt.sha256 + result.user)
     if result.recorded_input_sha256 is None:
         # Not a mismatch: there is nothing to match. The checking stage began recording its input hash on

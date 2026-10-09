@@ -128,6 +128,9 @@ class DocumentAccess(Base):
     workspace_id: Mapped[str] = mapped_column(String(32), primary_key=True)
     document_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # The name this workspace gave the file, set once when the grant is made (application/workspace.py document names).
+    # Null on grants made before 2026-10-09.
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class DocumentVersion(Base):

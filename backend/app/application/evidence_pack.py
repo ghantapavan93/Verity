@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from ..analysis.service import window_of
 from ..config import settings
+from ..document_names import run_document_name
 from ..errors import NotFound
 from ..hashing import sha256_bytes
 from ..ingest import base_name
@@ -27,7 +28,7 @@ from ..models import Run, iso, utcnow
 from ..verify import spans as verifier
 from .clause_location import ClauseLocator
 from .create_memo import review_head
-from .ingest_document import coverage_of, original_path, reading_name
+from .ingest_document import coverage_of, document_suffix, original_path
 from .reconstruct_input import reconstruct_input
 
 QUOTE_MAP = {chr(k): v for k, v in verifier._QUOTE_MAP.items()}  # the one normalisation table, embedded in verify.py
@@ -68,7 +69,7 @@ _RESERVED = re.compile(r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$", re.I
 
 
 def pack_name(name: str) -> str:
-    """The document's file name inside the pack. run.json keeps the name as given (`document.name`)."""
+    """The document's file name inside the pack. run.json keeps the name as given (the workspace's, document_names)."""
     safe = _UNPORTABLE.sub("_", base_name(name)).rstrip(" .") or "document"
     return f"_{safe}" if _RESERVED.match(safe) else safe
 
@@ -127,6 +128,10 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         {"label": s.label, "section_id": s.section_id, "rank": s.rank, "start": s.start, "end": s.end, "truncated": s.truncated, "sha256": s.content_sha256}
         for s in rebuilt.slices
     ]
+    # The name as the run's workspace knows it (document_names), with the type's extension, as reading_name gives it.
+    shown_name = run_document_name(run)
+    suffix = document_suffix(document)
+    shown_file = shown_name if shown_name.lower().endswith(suffix) else f"{shown_name}{suffix}"
     record = {
         "run_id": run.id,
         "fingerprint": run.fingerprint,
@@ -136,11 +141,11 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         "task": run.task,
         "document": {
             "id": document.id,
-            "name": document.name,
+            "name": shown_name,
             "sha256": document.sha256,
             "parser_version": document.parser_version,
             "parse_coverage": coverage_of(document),
-            "file": f"document/{pack_name(reading_name(document))}" if original_bytes is not None else None,
+            "file": f"document/{pack_name(shown_file)}" if original_bytes is not None else None,
         },
         "sections_sha256": sha256_bytes(sections_json.encode("utf-8")),
         # What the run itself recorded when it read the document (the reading stage's output hash), so the pack
@@ -183,7 +188,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         pack.writestr("findings.json", json.dumps(findings, ensure_ascii=False, indent=1))
         pack.writestr("verify.py", verify_py)
         if original_bytes is not None:
-            pack.writestr(f"document/{pack_name(reading_name(document))}", original_bytes)
+            pack.writestr(f"document/{pack_name(shown_file)}", original_bytes)
         if rebuilt.matches and rebuilt.system is not None and rebuilt.user is not None:
             pack.writestr("model_input/system.txt", rebuilt.system)
             pack.writestr("model_input/user.txt", rebuilt.user)

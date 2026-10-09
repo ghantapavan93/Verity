@@ -43,11 +43,12 @@ def can_read_guidance(guidance: Guidance, workspace: str) -> bool:
     return guidance.workspace_id is None or guidance.workspace_id == workspace
 
 
-def grant_document(session: Session, document: Document, workspace: str) -> bool:
-    """Let the workspace read the document. True when the grant is new."""
+def grant_document(session: Session, document: Document, workspace: str, name: str | None = None) -> bool:
+    """Let the workspace read the document, under the name it gave the file. True when the grant is new. A grant that
+    exists keeps its name: the model's input for that workspace's runs was built with it."""
     if session.get(DocumentAccess, (workspace, document.id)) is not None:
         return False
-    session.add(DocumentAccess(workspace_id=workspace, document_id=document.id))
+    session.add(DocumentAccess(workspace_id=workspace, document_id=document.id, name=name))
     return True
 
 

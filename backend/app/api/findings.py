@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ..application.review_finding import latest_review_id, review_finding, review_out
 from ..application.workspace import require_finding, require_own_run, visible_runs
 from ..db import get_session
+from ..document_names import run_document_name
 from ..models import Document, EvidenceSpan, Finding, Run, iso
 from ..schemas import FindingRecord, FindingReviewOut, ReviewIn
 from .access import current_workspace
@@ -69,7 +70,7 @@ def list_findings(
                 run_id=run.id,
                 shared=run.workspace_id is None,
                 document_id=document.id,
-                document_name=document.name,
+                document_name=run_document_name(run),
                 question=run.question,
                 topic=finding.topic,
                 status=finding.status,

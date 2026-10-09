@@ -19,7 +19,7 @@ from app import db as db_module
 from app.application.ingest_document import coverage_of, original_path, reading_name
 from app.application.trust_run import _read_again
 from app.ingest import MAX_NAME, PARSER_VERSION, base_name
-from app.models import Document
+from app.models import Document, DocumentAccess
 from tests.support import CONTRACT
 
 TEXT = b"1. Term\n\nThe term is two years.\n\n2. Fees\n\nFees are due monthly.\n"
@@ -63,6 +63,9 @@ def legacy(client: TestClient, cut_name: str) -> tuple[str, str]:
         kept = original_path(document)
         document.name = cut_name
         document.coverage_json = None  # an early reading, so the coverage is reconstructed from the bytes
+        # Stored before grants kept a name (2026-10-09), as every such document was: the workspace sees the stored name.
+        for grant in session.query(DocumentAccess).filter(DocumentAccess.document_id == document_id):
+            grant.name = None
         session.commit()
         kept.rename(kept.with_name(f"{document.sha256}{Path(cut_name).suffix.lower()}"))
     started = client.post("/api/runs", json={"documentId": document_id, "question": "What notice period applies to termination for convenience?"})

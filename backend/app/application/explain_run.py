@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from ..analysis.schema import AnalysisOut
 from ..analysis.service import window_of
+from ..document_names import run_document_name
 from ..errors import NotFound
 from ..models import Finding, Run, RunStage, Section
 from ..schemas import (
@@ -92,7 +93,7 @@ def _reading(run: Run) -> ExplanationReading:
     not_read = [f"{p.part.replace('_', ' ')} ({p.count})" for p in (coverage.parts if coverage else []) if p.status == "omitted" and p.count > 0]
     return ExplanationReading(
         document_id=document.id,
-        document_name=document.name,
+        document_name=run_document_name(run),
         document_sha256=document.sha256,
         reader_version=document.parser_version,
         pages=document.pages,

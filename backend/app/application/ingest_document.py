@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..errors import InvalidInput, TooLarge
 from ..hashing import sha256_bytes
-from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, ingest
+from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, base_name, ingest
 from ..ingest.coverage import coverage_report
 from ..ingest.readers import SUFFIX_OF, file_type, read
 from ..models import Document, Section
@@ -97,14 +97,16 @@ def refuse_unsupported_type(filename: str, data: bytes) -> None:
 
 def ingest_document(session: Session, filename: str, data: bytes, workspace: str | None = None) -> IngestedDocument:
     """``workspace`` is the uploader's; it is granted the document. Deduplication stays by bytes and reader version: a
-    second workspace uploading the same bytes gets a grant on the one stored reading, and learns nothing it did not
-    already hold, since it had the bytes. "created" is from that workspace's side: new to it, or already its."""
+    second workspace uploading the same bytes gets a grant on the one stored reading. The bytes tell it nothing it did
+    not hold; the stored name and date are the first uploader's, so each grant keeps the name its workspace gave
+    (application/workspace.py display_name). "created" is from that workspace's side: new to it, or already its."""
     refuse_if_too_large(len(data))
     refuse_unsupported_type(filename, data)
+    given = base_name(filename or "upload")  # the name this workspace gave the file, kept on its grant
     existing = stored_document(session, sha256_bytes(data))
     if existing is not None:
         keep_original(existing, data)  # the same bytes by hash: a row whose file is not there is completed here
-        new_to_workspace = _grant(session, existing, workspace, new=False)
+        new_to_workspace = _grant(session, existing, workspace, new=False, name=given)
         return IngestedDocument(existing, created=new_to_workspace)
 
     started = time.perf_counter()
@@ -142,14 +144,14 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
         if winner is None:
             raise
         keep_original(winner, data)
-        _grant(session, winner, workspace, new=False)
+        _grant(session, winner, workspace, new=False, name=given)
         return IngestedDocument(winner, created=False)
     session.refresh(document)
-    _grant(session, document, workspace, new=True)
+    _grant(session, document, workspace, new=True, name=given)
     return IngestedDocument(document, created=True)
 
 
-def _grant(session: Session, document: Document, workspace: str | None, new: bool) -> bool:
+def _grant(session: Session, document: Document, workspace: str | None, new: bool, name: str) -> bool:
     """Grant the workspace the document. A document this upload created is always granted to its uploader; one already
     stored is granted unless it is curated (no grants at all, readable by every workspace) or already the workspace's.
     True when the grant is new."""
@@ -157,7 +159,7 @@ def _grant(session: Session, document: Document, workspace: str | None, new: boo
         return False
     if not new and document_is_curated(session, document.id):
         return False
-    if not grant_document(session, document, workspace):
+    if not grant_document(session, document, workspace, name):
         return False
     session.commit()
     return True
