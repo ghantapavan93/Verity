@@ -2026,6 +2026,13 @@ export interface components {
             latencyMs: number | null;
             /** Model */
             model: string;
+            /**
+             * Outcomes
+             * @default {}
+             */
+            outcomes: {
+                [key: string]: number;
+            };
             /** Prompthash */
             promptHash: string;
             /** Promptversion */

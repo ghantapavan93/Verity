@@ -1993,3 +1993,77 @@
     margin-bottom: 8px;
   }
 }
+
+/* ---- what was checked, by whom (assistant/FindingCard, lib/checks) ---- */
+
+.checks {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 5px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.checkRow {
+  display: contents;
+}
+
+.checkKey {
+  color: var(--text-3);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.checkText {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.checkBy {
+  display: inline-block;
+  min-width: 52px;
+  margin-right: 8px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: 600 10px/16px var(--font-mono);
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--text-3);
+  vertical-align: 1px;
+}
+
+/* Only what code established carries the accent; the model's reading is said plainly, never in a verified colour. */
+.checkRow[data-by="code"] .checkText {
+  color: var(--text);
+}
+
+.checkRow[data-by="code"] .checkBy {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.checkRow[data-by="model"] .checkBy {
+  border-style: dashed;
+}
+
+.checkRow[data-by="person"] .checkText {
+  color: var(--text);
+}
+
+@media (max-width: 420px) {
+  .checks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .checkKey {
+    margin-top: 4px;
+  }
+}

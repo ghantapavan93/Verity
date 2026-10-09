@@ -19,6 +19,9 @@ function summaryOf(run: RunDetailView): RunSummary {
     latencyMs: run.latencyMs,
     reason: run.reason,
     findings: shown(run),
+    outcomes: run.findings
+      .filter((f) => f.status !== "unresolved")
+      .reduce<Record<string, number>>((by, f) => ({ ...by, [f.status]: (by[f.status] ?? 0) + 1 }), {}),
     hasGuidance: run.hasGuidance,
     documentId: run.documentId,
     documentName: run.documentName,

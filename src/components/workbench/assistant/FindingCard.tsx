@@ -3,6 +3,7 @@
 import styles from "../Workbench.module.css";
 import { NARROW_QUERY } from "../shell/constants";
 import { StatusChip, Visible } from "../shell/primitives";
+import { checkLedger } from "@/lib/checks";
 import { isLocated, passageLabel, type FindingView, type SectionView, type SpanView } from "@/lib/types";
 
 function excerpt(quote: string, max = 150): string {
@@ -17,6 +18,7 @@ export function FindingCard({
   finding,
   hasGuidance,
   sectionsById,
+  context = null,
   onJump,
   onEvidence,
   onFollowUp,
@@ -24,6 +26,8 @@ export function FindingCard({
   finding: FindingView;
   hasGuidance: boolean;
   sectionsById: Map<string, SectionView>;
+  /** How much of the document the model was handed (lib/types sectionsReadNote); null when the run did not record it. */
+  context?: string | null;
   onJump: (sectionId: string, span: SpanView | null) => void;
   onEvidence: (trigger: HTMLElement | null) => void;
   onFollowUp: () => void;
@@ -40,13 +44,25 @@ export function FindingCard({
         <StatusChip status={finding.status} hasGuidance={hasGuidance} source={finding.statusSource} />
       </header>
       <p className={styles.resultText}>{finding.conclusion}</p>
+      {/* What was checked, by whom: one row per recorded fact (lib/checks). A located quote and a supported answer are
+          two facts; only the first is ever established by code. */}
+      <dl className={styles.checks} aria-label="What was checked">
+        {checkLedger(finding, hasGuidance, sectionsById, context).map((row) => (
+          <div key={row.key} className={styles.checkRow} data-by={row.by}>
+            <dt className={styles.checkKey}>{row.label}</dt>
+            <dd className={styles.checkText}>
+              <span className={styles.checkBy}>{row.by === "code" ? "code" : row.by === "model" ? "model" : row.by === "person" ? "person" : "—"}</span>
+              {row.text}
+            </dd>
+          </div>
+        ))}
+      </dl>
       {evidence.length > 0 && (
         <div className={styles.evidenceList}>
           <div className={styles.evidenceHead}>
             {finding.evidenceKind === "coverage"
               ? `Closest provisions read · ${evidence.length} · the model found none that states the point`
-              : `Evidence · ${evidence.length} passage${evidence.length === 1 ? "" : "s"} found in the document text`}
-            {finding.review ? ` · ${finding.review.verdict === "confirmed" ? "Confirmed" : "Dismissed"} by ${finding.review.reviewer}` : ""}
+              : `Evidence · ${evidence.length} passage${evidence.length === 1 ? "" : "s"}`}
           </div>
           {evidence.map(({ span, section }, i) => (
             <button

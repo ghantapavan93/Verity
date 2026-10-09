@@ -12,6 +12,7 @@ import { plural } from "@/lib/format";
 import { modelPlace } from "@/lib/modelPlace";
 import { TopLinks } from "./TopLinks";
 import { PublicDemo } from "../access/PublicDemo";
+import { runOutcome } from "@/lib/checks";
 import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
 /** How a status is set, in the order the evidence drawer reads it. Static: it describes the product, not one run. */
@@ -298,7 +299,7 @@ export function Landing({
                     </div>
                     <div>
                       <dt>Findings</dt>
-                      <dd>{plural(proof.findings, "finding")}, every quoted passage found in the document</dd>
+                      <dd>{runOutcome(proof.outcomes, proof.hasGuidance)}; every quoted passage located in the document</dd>
                     </div>
                     <div>
                       <dt>Model</dt>

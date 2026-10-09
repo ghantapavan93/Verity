@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections import Counter
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 
@@ -152,6 +153,7 @@ def run_summary(run: Run) -> RunSummary:
         latency_ms=run.latency_ms,
         reason=run.reason,
         findings=len(shown),
+        outcomes=dict(Counter(f.status for f in shown)),
         has_guidance=run.guidance_id is not None,
         document_id=run.document_id,
         document_name=run_document_name(run),

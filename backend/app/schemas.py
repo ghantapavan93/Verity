@@ -209,6 +209,9 @@ class RunSummary(ApiModel):
     latency_ms: float | None
     reason: RunReasonName | None = None
     findings: int
+    # The shown findings by status ("needs_review": 1, "missing": 1): what the run concluded, so a list of runs never
+    # shows two different outcomes as the same "Complete" (2026-10-09 review).
+    outcomes: dict[str, int] = {}
     has_guidance: bool
     document_id: str
     document_name: str

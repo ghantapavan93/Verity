@@ -9,6 +9,7 @@
 
 import { useContext, useEffect, useState } from "react";
 import { PublicDemo } from "../access/PublicDemo";
+import { runOutcome } from "@/lib/checks";
 import wb from "../Workbench.module.css";
 import { WhyThisAnswer } from "../assistant/WhyThisAnswer";
 import { TERMINAL } from "../shell/constants";
@@ -39,8 +40,9 @@ import {
   type RunSummary,
 } from "@/lib/types";
 
+// Finishing is not an outcome: a complete run is shown plain, and what it concluded is said beside it (runOutcome).
 function outcomeTone(stage: RunStage): string {
-  return stage === "complete" ? wb.statusPass : stage === "failed" ? wb.statusBad : wb.statusMuted;
+  return stage === "failed" ? wb.statusBad : wb.statusMuted;
 }
 
 function message(error: unknown): string {
@@ -281,7 +283,9 @@ export function RunsView({
                       <span>{r.model}</span>
                       <span>prompt {r.promptVersion}</span>
                       {r.latencyMs !== null && <span>{formatLatency(r.latencyMs)}</span>}
-                      <span>{plural(r.findings, "finding")}</span>
+                      <span className={styles.rowOutcome}>
+                        {r.stage === "complete" ? runOutcome(r.outcomes, r.hasGuidance) : plural(r.findings, "finding")}
+                      </span>
                       {r.hasGuidance && <span>with guidance</span>}
                       <span>{formatWhen(r.createdAt)}</span>
                     </div>

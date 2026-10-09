@@ -3867,6 +3867,14 @@
             "title": "Model",
             "type": "string"
           },
+          "outcomes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Outcomes",
+            "type": "object"
+          },
           "promptHash": {
             "title": "Prompthash",
             "type": "string"

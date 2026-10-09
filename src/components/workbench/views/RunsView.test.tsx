@@ -22,6 +22,7 @@ const api = vi.hoisted(() => ({
 vi.mock("@/lib/api", () => ({ ...api, absolute: (path: string) => path }));
 
 import { PublicDemo } from "../access/PublicDemo";
+import { runOutcome } from "@/lib/checks";
 import { RunsView } from "./RunsView";
 
 const never = () => new Promise(() => undefined);
@@ -57,5 +58,15 @@ describe("RunsView in a public demo", () => {
     render(<RunsView notice={null} onOpenRun={vi.fn()} />);
     expect(await screen.findByRole("link", { name: "Golden set" })).toBeTruthy();
     expect(api.getGoldens).toHaveBeenCalled();
+  });
+});
+
+describe("runOutcome", () => {
+  it("says what a run concluded, not only that it finished", () => {
+    expect(runOutcome({ needs_review: 1, missing: 1 }, true)).toBe("1 needs review · 1 not found");
+    expect(runOutcome({ pass: 2 }, true)).toBe("2 within guidance");
+    expect(runOutcome({ pass: 1 }, false)).toBe("1 answered");
+    expect(runOutcome({}, true)).toBe("no finding");
+    expect(runOutcome(undefined, true)).toBe("no finding");
   });
 });
