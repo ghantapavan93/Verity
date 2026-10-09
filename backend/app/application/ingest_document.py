@@ -138,6 +138,13 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
     keep_original(document, data)
     session.add(document)
     try:
+        # The uploader's grant is written in the same transaction as the document. Committed apart, a request that read
+        # the row between the two commits saw a document with no grant, which the read rules call curated, and was
+        # granted nothing: told the upload worked, then refused it (5 of 50 races, audit 2026-10-09). A crash in the gap
+        # left an ungranted row, and the public API refused to start on it.
+        if workspace is not None:
+            session.flush()
+            grant_document(session, document, workspace, given)
         session.commit()
     except IntegrityError:
         # Another request stored the same bytes between the lookup and the insert; the database kept its row.
@@ -149,7 +156,6 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
         _grant(session, winner, workspace, new=False, name=given)
         return IngestedDocument(winner, created=False)
     session.refresh(document)
-    _grant(session, document, workspace, new=True, name=given)
     return IngestedDocument(document, created=True)
 
 
@@ -176,6 +182,12 @@ def keep_original(document: Document, data: bytes) -> None:
         partial = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.part")
         try:
             partial.write_bytes(data)
-            partial.replace(path)
+            try:
+                partial.replace(path)
+            except PermissionError:
+                # Windows refuses to replace a file another request is writing or reading at that moment. The name is the
+                # bytes' hash, so a file standing there whole is these bytes (two visitors racing one upload, 2026-10-09).
+                if not (path.exists() and path.stat().st_size == len(data)):
+                    raise
         finally:
             partial.unlink(missing_ok=True)
