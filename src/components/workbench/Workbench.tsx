@@ -114,6 +114,8 @@ function WorkbenchSurface() {
 
   // ---- health ----------------------------------------------------------------------------
 
+  const onLanding = stage === "empty" && view === "assistant";
+
   useEffect(() => {
     let cancelled = false;
     health()
@@ -128,10 +130,12 @@ function WorkbenchSurface() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // Asked again whenever the first screen comes and goes, not once per page: a model that went offline while the
+    // page stayed open was never announced, and the first a reader heard of it was a failed question (journey audit,
+    // 2026-10-09).
+  }, [onLanding]);
 
   // Documents already in the workbench, so a returning reviewer can reopen one from the first screen.
-  const onLanding = stage === "empty" && view === "assistant";
   useEffect(() => {
     if (!onLanding) return;
     let cancelled = false;
