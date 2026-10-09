@@ -39,6 +39,14 @@ from ..models import EvidenceSpan, Finding, Run, as_utc, iso, utcnow
 _XML_UNSAFE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
 
 
+def _suggests(finding: Finding) -> bool:
+    """A memo carries the model's suggested change only beside a finding that needs review. Elsewhere the clause meets
+    the point or no review was asked for, and a change it does not need is noise a reviewer would have to undo; the
+    suggestion stays on the record, shown in the workbench as the model's (2026-10-09 evaluation: net 30 days suggested
+    against the buyer's own 45)."""
+    return bool(finding.suggested_position) and finding.status == "needs_review"
+
+
 def xml_safe(text: str) -> str:
     return _XML_UNSAFE.sub("", text)
 
@@ -193,8 +201,8 @@ def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str],
         ]
         if any(position):
             parts.append("<p>" + " · ".join(p for p in position if p) + "</p>")
-        if f.suggested_position:
-            parts.append(f"<p><strong>Suggested position.</strong> {escape(f.suggested_position)}</p>")
+        if _suggests(f):
+            parts.append(f"<p><strong>Suggested position (the model's).</strong> {escape(f.suggested_position or '')}</p>")
         if f.review is not None:
             parts.append(f"<p><strong>Reviewed.</strong> {escape(_review_line(f))}</p>")
     parts.append("<h2>Sources</h2><table><tr><th>#</th><th>Section</th><th>Located</th><th></th></tr>")
@@ -370,10 +378,10 @@ def memo_docx(
             if f.required:
                 p.add_run("Required ").bold = True
                 p.add_run(xml_safe(f.required))
-        if f.suggested_position:
+        if _suggests(f):
             p = document.add_paragraph()
-            p.add_run("Suggested position. ").bold = True
-            p.add_run(xml_safe(f.suggested_position))
+            p.add_run("Suggested position (the model's). ").bold = True
+            p.add_run(xml_safe(f.suggested_position or ""))
         if f.review is not None:
             p = document.add_paragraph()
             p.add_run("Reviewed. ").bold = True
