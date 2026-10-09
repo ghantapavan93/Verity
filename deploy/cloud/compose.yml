@@ -1,0 +1,58 @@
+# Verity on one Linux VM: Caddy (TLS, routing), the interface and the API. Only Caddy publishes ports; the API and the
+# interface are reachable only through it. Run from this directory: `docker compose up -d` (README.md).
+name: verity
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/cloud/Dockerfile.api
+    image: verity-api:${VERITY_TAG:-local}
+    # A stable name across restarts and redeploys: a stage row records the host, pid and start time of the process
+    # running it, so runs the previous container left in flight are recovered at once (app/runs/owner.py).
+    hostname: verity-api
+    env_file: .env
+    environment:
+      WORKBENCH_DATA_DIR: /data
+    volumes:
+      - verity-data:/data
+      - verity-backups:/backups
+    restart: unless-stopped
+    extra_hosts:
+      # Lets a rehearsal reach a model on the machine running Docker; unused when WORKBENCH_OLLAMA_URL is remote.
+      - "host.docker.internal:host-gateway"
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/cloud/Dockerfile.web
+      args:
+        NEXT_PUBLIC_PROOF_RUN: ${VERITY_PROOF_RUN:-}
+        NEXT_PUBLIC_BUILD_SHA: ${VERITY_BUILD_SHA:-}
+    image: verity-web:${VERITY_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "${VERITY_HTTP_PORT:-80}:80"
+      - "${VERITY_HTTPS_PORT:-443}:443"
+    environment:
+      VERITY_SITE: ${VERITY_SITE:?set VERITY_SITE, e.g. try.example.com}
+      VERITY_TLS: ${VERITY_TLS:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+
+volumes:
+  verity-data:
+  verity-backups:
+  caddy-data:
+  caddy-config:

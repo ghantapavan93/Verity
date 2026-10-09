@@ -48,3 +48,6 @@ next-env.d.ts
 
 # local editor and agent launch configs
 /.claude/
+
+# A deployment's secrets (deploy/cloud/env.example is the template)
+/deploy/cloud/.env

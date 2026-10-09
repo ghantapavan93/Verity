@@ -1,0 +1,27 @@
+# One origin for the workbench: TLS here, /api to the API, everything else to the interface. Same origin means no CORS,
+# and the session cookie (__Host-, Secure, SameSite=Strict) stays first-party.
+{$VERITY_SITE} {
+	{$VERITY_TLS}
+
+	handle /api/* {
+		reverse_proxy api:8000 {
+			# The API keys its request limits by Cf-Connecting-Ip (api/access.client_address). There is no Cloudflare in
+			# front of this server, so a client could send its own and choose its bucket: it is set here, from the address
+			# Caddy actually saw, and whatever the client sent is replaced.
+			header_up Cf-Connecting-Ip {remote_host}
+			# Run events are a stream; send each one as it is written.
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

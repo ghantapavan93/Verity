@@ -1,0 +1,18 @@
+# The image build context (deploy/cloud): code only. No local stores, secrets, environments or build output.
+.git
+**/node_modules
+.next
+.next-*
+out
+out-state
+test-results
+playwright-report
+backend/.venv
+backend/data
+backend/**/__pycache__
+backend/.mypy_cache
+backend/.pytest_cache
+backend/.ruff_cache
+**/*.secret
+**/.env
+deploy/cloud/.env

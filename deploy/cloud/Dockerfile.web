@@ -1,0 +1,34 @@
+# The interface: `next build`, then `next start`. NEXT_PUBLIC_API_URL is left unset, so the build talks to its own origin
+# (src/lib/api.ts apiBase), where Caddy sends /api to the API. Nothing in the bundle names a host.
+FROM node:22-slim AS build
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+# The run the first screen shows as a finished review; it must exist in this deployment's store (README: proof run).
+ARG NEXT_PUBLIC_PROOF_RUN=""
+# The commit this build is made from, shown on the Runs surface.
+ARG NEXT_PUBLIC_BUILD_SHA=""
+ENV NEXT_PUBLIC_PROOF_RUN=$NEXT_PUBLIC_PROOF_RUN \
+    NEXT_PUBLIC_BUILD_SHA=$NEXT_PUBLIC_BUILD_SHA
+RUN npm run build \
+    && if grep -rqs "127.0.0.1:8000" .next/static; then echo "the bundle names a loopback API" >&2; exit 1; fi
+
+FROM node:22-slim
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+COPY package.json package-lock.json ./
+# The build stage's install, without the dev tools: `npm ci --omit=dev` cannot resolve the platform's optional packages
+# from a lock file written on another platform, and pruning keeps exactly the versions that built the bundle.
+COPY --from=build /app/node_modules ./node_modules
+RUN npm prune --omit=dev --no-audit --no-fund && npm cache clean --force
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/public ./public
+COPY --from=build /app/next.config.ts ./next.config.ts
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=6s --start-period=30s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+CMD ["node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]

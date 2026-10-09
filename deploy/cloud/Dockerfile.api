@@ -1,0 +1,32 @@
+# The API: FastAPI on one uvicorn worker. One process on purpose: SQLite, runs executed as in-process background tasks,
+# the run event bus and the request limiters all assume a single process (deploy/cloud/README.md).
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    WORKBENCH_DATA_DIR=/data
+
+WORKDIR /app/backend
+
+# The versions the test suite last passed with, not whatever is newest on the day the image is built.
+COPY deploy/cloud/requirements.runtime.txt deploy/cloud/constraints.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements.runtime.txt -c /tmp/constraints.txt
+
+COPY backend/app ./app
+COPY backend/scripts ./scripts
+# The bundled sample the golden set names (app/goldens/set.json) and the first screen offers.
+COPY public/samples /app/public/samples
+
+RUN useradd --system --uid 10001 --home-dir /nonexistent verity \
+    && mkdir -p /data /backups \
+    && chown verity:verity /data /backups
+USER verity
+
+VOLUME ["/data", "/backups"]
+EXPOSE 8000
+
+# Liveness only: health answers 200 while saying whether the model and the store are usable.
+HEALTHCHECK --interval=30s --timeout=6s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).status == 200 else 1)"
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-server-header"]
