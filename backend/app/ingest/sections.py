@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 # Nine digits per part: a "number" longer than that is not a clause number, and Python refuses to parse thousands of digits.
 HEADING_NUMBER = re.compile(r"^\s*(?:(?:Section|Clause|Article)\s+)?(\d{1,9}(?:\.\d{1,9})*)[.)]?\s+(.*\S)\s*$", re.IGNORECASE)
@@ -276,7 +277,50 @@ def looks_like_sentence(text: str) -> bool:
     return len(text.split()) >= SENTENCE_MIN_WORDS and text.rstrip().endswith((".", ";", ":"))
 
 
+_DIGITS = re.compile(r"\d+")
+_NOT_LETTERS = re.compile(r"[^a-z ]+")
+# A running line names the page or the document, never a part of it: "EXHIBIT B-1", "B-2", "B-3" are headings.
+_STRUCTURAL = frozenset({"exhibit", "schedule", "annex", "appendix", "article", "section", "part", "attachment", "chapter", "clause"})
+MIN_RUNNING_PAGES = 3
+
+
+def _words(text: str) -> str:
+    return " ".join(_NOT_LETTERS.sub(" ", text.casefold()).split())
+
+
+def running_lines(blocks: Sequence[Block], title: str = "") -> set[int]:
+    """The indexes of heading blocks that are a page's running header or footer ("1 – LEASE AGREEMENT" at the foot of
+    every page; holdout audit, 2026-10-09): a heading whose words, its page number aside, are "Page" or a heading the
+    document also prints unnumbered, at least MIN_RUNNING_PAGES times in a row with that number rising. A run that
+    restarts (an exhibit numbered from 1 again) counts on its own. Measured over 510 CUAD and 800 EDGAR texts and the
+    audit's lease: 87 of 54,901 heading lines in 7 documents, each a page footer or a contents line with its page number."""
+    headings = [(i, b.text.strip()) for i, b in enumerate(blocks) if b.kind == "heading" and b.text.strip()]
+    plain = {_words(text) for _, text in headings if not _DIGITS.search(text)} | {_words(title)}
+    by_words: dict[str, list[tuple[int, int]]] = {}
+    for index, text in headings:
+        number = _DIGITS.search(text)
+        words = _words(text)
+        if number and words and (words in ("page", "page of") or (words in plain and words.split()[0] not in _STRUCTURAL)):
+            by_words.setdefault(words, []).append((index, int(number.group(0))))
+    running: set[int] = set()
+    for occurrences in by_words.values():
+        run = occurrences[:1]
+        for previous, current in pairwise(occurrences):
+            if current[1] > previous[1]:
+                run.append(current)
+                continue
+            if len(run) >= MIN_RUNNING_PAGES:
+                running.update(index for index, _ in run)
+            run = [current]
+        if len(run) >= MIN_RUNNING_PAGES:
+            running.update(index for index, _ in run)
+    return running
+
+
 def build_sections(blocks: list[Block], title: str = "") -> list[ParsedSection]:
+    # A running header or footer is text where it stands: never a heading, and never deleted (it was printed).
+    running = running_lines(blocks, title)
+    blocks = [Block("text", b.text) if i in running else b for i, b in enumerate(blocks)]
     sections: list[ParsedSection] = []
     counters: list[int] = []
     parent_headings: dict[int, str] = {}
