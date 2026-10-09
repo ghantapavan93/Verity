@@ -40,6 +40,9 @@ class Settings(BaseModel):
     # Where a model on another machine runs, in words a reader can weigh ("a Modal GPU in the US"); shown wherever the
     # interface says where a contract's text goes. Empty for a model on the server itself.
     model_host: str = os.environ.get("WORKBENCH_MODEL_HOST", "").strip()
+    # A ceiling on the readers' new runs per UTC day, all workspaces together: the model's spend has a bound that one
+    # reader cannot exhaust for everyone (application.start_run). 0 is no ceiling. Curated runs (scripts) are not counted.
+    max_runs_per_day: int = int(os.environ.get("WORKBENCH_MAX_RUNS_PER_DAY", "0") or "0")
     # Whether /api/health asks the model endpoint. Off where the endpoint bills by the second and starts cold: every
     # answer still checks the model first (providers.ollama._check_build), and health reports the store and the gate.
     health_probes_model: bool = os.environ.get("WORKBENCH_HEALTH_PROBES_MODEL", "1").strip().lower() not in ("0", "false", "no")

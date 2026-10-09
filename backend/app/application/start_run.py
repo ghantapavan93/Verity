@@ -12,16 +12,18 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import timedelta
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, load_prompt
 from ..config import settings
-from ..errors import NotFound
+from ..errors import NotFound, TooManyRequests
 from ..hashing import fingerprint
 from ..ingest.invisible import visible_text
-from ..models import Document, Guidance, Run
+from ..models import Document, Guidance, Run, utcnow
 from ..providers.base import ModelProvider
 from ..retrieval.aliases import ALIASES_SHA256
 from ..routing.router import ModelRouter, task_for
@@ -113,6 +115,8 @@ def start_run(
     existing = active_run(session, key)
     if existing is not None:
         return StartedRun(existing, created=False)
+    if workspace is not None:
+        refuse_past_daily_budget(session)
 
     run = Run(
         document_id=document.id,
@@ -142,6 +146,24 @@ def start_run(
             raise
         return StartedRun(existing, created=False)
     return StartedRun(run, created=True)
+
+
+def refuse_past_daily_budget(session: Session) -> None:
+    """The readers' new runs today (UTC), all workspaces together, against settings.max_runs_per_day. A question asked
+    before is handed its run before this is asked, and the project's own runs (no workspace) are not counted."""
+    limit = settings.max_runs_per_day
+    if limit <= 0:
+        return
+    now = utcnow()
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    started = session.query(func.count(Run.id)).filter(Run.workspace_id.isnot(None), Run.created_at >= midnight).scalar() or 0
+    if started >= limit:
+        wait = int((midnight + timedelta(days=1) - now).total_seconds()) + 1
+        raise TooManyRequests(
+            f"Today's run budget for this workbench is spent ({limit} new questions). Answers already given still open; "
+            "new questions can be asked again after midnight UTC.",
+            retry_after=wait,
+        )
 
 
 def active_run(session: Session, key: str) -> Run | None:
