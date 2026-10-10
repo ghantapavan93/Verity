@@ -678,3 +678,27 @@ evidence. The memo carries the model's suggested change only where review is nee
 policy are unchanged; the policy work the evaluation pointed at (a carve-out the quote boundary cut, "without cause"
 read as convenience) is deferred because it changes status semantics and needs the goldens.
 
+
+**Policy-v6: a pass does not state a value its evidence does not show (2026-10-10).** The Contract Reality Lab (24
+pre-registered questions on 2025–2026 EDGAR agreements, real qwen3:8b, independently adjudicated) found passes whose
+conclusion stated a figure no verified quote stated: "$10,000 a month" over a quote of hours whose rate was never
+quoted, "[***]%" given as a royalty rate. Code already saw both and said so beside the answer; the status still read
+pass. Now `runs.status.check_values` lowers such a pass to needs review when the run is decided, with the value or the
+redaction mark named (status source `position_check`, whose label now says "a value" where it said "a day count").
+Read whole, it is a statement about the evidence, not about the answer: of the 16 recorded passes it would change (of
+896 in the owner and lab stores; nothing else changes), most values are probably right, computed from an unquoted rate
+or cut off by a quote that stops short. What a person reads is now true: the passage shown does not state the figure.
+An independent review approved it with notes, each kept as a test: a duration is quoted by its equivalent in the same
+unit family ("1 year" by "twelve (12) months"); only bracketed marks are redactions; "redacted", "not disclosed" and the
+like count only in the mark's own sentence. Not caught, and said so in the failure envelope: a wrong value that is in
+the quote, and a pointer to an attachment the model was not handed or the filing omits. Recorded runs keep the status
+they were decided with; `runs.values` is now inside the policy fingerprint, since it decides.
+
+**The release gate fails when a step fails (2026-10-10).** The clean-clone gate printed each step's last line and kept
+no status, so the retrieval-v2 candidate (one failing backend test, two failing browser flows) ended with exit 0. Each
+step now records its exit status, the fault matrix and exporter checks compare their counts, and the gate ends "GATE
+FAILED" with the failed steps named and a non-zero exit. Rehearsed: a throwaway commit with one deliberately failing
+test and one deliberately failing flow failed the gate with both named; the blocked candidate failed it; the live commit
+passed it (1,231 tests, 29 of 29 flows). The candidate's two browser failures were not load: the flows replay recorded
+model answers keyed by the exact message, and changing the handed sections leaves the replay with no recording, as
+designed. The gate script still lives outside the repository.
