@@ -200,3 +200,11 @@ def test_a_digit_run_longer_than_any_contract_value_is_set_aside_not_raised() ->
     huge = "9" * 1_000_001
     assert unquoted_values("The total is 5 days.", [huge], []) == ["5 days"]
     assert value_choices(f"{huge}%", ["5% or 10%"], []) == []
+
+
+def test_an_answer_repeating_the_guidance_value_made_no_choice() -> None:
+    """Review R8 (a surviving mutant): the guidance's 90 days, repeated by the answer, is the reader's standard, not a
+    value the answer chose among the passages' 30 and 90."""
+    quotes = ["terminate on thirty (30) days' notice", "notwithstanding the above, ninety (90) days' notice"]
+    assert value_choices("The guidance asks for 90 days.", quotes, ["What notice applies?"], ["At least 90 days."]) == []
+    assert [c.answer for c in value_choices("Notice is 30 days.", quotes, ["What notice applies?"], ["At least 90 days."])] == ["30 days"]
