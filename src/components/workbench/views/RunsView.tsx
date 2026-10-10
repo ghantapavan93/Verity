@@ -160,7 +160,11 @@ export function RunsView({
       };
     }
     listBatches()
-      .then((rows) => !cancelled && setBatches(rows))
+      .then((rows) => {
+        if (cancelled) return;
+        setBatchesError(null);
+        setBatches(rows);
+      })
       .catch((e: unknown) => {
         if (cancelled) return;
         setBatchesError(errorMessage(e));
@@ -259,6 +263,7 @@ export function RunsView({
             error={error}
             onRetry={() => {
               setError(null);
+              setBatchesError(null);
               setAttempt((n) => n + 1);
             }}
           />

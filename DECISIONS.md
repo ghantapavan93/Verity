@@ -734,7 +734,7 @@ access required, the real model, a fresh store) was driven in a browser through 
 real DOCX schedule, a real TXT agreement, four broken files, a second visitor on a phone, a model that could not be
 reached, a review, a memo, the evidence pack and a reload. Every path worked and isolation held (the second visitor read
 none of the first's runs: 404). No axe violation, overflow or console error at any width from 320 to 1920 px. What did
-not hold up was smaller and is fixed, each with a test that failed first: the landing's counts read 0 until scrolled to;
+not hold up was smaller and is fixed, most with a test that failed first (Ctrl K, clearing from the Findings list and the corrected claims were checked in a real browser): the landing's counts read 0 until scrolled to;
 it said code confirms a pass, which no policy since v3 does; the proof-run story carried its own facts; a refused
 guidance explained nothing; "Clear the decision" did nothing with no remembered name; a batch list that failed to load
 read "No batch recorded yet"; Ctrl K worked on one view only and blocked the browser's own shortcut elsewhere.
@@ -746,7 +746,7 @@ of 80 findings (25%) gave a right or a value to the wrong party, every one shown
 false-premise questions accepted the premise. A deterministic check (the contract's parties read from its joining
 clause; the party a conclusion has act, against the party that acts in its quote) flagged only the Reality Lab's
 wrong-party answer across 1,095 recorded findings, and after a second round of general fixes on the first 16 cases it
-caught 4 of 6 there; on the 16 cases it had not seen it caught 0 of 8, because the real actor is often not a party the
+caught 4 of 6 wrong-party findings per session there; on the 16 cases it had not seen it caught none of 8 wrong-party findings (4 per session), because the real actor is often not a party the
 opening defines (an agent, a trustee, a representative) or acts through a phrase the reading does not cover. It is not
 adopted; branch `party-check-experiment` keeps it. Policy-v6 did catch part of the class on the unseen cases: the
 question's figure repeated as the contract's (2 of 8), at the cost of one correct answer that rejected the premise and

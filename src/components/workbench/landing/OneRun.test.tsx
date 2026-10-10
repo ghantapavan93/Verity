@@ -48,7 +48,15 @@ it("takes its title, periods and status from the record", () => {
   expect(story.textContent).not.toMatch(/missed a 90 day floor|Needs review\./);
 });
 
-it("says needs review only when the record does", () => {
+it("control: says needs review when the record does", () => {
   render(<OneRun proof={proof} lead={lead("needs_review")} onOpen={vi.fn()} reduceMotion />);
   expect(document.body.textContent).toMatch(/[Nn]eeds review/);
+});
+
+it("says the quote was found only when the record verified one", () => {
+  // Triage, 2026-10-10: "The quote was found verbatim" was said whatever the spans held.
+  const unverified = { ...lead("needs_review"), spans: [{ verified: false, method: "none" }] } as unknown as FindingView;
+  render(<OneRun proof={proof} lead={unverified} onOpen={vi.fn()} reduceMotion />);
+  expect(document.body.textContent).toContain("Code did not find the quote in the document text.");
+  expect(document.body.textContent).not.toContain("found verbatim");
 });

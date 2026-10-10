@@ -226,7 +226,11 @@ export function OneRun({
 }) {
   if (!lead) return null;
   const status = statusLabel(lead.status, proof.hasGuidance, lead.statusSource);
-  const relocated = (lead.spans ?? []).some((span) => span.method?.startsWith("relocated"));
+  const verified = (lead.spans ?? []).filter((span) => span.verified);
+  const relocated = verified.some((span) => span.method?.startsWith("relocated"));
+  const found = verified.length
+    ? `The quote was found verbatim${relocated ? ", in a different section from the one cited" : ""}.`
+    : "Code did not find the quote in the document text.";
   const read = lead.observed && lead.required ? `It read ${lead.observed} against ${lead.required}` : "It answered";
   const steps = [
     {
@@ -246,7 +250,7 @@ export function OneRun({
     {
       n: "03",
       title: "Code checks the quote, then the arithmetic",
-      text: `The quote was found verbatim${relocated ? ", in a different section from the one cited" : ""}.${lead.statusReason ? ` Then: ${lead.statusReason}.` : ""} Status: ${status}.`,
+      text: `${found}${lead.statusReason ? ` Then: ${lead.statusReason}.` : ""} Status: ${status}.`,
       link: "See what code decided",
       finding: true,
     },

@@ -442,7 +442,7 @@ function WorkbenchSurface() {
         if (stage === "workspace" && view === "assistant") {
           event.preventDefault();
           setPaletteOpen((o) => !o);
-        } else if (doc) {
+        } else if (doc && stage !== "processing") {
           event.preventDefault();
           setView("assistant");
           setStage("workspace");

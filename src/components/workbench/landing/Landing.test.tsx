@@ -23,7 +23,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
         observed: "60 days' written notice",
         required: "at least 90 days",
         review: null,
-        spans: [{ method: "relocated:exact" }],
+        spans: [{ method: "relocated:exact", verified: true }],
       },
     ],
   })),
