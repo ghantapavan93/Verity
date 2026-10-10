@@ -17,7 +17,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.policy.durations import Operator, parse_rule, stated_rules
+from app.policy.durations import Operator, parse_durations, parse_rule, stated_operator, stated_rules
 from app.runs.status import decide
 
 CEILINGS = [
@@ -112,3 +112,44 @@ def test_a_ceiling_met_by_the_contract_is_not_lowered_for_its_polarity() -> None
         topic="Cure period for material breach",
     )
     assert decision.status == "pass", decision
+
+
+# Bug hunt, 2026-10-09: ceiling words missing from the list fell through to "a bare period is a floor"; and the quote's
+# "not less than" read as a ceiling when a line break or two spaces sat inside it, because the lookbehinds matched one
+# space only. A comparative code does not recognise now leaves the period unread; whitespace inside a phrase is one space.
+MORE_CEILINGS = [
+    "Maximum 60 days' notice.",
+    "Notice: 60 days maximum.",
+    "Notice of max. 60 days.",
+    "Notice is limited to 60 days.",
+    "Notice of less than or equal to 60 days.",
+    "Notice of 60 days at the most.",
+    "Notice within\n60 days.",
+]
+UNKNOWN_COMPARATIVES = [
+    "Notice of 60 days or sooner is not required.",
+    "Notice shall be capped somewhere near 60 days.",
+    "Notice approximately 60 days, give or take.",
+]
+
+
+@pytest.mark.parametrize("guidance", MORE_CEILINGS)
+def test_more_ceiling_phrasings_are_maximums(guidance: str) -> None:
+    rule = parse_rule(guidance)
+    assert rule is not None and rule.operator is Operator.MAXIMUM, (guidance, rule)
+
+
+@pytest.mark.parametrize("guidance", UNKNOWN_COMPARATIVES)
+def test_a_comparative_code_does_not_recognise_is_not_read_as_a_floor(guidance: str) -> None:
+    rule = parse_rule(guidance)
+    assert rule is None or rule.operator is not Operator.MINIMUM, (guidance, rule)
+
+
+@pytest.mark.parametrize("quote", ["notice of not\nless than 30 days", "notice of not  less than 30 days", "notice not to be less than 30 days"])
+def test_a_floor_in_a_quote_reads_as_a_floor_whatever_the_spacing(quote: str) -> None:
+    assert stated_operator(quote, parse_durations(quote)[0]) is Operator.MINIMUM, quote
+
+
+def test_a_ceiling_in_a_quote_reads_as_a_ceiling_whatever_the_spacing() -> None:
+    quote = "notice of no\nmore than 30 days"
+    assert stated_operator(quote, parse_durations(quote)[0]) is Operator.MAXIMUM

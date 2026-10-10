@@ -50,6 +50,7 @@ RECORDED: dict[str, str] = {
     "policy-v2": "f680f205d5dca0c0",
     "policy-v3": "157d0c3d7711b18b",
     "policy-v4": "b88a4017c8ebfd98",
+    "policy-v5": "1ad102cde0ae3936",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged

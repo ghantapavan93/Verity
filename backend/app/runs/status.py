@@ -47,7 +47,11 @@ from ..policy.proof import pass_blockers, same_point
 # changed. A reference is unknown only when the document's text never opens a clause with it either (§12.3 inside §12
 # was "a section this document does not have"); replayed over 1,229 recorded findings, 20 became known, each
 # printed as a clause opening in its document.
-POLICY_VERSION = "policy-v4"
+# policy-v5 (2026-10-09, bug hunt): "maximum 60 days", "limited to", "less than or equal to" and "at the most" are
+# ceilings; a guidance period beside a comparing word the patterns do not recognise is not read; a qualifier a word or
+# two after the period counts ("30 days' notice or more"); whitespace inside a phrase is one space, so "not\nless than"
+# in a quote is a floor. Replayed over the 63 recorded findings with guidance and 10 guidance texts: none changed.
+POLICY_VERSION = "policy-v5"
 
 
 @dataclass(frozen=True)

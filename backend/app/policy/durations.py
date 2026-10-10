@@ -208,21 +208,41 @@ class GuidanceRule:
 
 # A ceiling is never to be read as a floor (the holdout audit of 2026-10-09: "must not exceed 60 days" was): every
 # phrasing that bounds from above is listed here, its negated forms with it, so the "not" in them is not a negation.
+# The negated forms carry "to be" too ("not to be less than"), and the windows they are matched in have their whitespace
+# collapsed (window_before): a line break inside "not less than" read it as a ceiling (bug hunt, 2026-10-09).
+_NEGATED = r"(?:no|not|nor|never)(?: to)?(?: be)?"
 _MAXIMUM = re.compile(
-    r"(?:≤|<=|at most|(?:no|not|nor|never)(?: be)? (?:more|longer|greater) than|maximum of|a maximum|or less|or fewer|or shorter|within"
-    r"|(?:not|never)(?: to)? exceed(?:ing|s)?|capped at|a cap of|up to|no later than|not later than)",
+    rf"(?:≤|<=|at most|at the most|{_NEGATED} (?:more|longer|greater) than|(?:less|shorter|fewer) than or equal to|\bmaximum\b|\bmax\b\.?"
+    r"|or less|or fewer|or shorter|or sooner|within|(?:not|never)(?: to)? exceed(?:ing|s)?|capped at|a cap of|limited to|up to"
+    r"|no later than|not later than)",
     re.IGNORECASE,
 )
-_MINIMUM = re.compile(r"(?:≥|>=|at least|(?:no|not|nor|never)(?: be)? (?:less|fewer|shorter) than|minimum of|a minimum|or more|or longer)", re.IGNORECASE)
+_MINIMUM = re.compile(
+    rf"(?:≥|>=|at least|at the least|{_NEGATED} (?:less|fewer|shorter) than|(?:more|longer|greater) than or equal to|\bminimum\b"
+    r"|\bmin\b\.?|or more|or longer)",
+    re.IGNORECASE,
+)
+# Any word that compares. A guidance period beside one that neither pattern above recognised is not read at all: a
+# bare period is a floor only when nothing beside it compares ("maximum 60 days" fell through to a floor; bug hunt).
+_COMPARES = re.compile(
+    r"\b(?:max\w*|min\w*|limit\w*|cap\w*|ceiling|floor|exceed\w*|sooner|later|earlier|most|least|more|less|fewer|greater|longer"
+    r"|shorter|approx\w*|about|around|near(?:ly)?|roughly|up to|within|under|over|above|below|beyond)\b",
+    re.IGNORECASE,
+)
+_WHITESPACE = re.compile(r"\s+")
+_TRAILING_MAXIMUM = re.compile(r"\b(?:or less|or fewer|or shorter|or sooner|at the most|at most|maximum|max)\b", re.IGNORECASE)
+_TRAILING_MINIMUM = re.compile(r"\b(?:or more|or longer|at the least|at least|minimum|min)\b", re.IGNORECASE)
 # "less than 30 days" with no negation before it: an upper bound, stated strictly.
 BELOW = re.compile(
-    r"(?<!not )(?<!no )(?<!nor )(?<!never )(?<!not be )(?<!never be )\b(?:less than|fewer than|shorter than|under|below)\s*\(?\s*$", re.IGNORECASE
+    r"(?<!not )(?<!no )(?<!nor )(?<!never )(?<!not be )(?<!never be )(?<!not to be )(?<!never to be )"
+    r"\b(?:less than|fewer than|shorter than|under|below)\s*\(?\s*$",
+    re.IGNORECASE,
 )
 # A bare comparative before a guidance period says which side the sentence is about, not which side it allows: "must
 # be less than 60 days" is a ceiling, "anything below 30 days requires review" a floor. The predicate decides, and
 # code does not read predicates; a period so stated is not a rule.
 _STRICT = re.compile(
-    r"(?<!not )(?<!no )(?<!nor )(?<!never )(?<!not be )(?<!never be )(?<!not to )(?<!never to )"
+    r"(?<!not )(?<!no )(?<!nor )(?<!never )(?<!not be )(?<!never be )(?<!not to )(?<!never to )(?<!not to be )(?<!never to be )"
     r"\b(?:(?:less|fewer|shorter|more|longer|greater) than|under|below|over|above|in excess of|exceed(?:ing|s)?|beyond)\s*\(?\s*$",
     re.IGNORECASE,
 )
@@ -237,11 +257,11 @@ _WINDOW_AFTER = 24
 
 
 def window_before(text: str, mention: DurationMention) -> str:
-    return text[max(0, mention.start - _WINDOW_BEFORE) : mention.start]
+    return _WHITESPACE.sub(" ", text[max(0, mention.start - _WINDOW_BEFORE) : mention.start])
 
 
 def window_after(text: str, mention: DurationMention) -> str:
-    return text[mention.end : mention.end + _WINDOW_AFTER]
+    return _WHITESPACE.sub(" ", text[mention.end : mention.end + _WINDOW_AFTER])
 
 
 def without_comparisons(text: str) -> str:
@@ -272,6 +292,12 @@ def explicit_operator(text: str, mention: DurationMention) -> Operator | None:
         suffix = pattern.match(after.lstrip())
         if suffix is not None:
             candidates.append((0, operator))
+    # A trailing qualifier a word or two on ("30 days' notice or more", "60 days' notice at the most"): only the phrases
+    # that close a period, so "within" or "up to" after it never read as its bound.
+    for pattern, operator in ((_TRAILING_MAXIMUM, Operator.MAXIMUM), (_TRAILING_MINIMUM, Operator.MINIMUM)):
+        trailing = pattern.search(after)
+        if trailing is not None:
+            candidates.append((trailing.start(), operator))
     if not candidates:
         return None
     return min(candidates, key=lambda c: c[0])[1]
@@ -296,14 +322,17 @@ def _operator_near(text: str, mention: DurationMention) -> Operator | None:
     """The comparison a guidance sentence states around its duration. A duration with no comparison word is a floor:
     a notice requirement states the least notice that will do (written here once). None where a negation code does not
     read stands beside it: before a stated comparison ("must not be at least 60 days"), or on either side of a bare
-    period ("more than 60 days are not acceptable"); and after a bare comparative ("less than 60 days", see _STRICT).
-    A guidance bound is read as written or not read at all."""
+    period ("more than 60 days are not acceptable"); after a bare comparative ("less than 60 days", see _STRICT); and
+    beside any comparing word the patterns did not recognise (_COMPARES). A guidance bound is read as written or not
+    read at all."""
     if _STRICT.search(window_before(text, mention)):
         return None
     stated = explicit_operator(text, mention)
     if stated is not None:
         return None if negation_near(text, mention, after=False) else stated
-    return None if negation_near(text, mention) else Operator.MINIMUM
+    if negation_near(text, mention) or _COMPARES.search(f"{window_before(text, mention)} {window_after(text, mention)}"):
+        return None
+    return Operator.MINIMUM
 
 
 def _sentence_spans(text: str) -> list[tuple[int, int]]:
