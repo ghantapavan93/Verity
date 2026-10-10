@@ -62,7 +62,7 @@ _DATE = re.compile(
 )
 # Any run of three numbers joined by one separator ("2024-01-01", "13/01/2024", "1/2/24") is a date: one value when its
 # order is certain, set aside when not, never loose numbers (triage, 2026-10-09: "2024-01-01" showed as 2024 and 01).
-_NUMERIC_DATE = re.compile(r"\b(?P<a>\d{1,4})(?P<sep>[-/.])(?P<b>\d{1,2})(?P=sep)(?P<c>\d{1,4})\b")
+_NUMERIC_DATE = re.compile(r"\b(?P<a>\d{1,4})(?P<sep>[-/.\u2013\u2014])(?P<b>\d{1,2})(?P=sep)(?P<c>\d{1,4})\b")
 
 # Letters in a pointer are capitals or a bracketed sub-item: "Schedule B", "8.1(a)", never the next word ("fees").
 _REF = r"(?-i:[\dA-Z]{1,6})(?![A-Za-z])(?:\.\d{1,6}){0,6}(?:\([a-z0-9]{1,4}\)){0,4}"
@@ -73,7 +73,7 @@ _POINTER_WORDS = (
 # Where an answer points rather than states.
 _POINTERS = re.compile(
     rf"(?:§§?\s*|\b(?:{_POINTER_WORDS})\s+(?:no\.?\s*|number\s+)?){_REF}(?:\s*(?:,\s*(?:and|or)?|and|or|to|through|&)\s*{_REF}){{0,40}}"
-    r"|\bsec_\d+|\(part \d+\)|\(\s*\d{1,2}\s*\)|(?<!\d)\.\d+",
+    r"|\bsec_\d+(?:[.,]\d+)*|\(part \d+\)|\(\s*\d{1,2}\s*\)|(?<!\d)\.\d+",
     re.IGNORECASE,
 )
 
@@ -83,8 +83,21 @@ _POINTERS = re.compile(
 MAX_VALUE_DIGITS = 24
 
 
+# Thousands grouping, the only comma a value may hold: "1,5%" is a European 1.5%, unreadable here, so set aside rather
+# than read as 15% (bug hunt, 2026-10-09).
+_GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?")
+# A number glued to what follows ("$1.5M", "100m", "1st") is one run; the tokenizer stops inside it ("$1" of "$1.5M").
+# Money with a magnitude suffix is read whole; any other glued run is set aside, never reported cut short.
+_GLUED = re.compile(r"[.,]?[^\W_]")
+_GLUED_MONEY = re.compile(r"(?:[$€£¥]|(?:USD|EUR|GBP|CHF|CAD|AUD)\s?)(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(k|mm|m|bn|b)(?![^\W_])", re.IGNORECASE)
+_SUFFIX = {"k": Decimal(10) ** 3, "m": Decimal(10) ** 6, "mm": Decimal(10) ** 6, "b": Decimal(10) ** 9, "bn": Decimal(10) ** 9}
+
+
 def _number(surface: str) -> Decimal | None:
-    digits = re.sub(r"[^\d.]", "", surface.replace(",", ""))
+    raw = re.sub(r"[^\d.,]", "", surface)
+    if "," in raw and not _GROUPED.fullmatch(raw):
+        return None
+    digits = raw.replace(",", "")
     if not digits or len(digits) > MAX_VALUE_DIGITS:
         return None
     try:
@@ -159,12 +172,25 @@ def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int, 
     dates = _dates(text)
     found = [(key, start, end, "date") for key, start, end in dates if key is not None]
     rest = _blank(text, ((start, end) for _, start, end in dates))
+    # Money with a glued magnitude is read straight from the text: the tokenizer splits "$1.5M" into "$1" and "5M", and
+    # gives "$3M" no number at all.
+    glued_until: dict[int, int] = {}
+    for glued in _GLUED_MONEY.finditer(rest):
+        amount = _number(glued.group(1))
+        if amount is not None:
+            found.append((_key(amount * _SUFFIX[glued.group(2).casefold()]), glued.start(), glued.end(), "money"))
+            glued_until[glued.start()] = glued.end()
+    covered = sorted(glued_until.items())
     for token in tokenize(rest):
         if token.kind in (Kind.NUMBER, Kind.CURRENCY, Kind.PERCENT):
+            end = token.end
+            if any(start <= token.start < stop for start, stop in covered):
+                continue
+            if token.kind is not Kind.PERCENT and _GLUED.match(rest, end):
+                continue  # glued to what follows ("100m", "1st"): set aside, never reported cut short
             value = _number(rest[token.start : token.end])
             if value is None:
                 continue
-            end = token.end
             scale = _MAGNITUDE.match(rest, end) if token.kind is not Kind.PERCENT else None
             factor = _scale(scale.group(1)) if scale else None
             if scale and factor is not None:
@@ -190,22 +216,41 @@ def _keys(text: str) -> set[str]:
     return {key for key, _, _, _ in _stated(text, words_need_a_unit=False)}
 
 
+def _kinds_of(text: str, *, words_need_a_unit: bool) -> dict[str, set[str]]:
+    """For each value ``text`` states (its "n:" or "d:" key), the kinds it is stated as: a percentage, money, a duration
+    in one unit family, or "plain" where code reads no kind (a number with no unit, "30 (thirty) days")."""
+    group_at = {start: group for _, group, _, _, start, _ in _kinded(text, words_need_a_unit=words_need_a_unit)}
+    kinds: dict[str, set[str]] = {}
+    for key, start, _, _ in _stated(text, words_need_a_unit=words_need_a_unit):
+        kinds.setdefault(key, set()).add(group_at.get(start, "plain"))
+    return kinds
+
+
 def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = ()) -> list[str]:
     """The values ``answer`` states that no quote and none of the reader's own text (question, guidance) states, each as
-    the answer writes it ("45 days", "$78,600.00", "one (1) day", "January 1, 2024"), in the answer's order, once each."""
+    the answer writes it ("45 days", "$78,600.00", "one (1) day", "January 1, 2024"), in the answer's order, once each.
+
+    A value is quoted by the same number stated as the same kind, or stated with no kind code can read: "5%" is not
+    quoted by "within 5 business days" (review, 2026-10-09: an answer of 5% over a quote whose 5 is days, beside a credit
+    of 10%, was told nothing), while "30 days" is quoted by "30 (thirty) days", whose unit code does not read."""
     if not answer:
         return []
-    given: set[str] = set()
+    given: dict[str, set[str]] = {}
     for text in (*quotes, *readers_text):
-        given |= _keys(text)
+        for key, kinds in _kinds_of(text, words_need_a_unit=False).items():
+            given.setdefault(key, set()).update(kinds)
     # Pointers are blanked to spaces, not removed, so offsets still index the answer as written.
     blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
+    group_at = {start: group for _, group, _, _, start, _ in _kinded(blanked, words_need_a_unit=True)}
     shown: list[str] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     for key, start, end, _ in sorted(_stated(blanked, words_need_a_unit=True), key=lambda found: found[1]):
-        if key in given or key in seen:
+        kind = group_at.get(start, "plain")
+        stated_as = given.get(key, set())
+        quoted = bool(stated_as) and (kind == "plain" or kind in stated_as or "plain" in stated_as)
+        if quoted or (key, kind) in seen:
             continue
-        seen.add(key)
+        seen.add((key, kind))
         unit = _TRAILING_UNIT.match(blanked, end) if key.startswith("n:") else None
         shown.append(answer[start : unit.end() if unit else end].strip())
     return shown

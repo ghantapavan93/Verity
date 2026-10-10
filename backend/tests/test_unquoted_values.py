@@ -18,7 +18,7 @@ from collections.abc import Callable
 import pytest
 from fastapi.testclient import TestClient
 
-from app.runs.values import unquoted_values
+from app.runs.values import unquoted_values, value_choices
 from tests.support import upload_and_ask
 
 
@@ -146,3 +146,39 @@ def test_the_run_detail_carries_them_on_a_passage_finding(client: TestClient) ->
     quoted = " ".join(s["quote"] for s in finding["spans"] if s["verified"])
     for value in finding["unquotedValues"]:
         assert value not in quoted, value
+
+
+# Bug hunt and review, 2026-10-09: statements the check made that were not true.
+def test_a_glued_magnitude_is_part_of_the_value_or_the_value_is_set_aside() -> None:
+    """ "$1.5M" was reported as "$1", a value the answer never states."""
+    assert unquoted_values("The cap is $1.5M.", ["capped at $1,500,000"], []) == []
+    assert unquoted_values("The cap is $2.5bn.", ["capped at $2,500,000,000"], []) == []
+    assert unquoted_values("The cap is $1,500K.", ["capped at $1,500,000"], []) == []
+    assert unquoted_values("The cap is $3M.", ["capped at $1,500,000"], []) == ["$3M"], "control: a different value"
+    assert "$1" not in unquoted_values("The cap is $1.5Q.", ["capped at $1,500,000"], [])
+
+
+def test_a_comma_that_is_not_thousands_grouping_is_not_dropped() -> None:
+    """ "1,5%" (a European 1.5%) was read as 15%: unreadable, so set aside, never another value."""
+    assert unquoted_values("The rate is 1,5%.", ["15% or 20%"], []) == []
+    assert value_choices("The rate is 1,5%.", ["15% or 20%"], []) == []
+
+
+def test_the_tail_of_a_pointer_is_not_a_value() -> None:
+    """ "sec_1,500" left ",500" behind as the value 500."""
+    assert unquoted_values("See sec_1,500 for the fee.", ["a fee"], []) == []
+
+
+def test_dash_dates_are_one_value() -> None:
+    assert unquoted_values("Signed 2024–01–01.", ["for three years"], []) == ["2024–01–01"]
+    assert unquoted_values("Signed 2024–01–01.", ["dated January 1, 2024"], []) == []
+
+
+def test_a_value_of_another_kind_does_not_count_as_quoted() -> None:
+    """Review R2: an answer of "5%" over "within 5 business days … a credit of 10%" was told nothing; the 5 in the
+    quote is days. A value with a kind (percent, money, duration) is quoted only by a value of that kind."""
+    quote = "Provider will respond within 5 business days and pay a credit of 10% of the monthly fee"
+    assert unquoted_values("The credit is 5%.", [quote], []) == ["5%"]
+    assert unquoted_values("The credit is 10%.", [quote], []) == [], "control"
+    assert unquoted_values("Respond within 5 days.", [quote], []) == [], "control: 5 business days is 5 days of the same family"
+    assert unquoted_values("Section 5 applies.", [quote], []) == [], "control: a pointer"
