@@ -12,6 +12,9 @@ changes no status, and its absence claims nothing (a quote can state the right n
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -102,25 +105,38 @@ def test_a_right_number_in_the_wrong_band_is_not_claimed_as_caught() -> None:
     assert unquoted_values("A credit of 5% applies at 98.7% availability.", [quote], ["What credit applies at 98.7%?"]) == []
 
 
+# (repeated unit, repeats): about 12 KB each; the scaling check reads 1x and 4x (about 50 KB).
 HOSTILE = [
-    "9" * 50_000,
-    "one and " * 6_000,
-    "one " * 12_500,  # security audit, 2026-10-09: 13.3 s, and every other request waited behind it
-    "twenty-one " * 4_500,
-    "thirty (30) " * 4_000,
-    "§" + "1." * 20_000,
-    "Sections 1, " * 4_000,
+    ("9", 12_500),
+    ("one and ", 1_500),
+    ("one ", 3_125),  # security audit, 2026-10-09: 13.3 s at 50 KB, and every other request waited behind it
+    ("twenty-one ", 1_125),
+    ("thirty (30) ", 1_000),
+    ("1.", 5_000),
+    ("Sections 1, ", 1_000),
 ]
 
 
-@pytest.mark.parametrize("hostile", HOSTILE, ids=[f"hostile-{i}" for i in range(len(HOSTILE))])
-def test_hostile_answers_and_quotes_are_read_in_linear_time(hostile: str) -> None:
-    """Every finding read runs this, in the API's process: a long answer or quote must not stall other requests."""
-    import time
+def read_time(read: Callable[[str], object], text: str) -> float:
+    best = float("inf")
+    for _ in range(3):
+        started = time.perf_counter()
+        read(text)
+        best = min(best, time.perf_counter() - started)
+    return best
 
-    started = time.perf_counter()
-    unquoted_values(hostile, [hostile], [hostile])
-    assert time.perf_counter() - started < 0.5, len(hostile)
+
+def assert_linear(read: Callable[[str], object], unit: str, repeats: int) -> None:
+    """Four times the input costs about four times the time; a quadratic read costs sixteen. The ratio, not a
+    wall-clock bound, so a busy machine cannot fail it and a quadratic one cannot pass it."""
+    small, big = read_time(read, unit * repeats), read_time(read, unit * repeats * 4)
+    assert big < 8 * small + 0.02, (unit, repeats, small, big)
+
+
+@pytest.mark.parametrize(("unit", "repeats"), HOSTILE, ids=[f"hostile-{i}" for i in range(len(HOSTILE))])
+def test_hostile_answers_and_quotes_are_read_in_linear_time(unit: str, repeats: int) -> None:
+    """Every finding read runs this, in the API's process: a long answer or quote must not stall other requests."""
+    assert_linear(lambda text: unquoted_values(text, [text], [text]), unit, repeats)
 
 
 def test_the_run_detail_carries_them_on_a_passage_finding(client: TestClient) -> None:

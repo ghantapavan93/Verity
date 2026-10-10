@@ -14,14 +14,12 @@ and expected counts: C:/Temp/verity-qa/m3/impl/candidates-prereg.json (sha256 05
 
 from __future__ import annotations
 
-import time
-
 import pytest
 from fastapi.testclient import TestClient
 
 from app.runs.values import value_choices
 from tests.support import upload_and_ask
-from tests.test_unquoted_values import HOSTILE
+from tests.test_unquoted_values import HOSTILE, assert_linear
 
 AD7_QUOTE = (
     "Monthly Availability | Service Credit 99.5% or higher | No credit 99.0% to 99.49% | 5% of the monthly fee "
@@ -83,28 +81,44 @@ def test_a_provision_that_overrides_another_is_one_choice() -> None:
         "4.1 Either party may terminate this Agreement for convenience upon thirty (30) days' prior written notice to the other party.",
         "12.3 Notwithstanding Section 4.1, neither party may terminate for convenience on less than ninety (90) days' prior written notice.",
     ]
-    choices = value_choices("Notice is 30 days' prior written notice.", quotes, ["Does the notice meet our guidance?", "At least 60 days."])
+    choices = value_choices("Notice is 30 days' prior written notice.", quotes, ["Does the notice meet our guidance?"], guidance=["At least 60 days."])
     assert [(c.answer, c.values) for c in choices] == [("30 days", ["thirty (30) days", "ninety (90) days"])]
 
 
-def test_a_quote_that_contradicts_itself_offers_both_values() -> None:
-    """AD14: "thirty (60) days" states 30 and 60."""
-    choices = value_choices("The notice period is 60 days.", ["upon thirty (60) days' written notice to Provider"], [])
-    assert [c.values for c in choices] == [["thirty (60) days", "(60) days"]]
+def test_one_provision_is_one_value_however_it_spells_it() -> None:
+    """Triage, revision: "thirty (60) days" is one provision; the bracket rule that listed it twice is gone."""
+    assert value_choices("The notice period is 60 days.", ["upon thirty (60) days' written notice to Provider"], []) == []
 
 
-def test_the_readers_own_values_are_set_aside_on_both_sides() -> None:
-    """C09: the question names "sixty minutes"; the passage's other duration alone is not a choice."""
-    quote = "For the first sixty (60) minutes of Downtime during Normal Business Hours or the first four (4) hours outside"
-    question = "What credit does the customer receive for the first sixty minutes of downtime?"
-    assert value_choices("The customer receives one (1) day of credit.", [quote], [question]) == []
+def test_the_readers_own_values_stay_among_the_passages() -> None:
+    """Triage, revision: set aside only on the answer's side. Guidance "at least 90 days", passages stating 30 and 90, an
+    answer of 30: the passages offered a choice, and hiding the 90 hid the conflict."""
+    quotes = ["terminate on thirty (30) days' notice", "notwithstanding the above, not on less than ninety (90) days' notice"]
+    choices = value_choices("Notice is 30 days.", quotes, ["What notice applies?"], guidance=["At least 90 days' notice."])
+    assert [(c.answer, c.values) for c in choices] == [("30 days", ["thirty (30) days", "ninety (90) days"])]
 
 
-@pytest.mark.parametrize("hostile", HOSTILE, ids=[f"hostile-{i}" for i in range(len(HOSTILE))])
-def test_hostile_text_is_read_in_linear_time(hostile: str) -> None:
-    started = time.perf_counter()
-    value_choices(hostile, [hostile], [hostile])
-    assert time.perf_counter() - started < 0.5, len(hostile)
+def test_a_value_the_passages_do_not_state_is_not_a_choice() -> None:
+    """Triage, revision: an answer computed from the passages ($71,100 + $7,500 = $78,600) chose nothing among them;
+    unquoted_values already names it. Only answer values that are among the passages' values are reported as used."""
+    quotes = ["Total | $71,100.00", "a one-time onboarding fee of $7,500.00"]
+    assert value_choices("The total payable is $78,600.00.", quotes, []) == []
+    mixed = value_choices("The total is USD 64,000: USD 4,000 and USD 60,000.", ["Implementation USD 4,000; licence USD 2,500 a month"], [])
+    assert [(c.answer, c.values) for c in mixed] == [("USD 4,000", ["USD 4,000", "USD 2,500"])]
+
+
+def test_durations_compare_within_one_unit_family_and_equivalents_merge() -> None:
+    """Triage, revision: a term (12 months) and a notice (30 days) are not a choice; one year and twelve months are one value."""
+    term_and_notice = ["The Initial Term is twelve (12) months.", "Either party may terminate on thirty (30) days' notice."]
+    assert value_choices("Notice is 30 days.", term_and_notice, []) == []
+    assert value_choices("The term is one year.", ["The term is one (1) year, being twelve (12) months."], []) == []
+    weeks = value_choices("Notice is 2 weeks.", ["notice of two weeks, or 30 days for cause"], [])
+    assert [(c.answer, c.values) for c in weeks] == [("2 weeks", ["two weeks", "30 days"])]
+
+
+@pytest.mark.parametrize(("unit", "repeats"), HOSTILE, ids=[f"hostile-{i}" for i in range(len(HOSTILE))])
+def test_hostile_text_is_read_in_linear_time(unit: str, repeats: int) -> None:
+    assert_linear(lambda text: value_choices(text, [text], [text]), unit, repeats)
 
 
 def test_the_run_detail_carries_them(client: TestClient) -> None:
@@ -114,3 +128,27 @@ def test_the_run_detail_carries_them(client: TestClient) -> None:
     quoted = " ".join(s["quote"] for s in finding["spans"] if s["verified"])
     for choice in finding["valueChoices"]:
         assert all(value in quoted for value in choice["values"]), "every value listed is in a verified quote"
+
+
+def test_the_readers_value_is_recognised_in_any_unit() -> None:
+    """C09: the question names "sixty minutes"; an answer repeating it chose nothing, though code compares in seconds."""
+    quote = "For the first sixty (60) minutes of Downtime during Normal Business Hours or the first four (4) hours outside"
+    question = "What service credit does the customer receive for the first sixty minutes of downtime?"
+    assert value_choices("One (1) day of credit for the first sixty (60) minutes.", [quote], [question]) == []
+
+
+def test_an_answer_that_gives_every_value_made_no_choice() -> None:
+    """A conditional answer that states both periods (U1: 30 days, or 90 days after the first year) left nothing out:
+    "which one applies" would be untrue. A choice is some of the passages' values used and others left out."""
+    quotes = ["terminate on thirty (30) days' notice", "after the first year, on ninety (90) days' notice"]
+    assert value_choices("Thirty (30) days, or ninety (90) days after the first year.", quotes, []) == []
+    assert [c.answer for c in value_choices("Thirty (30) days.", quotes, [])] == ["Thirty (30) days"]
+
+
+def test_the_condition_the_question_names_is_not_an_alternative() -> None:
+    """Fresh evaluation C1 (2026-10-09), a control: one clause, "7% … for each month in which availability falls below
+    99.5%", asked about "below 99.5%". The question's own value is the condition asked about, set aside on both sides; a
+    guidance's value stays among the passages, as a competing standard (test above)."""
+    quote = "Supplier shall pay a service credit of 7% of the monthly fee for each month in which availability falls below 99.5%."
+    question = "What service credit does the Supplier pay for a month in which availability falls below 99.5%?"
+    assert value_choices("A service credit of 7% for a month below 99.5%.", [quote], [question]) == []

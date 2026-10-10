@@ -50,7 +50,10 @@ def _value_checks(finding: Finding) -> tuple[list[str], list[ValueChoiceOut]]:
     session = object_session(finding)
     guidance = session.get(Guidance, run.guidance_id) if session is not None and run.guidance_id else None
     readers = [run.question, guidance.text if guidance else ""]
-    choices = [ValueChoiceOut(kind=c.kind, answer=c.answer, values=c.values, more=c.more) for c in value_choices(finding.shown_conclusion, quotes, readers)]
+    choices = [
+        ValueChoiceOut(kind=c.kind, answer=c.answer, values=c.values, more=c.more)
+        for c in value_choices(finding.shown_conclusion, quotes, [run.question], [guidance.text] if guidance else [])
+    ]
     return unquoted_values(finding.shown_conclusion, quotes, readers), choices
 
 

@@ -41,7 +41,7 @@ _UNIT = (
 # one …" held the API for 13 s (security audit, 2026-10-09).
 _ANY_WORDS = re.compile(rf"(?P<words>{_WORD_RUN})", re.IGNORECASE)
 # What follows a value and belongs to it when it is shown: its unit, with the digits a contract repeats in brackets.
-_TRAILING_UNIT = re.compile(rf"(?:\s*\(\s*[\d.,]{{1,24}}\s*\)|\s*\))?[\s-]*{_UNIT}", re.IGNORECASE)
+_TRAILING_UNIT = re.compile(rf"(?:\s*\(\s*[\d.,]{{1,24}}\s*\))?[\s-]*{_UNIT}", re.IGNORECASE)
 # "$1.5 million" is 1,500,000: the word is part of the value, on both sides (triage, 2026-10-09).
 _MAGNITUDE = re.compile(r"\s*(thousand|million|billion|trillion)\b", re.IGNORECASE)
 _SCALE = {"thousand": Decimal(10) ** 3, "million": Decimal(10) ** 6, "billion": Decimal(10) ** 9, "trillion": Decimal(10) ** 12}
@@ -194,7 +194,14 @@ def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Ite
 
 # ----------------------------------------------------------------------------------------------- choices among values
 
-_TIME_UNITS = {"day", "week", "fortnight", "month", "year", "hour", "minute", "second"}
+# A duration is compared only within its unit family, in that family's base unit, so that equivalents are one value
+# ("one year" is "twelve months") and a term and a notice are not a choice ("12 months" against "30 days"): a month is
+# not a fixed number of days, so across families code cannot compare exactly (triage, 2026-10-09).
+_DURATION_FAMILIES: dict[str, tuple[str, int]] = {
+    "second": ("clock", 1), "minute": ("clock", 60), "hour": ("clock", 3600),
+    "day": ("days", 1), "week": ("days", 7), "fortnight": ("days", 14),
+    "month": ("months", 1), "year": ("months", 12),
+}  # fmt: skip
 _MONEY_UNITS = {"dollar", "euro", "pound"}
 # The kinds a choice is disclosed for: a band of percentages, a schedule of fees, a set of periods.
 ChoiceKind = Literal["percent", "money", "duration"]
@@ -204,72 +211,78 @@ MAX_CHOICES_SHOWN = 8
 
 @dataclass(frozen=True)
 class ValueChoice:
-    """Several values of a kind the answer gives, stated by a finding's verified passages, and the answer's value(s)."""
+    """Several values of a kind the answer gives, stated by a finding's verified passages, and the answer's value(s)
+    among them."""
 
     kind: ChoiceKind
-    answer: str  # the answer's value(s) of this kind, as written in the answer
+    answer: str  # the answer's value(s) of this kind that the passages state, as written in the answer
     values: list[str]  # the passages' distinct values of this kind, as written, in their order, at most MAX_CHOICES_SHOWN
     more: int  # how many further distinct values the passages state
 
 
-def _kinded(text: str, *, words_need_a_unit: bool) -> list[tuple[ChoiceKind, str, int, int]]:
-    """(kind, key, start, end) of each percentage, sum of money and duration ``text`` states, in its order, with the
-    span covering its unit. A duration's key carries its unit: 30 days and 30 months are two values."""
-    out: list[tuple[ChoiceKind, str, int, int]] = []
+def _kinded(text: str, *, words_need_a_unit: bool) -> list[tuple[ChoiceKind, str, str, str, int, int]]:
+    """(kind, group, key, number, start, end) of each percentage, sum of money and duration ``text`` states, in its
+    order, with the span covering its unit. Values compare within a group: a kind, and for a duration its unit family
+    in that family's base unit. ``number`` is the value as written ("n:60" for sixty minutes, keyed 3600 seconds)."""
+    out: list[tuple[ChoiceKind, str, str, str, int, int]] = []
     for key, start, end, written in sorted(_stated(text, words_need_a_unit=words_need_a_unit), key=lambda found: found[1]):
         if written == "date":
             continue
-        value = key.removeprefix("n:")
+        value = Decimal(key.removeprefix("n:"))
         unit = _TRAILING_UNIT.match(text, end)
         word = re.sub(r"s$", "", unit.group(0).split()[-1].lower().strip("-")) if unit else ""
         through = unit.end() if unit else end
-        if start > 0 and text[start - 1] == "(" and text[end : end + 1] == ")":
-            start -= 1  # "(60) days" in "thirty (60) days": the bracket shows which value this is
         if written == "percent":
-            out.append(("percent", f"p:{value}", start, end))
+            out.append(("percent", "percent", f"p:{value.normalize()}", key, start, end))
         elif written == "money":
-            out.append(("money", f"m:{value}", start, end))
+            out.append(("money", "money", f"m:{value.normalize()}", key, start, end))
         elif word in ("percent", "cent"):
-            out.append(("percent", f"p:{value}", start, through))
+            out.append(("percent", "percent", f"p:{value.normalize()}", key, start, through))
         elif word in _MONEY_UNITS:
-            out.append(("money", f"m:{value}", start, through))
-        elif word in _TIME_UNITS:
-            out.append(("duration", f"t:{value}:{word}", start, through))
+            out.append(("money", "money", f"m:{value.normalize()}", key, start, through))
+        elif word in _DURATION_FAMILIES:
+            family, factor = _DURATION_FAMILIES[word]
+            out.append(("duration", f"duration:{family}", f"t:{family}:{(value * factor).normalize()}", key, start, through))
     return out
 
 
-def value_choices(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = ()) -> list[ValueChoice]:
-    """For each kind the answer gives (a percentage, money, a duration), the distinct values of that kind the finding's
-    verified passages state together, when there are two or more, with the answer's (evaluation workstream, 2026-10-09:
-    a band table quoted word for word held 5%, 10% and 25%, and the answer chose 5% where the band gives 10%; a discount
-    table split over two quotes held 5% and 8%). Which value applies is the model's reading; code says only that the
-    passages offered several and which the answer used. A value the reader's own question or guidance states is set
-    aside on both sides: it is neither the answer's choice ("at 98.7%") nor one the passages offered for it."""
+def value_choices(answer: str | None, quotes: Iterable[str], question: Iterable[str] = (), guidance: Iterable[str] = ()) -> list[ValueChoice]:
+    """For each kind of value the answer gives (a percentage, money, a duration), the distinct values of that kind the
+    finding's verified passages state together, when there are two or more and the answer uses one of them
+    (evaluation workstream, 2026-10-09: a band table quoted word for word held 5%, 10% and 25%, and the answer chose 5%
+    where the band gives 10%; a discount table split over two quotes held 5% and 8%). Which value applies is the
+    model's reading; code says only that the passages offered several and which of them the answer used. An answer
+    value the passages do not state chose nothing among them (a computed total): `unquoted_values` names it.
+
+    The reader's own values are not the answer's choice. A value the question names is the condition asked about ("below
+    99.5%"), set aside on both sides; a value the guidance names stays among the passages', since a guidance's 90 days
+    beside a contract's 30 is the very conflict to show (triage and the fresh evaluation, 2026-10-09)."""
     if not answer:
         return []
     asked: set[str] = set()
-    for text in readers_text:
+    for text in question:
         asked |= _keys(text)
-
-    def own(key: str) -> bool:
-        return f"n:{key.split(':')[1]}" in asked
-
-    blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
-    given: dict[ChoiceKind, list[str]] = {}
-    for kind, key, start, end in _kinded(blanked, words_need_a_unit=True):
-        written = answer[start:end].strip()
-        if own(key) or written in given.get(kind, []):
-            continue
-        given.setdefault(kind, []).append(written)
-    offered: dict[ChoiceKind, list[tuple[str, str]]] = {}
+    standard: set[str] = set(asked)
+    for text in guidance:
+        standard |= _keys(text)
+    # Per group: each distinct value once (key -> as written, in the passages' order). Dicts, not scans: a quote of
+    # thousands of values stays linear.
+    offered: dict[str, dict[str, str]] = {}
     for quote in quotes:
-        for kind, key, start, end in _kinded(quote, words_need_a_unit=False):
-            if not own(key) and all(key != seen for seen, _ in offered.get(kind, [])):
-                offered.setdefault(kind, []).append((key, quote[start:end].strip()))
+        for _, group, key, number, start, end in _kinded(quote, words_need_a_unit=False):
+            if number not in asked:
+                offered.setdefault(group, {}).setdefault(key, quote[start:end].strip())
+    blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
+    used: dict[str, tuple[ChoiceKind, dict[str, str]]] = {}
+    for kind, group, key, number, start, end in _kinded(blanked, words_need_a_unit=True):
+        if number in standard or key not in offered.get(group, {}):
+            continue
+        used.setdefault(group, (kind, {}))[1].setdefault(key, answer[start:end].strip())
     choices: list[ValueChoice] = []
-    for kind in CHOICE_KINDS:
-        values = offered.get(kind, [])
-        if kind in given and len(values) >= 2:
-            shown = [written for _, written in values[:MAX_CHOICES_SHOWN]]
-            choices.append(ValueChoice(kind, ", ".join(given[kind]), shown, len(values) - len(shown)))
+    for group, (kind, chosen) in used.items():
+        values = list(offered[group].values())
+        # A choice is some of the values used and others left out: an answer that gives them all chose nothing.
+        if len(values) >= 2 and len(chosen) < len(values):
+            shown = values[:MAX_CHOICES_SHOWN]
+            choices.append(ValueChoice(kind, ", ".join(chosen.values()), shown, len(values) - len(shown)))
     return choices
