@@ -249,7 +249,7 @@ def _kinds_of(text: str, *, words_need_a_unit: bool) -> dict[str, set[str]]:
 
 
 def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = (), clause_numbers: Iterable[str] = ()) -> list[str]:
-    """The values ``answer`` states that no quote and none of the reader's own text (question, guidance) states, each as
+    """The values ``answer`` states that no quote and none of the reader's own text the caller passes (the guidance) states, each as
     the answer writes it ("45 days", "$78,600.00", "one (1) day", "January 1, 2024"), in the answer's order, once each.
 
     A value is quoted by the same number stated as the same kind, or stated with no kind code can read: "5%" is not

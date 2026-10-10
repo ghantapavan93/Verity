@@ -78,7 +78,7 @@ class FakeProvider:
         if self.paraphrase:
             quote = "The customer can walk away with about two weeks of notice."
         # A well-behaved model names the guidance's period only when guidance was given (policy-v6 lowers a pass that
-        # states a value no quote, question or guidance states).
+        # states a value no quote or guidance states).
         guided = "LEGAL GUIDANCE: none supplied" not in user
         conclusion = (
             f"Customer may terminate for convenience on 15 days' written notice{'; the guidance requires at least 30 days' if guided else ''}. [{label}]"

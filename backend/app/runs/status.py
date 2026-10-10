@@ -54,8 +54,8 @@ from .values import redaction_given_as_value, unquoted_values
 # in a quote is a floor. References read "§ 99", plurals and lists, and leave statutes ("Section 1542 of the California
 # Civil Code") alone. Replayed: 0 of 63 guidance decisions, 0 of 10 guidance rules and 0 of 1,229 references change.
 # policy-v6 (2026-10-10, Contract Reality Lab): a pass is lowered to needs review when its conclusion states a value no
-# verified quote, question or guidance states, or gives a redaction mark ("[***]") as its value (`check_values`). Both were
-# disclosed beside the answer and left the pass standing. Over 896 recorded passes (owner and lab stores): 12 and 4.
+# verified quote or guidance states (the question is not evidence), or gives a redaction mark ("[***]") as its value (`check_values`). Both were
+# disclosed beside the answer and left the pass standing. Over 896 recorded passes (owner and lab stores): 17 change.
 POLICY_VERSION = "policy-v6"
 
 

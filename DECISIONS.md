@@ -701,7 +701,7 @@ FAILED" with the failed steps named and a non-zero exit. Rehearsed: a throwaway 
 test and one deliberately failing flow failed the gate with both named; the blocked candidate failed it; the live commit
 passed it (1,231 tests, 29 of 29 flows). The candidate's two browser failures were not load: the flows replay recorded
 model answers keyed by the exact message, and changing the handed sections leaves the replay with no recording, as
-designed. The gate script still lives outside the repository.
+designed. The gate was moved into the repository the same day (`scripts/release-gate.sh`).
 
 **Two candidates measured and not adopted; the model is not reproducible (2026-10-10).** Conditions and exceptions
 were the Reality Lab's largest failure (the condition criterion passed 2 of 18), with false premises behind every
