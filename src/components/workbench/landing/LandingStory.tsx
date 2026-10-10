@@ -4,7 +4,7 @@ import { motion, useInView } from "framer-motion";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import styles from "./Landing.module.css";
 import { IconArrowRight } from "../icons";
-import type { CitationRecord, DocumentSummary, FindingView, RunSummary } from "@/lib/types";
+import { statusLabel, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const grouped = new Intl.NumberFormat("en-US");
@@ -209,7 +209,10 @@ export function RecordPipeline({
   );
 }
 
-/** The hero run, told in four steps, each a door into the exact place in the product where that step is on the record. */
+/** The hero run, told in four steps, each a door into the exact place in the product where that step is on the record.
+ * Every fact in it is read from the run's lead finding; without that finding there is no story. It used to carry its own
+ * facts (a title about a 90 day floor, fallback periods, "Needs review." after any status), true of one curated run only
+ * and shown beside whatever the record held (m7 audit, 2026-10-10). */
 export function OneRun({
   proof,
   lead,
@@ -221,8 +224,10 @@ export function OneRun({
   onOpen: (runId: string, findingId?: string) => void;
   reduceMotion: boolean;
 }) {
-  const observed = lead?.observed ?? "60 days' written notice";
-  const required = lead?.required ?? "at least 90 days";
+  if (!lead) return null;
+  const status = statusLabel(lead.status, proof.hasGuidance, lead.statusSource);
+  const relocated = (lead.spans ?? []).some((span) => span.method?.startsWith("relocated"));
+  const read = lead.observed && lead.required ? `It read ${lead.observed} against ${lead.required}` : "It answered";
   const steps = [
     {
       n: "01",
@@ -234,23 +239,21 @@ export function OneRun({
     {
       n: "02",
       title: "The model proposes, and quotes the contract",
-      text: `It read ${observed} against ${required}, called the clause within guidance, and cited a section. Its exact words are kept as its own.`,
+      text: `${read} and cited a section. Its exact words are kept as its own.`,
       link: "See what it proposed",
       finding: true,
     },
     {
       n: "03",
       title: "Code checks the quote, then the arithmetic",
-      text: lead?.statusReason
-        ? `The quote was found verbatim, in a different section from the one cited. Then: ${lead.statusReason}. Needs review.`
-        : "The quote was found verbatim, in a different section from the one cited. Then code compared the days and set the status.",
+      text: `The quote was found verbatim${relocated ? ", in a different section from the one cited" : ""}.${lead.statusReason ? ` Then: ${lead.statusReason}.` : ""} Status: ${status}.`,
       link: "See what code decided",
       finding: true,
     },
     {
       n: "04",
       title: "A person has the last word",
-      text: lead?.review
+      text: lead.review
         ? `${lead.review.reviewer} ${lead.review.verdict === "confirmed" ? "confirmed" : "dismissed"} the finding. The decision is kept with the run, and the memo names it.`
         : "A reviewer confirms or dismisses the finding. The decision is kept with the run, under their name.",
       link: "See the decision",
@@ -265,7 +268,7 @@ export function OneRun({
           One run, end to end
         </p>
         <h2 id="one-run-title" className={styles.storyTitle}>
-          The model missed a 90 day floor. <span className={styles.titleQuiet}>Here is each hand it passed through.</span>
+          One answer: {status.toLowerCase()}. <span className={styles.titleQuiet}>Here is each hand it passed through.</span>
         </h2>
       </Reveal>
       <ol className={styles.steps}>
@@ -306,11 +309,11 @@ export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place
   const lines = [
     {
       head: "It does not read the whole agreement.",
-      text: "Up to six sections per question, chosen by retrieval; the rest of the contract is not read. Every answer says how many it was handed, and the memo repeats it.",
+      text: "Up to six sections per question, chosen by retrieval, or the opening sections when retrieval ranks none; the rest of the contract is not read. Every answer says how many it was handed and how they were chosen, and the memo repeats it.",
     },
     {
       head: "It does not pass a clause on its own.",
-      text: "A pass is the model's proposal. Code confirms it only when the quote, the guidance and the day counts agree; a shortfall is code's call alone.",
+      text: "A pass is the model's proposal, never code's. Code lowers it to review when the evidence shown does not establish it: a value no verified quote states, a section the document does not have, a period short of your guidance.",
     },
     {
       head: "It does not hide a miss.",

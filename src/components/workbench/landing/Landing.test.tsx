@@ -10,6 +10,25 @@ import type { Health, RunSummary } from "@/lib/types";
 import { PublicDemo } from "../access/PublicDemo";
 import { Landing } from "./Landing";
 
+// The proof run's lead finding, as its record holds it: the story is told only from the record (m7 audit, 2026-10-10).
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  getRun: vi.fn(async () => ({
+    findings: [
+      {
+        id: "f1",
+        status: "needs_review",
+        statusSource: "computed_days",
+        statusReason: "the contract provides 60 calendar days; the guidance requires at least 90 calendar days",
+        observed: "60 days' written notice",
+        required: "at least 90 days",
+        review: null,
+        spans: [{ method: "relocated:exact" }],
+      },
+    ],
+  })),
+}));
+
 afterEach(cleanup);
 // jsdom has no IntersectionObserver; the landing's scroll reveals ask for one.
 vi.stubGlobal(
@@ -118,9 +137,11 @@ describe("Landing: the finished review it shows", () => {
     createdAt: "2026-10-09T00:00:00+00:00",
   } as RunSummary;
 
-  it("tells the four-step story only of the proof run it was written for", () => {
+  it("tells the four-step story only of the proof run it was written for, from its record", async () => {
     renderLanding({ ...health("off"), modelLocation: "server", modelHost: "" } as Health, true, run, true);
-    expect(document.body.textContent).toContain("Code checks the quote, then the arithmetic");
+    expect(await screen.findByText("Code checks the quote, then the arithmetic")).toBeTruthy();
+    expect(document.body.textContent).toContain("in a different section from the one cited");
+    expect(document.body.textContent).toContain("60 days' written notice");
   });
 
   it("shows another run's receipt without a story that is not its own", () => {
