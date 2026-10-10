@@ -259,6 +259,21 @@ describe("EvidenceDrawer", () => {
     expect(api.reviewFinding).toHaveBeenCalledWith("afa60a7574984690", { verdict: "confirmed", reviewer: "Pavan", note: null, basedOn: 0 });
   });
 
+  it("asks for a name before clearing a decision when none is remembered, then records the clear under it", async () => {
+    // m7 audit, 2026-10-10: with no remembered name (cleared site data, another browser) "Clear the decision" did nothing.
+    window.localStorage.removeItem("workbench.reviewer");
+    const onReviewed = vi.fn();
+    api.reviewFinding.mockResolvedValue({ review: null, latestReviewId: 8 } as Awaited<ReturnType<typeof reviewFinding>>);
+    renderDrawer(finding(CONFIRMED), onReviewed);
+    const human = within(screen.getByLabelText("Evidence")).getByTestId("layer-human");
+    fireEvent.click(within(human).getByRole("button", { name: "Clear the decision" }));
+    expect(api.reviewFinding).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Your name, recorded with the decision"), { target: { value: "R. Reviewer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Clear as R. Reviewer" }));
+    await vi.waitFor(() => expect(onReviewed).toHaveBeenCalledWith("afa60a7574984690", null, 8));
+    expect(api.reviewFinding).toHaveBeenCalledWith("afa60a7574984690", { verdict: "cleared", reviewer: "R. Reviewer", note: null, basedOn: 7 });
+  });
+
   it("says a decision was refused when the finding was reviewed since, and asks for the current state", async () => {
     window.localStorage.setItem("workbench.reviewer", "Pavan");
     const onReviewed = vi.fn();

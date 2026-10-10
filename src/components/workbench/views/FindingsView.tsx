@@ -20,7 +20,8 @@ function keep(filter: Filter, r: FindingRecord): boolean {
   return r.status === filter;
 }
 
-type Decision = Exclude<ReviewVerdict, "cleared">;
+// Clearing asks for a name too when none is remembered (it used to return silently, m7 audit 2026-10-10).
+const VERB: Record<ReviewVerdict, string> = { confirmed: "Confirm", dismissed: "Dismiss", cleared: "Clear" };
 
 /**
  * Findings across runs, grouped by document. Model proposes, code verifies, a person adjudicates:
@@ -30,7 +31,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
   const [records, setRecords] = useState<FindingRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [pending, setPending] = useState<{ id: string; verdict: Decision } | null>(null);
+  const [pending, setPending] = useState<{ id: string; verdict: ReviewVerdict } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [attempt, setAttempt] = useState(0);
 
@@ -66,7 +67,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
   const decide = async (record: FindingRecord, verdict: ReviewVerdict, name?: string) => {
     const reviewer = name ?? rememberedReviewer();
     if (!reviewer) {
-      if (verdict !== "cleared") setPending({ id: record.id, verdict });
+      setPending({ id: record.id, verdict });
       return;
     }
     setBusyId(record.id);
@@ -236,9 +237,9 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                         <button
                           type="submit"
                           className={styles.reviewButton}
-                          aria-label={`${pending.verdict === "confirmed" ? "Confirm" : "Dismiss"}: ${r.topic}`}
+                          aria-label={`${VERB[pending.verdict]}: ${r.topic}`}
                         >
-                          {pending.verdict === "confirmed" ? "Confirm" : "Dismiss"}
+                          {VERB[pending.verdict]}
                         </button>
                         <button type="button" className={styles.reviewButton} onClick={() => setPending(null)}>
                           Cancel

@@ -428,7 +428,9 @@ function EvidenceBody({
   );
 }
 
-type Decision = Exclude<ReviewVerdict, "cleared">;
+// Every decision is recorded under a name, clearing included: with no name remembered, each asks for one (clearing used
+// to return silently, m7 audit 2026-10-10).
+const VERB: Record<ReviewVerdict, string> = { confirmed: "Confirm", dismissed: "Dismiss", cleared: "Clear" };
 
 /** The person's decision on the finding, as the API recorded it, and the controls to record one. */
 function HumanLayer({
@@ -443,14 +445,14 @@ function HumanLayer({
   curated?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<Decision | null>(null);
+  const [pending, setPending] = useState<ReviewVerdict | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const decide = async (verdict: ReviewVerdict, reviewerName?: string) => {
     const reviewer = reviewerName ?? rememberedReviewer();
     if (!reviewer) {
-      if (verdict !== "cleared") setPending(verdict);
+      setPending(verdict);
       return;
     }
     setBusy(true);
@@ -521,7 +523,7 @@ function HumanLayer({
           <label htmlFor="drawer-reviewer">Your name, recorded with the decision</label>
           <input id="drawer-reviewer" className={styles.popoverInput} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoFocus />
           <button type="submit" className={styles.actionButton} disabled={busy || !name.trim()}>
-            {pending === "confirmed" ? "Confirm as" : "Dismiss as"} {name.trim() || "you"}
+            {VERB[pending]} as {name.trim() || "you"}
           </button>
         </form>
       )}
