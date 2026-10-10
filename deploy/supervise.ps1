@@ -39,6 +39,10 @@ function Write-Line([string]$message) {
 if (Test-Path $stopFile) { Write-Line "supervisor not started: stop file present ($stopFile); remove it to allow restarts"; exit 0 }
 Write-Line "supervisor started for $Name on port $Port (pid $PID)"
 
+$HEALTH_EVERY_SECONDS = 30
+$HEALTH_GRACE_SECONDS = 60  # a server starting up is not probed
+$HEALTH_MISSES = 3          # about ninety seconds of silence
+
 $backoff = 5
 while ($true) {
   if (Test-Path $stopFile) { Write-Line "stop file present; supervisor exiting"; break }
@@ -88,7 +92,24 @@ while ($true) {
   Set-Content -Path $pidFile -Value $process.Id -Encoding ascii
   Write-Line "started $Name pid $($process.Id) (output $Tag.$stamp.out.log)"
   $began = Get-Date
-  $process.WaitForExit()
+  # Alive is not answering: on 2026-10-09 the API's accept loop died (asyncio, WinError 64) and the process stayed up,
+  # so a supervisor that waited only for an exit left the public API at 502 for 33 minutes. The server is probed on its
+  # own loopback port; after HEALTH_MISSES failed probes in a row it is stopped, and the restart below brings it back.
+  $probe = if ($Name -eq "api") { "http://127.0.0.1:$Port/api/health" } else { "http://127.0.0.1:${Port}/" }
+  $misses = 0
+  while (-not $process.WaitForExit($HEALTH_EVERY_SECONDS * 1000)) {
+    if (((Get-Date) - $began).TotalSeconds -lt $HEALTH_GRACE_SECONDS) { continue }
+    try { $answered = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 $probe).StatusCode -eq 200 } catch { $answered = $false }
+    if ($answered) { $misses = 0; continue }
+    $misses++
+    Write-Line "$Name pid $($process.Id) did not answer $probe ($misses of $HEALTH_MISSES)"
+    if ($misses -ge $HEALTH_MISSES) {
+      Write-Line "$Name pid $($process.Id) is running but not answering: stopping it so it is restarted"
+      & taskkill.exe /PID $process.Id /T /F | Out-Null
+      $process.WaitForExit()
+      break
+    }
+  }
   $ran = [int]((Get-Date) - $began).TotalSeconds
   Write-Line "exited $Name pid $($process.Id) code $($process.ExitCode) after $ran s"
   Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
