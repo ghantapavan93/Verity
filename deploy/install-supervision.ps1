@@ -56,6 +56,8 @@ if ($Build) {
       Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
       throw "npm run build failed; the release that serves was not touched"
     }
+    # The build is whole only now: mark it, with the commit it was made from (deploy/swap-build.ps1 swaps only a marked one).
+    Set-Content -Path (Join-Path $staging "VERITY_COMPLETE") -Value $env:NEXT_PUBLIC_BUILD_SHA -Encoding ascii
   } finally {
     [System.IO.File]::WriteAllBytes($tsconfig, $tsconfigBytes)
     Remove-Item Env:NEXT_DIST_DIR -ErrorAction SilentlyContinue

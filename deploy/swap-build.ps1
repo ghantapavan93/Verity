@@ -4,13 +4,15 @@
 
 .DESCRIPTION
   The interface is built into .next-staging while the old release serves (deploy/install-supervision.ps1). With the
-  servers stopped, -Swap makes it .next and keeps the build it replaces as .next-previous. A build is whole when its
-  folder holds BUILD_ID, which Next writes last; only a whole build is ever put in place.
+  servers stopped, -Swap makes it .next and keeps the build it replaces as .next-previous. A staged build is whole only
+  when it holds VERITY_COMPLETE, which the installer writes after `npm run build` exits 0 (Next's own BUILD_ID is
+  written before prerendering, so a killed build can hold one; triage, 2026-10-09). Only a whole build is put in place.
 
   A swap that fails between its two renames (a folder locked by a scanner or an open handle) puts the replaced build
   back, so the site restarts on the release it had, and the failure is raised. -Recover, run by deploy/supervise.ps1
-  before every start of the interface, finishes or undoes a swap a crash interrupted: if .next is missing it takes a
-  whole .next-staging, else a whole .next-previous. Rehearsed 2026-10-09 (deploy/README.md).
+  before every start of the interface, finishes or undoes a swap a crash interrupted. A folder rename is atomic, so it
+  acts only when .next is missing: it takes a whole .next-staging, else .next-previous (the build that served before).
+  An existing .next is never touched. Rehearsed 2026-10-09 (docs/FAILURE-ENVELOPE.md).
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Root,
@@ -23,14 +25,14 @@ $staging = Join-Path $Root ".next-staging"
 $previous = Join-Path $Root ".next-previous"
 
 function Test-Whole([string]$folder) {
-  return (Test-Path (Join-Path $folder "BUILD_ID"))
+  return (Test-Path (Join-Path $folder "VERITY_COMPLETE"))
 }
 
 if ($Recover) {
-  if (Test-Whole $live) { exit 0 }
+  if (Test-Path $live) { exit 0 }
+  $served = Test-Path (Join-Path $previous "BUILD_ID")  # .next-previous is the build that served until the swap
   foreach ($candidate in @($staging, $previous)) {
-    if (Test-Whole $candidate) {
-      if (Test-Path $live) { Remove-Item $live -Recurse -Force }  # a partial .next, never served
+    if ((Test-Whole $candidate) -or ($candidate -eq $previous -and $served)) {
       Rename-Item $candidate ".next"
       Write-Host "recovered .next from $(Split-Path $candidate -Leaf)"
       exit 0
@@ -41,7 +43,7 @@ if ($Recover) {
 }
 
 if ($Swap) {
-  if (-not (Test-Whole $staging)) { throw "no whole staged build at $staging (BUILD_ID missing); nothing was swapped" }
+  if (-not (Test-Whole $staging)) { throw "no whole staged build at $staging (VERITY_COMPLETE missing); nothing was swapped" }
   $stagedId = (Get-Content (Join-Path $staging "BUILD_ID") -Raw).Trim()
   # Clear the slot first, and stop if it will not clear: nothing has moved yet.
   if (Test-Path $previous) { Remove-Item $previous -Recurse -Force }
