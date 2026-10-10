@@ -169,3 +169,17 @@ describe("valueNotes: what code says about the values an answer chose", () => {
     expect(valueNotes(finding({ evidenceKind: "coverage", valueChoices: [{ kind: "money", answer: "$1", values: ["$1", "$2"], more: 0 }] }))).toEqual([]);
   });
 });
+
+describe("FindingCard value notes", () => {
+  it("are distinct notes even when two read alike (keys never collide)", () => {
+    const twice = valueNotes(
+      finding({
+        valueChoices: [
+          { kind: "percent", answer: "5%", values: ["5%", "8%"], more: 0 },
+          { kind: "percent", answer: "5%", values: ["5%", "8%"], more: 0 },
+        ],
+      }),
+    );
+    expect(twice).toHaveLength(2);
+  });
+});

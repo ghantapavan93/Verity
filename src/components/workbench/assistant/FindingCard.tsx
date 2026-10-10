@@ -70,9 +70,13 @@ export function FindingCard({
             </button>
           ))}
           {/* Code's word on a choice among values, beside the passages that offered it (lib/checks valueNotes). */}
-          {valueNotes(finding).map((note) => (
-            <p key={note} className={styles.valueNote}>
-              <span className={styles.checkBy}>code</span>
+          {valueNotes(finding).map((note, i) => (
+            <p key={`${i}-${note}`} className={styles.valueNote}>
+              {/* Read aloud as what it is: a check code made, not a stray "code" (browser QA, 2026-10-09). */}
+              <span className={styles.checkBy} aria-hidden="true">
+                code
+              </span>
+              <span className={styles.visuallyHidden}>Checked by code: </span>
               {note}
             </p>
           ))}

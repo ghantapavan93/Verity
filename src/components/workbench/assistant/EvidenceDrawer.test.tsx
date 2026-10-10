@@ -104,6 +104,17 @@ describe("EvidenceDrawer", () => {
     expect(within(source).getByRole("button", { name: "§4.1 Termination Without Cause" })).toBeTruthy();
   });
 
+  it("keeps the relocation in the Source cell when it also names a value in none of the quotes", async () => {
+    // Browser QA, 2026-10-09: the value note replaced "in another section" instead of joining it.
+    const relocatedAndUnquoted = { ...finding(null), unquotedValues: ["75 days"] } as unknown as FindingView;
+    renderDrawer(relocatedAndUnquoted);
+    const drawer = screen.getByLabelText("Evidence");
+    await within(drawer).findByText("Its hint");
+    const strip = drawer.textContent ?? "";
+    expect(strip).toContain("75 days in none of them");
+    expect(strip).toContain("in another section");
+  });
+
   it("says which check lowered a finding: a reference check is not a day-count conflict", async () => {
     const lowered = { ...finding(null), statusSource: "reference_check", statusReason: null } as unknown as FindingView;
     renderDrawer(lowered);

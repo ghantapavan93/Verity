@@ -169,16 +169,17 @@ function EvidenceBody({
                     : finding.spans.length
                       ? "review"
                       : "muted",
+            // Every fact the cell holds is said; the value notes join the relocation, never replace it (browser QA).
             note:
-              finding.evidenceKind !== "coverage" && unquoted.length > 0
-                ? `${unquoted.join(", ")} in none of them`
-                : finding.evidenceKind !== "coverage" && (finding.valueChoices ?? []).length > 0
+              [
+                finding.evidenceKind !== "coverage" && unquoted.length > 0 ? `${unquoted.join(", ")} in none of them` : null,
+                finding.evidenceKind !== "coverage" && unquoted.length === 0 && (finding.valueChoices ?? []).length > 0
                   ? `they state several values; the answer uses ${(finding.valueChoices ?? []).map((c) => c.answer).join(", ")}`
-                  : relocated
-                    ? "in another section"
-                    : finding.spans.length
-                      ? "where it was cited"
-                      : undefined,
+                  : null,
+                relocated ? "in another section" : null,
+              ]
+                .filter(Boolean)
+                .join("; ") || (finding.spans.length ? "where it was cited" : undefined),
           },
           {
             who: "Code",
