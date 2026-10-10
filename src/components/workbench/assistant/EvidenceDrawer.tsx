@@ -173,7 +173,7 @@ function EvidenceBody({
               finding.evidenceKind !== "coverage" && unquoted.length > 0
                 ? `${unquoted.join(", ")} in none of them`
                 : finding.evidenceKind !== "coverage" && (finding.valueChoices ?? []).length > 0
-                  ? "they state several values; the answer chose one"
+                  ? `they state several values; the answer uses ${(finding.valueChoices ?? []).map((c) => c.answer).join(", ")}`
                   : relocated
                     ? "in another section"
                     : finding.spans.length
