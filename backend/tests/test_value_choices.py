@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
-from app.runs.values import value_choices
+from app.runs.values import ValueChoice, unquoted_values, value_choices
 from tests.support import upload_and_ask
 from tests.test_unquoted_values import HOSTILE, assert_linear
 
@@ -154,3 +156,47 @@ def test_the_condition_the_question_names_is_not_an_alternative() -> None:
     quote = "Supplier shall pay a service credit of 7% of the monthly fee for each month in which availability falls below 99.5%."
     question = "What service credit does the Supplier pay for a month in which availability falls below 99.5%?"
     assert value_choices("A service credit of 7% for a month below 99.5%.", [quote], [question]) == []
+
+
+# ------------------------------------------------------------------------------------------- no text can make them raise
+# Bug hunt, 2026-10-09: "ſep 2024" (a long s) matched the month pattern under IGNORECASE, which folds Unicode case, while
+# the lookup lowered it, which does not: StopIteration, and every read of the run a 500. "thouſand" did the same to the
+# magnitude table (KeyError). These read model output and contract text on every finding read; no input may raise.
+_PIECES = [*"0123456789 ,.-/%$€£()§:;'\n\u00a0\u2013\u2014\u017f\u212akı\u0130", "thousand", "million", "Sep", "January"]
+_PIECES += [
+    "days",
+    "months",
+    "percent",
+    "Section ",
+    "sec_",
+    "thirty ",
+    "one ",
+    "USD ",
+    "EUR ",
+    "thou\u017fand",
+    "\u017fep",
+    "\u212aelvin",
+    " \u017fep 2024 ",
+    " 2 thou\u017fand ",
+]
+_PIECES += ["9" * 45, "1" * 31, "1e999 ", "inf "]  # review, 2026-10-09: an oversized digit run must be set aside, not raise
+_CONTRACT_TEXT = st.lists(st.sampled_from(_PIECES), max_size=40).map("".join)
+
+
+@settings(max_examples=400, deadline=None)
+@given(answer=_CONTRACT_TEXT, quote=_CONTRACT_TEXT, question=_CONTRACT_TEXT)
+def test_no_text_makes_the_value_checks_raise(answer: str, quote: str, question: str) -> None:
+    unquoted_values(answer, [quote], [question])
+    value_choices(answer, [quote], [question], [question])
+
+
+def test_unicode_case_folds_are_read_not_raised() -> None:
+    assert value_choices("The fee is 5%.", ["5% or 10%"], ["ſep 2024"]) == [ValueChoice("percent", "5%", ["5%", "10%"], 0)]
+    assert unquoted_values("$2 thouſand", ["$2,000"], []) == []
+
+
+def test_a_digit_run_longer_than_any_contract_value_is_set_aside_not_raised() -> None:
+    """Review, 2026-10-09: a run of a million digits overflowed Decimal's exponent on normalising (a 500 on the read)."""
+    huge = "9" * 1_000_001
+    assert unquoted_values("The total is 5 days.", [huge], []) == ["5 days"]
+    assert value_choices(f"{huge}%", ["5% or 10%"], []) == []

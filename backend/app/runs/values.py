@@ -78,10 +78,17 @@ _POINTERS = re.compile(
 )
 
 
+# No contract states a value of more digits than this; a longer run is set aside, so arithmetic on it can neither
+# overflow nor round two different numbers into one at Decimal's 28-digit precision (review, 2026-10-09).
+MAX_VALUE_DIGITS = 24
+
+
 def _number(surface: str) -> Decimal | None:
     digits = re.sub(r"[^\d.]", "", surface.replace(",", ""))
+    if not digits or len(digits) > MAX_VALUE_DIGITS:
+        return None
     try:
-        return Decimal(digits) if digits else None
+        return Decimal(digits)
     except InvalidOperation:
         return None
 
@@ -90,8 +97,16 @@ def _key(value: Decimal) -> str:
     return f"n:{value.normalize()}"
 
 
-def _month(name: str) -> int:
-    return next(i for i, full in enumerate(_MONTH_NAMES, start=1) if full.startswith(name.lower().rstrip(".")[:3]))
+# The patterns match case-insensitively, which in Python folds Unicode case ("ſep" matches "sep"); every lookup by the
+# matched text therefore casefolds too, and falls back rather than raising: "ſep 2024" raised StopIteration on every
+# read of a run whose question held it (bug hunt, 2026-10-09).
+def _month(name: str) -> int | None:
+    folded = name.casefold().rstrip(".")[:3]
+    return next((i for i, full in enumerate(_MONTH_NAMES, start=1) if full.startswith(folded)), None)
+
+
+def _scale(word: str) -> Decimal | None:
+    return _SCALE.get(word.casefold())
 
 
 def _numeric_date_key(first: str, middle: str, last: str) -> str | None:
@@ -118,12 +133,14 @@ def _dates(text: str) -> list[tuple[str | None, int, int]]:
         found.append((_numeric_date_key(numeric["a"], numeric["b"], numeric["c"]), numeric.start(), numeric.end()))
     for match in _DATE.finditer(text):
         groups = match.groupdict()
-        if groups["year"]:
-            key = f"d:{groups['year']}-{_month(groups['month']):02d}-{int(groups['day']):02d}"
-        elif groups["year2"]:
-            key = f"d:{groups['year2']}-{_month(groups['month2']):02d}-{int(groups['day2']):02d}"
-        else:
-            key = f"d:{groups['year3']}-{_month(groups['month3']):02d}"
+        month = _month(groups["month"] or groups["month2"] or groups["month3"])
+        key: str | None = None  # a month no table names is set aside as a date, never split into numbers
+        if month is not None and groups["year"]:
+            key = f"d:{groups['year']}-{month:02d}-{int(groups['day']):02d}"
+        elif month is not None and groups["year2"]:
+            key = f"d:{groups['year2']}-{month:02d}-{int(groups['day2']):02d}"
+        elif month is not None:
+            key = f"d:{groups['year3']}-{month:02d}"
         found.append((key, match.start(), match.end()))
     return found
 
@@ -149,8 +166,9 @@ def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int, 
                 continue
             end = token.end
             scale = _MAGNITUDE.match(rest, end) if token.kind is not Kind.PERCENT else None
-            if scale:
-                value, end = value * _SCALE[scale.group(1).lower()], scale.end()
+            factor = _scale(scale.group(1)) if scale else None
+            if scale and factor is not None:
+                value, end = value * factor, scale.end()
             written = "percent" if token.kind is Kind.PERCENT else "money" if token.kind is Kind.CURRENCY else "number"
             found.append((_key(value), token.start, end, written))
     for match in _ANY_WORDS.finditer(rest):
@@ -161,8 +179,9 @@ def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int, 
             continue
         end = match.end()
         scale = _MAGNITUDE.match(rest, end)
-        if scale:
-            value, end = value * _SCALE[scale.group(1).lower()], scale.end()
+        factor = _scale(scale.group(1)) if scale else None
+        if scale and factor is not None:
+            value, end = value * factor, scale.end()
         found.append((_key(value), match.start(), end, "words"))
     return found
 
