@@ -437,8 +437,17 @@ function WorkbenchSurface() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        if (stage === "workspace" && view === "assistant") setPaletteOpen((o) => !o);
+        // Ctrl K does what the rail's "Search (Ctrl K)" does, from every view; with nothing to search it leaves the
+        // browser's own shortcut alone. It used to be swallowed everywhere but the Assistant (m7 audit, 2026-10-10).
+        if (stage === "workspace" && view === "assistant") {
+          event.preventDefault();
+          setPaletteOpen((o) => !o);
+        } else if (doc) {
+          event.preventDefault();
+          setView("assistant");
+          setStage("workspace");
+          setPaletteOpen(true);
+        }
         return;
       }
       if (event.key === "Escape") {
@@ -449,7 +458,7 @@ function WorkbenchSurface() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [stage, view, paletteOpen, guidanceOpen, setGuidanceOpen, evidence, closeEvidence]);
+  }, [stage, view, doc, setView, setStage, paletteOpen, guidanceOpen, setGuidanceOpen, evidence, closeEvidence]);
 
   // ---- commands ---------------------------------------------------------------------------
 
