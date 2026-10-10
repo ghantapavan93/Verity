@@ -719,3 +719,12 @@ request under the same identity (prompt hash, seed 42, temperature 0, model dige
 model session in 8 of 18 cases, one with a different status. Verity hands back the recorded run for an identical
 request, so a reader sees one answer; an evaluation that compares two variants on one sample each is comparing noise
 until a repeat says how large the noise is.
+
+**Policy-v6, read once more before release (2026-10-10).** Three things were checked against the record rather than
+the cases that prompted them. The question no longer counts as evidence: it is what the reader asked, and in the lab
+store every pass whose figure came only from its question had repeated a false premise as the contract's ("the Buyer's
+$1,000,000 cash payment"); the owner store has none, and the guidance, the standard an answer is compared with, still
+counts. A total computed from quoted figures stays a needs review, because which figures add up is a reading, but the
+reason no longer reads as a verdict on the figure: it says the evidence shown does not establish it, and a figure from
+the question is named as the question's. The label reads "the evidence shown does not establish a value the answer
+states". Over 896 recorded passes 17 would change, 1 more than before (that false premise); nothing else moves.

@@ -351,7 +351,8 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 decision,
                 label_handles(item.conclusion, labels),
                 [span.quote for span in spans if span.verified],
-                [run.question, guidance_text or ""],
+                run.question,
+                guidance_text,
                 clause_numbers,
             )
             verified_any = verified_any or all_verified

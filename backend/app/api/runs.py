@@ -39,8 +39,9 @@ HEARTBEAT_SECONDS = 15
 
 def _value_checks(finding: Finding, clause_numbers: frozenset[str] = frozenset()) -> tuple[list[str], list[ValueChoiceOut]]:
     """What code can say about the values the shown answer states, read now from the record (runs.values): the values
-    no verified quote, nor the reader's question or guidance, states; and each verified quote that offers several values
-    of a kind the answer gives. Disclosures that change no status. A point reported as not found states none."""
+    no verified quote and no guidance states (the question is what was asked, not evidence: policy-v6 reads it the same
+    way); and each verified quote that offers several values of a kind the answer gives. Read now, they change no
+    status; a run decided under policy-v6 was lowered on the same reading. A point reported as not found states none."""
     if finding.status == "missing":
         return [], []
     quotes = [span.quote for span in finding.spans if span.verified]
@@ -49,7 +50,7 @@ def _value_checks(finding: Finding, clause_numbers: frozenset[str] = frozenset()
     run = finding.run
     session = object_session(finding)
     guidance = session.get(Guidance, run.guidance_id) if session is not None and run.guidance_id else None
-    readers = [run.question, guidance.text if guidance else ""]
+    readers = [guidance.text if guidance else ""]
     choices = [
         ValueChoiceOut(kind=c.kind, answer=c.answer, values=c.values, more=c.more)
         for c in value_choices(finding.shown_conclusion, quotes, [run.question], [guidance.text] if guidance else [])

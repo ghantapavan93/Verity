@@ -310,22 +310,36 @@ def check_references(
 
 
 def check_values(
-    decision: Decision, conclusion: str | None, quotes: Sequence[str], readers_text: Sequence[str], clause_numbers: Iterable[str] = ()
+    decision: Decision, conclusion: str | None, quotes: Sequence[str], question: str | None, guidance: str | None, clause_numbers: Iterable[str] = ()
 ) -> Decision:
-    """A pass whose conclusion states a value its evidence does not show is not a pass (policy-v6). Two forms are code's to
-    see: a value no verified quote, nor the reader's own question or guidance, states (`values.unquoted_values`), and a
-    redaction mark given as the value (`values.redaction_given_as_value`). The quote may be real; the value it is cited
-    for is not in it, and a person must look. The value may still be right (a total the model computed from an unquoted
-    rate): code does not say it is wrong, only that the evidence shown does not state it. Other statuses already ask a
-    person to look, and a finding with no verified quote was decided before this."""
+    """A pass whose conclusion states a value its evidence does not establish is not a pass (policy-v6). Two forms are
+    code's to see: a value no verified quote and no guidance states (`values.unquoted_values`), and a redaction mark given
+    as the value (`values.redaction_given_as_value`). The quote may be real; the value it is cited for is not in it, and a
+    person must look. The value may still be right (a total computed from quoted figures, a period stated elsewhere in
+    the contract): code says only that the evidence shown does not establish it, never that it is wrong.
+
+    The guidance is a standard the reader set and the answer is compared with, so its values count as stated. The
+    question does not: it is what the reader asked, not what the contract says, and a value an answer takes from it
+    ("the Buyer's $1,000,000 cash payment") is a premise repeated, which the reason names as such. Other statuses already
+    ask a person to look, and a finding with no verified quote was decided before this."""
     if decision.status != "pass" or not quotes:
         return decision
     mark = redaction_given_as_value(conclusion)
     if mark is not None:
         return Decision(
-            "needs_review", "position_check", f"the answer gives a redacted figure ({mark}) as its value; this copy of the contract does not state it"
+            "needs_review",
+            "position_check",
+            f"the answer gives {mark}, a redaction mark, as its value: this copy of the contract withholds the figure, so the evidence cannot establish it",
         )
-    unquoted = unquoted_values(conclusion, quotes, readers_text, clause_numbers)
-    if unquoted:
-        return Decision("needs_review", "position_check", f"the answer states {', '.join(unquoted)}, which no verified quote, question or guidance states")
-    return decision
+    unsupported = unquoted_values(conclusion, quotes, [guidance or ""], clause_numbers)
+    if not unsupported:
+        return decision
+    beyond_question = set(unquoted_values(conclusion, quotes, [question or "", guidance or ""], clause_numbers))
+    from_question = [v for v in unsupported if v not in beyond_question]
+    elsewhere = [v for v in unsupported if v in beyond_question]
+    reasons = []
+    if elsewhere:
+        reasons.append(f"the evidence shown does not establish {', '.join(elsewhere)}: no verified quote or guidance states it")
+    if from_question:
+        reasons.append(f"{', '.join(from_question)} comes from the question, and no verified quote states it")
+    return Decision("needs_review", "position_check", "; ".join(reasons))

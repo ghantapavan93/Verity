@@ -113,7 +113,7 @@ export const STATUS_SOURCE_LABELS: Record<string, string> = {
   model_hint: "Status taken from the model's hint; code did not decide it",
   no_evidence: "No verified evidence, so no status was given",
   reference_check: "Lowered to needs review by code: the conclusion names a section this document does not have",
-  position_check: "Lowered to needs review by code: a value the model stated is not in the verified quote or the guidance",
+  position_check: "Lowered to needs review by code: the evidence shown does not establish a value the answer states",
   ambiguous_fact: "Lowered to needs review by code: the quote does not state one period (its words and digits disagree, or its periods differ)",
 };
 
@@ -150,7 +150,7 @@ export interface CodeAccount {
 const CODE_ACCOUNTS: Record<string, CodeAccount> = {
   computed_days: { role: "Code found a conflict", note: "the day counts conflict", sentence: STATUS_SOURCE_LABELS.computed_days },
   reference_check: { role: "Code lowered it", note: "names a section not in this document", sentence: STATUS_SOURCE_LABELS.reference_check },
-  position_check: { role: "Code lowered it", note: "a value not in the quote", sentence: STATUS_SOURCE_LABELS.position_check },
+  position_check: { role: "Code lowered it", note: "a value the evidence does not establish", sentence: STATUS_SOURCE_LABELS.position_check },
   ambiguous_fact: { role: "Code lowered it", note: "the quote states no one period", sentence: STATUS_SOURCE_LABELS.ambiguous_fact },
   confirmed_days: { role: "Code confirmed", note: "confirmed the model's call", sentence: STATUS_SOURCE_LABELS.confirmed_days },
   no_evidence: { role: "Code withheld", note: "no passage found", sentence: STATUS_SOURCE_LABELS.no_evidence },

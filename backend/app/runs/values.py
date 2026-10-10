@@ -7,8 +7,9 @@ Values are compared by value, not by spelling: "thirty (30) days", "30 days" and
 and is shown as written, never as a loose day number. The answer is read for the values it states: dates, digits,
 money, percentages, and number words before a unit ("two years"); what points rather than states ("§6.4", "Sections 2,
 11, and 13", "Exhibit No. 10.1", "regulation 72(9)", "sec_7", an enumerator "(2)") is set aside. A quote is read whole,
-every number word included, so nothing it states is missed. The reader's own question and guidance count as stated:
-an answer may repeat them.
+every number word included, so nothing it states is missed. Text the caller passes as the reader's own counts as
+stated: the guidance, which an answer is compared with. The question is not passed since policy-v6: it is what was
+asked, and an answer that repeats its figure has repeated a premise, not quoted the contract.
 
 Shown beside every answer as a disclosure. Since policy-v6 it also decides: a pass whose conclusion states a value no
 verified quote states, or gives a redaction mark as its value, is lowered to needs review when the run is decided
