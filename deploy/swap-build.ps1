@@ -34,11 +34,11 @@ if ($Recover) {
   foreach ($candidate in @($staging, $previous)) {
     if ((Test-Whole $candidate) -or ($candidate -eq $previous -and $served)) {
       Rename-Item $candidate ".next"
-      Write-Host "recovered .next from $(Split-Path $candidate -Leaf)"
+      Write-Output "recovered .next from $(Split-Path $candidate -Leaf)"
       exit 0
     }
   }
-  Write-Host "no whole build to recover: .next stays as it is"
+  Write-Output "no whole build to recover: .next stays as it is"
   exit 0
 }
 
@@ -53,12 +53,15 @@ if ($Swap) {
     if (Test-Path $live) { Rename-Item $live ".next-previous"; $moved = $true }
     Rename-Item $staging ".next"
   } catch {
-    if ($moved -and -not (Test-Path $live)) { Rename-Item $previous ".next" }  # the site restarts on the build it had
+    if ($moved -and -not (Test-Path $live)) {
+      try { Rename-Item $previous ".next" }  # the site restarts on the build it had
+      catch { throw "the swap failed, and putting the previous build back failed too (no .next; the supervisor recovers one at start): $($_.Exception.Message)" }
+    }
     throw "the swap failed and the previous build was put back: $($_.Exception.Message)"
   }
   $liveId = (Get-Content (Join-Path $live "BUILD_ID") -Raw).Trim()
   if ($liveId -ne $stagedId) { throw "after the swap .next holds build $liveId, not the staged $stagedId" }
-  Write-Host "swapped in build $liveId; the replaced build is .next-previous"
+  Write-Output "swapped in build $liveId; the replaced build is .next-previous"
   exit 0
 }
 

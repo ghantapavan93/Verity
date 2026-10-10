@@ -103,5 +103,5 @@ while ((Get-Date) -lt $deadline -and -not ($api -and $web)) {
   try { $web = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 http://127.0.0.1:3900/).StatusCode -eq 200 } catch { $web = $false }
 }
 Write-Host ("API answering: {0}; interface answering: {1}; supervisor logs under {2}" -f $api, $web, $logs)
-if ($swapFailure) { throw "the new build was not put in place, and the previous release was restarted: $swapFailure" }
+if ($swapFailure) { throw "the new build was not put in place; the servers were restarted on what .next holds (see web.supervisor.log): $swapFailure" }
 if (-not ($api -and $web)) { exit 1 }

@@ -99,6 +99,7 @@ while ($true) {
   $misses = 0
   while (-not $process.WaitForExit($HEALTH_EVERY_SECONDS * 1000)) {
     if (((Get-Date) - $began).TotalSeconds -lt $HEALTH_GRACE_SECONDS) { continue }
+    if (Test-Path $stopFile) { continue }  # a stop is under way (deploy/down.ps1): it ends the server; the watchdog must not race it
     try { $answered = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 $probe).StatusCode -eq 200 } catch { $answered = $false }
     if ($answered) { $misses = 0; continue }
     $misses++
