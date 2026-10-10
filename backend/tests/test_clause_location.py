@@ -11,7 +11,9 @@ import io
 import json
 import re
 import zipfile
+from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -215,3 +217,18 @@ def test_control_a_passage_under_its_own_heading_has_no_clause_label(client: Tes
 
     span = upload_and_ask(client, "Can the customer terminate for convenience?")["run"]["findings"][0]["spans"][0]
     assert span["verified"] and span["clauseLabel"] is None
+
+
+def test_a_documents_clause_numbers_are_read_once_across_views(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Triage, 2026-10-10: every view of a run scanned every section again (over 2 s on a crafted 6 MB upload).
+    import app.application.clause_location as location
+
+    scans: list[int] = []
+    real = location.stated_clause_numbers
+    monkeypatch.setattr(location, "stated_clause_numbers", lambda texts: scans.append(1) or real(texts))
+    sections = [SimpleNamespace(id=f"cache-{i}", ordinal=i, number="", heading="h", text=f"{i}.1 Clause {i}. Text.") for i in range(1, 4)]
+    first = location.ClauseLocator(sections).clause_numbers  # type: ignore[arg-type]
+    second = location.ClauseLocator(sections).clause_numbers  # type: ignore[arg-type]
+    assert first == second and {"1.1", "2.1", "3.1"} <= first and len(scans) == 1
+    renamed = [SimpleNamespace(id=f"other-{s.id}", ordinal=s.ordinal, number=s.number, heading=s.heading, text=s.text) for s in sections]
+    assert location.ClauseLocator(renamed).clause_numbers == first and len(scans) == 2, "another reading is read on its own"  # type: ignore[arg-type]
