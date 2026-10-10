@@ -94,7 +94,7 @@ function WorkbenchSurface() {
 
   const runs = useRunFollower();
   const { run, show: showRun, setRunError, stop: stopRun, ask: startRun } = runs;
-  const guidance = useGuidance(setRunError);
+  const guidance = useGuidance();
   const { guidance: guidanceRecord, setGuidance, setDraft: setGuidanceDraft, open: guidanceOpen, setOpen: setGuidanceOpen } = guidance;
   const memo = useMemoAction();
   const { reset: resetMemo, generate: generateMemo } = memo;

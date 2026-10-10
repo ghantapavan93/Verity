@@ -10,12 +10,20 @@ export interface GuidanceState {
   text: string;
 }
 
-/** The legal guidance attached to the scope: the saved record, the popover and its draft. */
-export function useGuidance(onError: (message: string | null) => void) {
+/** The legal guidance attached to the scope: the saved record, the popover, its draft, and why a save was refused.
+ * The refusal is the popover's own: handed to the run's error slot, it was dropped while a run was in progress and not
+ * shown beside a finished run's findings, so a refused guidance explained nothing (m7 audit, 2026-10-10). */
+export function useGuidance() {
   const [guidance, setGuidance] = useState<GuidanceState | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState(DEFAULT_GUIDANCE);
+  const [error, setError] = useState<string | null>(null);
+  // Opening or closing the popover starts it without a stale refusal.
+  const setOpen = useCallback((next: boolean | ((open: boolean) => boolean)) => {
+    setOpenState(next);
+    setError(null);
+  }, []);
 
   const apply = useCallback(async () => {
     const text = draft.trim();
@@ -25,21 +33,21 @@ export function useGuidance(onError: (message: string | null) => void) {
       return;
     }
     setBusy(true);
+    setError(null);
     try {
       const record = await createGuidance(text);
       setGuidance({ id: record.id, text: record.text });
       setOpen(false);
-      onError(null); // an accepted guidance ends the sentence a refused one left on screen (sweep, 2026-10-01)
-    } catch (error) {
-      onError(errorMessage(error));
+    } catch (refused) {
+      setError(errorMessage(refused));
     } finally {
       setBusy(false);
     }
-  }, [draft, onError]);
+  }, [draft, setOpen]);
 
   const remove = useCallback(() => setGuidance(null), []);
 
-  return { guidance, setGuidance, open, setOpen, busy, draft, setDraft, apply, remove };
+  return { guidance, setGuidance, open, setOpen, busy, draft, setDraft, apply, remove, error };
 }
 
 export type GuidanceController = ReturnType<typeof useGuidance>;

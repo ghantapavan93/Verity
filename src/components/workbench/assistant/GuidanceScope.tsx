@@ -70,6 +70,11 @@ export function GuidanceScope({ documentName, guidance, reduceMotion }: { docume
               onChange={(e) => guidance.setDraft(e.target.value)}
               placeholder="Paste a playbook rule, a lawyer's note or a review instruction"
             />
+            {guidance.error && (
+              <p className={styles.errorLine} role="alert">
+                {guidance.error}
+              </p>
+            )}
             <div className={styles.popoverBar}>
               <span className={styles.popoverHint}>Applies to every question in this scope</span>
               <div className={styles.popoverActions}>
