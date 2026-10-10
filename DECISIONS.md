@@ -702,3 +702,20 @@ test and one deliberately failing flow failed the gate with both named; the bloc
 passed it (1,231 tests, 29 of 29 flows). The candidate's two browser failures were not load: the flows replay recorded
 model answers keyed by the exact message, and changing the handed sections leaves the replay with no recording, as
 designed. The gate script still lives outside the repository.
+
+**Two candidates measured and not adopted; the model is not reproducible (2026-10-10).** Conditions and exceptions
+were the Reality Lab's largest failure (the condition criterion passed 2 of 18), with false premises behind every
+confident wrong answer. A prompt that asks for the conditions that change the answer, for the premise to be corrected,
+for the party to be named as the quote names it and for a redaction to be called one (`answer-v4`, kept frozen and
+unused) was run against `answer-v2` on the same sections: on 16 cases pre-registered by an independent annotator on
+untouched agreement families, and on the 24 Reality Lab cases, each answer scored blind. The condition criterion did
+not move (1 of 10 both; 3 of 16 against 3 of 18), no false premise was corrected under either, and full passes were 4
+against 4 and 7 against 6. Judges preferred the longer answers (16 to 7 over both sets), and a preference for length is
+a known judging bias; answers took 29% longer. answer-v2 stays. A duration alias group ("how long" ↔ term, expire,
+initial term) raised the share of agreements whose term section is handed over from 51 to 68 of 77 on automatic labels,
+with no change on CUAD or the goldens, but on twelve agreements answered by the model it gave no better answers (5
+correct, 6 wrong, against 5 and 4): the model read other periods as the agreement's term. Not adopted. And the same
+request under the same identity (prompt hash, seed 42, temperature 0, model digest) gave a different answer in a new
+model session in 8 of 18 cases, one with a different status. Verity hands back the recorded run for an identical
+request, so a reader sees one answer; an evaluation that compares two variants on one sample each is comparing noise
+until a repeat says how large the noise is.
