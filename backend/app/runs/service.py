@@ -42,7 +42,7 @@ from ..verify.spans import Located, locate
 from .events import StageEvent, bus
 from .owner import this_process
 from .prose import label_handles
-from .status import Decision, Grounds, check_references, decide, enclosing_sentences, settle_together, unseen_references
+from .status import Decision, Grounds, check_references, check_values, decide, enclosing_sentences, settle_together, unseen_references
 from .transitions import assert_transition
 from .versions import stale_versions
 
@@ -302,6 +302,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         all_sections_by_id = {s.id: s for s in sections}
         every_section = [(s.number, s.heading) for s in sections]
         printed = stated_clause_numbers([s.text for s in sections])  # the clause numbers the document's own text opens
+        clause_numbers = {s.number for s in sections if s.number} | printed  # a value written as one of these points (runs.values)
         handed = [(s.number, s.heading) for s in chosen]
         proposed: list[tuple[Finding, Decision, Grounds]] = []
         for ordinal, item in enumerate(proposal.findings):
@@ -346,6 +347,13 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 passages=passages,
             )
             decision = check_references(decision, label_handles(item.conclusion, labels), (s.number for s in sections), by_label, printed)
+            decision = check_values(
+                decision,
+                label_handles(item.conclusion, labels),
+                [span.quote for span in spans if span.verified],
+                [run.question, guidance_text or ""],
+                clause_numbers,
+            )
             verified_any = verified_any or all_verified
             if not all_verified:
                 withheld_count += 1

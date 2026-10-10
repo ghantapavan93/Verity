@@ -34,7 +34,7 @@ APP = Path(__file__).resolve().parents[1] / "app"
 
 # What each version names: whole modules, or one function of a module that also does other things.
 BOUNDARIES: dict[str, tuple[str | tuple[str, str], ...]] = {
-    "policy_version": ("runs/status.py", "policy/durations.py", "policy/proof.py"),
+    "policy_version": ("runs/status.py", "policy/durations.py", "policy/proof.py", "runs/values.py"),  # values: policy-v6 decides on them
     "verifier_version": ("verify/spans.py", "verify/tokens.py", ("runs/service.py", "verify_evidence")),
     "retrieval_version": (
         "retrieval/lexical.py",
@@ -51,6 +51,7 @@ RECORDED: dict[str, str] = {
     "policy-v3": "157d0c3d7711b18b",
     "policy-v4": "b88a4017c8ebfd98",
     "policy-v5": "85ac4239ce9ffd27",
+    "policy-v6": "03e3814b88794823",  # 2026-10-10: a pass stating a value its evidence does not show is lowered (runs.values joins the boundary)
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged

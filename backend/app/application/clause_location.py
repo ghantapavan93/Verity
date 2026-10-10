@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..ingest.sections import clause_label_in
+from ..ingest.sections import clause_label_in, stated_clause_numbers
 from ..models import EvidenceSpan, Section
 
 
@@ -21,6 +21,14 @@ class ClauseLocator:
         ordered = sorted(sections, key=lambda s: s.ordinal)
         self._rows = [(s.number, s.heading, s.text) for s in ordered]
         self._index = {s.id: i for i, s in enumerate(ordered)}
+        self._clause_numbers: frozenset[str] | None = None
+
+    @property
+    def clause_numbers(self) -> frozenset[str]:
+        """The document's clause numbers: its sections' and those its text opens a clause with, read once on first use."""
+        if self._clause_numbers is None:
+            self._clause_numbers = frozenset(n for n, _, _ in self._rows if n) | frozenset(stated_clause_numbers([t for _, _, t in self._rows]))
+        return self._clause_numbers
 
     def label(self, span: EvidenceSpan) -> str | None:
         if not span.verified or span.section_id not in self._index or span.start < 0:

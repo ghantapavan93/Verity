@@ -10,8 +10,10 @@ money, percentages, and number words before a unit ("two years"); what points ra
 every number word included, so nothing it states is missed. The reader's own question and guidance count as stated:
 an answer may repeat them.
 
-This is a disclosure. It changes no status, and finding nothing claims nothing: a quote can state the right number for
-the wrong band (a service-credit table holds both 5% and 10%).
+Shown beside every answer as a disclosure. Since policy-v6 it also decides: a pass whose conclusion states a value no
+verified quote states, or gives a redaction mark as its value, is lowered to needs review when the run is decided
+(`runs.status.check_values`). Finding nothing claims nothing: a quote can state the right number for the wrong band (a
+service-credit table holds both 5% and 10%).
 """
 
 from __future__ import annotations
@@ -245,34 +247,69 @@ def _kinds_of(text: str, *, words_need_a_unit: bool) -> dict[str, set[str]]:
     return kinds
 
 
-def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = ()) -> list[str]:
+def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = (), clause_numbers: Iterable[str] = ()) -> list[str]:
     """The values ``answer`` states that no quote and none of the reader's own text (question, guidance) states, each as
     the answer writes it ("45 days", "$78,600.00", "one (1) day", "January 1, 2024"), in the answer's order, once each.
 
     A value is quoted by the same number stated as the same kind, or stated with no kind code can read: "5%" is not
     quoted by "within 5 business days" (review, 2026-10-09: an answer of 5% over a quote whose 5 is days, beside a credit
-    of 10%, was told nothing), while "30 days" is quoted by "30 (thirty) days", whose unit code does not read."""
+    of 10%, was told nothing), while "30 days" is quoted by "30 (thirty) days", whose unit code does not read. A duration
+    is also quoted by its equivalent in the same unit family: "1 year" by "twelve (12) months" (review of policy-v6,
+    2026-10-10). Across families code does not compare: "3 months" is not "ninety days". A dotted number written exactly
+    as one of the document's ``clause_numbers``, with no unit, points rather than states ("(11.5)" after a clause
+    heading); a whole number is not set aside this way, since "6 Machines" is a value even where a clause 6 exists."""
     if not answer:
         return []
     given: dict[str, set[str]] = {}
     for text in (*quotes, *(_without_pointers(text) for text in readers_text)):
         for key, kinds in _kinds_of(text, words_need_a_unit=False).items():
             given.setdefault(key, set()).update(kinds)
+    # The same values in their kind's base unit ("t:months:12" for "one year" and for "twelve (12) months").
+    sources = (*quotes, *(_without_pointers(text) for text in readers_text))
+    given_kinded = {key for text in sources for _, _, key, _, _, _ in _kinded(text, words_need_a_unit=False)}
     # Pointers are blanked to spaces, not removed, so offsets still index the answer as written.
     blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
-    group_at = {start: group for _, group, _, _, start, _ in _kinded(blanked, words_need_a_unit=True)}
+    kinded_answer = _kinded(blanked, words_need_a_unit=True)
+    group_at = {start: group for _, group, _, _, start, _ in kinded_answer}
+    base_key_at = {start: key for _, _, key, _, start, _ in kinded_answer}
+    clause_set = set(clause_numbers)
     shown: list[str] = []
     seen: set[tuple[str, str]] = set()
     for key, start, end, _ in sorted(_stated(blanked, words_need_a_unit=True), key=lambda found: found[1]):
         kind = group_at.get(start, "plain")
         stated_as = given.get(key, set())
         quoted = bool(stated_as) and (kind == "plain" or kind in stated_as or "plain" in stated_as)
-        if quoted or (key, kind) in seen:
+        quoted = quoted or base_key_at.get(start) in given_kinded
+        pointer = kind == "plain" and "." in answer[start:end] and answer[start:end].strip() in clause_set
+        if quoted or pointer or (key, kind) in seen:
             continue
         seen.add((key, kind))
         unit = _TRAILING_UNIT.match(blanked, end) if key.startswith("n:") else None
         shown.append(answer[start : unit.end() if unit else end].strip())
     return shown
+
+
+# What a filed contract prints where it withholds a figure: "[***]", "[*]", "[ * ]", "[REDACTED]", or a run of asterisks.
+# Bracketed only: a bare run of asterisks is as often emphasis ("***Important***") as a redaction (review, 2026-10-10).
+REDACTION_MARK = re.compile(r"\[\s*(?:\*+|redacted)\s*\]", re.IGNORECASE)
+# Words with which an answer says the figure is withheld rather than giving the mark as the figure. Read only in the
+# mark's own sentence, the mark itself left out: "Confidential Information is defined in §1" elsewhere in the answer, or
+# the mark "[REDACTED]", says nothing about whether this figure is given as known.
+_SAYS_WITHHELD = re.compile(r"\b(?:redact\w*|omitted|withheld|not\s+disclosed|undisclosed|not\s+stated|cannot\s+be\s+determined)\b", re.IGNORECASE)
+_SENTENCE_END = re.compile(r"[.!?](?=\s|$)")  # not ";": "the [*] period; the period is not disclosed" is one statement
+
+
+def redaction_given_as_value(answer: str | None) -> str | None:
+    """The redaction mark an answer gives as if it were the figure ("set at [***]%", "the cap is [***]"), or None. An
+    answer that says the figure is withheld ("redacted ([***]) in this copy") gives no value, and is not this."""
+    if not answer:
+        return None
+    for mark in REDACTION_MARK.finditer(answer):
+        start = max((m.end() for m in _SENTENCE_END.finditer(answer, 0, mark.start())), default=0)
+        stop = next((m.start() for m in _SENTENCE_END.finditer(answer, mark.end())), len(answer))
+        if not _SAYS_WITHHELD.search(answer[start : mark.start()] + " " + answer[mark.end() : stop]):
+            return mark.group(0)
+    return None
 
 
 # ----------------------------------------------------------------------------------------------- choices among values

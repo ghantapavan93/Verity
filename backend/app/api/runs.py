@@ -37,7 +37,7 @@ HEARTBEAT_SECONDS = 15
 # ----------------------------------------------------------------------------- mapping
 
 
-def _value_checks(finding: Finding) -> tuple[list[str], list[ValueChoiceOut]]:
+def _value_checks(finding: Finding, clause_numbers: frozenset[str] = frozenset()) -> tuple[list[str], list[ValueChoiceOut]]:
     """What code can say about the values the shown answer states, read now from the record (runs.values): the values
     no verified quote, nor the reader's question or guidance, states; and each verified quote that offers several values
     of a kind the answer gives. Disclosures that change no status. A point reported as not found states none."""
@@ -54,12 +54,12 @@ def _value_checks(finding: Finding) -> tuple[list[str], list[ValueChoiceOut]]:
         ValueChoiceOut(kind=c.kind, answer=c.answer, values=c.values, more=c.more)
         for c in value_choices(finding.shown_conclusion, quotes, [run.question], [guidance.text] if guidance else [])
     ]
-    return unquoted_values(finding.shown_conclusion, quotes, readers), choices
+    return unquoted_values(finding.shown_conclusion, quotes, readers, clause_numbers), choices
 
 
 def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> FindingOut:
     locator = locator or ClauseLocator(finding.run.document.sections)
-    unquoted, choices = _value_checks(finding)
+    unquoted, choices = _value_checks(finding, locator.clause_numbers if finding.status != "missing" else frozenset())
     return FindingOut(
         id=finding.id,
         topic=finding.topic,

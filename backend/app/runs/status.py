@@ -33,6 +33,7 @@ from ..analysis.schema import StatusHint
 from ..models import STATUSES_BY_SOURCE, FindingStatusName, StatusSourceName
 from ..policy.durations import Duration, ObservedFact, evaluate, observed_fact, parse_durations, parse_rule, stated_periods, stated_rules
 from ..policy.proof import pass_blockers, same_point
+from .values import redaction_given_as_value, unquoted_values
 
 # The version of the rules in this module and in `policy`: what a status means. Part of a run's identity
 # (runs.versions), so a question answered under one version is asked again, not handed back, under the next.
@@ -52,7 +53,10 @@ from ..policy.proof import pass_blockers, same_point
 # two after the period counts ("30 days' notice or more"); whitespace inside a phrase is one space, so "not\nless than"
 # in a quote is a floor. References read "§ 99", plurals and lists, and leave statutes ("Section 1542 of the California
 # Civil Code") alone. Replayed: 0 of 63 guidance decisions, 0 of 10 guidance rules and 0 of 1,229 references change.
-POLICY_VERSION = "policy-v5"
+# policy-v6 (2026-10-10, Contract Reality Lab): a pass is lowered to needs review when its conclusion states a value no
+# verified quote, question or guidance states, or gives a redaction mark ("[***]") as its value (`check_values`). Both were
+# disclosed beside the answer and left the pass standing. Over 896 recorded passes (owner and lab stores): 12 and 4.
+POLICY_VERSION = "policy-v6"
 
 
 @dataclass(frozen=True)
@@ -303,3 +307,25 @@ def check_references(
     if decision.status != "pass" or not unknown_references(conclusion, section_numbers, handed_ids, stated):
         return decision
     return Decision("needs_review", "reference_check")
+
+
+def check_values(
+    decision: Decision, conclusion: str | None, quotes: Sequence[str], readers_text: Sequence[str], clause_numbers: Iterable[str] = ()
+) -> Decision:
+    """A pass whose conclusion states a value its evidence does not show is not a pass (policy-v6). Two forms are code's to
+    see: a value no verified quote, nor the reader's own question or guidance, states (`values.unquoted_values`), and a
+    redaction mark given as the value (`values.redaction_given_as_value`). The quote may be real; the value it is cited
+    for is not in it, and a person must look. The value may still be right (a total the model computed from an unquoted
+    rate): code does not say it is wrong, only that the evidence shown does not state it. Other statuses already ask a
+    person to look, and a finding with no verified quote was decided before this."""
+    if decision.status != "pass" or not quotes:
+        return decision
+    mark = redaction_given_as_value(conclusion)
+    if mark is not None:
+        return Decision(
+            "needs_review", "position_check", f"the answer gives a redacted figure ({mark}) as its value; this copy of the contract does not state it"
+        )
+    unquoted = unquoted_values(conclusion, quotes, readers_text, clause_numbers)
+    if unquoted:
+        return Decision("needs_review", "position_check", f"the answer states {', '.join(unquoted)}, which no verified quote, question or guidance states")
+    return decision
