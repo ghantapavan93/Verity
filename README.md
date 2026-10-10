@@ -139,6 +139,12 @@ a fresh clone of the commit about to be published is now a gate of every release
 tests or commands (`DECISIONS.md`); a commit that changes only documentation is checked for anything
 that reads the changed files instead.
 
+That gate is `bash scripts/release-gate.sh <commit>` (Git Bash on Windows). It clones this repository at the commit
+beside it (`../verity-gate`, or `GATE_DIR`), builds fresh environments, and runs the backend suite, the named isolation
+and trust suites, ruff, mypy, the trust fault matrix (`backend/scripts/trust_faults.py`), the interface's unit tests,
+lint, types and build, the browser flows and the evidence exporter. Each step's exit status is kept; any failure ends
+the gate with `GATE FAILED`, the failed steps named, and a non-zero exit.
+
 The browser flows run the production build against the API, each on its own port and data
 directory. The model's answers were recorded once from Qwen3 8B (`e2e/replay.json`, written by
 `WORKBENCH_PROVIDER=record`) and are replayed byte for byte, so the flows need no
