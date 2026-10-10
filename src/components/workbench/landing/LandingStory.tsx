@@ -9,11 +9,14 @@ import type { CitationRecord, DocumentSummary, FindingView, RunSummary } from "@
 const EASE = [0.16, 1, 0.3, 1] as const;
 const grouped = new Intl.NumberFormat("en-US");
 
-/** A number that counts up once it is on screen. Under reduced motion it is simply the number. */
+/** A number that counts up once it is on screen. Until then, and under reduced motion, it is simply the number: the
+ * page states the store's count whether or not the animation ever runs (a screen reader, a copy or a print read "0"
+ * for every count before, m7 audit 2026-10-10). The block around it is still transparent when the count restarts. */
 function CountUp({ value, reduceMotion }: { value: number; reduceMotion: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   const seen = useInView(ref, { once: true, margin: "-40px" });
-  const [shown, setShown] = useState(reduceMotion ? value : 0);
+  // The figure an animation frame is showing; null whenever no count is running, so the value itself is shown.
+  const [frameValue, setFrameValue] = useState<number | null>(null);
   useEffect(() => {
     if (!seen || reduceMotion) return;
     const started = performance.now();
@@ -22,13 +25,13 @@ function CountUp({ value, reduceMotion }: { value: number; reduceMotion: boolean
     const tick = (now: number) => {
       const t = Math.min(1, (now - started) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
-      setShown(Math.round(value * eased));
+      setFrameValue(t < 1 ? Math.round(value * eased) : null);
       if (t < 1) frame = window.requestAnimationFrame(tick);
     };
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
   }, [seen, value, reduceMotion]);
-  return <span ref={ref}>{grouped.format(reduceMotion ? value : shown)}</span>;
+  return <span ref={ref}>{grouped.format(reduceMotion || frameValue === null ? value : frameValue)}</span>;
 }
 
 /** A block that rises into view once, as the reader reaches it. Inside a list it is the list item itself. */
