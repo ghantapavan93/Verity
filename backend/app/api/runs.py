@@ -25,8 +25,8 @@ from ..providers import make_provider
 from ..providers.base import ModelProvider
 from ..runs.events import TERMINAL, bus
 from ..runs.service import execute_run
-from ..runs.values import unquoted_values
-from ..schemas import CandidateOut, FindingOut, RunDetail, RunExplanation, RunIn, RunOut, RunSummary, SpanOut, StageOut
+from ..runs.values import unquoted_values, value_choices
+from ..schemas import CandidateOut, FindingOut, RunDetail, RunExplanation, RunIn, RunOut, RunSummary, SpanOut, StageOut, ValueChoiceOut
 from .access import current_workspace
 from .deps import get_provider
 
@@ -37,22 +37,26 @@ HEARTBEAT_SECONDS = 15
 # ----------------------------------------------------------------------------- mapping
 
 
-def _unquoted(finding: Finding) -> list[str]:
-    """Values the shown answer states that no verified quote, nor the reader's question or guidance, states (runs.values).
-    Read now, from the record: a disclosure that changes no status. A point reported as not found states none."""
+def _value_checks(finding: Finding) -> tuple[list[str], list[ValueChoiceOut]]:
+    """What code can say about the values the shown answer states, read now from the record (runs.values): the values
+    no verified quote, nor the reader's question or guidance, states; and each verified quote that offers several values
+    of a kind the answer gives. Disclosures that change no status. A point reported as not found states none."""
     if finding.status == "missing":
-        return []
-    quotes = [s.quote for s in finding.spans if s.verified]
+        return [], []
+    quotes = [span.quote for span in finding.spans if span.verified]
     if not quotes:
-        return []
+        return [], []
     run = finding.run
     session = object_session(finding)
     guidance = session.get(Guidance, run.guidance_id) if session is not None and run.guidance_id else None
-    return unquoted_values(finding.shown_conclusion, quotes, [run.question, guidance.text if guidance else ""])
+    readers = [run.question, guidance.text if guidance else ""]
+    choices = [ValueChoiceOut(kind=c.kind, answer=c.answer, values=c.values, more=c.more) for c in value_choices(finding.shown_conclusion, quotes, readers)]
+    return unquoted_values(finding.shown_conclusion, quotes, readers), choices
 
 
 def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> FindingOut:
     locator = locator or ClauseLocator(finding.run.document.sections)
+    unquoted, choices = _value_checks(finding)
     return FindingOut(
         id=finding.id,
         topic=finding.topic,
@@ -82,7 +86,8 @@ def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> Findi
         observed=finding.observed,
         required=finding.required,
         suggested_position=finding.suggested_position,
-        unquoted_values=_unquoted(finding),
+        unquoted_values=unquoted,
+        value_choices=choices,
     )
 
 

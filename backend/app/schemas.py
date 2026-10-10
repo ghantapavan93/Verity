@@ -118,6 +118,13 @@ class RunIn(ApiModel):
     question: str = Field(min_length=1, max_length=2000)
 
 
+class ValueChoiceOut(ApiModel):
+    kind: Literal["percent", "money", "duration"]
+    answer: str
+    values: list[str]
+    more: int = 0
+
+
 class SpanOut(ApiModel):
     section_id: str | None
     start: int
@@ -165,6 +172,10 @@ class FindingOut(ApiModel):
     # the answer writes them (runs.values). Code's, read from the record; it changes no status, and an empty list
     # claims nothing: a quote can state the right number for the wrong band.
     unquoted_values: list[str] = []
+    # For each kind of value the answer gives, the several values of that kind its verified passages state together (a
+    # band of percentages, a fee schedule, a set of periods), with the answer's (runs.values.value_choices). Which applies
+    # is the model's reading; code says only that the passages offered several. It changes no status.
+    value_choices: list[ValueChoiceOut] = []
 
 
 class RunOut(ApiModel):

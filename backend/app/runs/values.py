@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from typing import Literal
 
 from ..policy.durations import words_to_number
 from ..verify.tokens import Kind, tokenize
@@ -39,7 +41,7 @@ _UNIT = (
 # one …" held the API for 13 s (security audit, 2026-10-09).
 _ANY_WORDS = re.compile(rf"(?P<words>{_WORD_RUN})", re.IGNORECASE)
 # What follows a value and belongs to it when it is shown: its unit, with the digits a contract repeats in brackets.
-_TRAILING_UNIT = re.compile(rf"(?:\s*\(\s*[\d.,]{{1,24}}\s*\))?[\s-]*{_UNIT}", re.IGNORECASE)
+_TRAILING_UNIT = re.compile(rf"(?:\s*\(\s*[\d.,]{{1,24}}\s*\)|\s*\))?[\s-]*{_UNIT}", re.IGNORECASE)
 # "$1.5 million" is 1,500,000: the word is part of the value, on both sides (triage, 2026-10-09).
 _MAGNITUDE = re.compile(r"\s*(thousand|million|billion|trillion)\b", re.IGNORECASE)
 _SCALE = {"thousand": Decimal(10) ** 3, "million": Decimal(10) ** 6, "billion": Decimal(10) ** 9, "trillion": Decimal(10) ** 12}
@@ -133,11 +135,12 @@ def _blank(text: str, spans: Iterable[tuple[int, int]]) -> str:
     return "".join(chars)
 
 
-def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int]]:
-    """(key, start, end) of each value ``text`` states, offsets into ``text``. Dates first, then what is left. Number
-    words count only before a unit when ``words_need_a_unit`` (an answer); everywhere otherwise (a quote)."""
+def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int, str]]:
+    """(key, start, end, written) of each value ``text`` states, offsets into ``text``; ``written`` says how the value
+    was written: "date", "percent", "money", "number" or "words". Dates first, then what is left. Number words count
+    only before a unit when ``words_need_a_unit`` (an answer); everywhere otherwise (a quote)."""
     dates = _dates(text)
-    found = [(key, start, end) for key, start, end in dates if key is not None]
+    found = [(key, start, end, "date") for key, start, end in dates if key is not None]
     rest = _blank(text, ((start, end) for _, start, end in dates))
     for token in tokenize(rest):
         if token.kind in (Kind.NUMBER, Kind.CURRENCY, Kind.PERCENT):
@@ -148,7 +151,8 @@ def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int]]
             scale = _MAGNITUDE.match(rest, end) if token.kind is not Kind.PERCENT else None
             if scale:
                 value, end = value * _SCALE[scale.group(1).lower()], scale.end()
-            found.append((_key(value), token.start, end))
+            written = "percent" if token.kind is Kind.PERCENT else "money" if token.kind is Kind.CURRENCY else "number"
+            found.append((_key(value), token.start, end, written))
     for match in _ANY_WORDS.finditer(rest):
         if words_need_a_unit and not _TRAILING_UNIT.match(rest, match.end()):
             continue
@@ -159,12 +163,12 @@ def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int]]
         scale = _MAGNITUDE.match(rest, end)
         if scale:
             value, end = value * _SCALE[scale.group(1).lower()], scale.end()
-        found.append((_key(value), match.start(), end))
+        found.append((_key(value), match.start(), end, "words"))
     return found
 
 
 def _keys(text: str) -> set[str]:
-    return {key for key, _, _ in _stated(text, words_need_a_unit=False)}
+    return {key for key, _, _, _ in _stated(text, words_need_a_unit=False)}
 
 
 def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = ()) -> list[str]:
@@ -179,10 +183,93 @@ def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Ite
     blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
     shown: list[str] = []
     seen: set[str] = set()
-    for key, start, end in sorted(_stated(blanked, words_need_a_unit=True), key=lambda found: found[1]):
+    for key, start, end, _ in sorted(_stated(blanked, words_need_a_unit=True), key=lambda found: found[1]):
         if key in given or key in seen:
             continue
         seen.add(key)
         unit = _TRAILING_UNIT.match(blanked, end) if key.startswith("n:") else None
         shown.append(answer[start : unit.end() if unit else end].strip())
     return shown
+
+
+# ----------------------------------------------------------------------------------------------- choices among values
+
+_TIME_UNITS = {"day", "week", "fortnight", "month", "year", "hour", "minute", "second"}
+_MONEY_UNITS = {"dollar", "euro", "pound"}
+# The kinds a choice is disclosed for: a band of percentages, a schedule of fees, a set of periods.
+ChoiceKind = Literal["percent", "money", "duration"]
+CHOICE_KINDS: tuple[ChoiceKind, ...] = ("percent", "money", "duration")
+MAX_CHOICES_SHOWN = 8
+
+
+@dataclass(frozen=True)
+class ValueChoice:
+    """Several values of a kind the answer gives, stated by a finding's verified passages, and the answer's value(s)."""
+
+    kind: ChoiceKind
+    answer: str  # the answer's value(s) of this kind, as written in the answer
+    values: list[str]  # the passages' distinct values of this kind, as written, in their order, at most MAX_CHOICES_SHOWN
+    more: int  # how many further distinct values the passages state
+
+
+def _kinded(text: str, *, words_need_a_unit: bool) -> list[tuple[ChoiceKind, str, int, int]]:
+    """(kind, key, start, end) of each percentage, sum of money and duration ``text`` states, in its order, with the
+    span covering its unit. A duration's key carries its unit: 30 days and 30 months are two values."""
+    out: list[tuple[ChoiceKind, str, int, int]] = []
+    for key, start, end, written in sorted(_stated(text, words_need_a_unit=words_need_a_unit), key=lambda found: found[1]):
+        if written == "date":
+            continue
+        value = key.removeprefix("n:")
+        unit = _TRAILING_UNIT.match(text, end)
+        word = re.sub(r"s$", "", unit.group(0).split()[-1].lower().strip("-")) if unit else ""
+        through = unit.end() if unit else end
+        if start > 0 and text[start - 1] == "(" and text[end : end + 1] == ")":
+            start -= 1  # "(60) days" in "thirty (60) days": the bracket shows which value this is
+        if written == "percent":
+            out.append(("percent", f"p:{value}", start, end))
+        elif written == "money":
+            out.append(("money", f"m:{value}", start, end))
+        elif word in ("percent", "cent"):
+            out.append(("percent", f"p:{value}", start, through))
+        elif word in _MONEY_UNITS:
+            out.append(("money", f"m:{value}", start, through))
+        elif word in _TIME_UNITS:
+            out.append(("duration", f"t:{value}:{word}", start, through))
+    return out
+
+
+def value_choices(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = ()) -> list[ValueChoice]:
+    """For each kind the answer gives (a percentage, money, a duration), the distinct values of that kind the finding's
+    verified passages state together, when there are two or more, with the answer's (evaluation workstream, 2026-10-09:
+    a band table quoted word for word held 5%, 10% and 25%, and the answer chose 5% where the band gives 10%; a discount
+    table split over two quotes held 5% and 8%). Which value applies is the model's reading; code says only that the
+    passages offered several and which the answer used. A value the reader's own question or guidance states is set
+    aside on both sides: it is neither the answer's choice ("at 98.7%") nor one the passages offered for it."""
+    if not answer:
+        return []
+    asked: set[str] = set()
+    for text in readers_text:
+        asked |= _keys(text)
+
+    def own(key: str) -> bool:
+        return f"n:{key.split(':')[1]}" in asked
+
+    blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
+    given: dict[ChoiceKind, list[str]] = {}
+    for kind, key, start, end in _kinded(blanked, words_need_a_unit=True):
+        written = answer[start:end].strip()
+        if own(key) or written in given.get(kind, []):
+            continue
+        given.setdefault(kind, []).append(written)
+    offered: dict[ChoiceKind, list[tuple[str, str]]] = {}
+    for quote in quotes:
+        for kind, key, start, end in _kinded(quote, words_need_a_unit=False):
+            if not own(key) and all(key != seen for seen, _ in offered.get(kind, [])):
+                offered.setdefault(kind, []).append((key, quote[start:end].strip()))
+    choices: list[ValueChoice] = []
+    for kind in CHOICE_KINDS:
+        values = offered.get(kind, [])
+        if kind in given and len(values) >= 2:
+            shown = [written for _, written in values[:MAX_CHOICES_SHOWN]]
+            choices.append(ValueChoice(kind, ", ".join(given[kind]), shown, len(values) - len(shown)))
+    return choices

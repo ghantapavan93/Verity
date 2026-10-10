@@ -2075,6 +2075,14 @@
             },
             "title": "Unquotedvalues",
             "type": "array"
+          },
+          "valueChoices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ValueChoiceOut"
+            },
+            "title": "Valuechoices",
+            "type": "array"
           }
         },
         "required": [
@@ -5780,6 +5788,42 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "ValueChoiceOut": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "percent",
+              "money",
+              "duration"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "more": {
+            "default": 0,
+            "title": "More",
+            "type": "integer"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "answer",
+          "values"
+        ],
+        "title": "ValueChoiceOut",
         "type": "object"
       }
     }
