@@ -208,3 +208,18 @@ def test_an_answer_repeating_the_guidance_value_made_no_choice() -> None:
     quotes = ["terminate on thirty (30) days' notice", "notwithstanding the above, ninety (90) days' notice"]
     assert value_choices("The guidance asks for 90 days.", quotes, ["What notice applies?"], ["At least 90 days."]) == []
     assert [c.answer for c in value_choices("Notice is 30 days.", quotes, ["What notice applies?"], ["At least 90 days."])] == ["30 days"]
+
+
+def test_the_readers_values_are_set_aside_by_kind_not_by_bare_number() -> None:
+    """Rerun of the bug hunt: a question's "within 30 days" set aside an answer's 30% and the passages' 30%; a question's
+    "one hour" did not set aside the passages' "sixty minutes". The reader's values are compared as values are: by kind."""
+    band = value_choices("The discount is 30%.", ["discount 30% or 50%"], ["What discount applies if paid within 30 days?"])
+    assert [(c.answer, c.values) for c in band] == [("30%", ["30%", "50%"])]
+    clock = value_choices("Credit for two hours.", ["sixty minutes or two hours"], ["What credit after one hour?"])
+    assert clock == [], "the question's hour is the passages' sixty minutes: set aside, one value is left"
+
+
+def test_spaced_thousands_beside_a_currency_are_one_value() -> None:
+    """ "1 500 000 €" (European grouping) was three values, "1", "500" and "000"."""
+    assert unquoted_values("The cap is 1 500 000 €.", ["€1,500,000"], []) == []
+    assert unquoted_values("The cap is 2 500 000 €.", ["€1,500,000"], []) == ["2 500 000 €"]

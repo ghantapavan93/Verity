@@ -92,6 +92,13 @@ _GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?")
 # Money with a magnitude suffix is read whole; any other glued run is set aside, never reported cut short.
 _GLUED = re.compile(r"[.,]?[^\W_]")
 _GLUED_MONEY = re.compile(r"(?:[$€£¥]|(?:USD|EUR|GBP|CHF|CAD|AUD)\s?)(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(k|mm|m|bn|b)(?![^\W_])", re.IGNORECASE)
+# Thousands grouped by spaces, as much of Europe writes money, read as one sum where a currency stands beside them:
+# "1 500 000 €" was three values (bug hunt). Without a currency a spaced group stays separate numbers.
+_CURRENCY_MARK = r"(?:[$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)"
+_SPACED_MONEY = re.compile(
+    rf"{_CURRENCY_MARK}\s?(?P<before>\d{{1,3}}(?:[ \u00a0\u202f]\d{{3}})+)(?![\d,.])"
+    rf"|(?<![\d,.])(?P<after>\d{{1,3}}(?:[ \u00a0\u202f]\d{{3}})+)\s?{_CURRENCY_MARK}",
+)
 _SUFFIX = {"k": Decimal(10) ** 3, "m": Decimal(10) ** 6, "mm": Decimal(10) ** 6, "b": Decimal(10) ** 9, "bn": Decimal(10) ** 9}
 
 
@@ -182,6 +189,11 @@ def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int, 
         if amount is not None:
             found.append((_key(amount * _SUFFIX[glued.group(2).casefold()]), glued.start(), glued.end(), "money"))
             glued_until[glued.start()] = glued.end()
+    for spaced in _SPACED_MONEY.finditer(rest):
+        amount = _number(re.sub(r"\s", "", spaced.group("before") or spaced.group("after")))
+        if amount is not None and spaced.start() not in glued_until:
+            found.append((_key(amount), spaced.start(), spaced.end(), "money"))
+            glued_until[spaced.start()] = spaced.end()
     covered = sorted(glued_until.items())
     for token in tokenize(rest):
         if token.kind in (Kind.NUMBER, Kind.CURRENCY, Kind.PERCENT):
@@ -317,6 +329,19 @@ def _kinded(text: str, *, words_need_a_unit: bool) -> list[tuple[ChoiceKind, str
     return out
 
 
+def _readers_values(texts: Iterable[str]) -> tuple[set[str], set[str]]:
+    """The values the reader's own text states, pointers aside: by kind ("within 30 days" is days, not 30%; "one hour" is
+    the passages' "sixty minutes"), and as plain numbers where code reads no kind, which match any kind (bug hunt
+    rerun, 2026-10-09: the question's values were compared by bare number)."""
+    kinded: set[str] = set()
+    plain: set[str] = set()
+    for text in texts:
+        bare = _without_pointers(text)
+        kinded |= {key for _, _, key, _, _, _ in _kinded(bare, words_need_a_unit=False)}
+        plain |= {number for number, kinds in _kinds_of(bare, words_need_a_unit=False).items() if "plain" in kinds}
+    return kinded, plain
+
+
 def value_choices(answer: str | None, quotes: Iterable[str], question: Iterable[str] = (), guidance: Iterable[str] = ()) -> list[ValueChoice]:
     """For each kind of value the answer gives (a percentage, money, a duration), the distinct values of that kind the
     finding's verified passages state together, when there are two or more and the answer uses one of them
@@ -330,23 +355,20 @@ def value_choices(answer: str | None, quotes: Iterable[str], question: Iterable[
     beside a contract's 30 is the very conflict to show (triage and the fresh evaluation, 2026-10-09)."""
     if not answer:
         return []
-    asked: set[str] = set()
-    for text in question:
-        asked |= _keys(_without_pointers(text))
-    standard: set[str] = set(asked)
-    for text in guidance:
-        standard |= _keys(_without_pointers(text))
+    asked_kinded, asked_plain = _readers_values(question)
+    guide_kinded, guide_plain = _readers_values(guidance)
+    standard_kinded, standard_plain = asked_kinded | guide_kinded, asked_plain | guide_plain
     # Per group: each distinct value once (key -> as written, in the passages' order). Dicts, not scans: a quote of
     # thousands of values stays linear.
     offered: dict[str, dict[str, str]] = {}
     for quote in quotes:
         for _, group, key, number, start, end in _kinded(quote, words_need_a_unit=False):
-            if number not in asked:
+            if key not in asked_kinded and number not in asked_plain:
                 offered.setdefault(group, {}).setdefault(key, quote[start:end].strip())
     blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
     used: dict[str, tuple[ChoiceKind, dict[str, str]]] = {}
     for kind, group, key, number, start, end in _kinded(blanked, words_need_a_unit=True):
-        if number in standard or key not in offered.get(group, {}):
+        if key in standard_kinded or number in standard_plain or key not in offered.get(group, {}):
             continue
         used.setdefault(group, (kind, {}))[1].setdefault(key, answer[start:end].strip())
     choices: list[ValueChoice] = []
