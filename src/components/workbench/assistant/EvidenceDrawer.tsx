@@ -123,6 +123,7 @@ function EvidenceBody({
   const proposal = proposalFor(explanation, finding.id);
   const hasGuidance = run?.hasGuidance ?? false;
   const verified = finding.spans.filter((s) => s.verified).length;
+  const unquoted = finding.unquotedValues ?? [];
   const withheld = finding.spans.length - verified;
   // The model proposed this pass and code confirmed it: the layer says so, and does not say code decided.
   const confirmed = finding.statusSource === "confirmed_days";
@@ -155,15 +156,29 @@ function EvidenceBody({
                 : finding.spans.length
                   ? `${verified} of ${finding.spans.length} found`
                   : "nothing cited",
+            // Found is not the whole of it: a value the answer states that no quote states sends the cell to review, and
+            // passages that offer several values the answer chose among are said (frontend review, 2026-10-09: the
+            // drawer showed "1 of 1 found" in the pass colour while the card named a value in none of the quotes).
             tone:
               finding.evidenceKind === "coverage"
                 ? "muted"
-                : finding.spans.length && verified === finding.spans.length
-                  ? "pass"
-                  : finding.spans.length
-                    ? "review"
-                    : "muted",
-            note: relocated ? "in another section" : finding.spans.length ? "where it was cited" : undefined,
+                : unquoted.length > 0
+                  ? "review"
+                  : finding.spans.length && verified === finding.spans.length
+                    ? "pass"
+                    : finding.spans.length
+                      ? "review"
+                      : "muted",
+            note:
+              finding.evidenceKind !== "coverage" && unquoted.length > 0
+                ? `${unquoted.join(", ")} in none of them`
+                : finding.evidenceKind !== "coverage" && (finding.valueChoices ?? []).length > 0
+                  ? "they state several values; the answer chose one"
+                  : relocated
+                    ? "in another section"
+                    : finding.spans.length
+                      ? "where it was cited"
+                      : undefined,
           },
           {
             who: "Code",

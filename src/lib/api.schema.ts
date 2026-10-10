@@ -1400,6 +1400,11 @@ export interface components {
              * @default []
              */
             unquotedValues: string[];
+            /**
+             * Valuechoices
+             * @default []
+             */
+            valueChoices: components["schemas"]["ValueChoiceOut"][];
         };
         /** FindingRecord */
         FindingRecord: {
@@ -2693,6 +2698,23 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** ValueChoiceOut */
+        ValueChoiceOut: {
+            /** Answer */
+            answer: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "percent" | "money" | "duration";
+            /**
+             * More
+             * @default 0
+             */
+            more: number;
+            /** Values */
+            values: string[];
         };
     };
     responses: never;

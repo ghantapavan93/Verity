@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkLedger, type CheckRow } from "./checks";
+import { checkLedger, valueNotes, type CheckRow } from "./checks";
 import type { FindingView, SectionView } from "./types";
 
 const section = { id: "s5", number: "5.3", heading: "Termination", text: "" } as unknown as SectionView;
@@ -153,5 +153,19 @@ describe("checkLedger: what was checked, and by whom", () => {
   it("does not call a match that differs in case word for word without saying so", () => {
     const spans = [{ ...finding().spans[0], method: "casefold" }];
     expect(row(checkLedger(finding({ spans }), true, sections, null), "quote")?.text).toMatch(/word for word, case aside$/);
+  });
+});
+
+describe("valueNotes: what code says about the values an answer chose", () => {
+  it("names the values the passages offered and the answer's, and leaves which applies to the model", () => {
+    const notes = valueNotes(finding({ valueChoices: [{ kind: "percent", answer: "8%", values: ["5%", "8%"], more: 0 }] }));
+    expect(notes).toEqual(["The passages state 5% and 8%. The answer uses 8%; which one applies is the model's reading, not checked by code."]);
+  });
+
+  it("counts what it does not list, and says nothing when there is no choice", () => {
+    const many = valueNotes(finding({ valueChoices: [{ kind: "percent", answer: "3%", values: ["1%", "2%", "3%"], more: 4 }] }));
+    expect(many[0]).toContain("1%, 2%, 3% and 4 more");
+    expect(valueNotes(finding({ valueChoices: [] }))).toEqual([]);
+    expect(valueNotes(finding({ evidenceKind: "coverage", valueChoices: [{ kind: "money", answer: "$1", values: ["$1", "$2"], more: 0 }] }))).toEqual([]);
   });
 });

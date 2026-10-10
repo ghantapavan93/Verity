@@ -141,3 +141,17 @@ export function runOutcome(outcomes: Record<string, number> | undefined, hasGuid
     .map(([status, n]) => `${n} ${words[status]}`);
   return parts.length > 0 ? parts.join(" · ") : "no finding";
 }
+
+/**
+ * What code says about a choice among values (backend runs/values.value_choices): the passages a finding cites state
+ * several values of the kind its answer gives, and which one the answer used. Which applies is a reading of the
+ * passage, the model's; code says only that there was a choice. Evaluation workstream, 2026-10-09: a band table quoted
+ * word for word held 5%, 10% and 25%, the answer chose 5% where the band gives 10%, and the card showed a plain answer.
+ */
+export function valueNotes(finding: FindingView): string[] {
+  if (finding.evidenceKind === "coverage") return [];
+  return (finding.valueChoices ?? []).map((choice) => {
+    const values = choice.more > 0 ? `${choice.values.join(", ")} and ${choice.more} more` : listed(choice.values);
+    return `The passages state ${values}. The answer uses ${choice.answer}; which one applies is the model's reading, not checked by code.`;
+  });
+}

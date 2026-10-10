@@ -3,7 +3,7 @@
 import styles from "../Workbench.module.css";
 import { NARROW_QUERY } from "../shell/constants";
 import { StatusChip, Visible } from "../shell/primitives";
-import { checkLedger } from "@/lib/checks";
+import { checkLedger, valueNotes } from "@/lib/checks";
 import { isLocated, passageLabel, type FindingView, type SectionView, type SpanView } from "@/lib/types";
 
 function excerpt(quote: string, max = 150): string {
@@ -68,6 +68,13 @@ export function FindingCard({
                 <Visible text={excerpt(span.quote)} />
               </span>
             </button>
+          ))}
+          {/* Code's word on a choice among values, beside the passages that offered it (lib/checks valueNotes). */}
+          {valueNotes(finding).map((note) => (
+            <p key={note} className={styles.valueNote}>
+              <span className={styles.checkBy}>code</span>
+              {note}
+            </p>
           ))}
         </div>
       )}
