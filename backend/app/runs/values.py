@@ -65,14 +65,16 @@ _DATE = re.compile(
 _NUMERIC_DATE = re.compile(r"\b(?P<a>\d{1,4})(?P<sep>[-/.\u2013\u2014])(?P<b>\d{1,2})(?P=sep)(?P<c>\d{1,4})\b")
 
 # Letters in a pointer are capitals or a bracketed sub-item: "Schedule B", "8.1(a)", never the next word ("fees").
-_REF = r"(?-i:[\dA-Z]{1,6})(?![A-Za-z])(?:\.\d{1,6}){0,6}(?:\([a-z0-9]{1,4}\)){0,4}"
+_REF = r"(?-i:[\dA-Z]{1,6})(?![\dA-Za-z])(?:\.\d{1,6}){0,6}(?:\([a-z0-9]{1,4}\)){0,4}"
 _POINTER_WORDS = (
     r"sections?|subsections?|clauses?|articles?|schedules?|exhibits?|attachments?|riders?|addend(?:um|a)|appendix|appendices"
     r"|annex(?:es|ures?)?|paragraphs?|parts?|chapters?|items?|regulations?|rules?"
 )
 # Where an answer points rather than states.
 _POINTERS = re.compile(
-    rf"(?:§§?\s*|\b(?:{_POINTER_WORDS})\s+(?:no\.?\s*|number\s+)?){_REF}(?:\s*(?:,\s*(?:and|or)?|and|or|to|through|&)\s*{_REF}){{0,40}}"
+    # A list of pointers runs on ("Sections 1, 2 and 3") but never over a quantity: "Under Section 4.2, 90 days" (bug hunt).
+    rf"(?:§§?\s*|\b(?:{_POINTER_WORDS})\s+(?:no\.?\s*|number\s+)?){_REF}"
+    rf"(?:\s*(?:,\s*(?:and|or)?|and|or|to|through|&)\s*{_REF}(?![\s-]*(?:%|{_UNIT}))){{0,40}}"
     r"|\bsec_\d+(?:[.,]\d+)*|\(part \d+\)|\(\s*\d{1,2}\s*\)|(?<!\d)\.\d+",
     re.IGNORECASE,
 )
@@ -212,6 +214,11 @@ def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int, 
     return found
 
 
+def _without_pointers(text: str) -> str:
+    """The text with what points blanked: "Under Section 10" in a question names no value (review R1, 2026-10-09)."""
+    return _POINTERS.sub(lambda m: " " * len(m.group(0)), text)
+
+
 def _keys(text: str) -> set[str]:
     return {key for key, _, _, _ in _stated(text, words_need_a_unit=False)}
 
@@ -236,7 +243,7 @@ def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Ite
     if not answer:
         return []
     given: dict[str, set[str]] = {}
-    for text in (*quotes, *readers_text):
+    for text in (*quotes, *(_without_pointers(text) for text in readers_text)):
         for key, kinds in _kinds_of(text, words_need_a_unit=False).items():
             given.setdefault(key, set()).update(kinds)
     # Pointers are blanked to spaces, not removed, so offsets still index the answer as written.
@@ -325,10 +332,10 @@ def value_choices(answer: str | None, quotes: Iterable[str], question: Iterable[
         return []
     asked: set[str] = set()
     for text in question:
-        asked |= _keys(text)
+        asked |= _keys(_without_pointers(text))
     standard: set[str] = set(asked)
     for text in guidance:
-        standard |= _keys(text)
+        standard |= _keys(_without_pointers(text))
     # Per group: each distinct value once (key -> as written, in the passages' order). Dicts, not scans: a quote of
     # thousands of values stays linear.
     offered: dict[str, dict[str, str]] = {}

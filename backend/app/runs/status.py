@@ -50,7 +50,8 @@ from ..policy.proof import pass_blockers, same_point
 # policy-v5 (2026-10-09, bug hunt): "maximum 60 days", "limited to", "less than or equal to" and "at the most" are
 # ceilings; a guidance period beside a comparing word the patterns do not recognise is not read; a qualifier a word or
 # two after the period counts ("30 days' notice or more"); whitespace inside a phrase is one space, so "not\nless than"
-# in a quote is a floor. Replayed over the 63 recorded findings with guidance and 10 guidance texts: none changed.
+# in a quote is a floor. References read "§ 99", plurals and lists, and leave statutes ("Section 1542 of the California
+# Civil Code") alone. Replayed: 0 of 63 guidance decisions, 0 of 10 guidance rules and 0 of 1,229 references change.
 POLICY_VERSION = "policy-v5"
 
 
@@ -175,7 +176,7 @@ def _bears_on(short: Grounds, confirmed: Grounds, guidance: str | None) -> str |
     if {section_id for section_id, _ in short.sections} & {section_id for section_id, _ in confirmed.sections}:
         return "another finding that cites the same section falls short of the guidance"
     numbers = [number for _, number in confirmed.sections if number]
-    for reference in (r.rstrip(".") for passage in short.passages for r in REFERENCE.findall(passage)):
+    for reference in (r for passage in short.passages for r in references(passage)):
         if any(number == reference or number.endswith("." + reference) for number in numbers):
             return f"another finding, whose clause refers to §{reference}, falls short of the guidance"
     if guidance and same_point(short.quotes, guidance):
@@ -206,7 +207,27 @@ def settle_together(decisions: Sequence[Decision], grounds: Sequence[Grounds], g
 
 
 # "§14.2", "Section 14.2", "clause 14.2", "Article 14": the ways a conclusion points a reader at a section.
-REFERENCE = re.compile(r"(?:§|\bSection\s+|\bClause\s+|\bArticle\s+)(\d+(?:\.\d+)*)", re.IGNORECASE)
+REFERENCE = re.compile(r"(?:§§?\s*|\b(?:Sections?|Clauses?|Articles?)\s+)(\d+(?:\.\d+)*)", re.IGNORECASE)
+# The rest of a list after a reference: "Sections 99 and 98", "§§ 4.1, 4.2".
+_MORE_REFERENCES = re.compile(r"(?:\([a-z0-9]{1,4}\))*\s*(?:,\s*(?:and|or)?|and|or|&)\s*(\d+(?:\.\d+)*)", re.IGNORECASE)
+# A section of a statute, not of this agreement: "Section 1542 of the California Civil Code", "Section 365 of the
+# Bankruptcy Code", "Section 2(a) of the Act" (bug hunt, 2026-10-09: reported as a section this document lacks).
+_STATUTE = re.compile(r"(?:\([a-z0-9]{1,4}\))*\s+of\s+(?:the\s+)?(?:[A-Z][\w.'-]*\s+){0,6}(?:Code|Act|Regulations?|Rules|Statutes?|Law|U\.?S\.?C\.?)\b")
+
+
+def references(text: str | None) -> list[str]:
+    """The section numbers ``text`` points at, lists and plurals included, statutes left out, in order."""
+    found: list[str] = []
+    for match in REFERENCE.finditer(text or ""):
+        numbers = [match.group(1)]
+        position = match.end()
+        while more := _MORE_REFERENCES.match(text or "", position):
+            numbers.append(more.group(1))
+            position = more.end()
+        if _STATUTE.match(text or "", position):
+            continue
+        found += [n.rstrip(".") for n in numbers]
+    return found
 
 
 def unknown_references(text: str | None, section_numbers: Iterable[str], handed_ids: Iterable[str], stated: Iterable[str] = ()) -> list[str]:
@@ -221,7 +242,7 @@ def unknown_references(text: str | None, section_numbers: Iterable[str], handed_
     printed = [n for n in stated if n]
     ids = {handle.removeprefix("sec_") for handle in handed_ids}
     unknown: list[str] = []
-    for reference in REFERENCE.findall(text or ""):
+    for reference in references(text):
         reference = reference.rstrip(".")
         if reference in ids:
             continue
@@ -260,7 +281,7 @@ def unseen_references(passage: str, sections: Iterable[tuple[str, str]], handed:
     was. No reference is followed; the model is not shown more, the pass is only not code's to give."""
     every, seen = list(sections), list(handed)
     unseen: list[str] = []
-    for reference in REFERENCE.findall(passage):
+    for reference in references(passage):
         reference = reference.rstrip(".")
         targets = [pair for pair in every if pair[0] and (pair[0] == reference or pair[0].endswith("." + reference))]
         if targets and any(pair not in seen for pair in targets) and f"§{reference}" not in unseen:

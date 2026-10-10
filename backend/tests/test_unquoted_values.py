@@ -182,3 +182,16 @@ def test_a_value_of_another_kind_does_not_count_as_quoted() -> None:
     assert unquoted_values("The credit is 10%.", [quote], []) == [], "control"
     assert unquoted_values("Respond within 5 days.", [quote], []) == [], "control: 5 business days is 5 days of the same family"
     assert unquoted_values("Section 5 applies.", [quote], []) == [], "control: a pointer"
+
+
+def test_a_quantity_after_a_pointer_is_still_a_value() -> None:
+    """Bug hunt #9: a pointer list ("Sections 1, 2 and 3") swallowed the quantity after it: "Under Section 4.2, 90 days"."""
+    assert unquoted_values("Under Section 4.2, 90 days' notice applies.", ["thirty (30) days' notice"], []) == ["90 days"]
+    assert unquoted_values("Sections 1, 2 and 3 apply.", ["no values"], []) == [], "control: a list of pointers"
+
+
+def test_a_pointer_in_the_question_is_not_a_value_the_question_names() -> None:
+    """Review R1: a question "Under Section 10, what credit applies?" set 10% aside as the reader's own value."""
+    quote = "a credit of 5% below 99.9%, or 10% below 99.0%"
+    choices = value_choices("The credit is 10%.", [quote], ["Under Section 10, what credit applies at 98.5%?"])
+    assert [c.answer for c in choices] == ["10%"]

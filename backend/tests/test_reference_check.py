@@ -90,3 +90,21 @@ def test_a_hostile_line_is_read_in_linear_time() -> None:
         started = time.perf_counter()
         stated_clause_numbers([hostile])
         assert time.perf_counter() - started < 0.5, hostile[:20]
+
+
+def test_a_statute_is_not_a_section_of_the_contract() -> None:
+    """Bug hunt #10: "Section 1542 of the California Civil Code" was "a section this document does not have"."""
+    for text in ("Waives Section 1542 of the California Civil Code.", "under Section 365 of the Bankruptcy Code", "Section 2(a) of the Act"):
+        assert unknown_references(text, ["1", "2"], []) == [], text
+    assert unknown_references("Section 14.2 grants pricing.", ["1", "2"], []) == ["14.2"], "control"
+
+
+def test_the_section_sign_with_a_space_and_plural_sections_are_references() -> None:
+    assert unknown_references("see § 99", ["1"], []) == ["99"]
+    assert unknown_references("Sections 99 and 98 apply.", ["1"], []) == ["99", "98"]
+
+
+def test_a_decimal_after_a_sentence_end_is_not_a_clause_opening() -> None:
+    """Bug hunt #10: "Fees are due. 1.5 times the fee applies." made 1.5 a clause the text opens."""
+    assert "1.5" not in stated_clause_numbers(["Fees are due. 1.5 times the fee applies."])
+    assert "4.1" in stated_clause_numbers(["Fees are due. 4.1 Late fees accrue."]), "control"

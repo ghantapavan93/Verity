@@ -120,7 +120,9 @@ SENTENCE_START = re.compile(r"(?<=[.;:])\s+(?=\d)")
 # so that a list item ("2. invoice monthly;") is not clause 2; a cross-reference ("Subject to Section 9") opens nothing.
 _OPENING_NUMBER = r"(\d{1,9}(?:\.\d{1,9})+|\d{1,9}(?=[.)]))[.)]?[ \t]+(?=\S)"
 _CLAUSE_OPENING = re.compile(
-    rf"^[ \t]*(?:(?:Section|Clause|Article)[ \t]+(\d{{1,9}}(?:\.\d{{1,9}})*)[.)]?[ \t]+(?=\S)|{_OPENING_NUMBER})|(?<=[.;:])[ \t]+{_OPENING_NUMBER}",
+    rf"^[ \t]*(?:(?:Section|Clause|Article)[ \t]+(\d{{1,9}}(?:\.\d{{1,9}})*)[.)]?[ \t]+(?=\S)|{_OPENING_NUMBER})"
+    # After a sentence end the opening must carry a title: "Fees are due. 1.5 times the fee" opens nothing (bug hunt).
+    rf"|(?<=[.;:])[ \t]+{_OPENING_NUMBER}(?-i:(?=[A-Z]))",
     re.IGNORECASE | re.MULTILINE,
 )
 
