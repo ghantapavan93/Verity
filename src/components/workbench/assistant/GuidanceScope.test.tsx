@@ -11,7 +11,10 @@ import { useGuidance } from "../hooks/useGuidance";
 import { GuidanceScope } from "./GuidanceScope";
 
 const createGuidance = vi.fn();
-vi.mock("@/lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/api")>()), createGuidance: (text: string) => createGuidance(text) }));
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  createGuidance: (text: string) => createGuidance(text),
+}));
 
 afterEach(() => {
   cleanup();

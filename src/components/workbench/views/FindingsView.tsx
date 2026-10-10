@@ -234,11 +234,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                           required
                           ref={(element) => element?.focus()}
                         />
-                        <button
-                          type="submit"
-                          className={styles.reviewButton}
-                          aria-label={`${VERB[pending.verdict]}: ${r.topic}`}
-                        >
+                        <button type="submit" className={styles.reviewButton} aria-label={`${VERB[pending.verdict]}: ${r.topic}`}>
                           {VERB[pending.verdict]}
                         </button>
                         <button type="button" className={styles.reviewButton} onClick={() => setPending(null)}>
