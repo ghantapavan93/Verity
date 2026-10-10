@@ -1,4 +1,4 @@
-"""When a verified quote states several values of the kind the answer gives, code says so beside the quote.
+"""When the cited passages state several values of the kind the answer gives, code says so beside them.
 
 Found by the evaluation workstream (2026-10-09): a service-credit table quoted word for word holds 5%, 10% and 25%, and
 the answer chose 5% where the band gives 10% (AD7). Band answers were right in 2 of 6 on record, and each wrong one read
@@ -6,10 +6,12 @@ as a plain pass over a quote "found word for word"; the unquoted-value check nam
 is in the quote. Which value applies is a reading of the passage; code does not make it. What code can say, truly, is
 that the passage offered several values of that kind and which one the answer used.
 
-The invariant: for each answer value that is a percentage, money or a duration (and not stated by the reader's own
-question or guidance), every verified quote that states two or more distinct values of that kind is disclosed with those
-values (document order, at most 8, then a count) and the answer's value. It changes no status. Pre-registered predicate
-and expected counts: C:/Temp/verity-qa/m3/impl/candidates-prereg.json (sha256 05de4533…).
+The invariant: for each kind the answer gives (a percentage, money, or a duration within one unit family), when the
+finding's verified passages together state two or more distinct values of that kind and the answer uses some but not all
+of them, code lists those values (in order, at most 8, then a count) and the ones the answer used. A value the question
+names is the condition asked about and set aside; a guidance's value stays among the passages. It changes no status.
+The predicate was pre-registered per quote, amended openly to pooled passages, and revised after triage; the counts and
+their post-hoc labels are in docs/FAILURE-ENVELOPE.md.
 """
 
 from __future__ import annotations
