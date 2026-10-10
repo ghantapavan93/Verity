@@ -4,7 +4,8 @@
 
 .DESCRIPTION
   One task per server ("Verity API", "Verity Web"), running deploy/supervise.ps1 under the current user at logon,
-  hidden, with no time limit, on battery or not. `-Build` first builds the interface for the public origin. Servers
+  hidden, with no time limit, on battery or not. `-Build` first builds the interface for the public origin, into
+  .next-staging, swapped in once the old servers have stopped (.next-previous keeps the last one). Servers
   already running are stopped first (deploy/down.ps1) and their supervisors waited out: a task whose instance is still
   running ignores a new start, and on 2026-10-09 the previous release kept serving over a new build.
   `-Uninstall` writes the stop files, stops both servers and removes the tasks. The connector is already a Windows
@@ -35,15 +36,31 @@ if ($Uninstall) {
   exit 0
 }
 
+# The interface is built beside the one that serves (.next-staging) and swapped in only after the running servers have
+# stopped: a build into .next itself replaced files under a running `next start`, and a failed one left a half-written
+# .next for the next restart to serve (security workstream, 2026-10-09). A failed build changes nothing that serves.
+$staging = Join-Path $root ".next-staging"
 if ($Build) {
   $env:NEXT_PUBLIC_API_URL = $Origin
   $env:NEXT_PUBLIC_PROOF_RUN = $ProofRun
   $env:NEXT_PUBLIC_BUILD_SHA = (git -C $root rev-parse HEAD).Trim()  # the commit this build is made from, shown on the Runs surface
+  $env:NEXT_DIST_DIR = ".next-staging"
+  Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+  # Next writes the build directory's type paths into tsconfig.json; the file is put back as it was.
+  $tsconfig = Join-Path $root "tsconfig.json"
+  $tsconfigBytes = [System.IO.File]::ReadAllBytes($tsconfig)
   Push-Location $root
   try {
     & npm run build 2>&1 | Tee-Object -FilePath (Join-Path $logs "build-$((Get-Date).ToString('yyyyMMdd-HHmmss')).log") | Select-Object -Last 2
-    if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
-  } finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0) {
+      Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+      throw "npm run build failed; the release that serves was not touched"
+    }
+  } finally {
+    [System.IO.File]::WriteAllBytes($tsconfig, $tsconfigBytes)
+    Remove-Item Env:NEXT_DIST_DIR -ErrorAction SilentlyContinue
+    Pop-Location
+  }
 }
 
 New-Item -ItemType Directory -Force $logs | Out-Null
@@ -57,6 +74,14 @@ if ($running.Count -gt 0) {
   while ((Get-Date) -lt $until -and @($running | Where-Object { (Get-ScheduledTask -TaskName $_).State -eq "Running" }).Count -gt 0) { Start-Sleep -Seconds 2 }
   $still = @($running | Where-Object { (Get-ScheduledTask -TaskName $_).State -eq "Running" })
   if ($still.Count -gt 0) { throw "still running after the stop: $($still -join ', '); nothing was restarted" }
+}
+if ($Build) {
+  # Nothing serves now: the staged build becomes .next, and the one it replaces is kept as .next-previous for a rollback.
+  $live = Join-Path $root ".next"
+  $previous = Join-Path $root ".next-previous"
+  Remove-Item $previous -Recurse -Force -ErrorAction SilentlyContinue
+  if (Test-Path $live) { Rename-Item $live ".next-previous" }
+  Rename-Item $staging ".next"
 }
 $publicArg = if ($PublicDataDir) { " -PublicDataDir `"$PublicDataDir`"" } else { "" }
 foreach ($name in $tasks.Keys) {
