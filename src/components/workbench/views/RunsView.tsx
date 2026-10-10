@@ -18,7 +18,19 @@ import styles from "./Views.module.css";
 import { Figures, MethodBar } from "./Figures";
 import { ListSkeleton, ReadFailed } from "./Skeleton";
 import { ContractState } from "./ContractState";
-import { absolute, getBatch, getCitations, getExperiments, getFamilies, getGoldens, getContractState, getRunDetail, listBatches, listRuns } from "@/lib/api";
+import {
+  absolute,
+  errorMessage,
+  getBatch,
+  getCitations,
+  getExperiments,
+  getFamilies,
+  getGoldens,
+  getContractState,
+  getRunDetail,
+  listBatches,
+  listRuns,
+} from "@/lib/api";
 import { formatClock, formatDelta, formatLatency, formatWhen, plural, shortHash } from "@/lib/format";
 import {
   OUTCOME_LABELS,
@@ -96,6 +108,8 @@ export function RunsView({
   const [goldens, setGoldens] = useState<GoldensView | null>(null);
   const [citations, setCitations] = useState<CitationRecord | null>(null);
   const [batches, setBatches] = useState<BatchSummary[] | null>(null);
+  // Why the batch list could not be read: an empty list would say "No batch recorded yet", which is a claim (m7 audit).
+  const [batchesError, setBatchesError] = useState<string | null>(null);
   const [families, setFamilies] = useState<FamiliesView | null>(null);
   const [selected, setSelected] = useState<RunDetailView | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -147,7 +161,11 @@ export function RunsView({
     }
     listBatches()
       .then((rows) => !cancelled && setBatches(rows))
-      .catch(() => !cancelled && setBatches([]));
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setBatchesError(errorMessage(e));
+        setBatches([]);
+      });
     getFamilies()
       .then((view) => !cancelled && setFamilies(view))
       .catch(() => !cancelled && setFamilies(null));
@@ -309,7 +327,7 @@ export function RunsView({
         )}
         {batches && (
           <div id="batches" className={styles.anchor}>
-            <Batches batches={batches} onOpenRun={(id) => void select(id)} />
+            <Batches batches={batches} loadError={batchesError} onOpenRun={(id) => void select(id)} />
           </div>
         )}
         {families && (
@@ -743,7 +761,7 @@ function valueTone(outcome: BatchValue["outcome"]): string {
 }
 
 /** Field extraction over a corpus, as recorded: the batches, and for the open one its numbers and every value with its citation. */
-function Batches({ batches, onOpenRun }: { batches: BatchSummary[]; onOpenRun: (runId: string) => void }) {
+function Batches({ batches, loadError, onOpenRun }: { batches: BatchSummary[]; loadError: string | null; onOpenRun: (runId: string) => void }) {
   const [open, setOpen] = useState<BatchView | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -773,7 +791,8 @@ function Batches({ batches, onOpenRun }: { batches: BatchSummary[]; onOpenRun: (
         retries. Batches start from the command line, never from here.
       </p>
       {error && <p className={styles.notice}>{error}</p>}
-      {batches.length === 0 && <p className={styles.quiet}>No batch recorded yet.</p>}
+      {loadError && <p className={styles.notice}>The batch record could not be read: {loadError}</p>}
+      {batches.length === 0 && !loadError && <p className={styles.quiet}>No batch recorded yet.</p>}
       {batches.length > 0 && (
         <ul className={styles.list}>
           {batches.map((b) => (

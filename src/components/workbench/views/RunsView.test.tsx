@@ -19,7 +19,7 @@ const api = vi.hoisted(() => ({
   getBatch: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => ({ ...api, absolute: (path: string) => path }));
+vi.mock("@/lib/api", () => ({ ...api, absolute: (path: string) => path, errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
 
 import { PublicDemo } from "../access/PublicDemo";
 import { runOutcome } from "@/lib/checks";
@@ -58,6 +58,14 @@ describe("RunsView in a public demo", () => {
     render(<RunsView notice={null} onOpenRun={vi.fn()} />);
     expect(await screen.findByRole("link", { name: "Golden set" })).toBeTruthy();
     expect(api.getGoldens).toHaveBeenCalled();
+  });
+
+  it("says the batch record could not be read, rather than that there is no batch", async () => {
+    // m7 audit, 2026-10-10: any failure to list batches read "No batch recorded yet", a claim about the record.
+    api.listBatches.mockRejectedValue(new Error("The workbench API is not reachable."));
+    render(<RunsView notice={null} onOpenRun={vi.fn()} />);
+    expect(await screen.findByText(/The batch record could not be read: The workbench API is not reachable\./)).toBeTruthy();
+    expect(screen.queryByText("No batch recorded yet.")).toBeNull();
   });
 });
 
