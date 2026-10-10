@@ -75,6 +75,8 @@ while ($true) {
       -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$Port" `
       -WorkingDirectory $backend -RedirectStandardOutput $out -RedirectStandardError $err -WindowStyle Hidden -PassThru
   } else {
+    # A deploy interrupted between its two renames can leave no .next: finish or undo it before starting (swap-build.ps1).
+    try { & (Join-Path $root "deploy\swap-build.ps1") -Root $root -Recover | ForEach-Object { Write-Line $_ } } catch { Write-Line "build recovery failed: $($_.Exception.Message)" }
     # `next start` itself, not `npm run start`: one process, so its exit is the server's exit and its pid is the server's.
     # Loopback only: the tunnel is the only client; before 2026-10-01 the interface also listened on the LAN address.
     $next = Join-Path $root "node_modules\next\dist\bin\next"

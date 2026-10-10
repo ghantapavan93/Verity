@@ -75,13 +75,11 @@ if ($running.Count -gt 0) {
   $still = @($running | Where-Object { (Get-ScheduledTask -TaskName $_).State -eq "Running" })
   if ($still.Count -gt 0) { throw "still running after the stop: $($still -join ', '); nothing was restarted" }
 }
+# Nothing serves now: the staged build becomes .next (deploy/swap-build.ps1). If the swap fails it has put the previous
+# build back, and the servers are still started below, on the release they had; the failure is raised after that.
+$swapFailure = $null
 if ($Build) {
-  # Nothing serves now: the staged build becomes .next, and the one it replaces is kept as .next-previous for a rollback.
-  $live = Join-Path $root ".next"
-  $previous = Join-Path $root ".next-previous"
-  Remove-Item $previous -Recurse -Force -ErrorAction SilentlyContinue
-  if (Test-Path $live) { Rename-Item $live ".next-previous" }
-  Rename-Item $staging ".next"
+  try { & (Join-Path $root "deploy\swap-build.ps1") -Root $root -Swap } catch { $swapFailure = $_.Exception.Message }
 }
 $publicArg = if ($PublicDataDir) { " -PublicDataDir `"$PublicDataDir`"" } else { "" }
 foreach ($name in $tasks.Keys) {
@@ -103,4 +101,5 @@ while ((Get-Date) -lt $deadline -and -not ($api -and $web)) {
   try { $web = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 http://127.0.0.1:3900/).StatusCode -eq 200 } catch { $web = $false }
 }
 Write-Host ("API answering: {0}; interface answering: {1}; supervisor logs under {2}" -f $api, $web, $logs)
+if ($swapFailure) { throw "the new build was not put in place, and the previous release was restarted: $swapFailure" }
 if (-not ($api -and $web)) { exit 1 }
