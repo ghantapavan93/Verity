@@ -954,6 +954,14 @@ export function BreakStory({ record }: { record: PageRecord }) {
               </a>
             ))}
           </nav>
+          <nav aria-label="Elsewhere" className={styles.navOut}>
+            <Link href="/" className={styles.navLink}>
+              Workbench
+            </Link>
+            <a href="/state" className={styles.navLink}>
+              Research
+            </a>
+          </nav>
         </header>
         <main id="main" className={styles.main}>
           <Failure headline={headline} />

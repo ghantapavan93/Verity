@@ -9,10 +9,10 @@ const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrai
 // What a link preview shows. The product opens on the workbench (the research is at /state); the public artifact
 // (NEXT_PUBLIC_EXPORT=state) opens on the recorded experiment and has no workbench to describe.
 const PUBLIC_STATE = process.env.NEXT_PUBLIC_EXPORT === "state";
-const TITLE = PUBLIC_STATE ? "Verity · One contract changes: what doesn't need to move?" : "Verity · Contract workbench and Contract State research";
+const TITLE = PUBLIC_STATE ? "Verity · One contract changes: what doesn't need to move?" : "Verity · Contract AI, under test";
 const DESCRIPTION = PUBLIC_STATE
   ? "A recorded experiment on real SEC exhibits: what one arriving contract changes in derived contract state, what it provably does not, and the evidence for each."
-  : "Upload a contract, ask a question, and open the passage each answer cites; the workbench checks every passage the model quotes against the document. With a recorded experiment on what one arriving contract changes.";
+  : "A contract AI can quote the right passage and still reach the wrong conclusion. Verity locates every passage the model quotes, records each run so it can be replayed, and says what code did not check. With one recorded wrong-party answer, and research on contract-derived state.";
 
 export const metadata: Metadata = {
   title: TITLE,

@@ -35,6 +35,15 @@
   scrollbar-width: none;
 }
 
+.navOut {
+  display: flex;
+  flex: none;
+  gap: 18px;
+  margin-left: auto;
+  padding-left: 18px;
+  border-left: 1px solid var(--hairline);
+}
+
 .navLink {
   flex: none;
   padding: 4px 0;
@@ -1165,6 +1174,16 @@
 }
 
 @media (max-width: 640px) {
+  /* On a phone the page is read by scrolling; the way out (workbench, research) keeps the bar. */
+  .top .nav {
+    display: none;
+  }
+
+  .navOut {
+    padding-left: 0;
+    border-left: 0;
+  }
+
   .hero {
     padding-top: 36px;
   }
