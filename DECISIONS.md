@@ -842,7 +842,7 @@ UTC), clears it. Removed files are unlinked, not overwritten, and the landing no
 the supervisor's logs show 18 such restarts in 27 hours. The first fix, the selector loop, traded that for a
 512-socket cap one visitor holding progress streams could reach (found in review). The deployed loop is Windows'
 proactor with one change, in `app.serving`: an accept the client caused to fail is retried, and counted in the log
-rather than written out with a traceback each time.
+(the first at once, the rest each minute) rather than written out with a traceback each time.
 
 Considered and not done: a separate trust page (the three questions a visitor has are answered where they upload, with
 links to the isolation and deletion tests; a page would repeat them further from the decision); a public encryption-
