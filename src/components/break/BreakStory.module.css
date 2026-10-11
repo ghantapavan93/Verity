@@ -353,6 +353,37 @@
   color: var(--text-2);
 }
 
+.matters {
+  max-width: 820px;
+  margin: 0 0 18px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--bg-raised);
+}
+
+.matters p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.mattersTitle {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.matters .mattersNote {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
 .provenance {
   max-width: 820px;
   margin: 0;

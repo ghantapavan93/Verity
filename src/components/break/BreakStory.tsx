@@ -196,6 +196,18 @@ function Failure({ headline }: { headline: CaseRecord }) {
         </div>
       </figure>
 
+      <section className={styles.matters} aria-labelledby="matters-title">
+        <h2 id="matters-title" className={styles.mattersTitle}>
+          Why it matters
+        </h2>
+        <p>
+          A reader acting on this answer would plan an objection the agreement does not give Axogen, and miss what it does say:{" "}
+          {headline.requiredConditions.slice(2).join("; ")}
+          <Cite id="cases" />. The answer carries a real quote and no warning, so in a quick triage nothing about it looks like a reason to escalate.
+        </p>
+        <p className={styles.mattersNote}>Illustrative: what the clause implies for someone who relies on the answer, not a reported incident.</p>
+      </section>
+
       <p className={styles.provenance}>
         {headline.source.title.toLowerCase().replace(/^\w/, (c) => c.toUpperCase())} · {headline.source.company.replace(/\s+\(CIK.*$/, "")} ·{" "}
         {headline.source.form} filed {headline.source.filingDate} ·{" "}

@@ -53,6 +53,18 @@ describe("the failure", () => {
   });
 });
 
+describe("why it matters", () => {
+  it("says what acting on the answer would get wrong, from the pre-registered conditions, labelled as a reading", () => {
+    // Release trust review, 2026-10-11: the hero showed the wrong party but not what a reader would do with the answer.
+    renderPage();
+    const block = screen.getByRole("region", { name: "Why it matters" });
+    const text = block.textContent ?? "";
+    for (const condition of headline.requiredConditions.slice(2)) expect(text).toContain(condition);
+    expect(text).toMatch(/Illustrative/);
+    expect(text).not.toMatch(/customer|incident occurred|lost|damages/i);
+  });
+});
+
 describe("the investigation", () => {
   it("moves between the record's steps with the arrow keys", () => {
     renderPage();
