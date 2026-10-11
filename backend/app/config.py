@@ -9,6 +9,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+# Ollama's own default bind, as an address: "localhost" can resolve to ::1 first, and where the server listens on IPv4
+# only every request waits for the IPv6 attempt to fail (about two seconds on Windows, measured 2026-10-11).
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 
 
 def json_headers(raw: str) -> dict[str, str]:
@@ -31,7 +34,7 @@ class Settings(BaseModel):
     database_url: str = os.environ.get("WORKBENCH_DATABASE_URL", "")
     provider: str = os.environ.get("WORKBENCH_PROVIDER", "ollama")
     model: str = os.environ.get("WORKBENCH_MODEL", "qwen3:8b")
-    ollama_url: str = os.environ.get("WORKBENCH_OLLAMA_URL", "http://localhost:11434")
+    ollama_url: str = os.environ.get("WORKBENCH_OLLAMA_URL", DEFAULT_OLLAMA_URL)
     # Credentials for a model endpoint behind an authenticating proxy; never printed (repr) or logged.
     ollama_headers: dict[str, str] = Field(default_factory=lambda: json_headers(os.environ.get("WORKBENCH_OLLAMA_HEADERS", "")), repr=False)
     # The model build the deployment names (an Ollama digest prefix, e.g. 500a1f067a9f for qwen3:8b Q4_K_M). Set, every
