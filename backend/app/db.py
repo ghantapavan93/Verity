@@ -30,6 +30,9 @@ def make_engine(url: str | None = None) -> Engine:
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.execute("PRAGMA journal_mode=WAL")
+            # A deleted row's bytes are overwritten, not left in free pages: the public store promises that what a
+            # visitor added is gone when their workspace ends (application/retention.py; release review, 2026-10-11).
+            cursor.execute("PRAGMA secure_delete=ON")
             cursor.close()
 
     return engine

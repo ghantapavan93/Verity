@@ -223,3 +223,29 @@ def test_the_public_process_refuses_a_store_with_owner_records(public: TestClien
 
     with pytest.raises(RuntimeError, match="Refusing to start"), TestClient(create_app(provider=public.provider)):
         pass
+
+
+def test_an_ended_workspaces_text_does_not_survive_in_the_store_files(public: TestClient) -> None:  # noqa: F811
+    # Release trust review, 2026-10-11: SQLite leaves a deleted row's bytes in the database file's free pages, and in the
+    # write-ahead log, until something overwrites them. The rows went; the contract's text could stay on disk
+    # indefinitely, which is not what "deleted 7 days after your first visit" says.
+    marker = "Clause 99. The Licensee shall paint every warehouse vermilion quokka-7f3a."
+    a, _ = arrive(public)
+    b, _ = arrive(public, address="198.51.100.9")
+    work(cast(Reviewer, a), contract=CONTRACT + "\n\n" + marker + "\n")
+    # Control: a visitor whose workspace has not ended keeps every byte of theirs.
+    kept = b.post("/api/documents", files={"file": ("b.txt", (CONTRACT + "\n\nClause 98. Wombat-c41d stays.\n").encode(), "text/plain")})
+    assert kept.status_code in (200, 201), kept.text
+    store = Path(str(db_module.engine.url.database))
+    with db_module.engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+    assert b"quokka-7f3a" in store.read_bytes()  # control: the text is on disk while the workspace lives
+    end(a)
+    purge_expired_workspaces(db_module.engine)
+    for path in (store, store.with_name(store.name + "-wal")):
+        if path.exists():
+            assert b"quokka-7f3a" not in path.read_bytes(), path.name
+    with db_module.engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+    assert b"Wombat-c41d" in store.read_bytes()
+    assert [d["name"] for d in b.get("/api/documents").json()] == ["b.txt"]

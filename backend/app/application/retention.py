@@ -41,6 +41,7 @@ class PurgeReport:
     runs: int = 0
     documents: int = 0
     files: int = 0
+    checkpointed: bool = False
 
 
 def _ids(connection: Connection, sql: str, **params: object) -> list[str]:
@@ -124,13 +125,20 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None) -> Pur
             report.files += _unlink(settings.data_dir / "documents" / f"{sha256}{SUFFIX_OF.get(media_type, '')}")
     for recorded in memo_files:
         report.files += _unlink(settings.data_dir / "memos" / PureWindowsPath(recorded).name)
+    # secure_delete zeroes what the rows held in the pages they leave; the write-ahead log still holds the frames written
+    # before, until a checkpoint copies the zeroed pages back and truncates it. A reader holding an old snapshot can keep
+    # the checkpoint from finishing; the next purge, or the next quiet moment's automatic checkpoint, completes it.
+    with engine.connect() as connection:
+        busy, _log, _done = connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)").one()
+        report.checkpointed = busy == 0
     log.info(
-        "retention purged workspaces=%d runs=%d documents=%d files=%d skipped_in_progress=%d",
+        "retention purged workspaces=%d runs=%d documents=%d files=%d skipped_in_progress=%d checkpointed=%s",
         len(report.workspaces),
         report.runs,
         report.documents,
         report.files,
         len(report.skipped_in_progress),
+        report.checkpointed,
     )
     return report
 
