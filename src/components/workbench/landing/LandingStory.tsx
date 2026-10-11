@@ -91,6 +91,8 @@ export function RecordPipeline({
   documents: DocumentSummary[] | null;
   reduceMotion: boolean;
 }) {
+  // An empty workspace has no record to show: six zeros on a first visit said nothing (final release review, 2026-10-11).
+  if (documents?.length === 0 && citations?.runs === 0) return null;
   const reviewed = documents ? documents.reduce((n, d) => n + d.reviewedFindings, 0) : null;
   const sections = documents ? documents.reduce((n, d) => n + d.sections, 0) : null;
   const nodes: { label: string; value: number | null; note: string; icon: ReactNode; tone?: "accent" | "bad" | "pass" }[] = [
@@ -172,9 +174,9 @@ export function RecordPipeline({
           The record so far
         </p>
         <h2 id="pipeline-title" className={styles.storyTitle}>
-          Every question passes through the same six hands.
+          What this workspace has recorded.
         </h2>
-        <p className={styles.storyLead}>The counts are the store&apos;s own, read from the API when this page opened. They move as the record grows.</p>
+        <p className={styles.storyLead}>Read from the API when this page opened, in the order a question goes through them.</p>
       </Reveal>
       <ol className={styles.pipeline} aria-label="The record as a pipeline">
         {nodes.map((node, i) => (
@@ -317,7 +319,7 @@ export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place
     },
     {
       head: "It does not pass a clause on its own.",
-      text: "A pass is the model's proposal, never code's. Code lowers it to review when the evidence shown does not establish it: a value no verified quote states, a section the document does not have, a period short of your guidance.",
+      text: "A pass is the model's proposal, never code's. Code lowers it to review when the evidence shown does not establish it: a value no verified quote states, a section the document does not have, a period short of your guidance. Who holds a right, and whether a condition was left out, code does not check.",
     },
     {
       head: "It does not hide a miss.",
@@ -333,7 +335,7 @@ export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place
           Said plainly
         </p>
         <h2 id="refusals-title" className={styles.storyTitle}>
-          {COUNT_WORDS[lines.length]} things it refuses to do.
+          {COUNT_WORDS[lines.length]} things it does not do.
         </h2>
       </Reveal>
       <ul className={styles.refusals}>

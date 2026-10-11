@@ -387,10 +387,10 @@ export function Landing({
               {place.hosted ? "The question, the guidance and the sections it reads are sent there to be answered." : "No contract is sent to a hosted model."}
             </>
           ) : (
-            "Every answer is checked against the document text."
+            "Every quoted passage is located in the document text, or withheld."
           )}
         </span>
-        <span>Every run is kept as a record: what the model saw, what it said, what code checked.</span>
+        <span>Every run is kept: what the model saw, what it said, what code checked.</span>
       </footer>
     </motion.section>
   );

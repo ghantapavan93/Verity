@@ -42,3 +42,23 @@ it("states every count before the reader scrolls to it, with motion allowed", ()
   expect(node("A person decided").textContent).toContain("1");
   expect(screen.getByText("560 sections read")).toBeTruthy();
 });
+
+it("says nothing while the workspace holds nothing: six zeros are not a record", () => {
+  // Final release review, 2026-10-11: a new public visitor's first screen counted 0 contracts, 0 questions and 0
+  // passages under "Every question passes through the same six hands".
+  const { container } = render(
+    <RecordPipeline citations={{ runs: 0, spans: 0, verifiedSpans: 0, withheldFindings: 0 } as unknown as CitationRecord} documents={[]} reduceMotion />,
+  );
+  expect(container.textContent).toBe("");
+});
+
+it("control: a workspace with a contract and no question yet still shows its record", () => {
+  render(
+    <RecordPipeline
+      citations={{ runs: 0, spans: 0, verifiedSpans: 0, withheldFindings: 0 } as unknown as CitationRecord}
+      documents={[{ sections: 34, reviewedFindings: 0 }] as unknown as DocumentSummary[]}
+      reduceMotion
+    />,
+  );
+  expect(screen.getByText("34 sections read")).toBeTruthy();
+});
