@@ -788,3 +788,38 @@ false alarm are the Q-3 and Q-2 findings traced above. Every filing the page lin
 2026-10-11 (UTC) and matched the corpus download byte for byte up to the script tag SEC appends to each response; that
 prefix's sha256 is in the record. The page calls no API, runs no model and offers no upload of its own; it links to the
 workbench, with a warning that nothing detects or refuses a confidential document.
+
+**The final release review (2026-10-11).** Every public surface was read as a visitor sees it (rendered text, 320 to
+1920 px) against one problem statement: a contract AI can quote the right passage and still reach the wrong
+conclusion. What did not serve it was changed; nothing was redesigned for its own sake. A new public visitor's landing
+counted six zeros under "Every question passes through the same six hands"; it now shows the record only once there is
+one. The limits list says what code does not check (who holds a right, a missing condition). The evidence drawer,
+where it says support is the model's reading, links to /break. The Findings introduction was one 70-word sentence. The
+site's metadata and the README open with the problem; the README's test counts were eight days stale and are now the
+gate's, dated. Two engineering defects were found by measurement, not reading: the model URL defaulted to `localhost`,
+which cost every request to the model endpoint about two seconds (health 2.4 s to 0.35 s after; `docs/SCALE.md`), and
+`npm audit` reported two high advisories in production dependencies, one of them cache poisoning of statically
+rendered pages in self-hosted Next.js, which is how the site runs (Next 16.3.6 to 16.3.8, source-map-js 1.2.2). Eight
+advisories remain in development tooling (vitest's pool, braces through the lint plugin); their fixes are breaking
+majors and they are not shipped. The import contracts the README promised were kept but not gated; they are now.
+
+Deployment stays what it is: the next interface is built beside the live one, the servers stop, the build is swapped
+(`.next-previous` keeps the last) and the supervisors restart them; rollback is the previous commit through the same
+installer. It is not blue-green: there is one machine, one SQLite store and one GPU, and two API processes would
+contend for both and for the runs each claims as its own. The outage of a release is the stop-to-answer window,
+measured at each deploy, not a rebuild. Names of people appear on /break only as the filings print them in their
+business roles (a stockholders' representative, an executive whose agreement was filed); their email addresses are
+masked.
+
+| Reference | Principle used | Verity before | Decision |
+|---|---|---|---|
+| Google SRE book, monitoring chapter | latency, traffic, errors and saturation, observed per request | request id, path, status and duration per request; stage, duration and queue wait per run; no contract text or prompt in the logs | kept; the health latency above was found this way |
+| Martin Fowler, BlueGreenDeployment | two production environments, traffic switched between them | staged build swapped on one machine | not adopted (above) |
+| OpenTelemetry | one trace across services | one API process; request id and run id join a request to its stages | not adopted: no second service to trace across |
+| OWASP ASVS 5.0, file handling and authorization | type from content, size bounds, every object reached through its owner | `docs/FAILURE-ENVELOPE.md`, `test_anonymous.py`; every data route resolves the workspace (checked route by route, 2026-10-11) | no change needed |
+| Karpathy, autoresearch | a fixed evaluation; keep a change only if it measurably improves, else revert | pre-registered unseen cases; the party check kept on its branch, not merged | already the practice |
+| Matt Pocock, diagnosing skill | a red-capable loop before a hypothesis | the health delay: probe, then `localhost` against `127.0.0.1`, then a failing test | applied |
+| Addy Osmani, agent skills (security and hardening) | audit dependencies; separate shipped from dev-only | no audit in the gate | audited once; production clean, dev-only deferred |
+
+Not consulted: Ivo's Sage model card and published engineering writing. Nothing in the product rests on what Ivo's
+systems do or lack, and nothing here says so.

@@ -91,3 +91,25 @@ else. Every call's wait is on its checking stage ("model answered in 58 s · que
 visible in the record, not inferred. What this does not do: cross processes. The API and a batch runner started as a
 separate process each have their own controller and meet only at the model, which serialises them without a record;
 a shared queue is earned by a requirement for that, not by this.
+
+## Before the release of 2026-10-11: what one slow question does to everyone else
+
+Measured on a local copy of the public instance (anonymous workspaces, access required, qwen3:8b on the laptop GPU),
+never on the live store. One visitor started two questions at once on an 81-page PDF while a second, fresh visitor
+asked for health and its own documents every 500 ms until both answers were in.
+
+| What | Number |
+|---|---|
+| Two questions at once | answered one after the other by the model: 54 s and 90 s wall, the second waiting behind the first |
+| The other visitor's document list during inference | 31 requests, p50 13 ms, max 25 ms, none failed |
+| Health for a visitor who has entered | p50 2.5 s, every time, idle or not |
+
+The document list shows the event loop is not held by a run: inference waits in Ollama, not in the API. Health was
+slow for an unrelated reason: the model URL defaulted to `localhost`, which resolved to `::1` first while Ollama
+listens on IPv4 only, so every request to the model endpoint waited about two seconds for the IPv6 attempt to fail.
+The live deployment sets no model URL, so it paid this too. The default is now `127.0.0.1`; health went from about
+2.4 s to about 0.35 s (the rest is a real request for the model's tags). Every model call made through the provider
+saves the same two seconds.
+
+What is still true: one GPU, one generation at a time. The public bounds (20 run starts in ten minutes per reader,
+30 questions per workspace a day, 200 for everyone) keep that queue to minutes, not hours.
