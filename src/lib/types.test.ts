@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { codeRole, decidedByCode, partOf, passageLabel, retrievalNote, sectionsReadNote, statusLabel, type SectionView, type SpanView } from "./types";
+import {
+  codeRole,
+  decidedByCode,
+  evidenceJump,
+  partOf,
+  passageLabel,
+  retrievalNote,
+  sectionsReadNote,
+  statusLabel,
+  type FindingView,
+  type SectionView,
+  type SpanView,
+} from "./types";
 
 /** The chip a lawyer reads most: "Within guidance" is a comparison code made, or it says it is the model's view. */
 describe("statusLabel", () => {
@@ -86,5 +98,28 @@ describe("partOf", () => {
     expect(partOf("Intellectual Property (part 1)")).toEqual({ base: "Intellectual Property", index: 1 });
     expect(partOf("Fees (part 2) and more")).toBeNull();
     expect(partOf("Fees and Milestones")).toBeNull();
+  });
+});
+
+/** Where the document goes when the evidence drawer opens (release readiness, 2026-10-10, and its review). */
+describe("evidenceJump", () => {
+  const span = (sectionId: string | null, verified: boolean) => ({ sectionId, verified, start: 0, end: 5 }) as SpanView;
+  const finding = (...spans: SpanView[]) => ({ spans }) as FindingView;
+  const wide = { shown: true, narrow: false };
+
+  it("goes to the first passage the API located", () => {
+    expect(evidenceJump(finding(span(null, false), span("s2", true), span("s3", true)), wide)?.sectionId).toBe("s2");
+  });
+
+  it("does not mark a withheld finding's passage as evidence", () => {
+    expect(evidenceJump(finding(span("s2", true)), { shown: false, narrow: false })).toBeNull();
+  });
+
+  it("does not move a document a phone does not show", () => {
+    expect(evidenceJump(finding(span("s2", true)), { shown: true, narrow: true })).toBeNull();
+  });
+
+  it("control: a finding with no located passage goes nowhere", () => {
+    expect(evidenceJump(finding(span("s2", false), span(null, false)), wide)).toBeNull();
   });
 });

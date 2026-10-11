@@ -28,7 +28,7 @@ import { Landing } from "./landing/Landing";
 import { chooseProof } from "./landing/proofRun";
 import { modelPlace } from "@/lib/modelPlace";
 import { Rail } from "./shell/Rail";
-import { type Stage, TERMINAL, type View, transitions } from "./shell/constants";
+import { NARROW_QUERY, type Stage, TERMINAL, type View, transitions } from "./shell/constants";
 import { DocumentsView } from "./views/DocumentsView";
 import { FindingsView } from "./views/FindingsView";
 import { RunsView } from "./views/RunsView";
@@ -38,6 +38,7 @@ import { errorMessage, getDocument, getGuidance, getRun, getRunDetail, health, l
 import {
   STAGE_LABELS,
   citationLabel,
+  evidenceJump,
   isLocated,
   type DocumentSummary,
   type DocumentView,
@@ -374,11 +375,12 @@ function WorkbenchSurface() {
   const openEvidence = useCallback(
     (finding: FindingView, trigger: HTMLElement | null) => {
       evidenceTriggerRef.current = trigger;
-      const span = finding.spans.find(isLocated);
+      const shown = !!run?.findings.some((f) => f.id === finding.id);
+      const span = evidenceJump(finding, { shown, narrow: window.matchMedia(NARROW_QUERY).matches });
       if (span) jumpTo(span.sectionId, span);
       setEvidence(finding);
     },
-    [jumpTo],
+    [jumpTo, run],
   );
 
   /** A decision recorded from the drawer: the run on screen takes the record's review, so the card and the drawer agree. */

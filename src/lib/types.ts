@@ -56,6 +56,16 @@ export function isLocated(span: SpanView): span is LocatedSpan {
   return span.verified && span.sectionId !== null;
 }
 
+/**
+ * The passage the document jumps to when a finding's evidence drawer opens: its first located span. None for a finding
+ * the verifier withheld (its passage would be marked as if it were relied on), nor on a phone, where the document is not
+ * shown and a jump would leave it scrolled to a mark nobody saw.
+ */
+export function evidenceJump(finding: FindingView, { shown, narrow }: { shown: boolean; narrow: boolean }): LocatedSpan | null {
+  if (!shown || narrow) return null;
+  return finding.spans.find(isLocated) ?? null;
+}
+
 /** The stages a run passes through before it ends, in order. */
 export const STAGE_ORDER = ["reading", "finding_evidence", "checking", "verifying"] as const satisfies readonly RunStage[];
 
