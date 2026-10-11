@@ -648,7 +648,8 @@ function VerdictCase({ rows }: { rows: VerdictRow[] }) {
 
 function RejectedFix() {
   const record = useRecord();
-  const [set, setSet] = useState<"diagnostic" | "unseen">("diagnostic");
+  // Opens on the unseen cases: the evidence the decision rests on comes before the score the check was tuned to.
+  const [set, setSet] = useState<"diagnostic" | "unseen">("unseen");
   const fix = record.rejectedFix;
   const sessions = set === "diagnostic" ? ["s1", "s2"] : ["v1", "v2"];
   const scores = sessions.map((s) => partyCheckScore(fix.rows, set, s));

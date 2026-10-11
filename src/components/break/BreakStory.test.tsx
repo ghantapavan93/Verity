@@ -149,13 +149,14 @@ describe("the investigation", () => {
 });
 
 describe("the rejected fix", () => {
-  it("shows its score on the cases it was built on, then on unseen ones", () => {
+  it("opens on its score on unseen cases, then shows the cases it was built on", () => {
     renderPage();
     const scores = () => (document.querySelector('[aria-live="polite"]')?.textContent ?? "").replace(/\s+/g, " ");
-    expect(scores()).toContain("4 of 6 wrong-party answers caught, session 1");
-    fireEvent.click(screen.getByRole("button", { name: "Unseen cases" }));
+    expect(screen.getByRole("button", { name: "Unseen cases" }).getAttribute("aria-pressed")).toBe("true");
     expect(scores()).toContain("0 of 4 wrong-party answers caught, session 1");
     expect(scores()).toContain("0 of 32 correct answers lowered");
+    fireEvent.click(screen.getByRole("button", { name: "Cases it was built on" }));
+    expect(scores()).toContain("4 of 6 wrong-party answers caught, session 1");
   });
 
   it("counts the unseen score in cases, each asked in both sessions, not in answers", () => {
