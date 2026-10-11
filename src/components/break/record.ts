@@ -114,7 +114,31 @@ export interface BreakRecord {
   headline: CaseRecord;
   rejectedFix: { commit: string; policy: string; function: string; rows: VerdictRow[] };
   counterexample: { caught: CaseRecord; falseAlarm: CaseRecord };
-  masking: { emailAddresses: number; mask: string };
+  /** How many email addresses are masked in the headline's input, as the Input panel shows it. */
+  masking: { inInput: number; mask: string };
+}
+
+/** A counterexample as the page renders it: the question, the source, and each session's finding and label. */
+export interface CounterCase {
+  id: string;
+  question: string;
+  source: SourceRecord;
+  sessions: Pick<SessionRecord, "session" | "finding" | "adjudication">[];
+}
+
+export interface PageRecord extends Omit<BreakRecord, "counterexample"> {
+  counterexample: { caught: CounterCase; falseAlarm: CounterCase };
+}
+
+/** The record without what the page never renders (the counterexamples' inputs, outputs and section texts). */
+export function forPage(record: BreakRecord): PageRecord {
+  const counter = (c: CaseRecord): CounterCase => ({
+    id: c.id,
+    question: c.question,
+    source: c.source,
+    sessions: c.sessions.map((s) => ({ session: s.session, finding: s.finding, adjudication: s.adjudication })),
+  });
+  return { ...record, counterexample: { caught: counter(record.counterexample.caught), falseAlarm: counter(record.counterexample.falseAlarm) } };
 }
 
 /** Shorter shared runs are coincidences of wording ("the Buyer"), not the passage. */
@@ -149,7 +173,10 @@ export function sharedRun(quote: string, passages: string[]): { start: number; e
   return end - start >= MIN_SHARED ? { start, end } : null;
 }
 
-/** The words of a text, casefolded: what the verifier's typed tier compares (backend/app/verify/spans.py). */
+/**
+ * The words of a text, casefolded. A simpler comparison than the verifier's typed tier (backend/app/verify/spans.py),
+ * which also keeps figures such as 1,500 and clause numbers whole: what a browser can check by itself.
+ */
 export function wordsOf(text: string): string[] {
   return (text.match(/[\p{L}\p{N}]+/gu) ?? []).map((w) => w.toLowerCase());
 }

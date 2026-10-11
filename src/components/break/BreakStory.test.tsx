@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BreakStory } from "./BreakStory";
 import raw from "./break-record.json";
-import type { BreakRecord } from "./record";
+import { forPage, type BreakRecord } from "./record";
 
 const record = raw as unknown as BreakRecord;
 const headline = record.headline;
@@ -17,7 +17,7 @@ afterEach(cleanup);
 
 function renderPage() {
   const fetchSpy = vi.spyOn(globalThis, "fetch");
-  render(<BreakStory />);
+  render(<BreakStory record={forPage(record)} />);
   return fetchSpy;
 }
 
@@ -36,7 +36,7 @@ describe("the failure", () => {
       within(exhibit)
         .getByText(/Who holds the right\./)
         .closest("li")?.textContent,
-    ).toContain("Not checked by code");
+    ).toContain("Not checked by the released code (policy-v6)");
   });
 
   it("links the contract to its SEC filing", () => {
@@ -123,7 +123,7 @@ describe("the counterexample", () => {
     const card = group.closest("article")!;
     expect(card.textContent).toContain("A correct answer, flagged");
     fireEvent.click(within(group).getByRole("button", { name: "Session 1" }));
-    expect(card.textContent).toContain("The same answer, kept");
+    expect(card.textContent).toContain("Kept: its quote states the figure");
     expect(card.textContent).toContain("$1,500,000");
   });
 });

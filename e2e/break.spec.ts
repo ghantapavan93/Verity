@@ -49,7 +49,7 @@ test("Break Verity tells one recorded failure, its record, the rejected fix and 
     // The counterexample: the same correct answer, kept in one session and flagged in the other.
     const sessions = page.getByRole("group", { name: "Model session for this question" });
     await sessions.getByRole("button", { name: "Session 1" }).click();
-    await expect(page.getByText("The same answer, kept")).toBeVisible();
+    await expect(page.getByText("Kept: its quote states the figure")).toBeVisible();
 
     await expect(page.getByRole("link", { name: "Open the workbench" })).toHaveAttribute("href", "/");
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);

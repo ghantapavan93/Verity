@@ -11,13 +11,12 @@
  */
 
 import Link from "next/link";
-import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useContext, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { StatusChip } from "../workbench/shell/primitives";
 import { STATUS_SOURCE_LABELS } from "@/lib/types";
 import { shortHash } from "@/lib/format";
 import styles from "./BreakStory.module.css";
-import raw from "./break-record.json";
 import {
   charDiff,
   listed,
@@ -25,14 +24,21 @@ import {
   sharedRun,
   whyMissed,
   wordsOf,
-  type BreakRecord,
   type CaseRecord,
+  type CounterCase,
+  type PageRecord,
   type SessionRecord,
   type SpanRecord,
   type VerdictRow,
 } from "./record";
 
-const record = raw as unknown as BreakRecord;
+// The record, trimmed on the server to what the page renders (record.ts forPage); read through this context.
+const RecordContext = createContext<PageRecord | null>(null);
+function useRecord(): PageRecord {
+  const record = useContext(RecordContext);
+  if (!record) throw new Error("BreakStory's parts need the record");
+  return record;
+}
 const REPO = "https://github.com/ghantapavan93/Verity";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -75,7 +81,7 @@ function Marked({ text, run }: { text: string; run: { start: number; end: number
   );
 }
 
-function SessionSwitch({ sessions, value, onChange, label }: { sessions: SessionRecord[]; value: number; onChange: (i: number) => void; label: string }) {
+function SessionSwitch({ sessions, value, onChange, label }: { sessions: { session: string }[]; value: number; onChange: (i: number) => void; label: string }) {
   return (
     <div className={styles.switch} role="group" aria-label={label}>
       {sessions.map((s, i) => (
@@ -172,7 +178,9 @@ function Failure({ headline }: { headline: CaseRecord }) {
               ✗
             </span>
             <span>
-              <strong>Who holds the right.</strong> Not checked by code. That the quote supports the answer is the model&apos;s reading.
+              <strong>Who holds the right.</strong> Not checked by the released code (policy-v6). The experimental party check that ran on this answer passed it
+              too
+              <Cite id="verdicts" />.
             </span>
             <span className={styles.byNone}>no one</span>
           </li>
@@ -269,7 +277,7 @@ function Pre({ text, label }: { text: string; label: string }) {
   const long = text.length > 1400;
   return (
     <div className={styles.preWrap}>
-      <pre className={`${styles.pre} ${long && !open ? styles.preClipped : ""}`} aria-label={label} tabIndex={0}>
+      <pre className={`${styles.pre} ${long && !open ? styles.preClipped : ""}`} role="region" aria-label={label} tabIndex={0}>
         {text}
       </pre>
       {long && (
@@ -282,6 +290,7 @@ function Pre({ text, label }: { text: string; label: string }) {
 }
 
 function InputPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
+  const record = useRecord();
   const opts = s.options;
   return (
     <div className={styles.stack}>
@@ -312,17 +321,17 @@ function InputPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
           <dd>{s.inputTokens?.toLocaleString("en-US")} tokens</dd>
         </div>
       </dl>
-      <h4 className={styles.h4}>System</h4>
+      <h3 className={styles.h4}>System</h3>
       <Pre text={c.input.system} label="The system message" />
-      <h4 className={styles.h4}>User</h4>
+      <h3 className={styles.h4}>User</h3>
       <Pre text={c.input.user} label="The user message" />
       <p className={styles.hashLine}>
         <span className={styles.hashTag}>sha256</span> <code>{c.input.sha256}</code>
         <br />
         Rebuilt from the record and equal to the hash the run recorded when it called the model
         <Cite id="record" />.{" "}
-        {record.masking.emailAddresses > 0 &&
-          `${record.masking.emailAddresses} email addresses in the contract's notice clause are masked here; the hash covers the record as stored.`}
+        {record.masking.inInput > 0 &&
+          `Email addresses in the contract's notice clause are masked here (${record.masking.inInput} places); the hash covers the record as stored.`}
       </p>
     </div>
   );
@@ -349,7 +358,7 @@ function RetrievalPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
           </li>
         ))}
       </ol>
-      <div className={styles.paper} aria-label={`Section text: ${section?.heading ?? ""}`} tabIndex={0}>
+      <div className={styles.paper} role="region" aria-label={`Section text: ${section?.heading ?? ""}`} tabIndex={0}>
         <p className={styles.paperHeading}>{section?.heading}</p>
         {section && section.text.length > 0 ? (
           <p className={styles.paperText}>
@@ -466,11 +475,12 @@ function BoundaryPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
   return (
     <div className={styles.boundary}>
       <div className={styles.boundaryCol}>
-        <h4 className={styles.h4}>Checked by code</h4>
+        <h3 className={styles.h4}>Checked by code</h3>
         <ul className={styles.boundaryList}>
           <li>
             <strong>The quote is in the contract.</strong> Located in “{c.sections[span.sectionId]?.heading}”, characters {span.start}–{span.end}, matched as{" "}
-            <code>{span.method}</code>: {TIER[tier] ?? tier}. Found {span.matchCount ?? 1} time{span.matchCount === 1 ? "" : "s"}.
+            <code>{span.method}</code>: {TIER[tier] ?? tier}.{" "}
+            {span.matchCount == null ? "How many times it occurs was not recorded." : `Found ${span.matchCount} time${span.matchCount === 1 ? "" : "s"}.`}
             <BrowserCheck c={c} span={span} />
           </li>
           <li>
@@ -482,7 +492,7 @@ function BoundaryPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
         </ul>
       </div>
       <div className={`${styles.boundaryCol} ${styles.boundaryOut}`}>
-        <h4 className={styles.h4}>Not checked by code</h4>
+        <h3 className={styles.h4}>Not checked by the released code</h3>
         <ul className={styles.boundaryList}>
           <li>Who holds the right or owes the duty.</li>
           <li>Whether the answer carries every condition and exception.</li>
@@ -502,12 +512,12 @@ function AdjudicationPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
         {s.adjudication.premiseAccepted && <span className={styles.tagWarn}>accepted the question&apos;s false premise</span>}
       </div>
       <p className={styles.verdictNote}>{s.adjudication.note}</p>
-      <h4 className={styles.h4}>
+      <h3 className={styles.h4}>
         The expected answer, written before any run
         <Cite id="cases" />
-      </h4>
+      </h3>
       <p className={styles.expected}>{c.expectedAnswer}</p>
-      <h4 className={styles.h4}>Conditions a correct answer carries</h4>
+      <h3 className={styles.h4}>Conditions a correct answer carries</h3>
       <ul className={styles.conditions}>
         {c.requiredConditions.map((r) => (
           <li key={r}>{r}</li>
@@ -545,14 +555,17 @@ function Investigation({ headline }: { headline: CaseRecord }) {
       <div className={styles.replay}>
         <div>
           <h3 className={styles.h3}>Replaying the record</h3>
-          <p>Everything above is the stored record, byte for byte. Nothing on this page asks a model anything, so opening it twice shows the same answer.</p>
+          <p>
+            Everything above is the stored record; only email addresses are masked. Nothing on this page asks a model anything, so opening it twice shows the
+            same answer.
+          </p>
         </div>
         <div>
           <h3 className={styles.h3}>Asking the model again</h3>
           <p>
             A new call is a new answer.{" "}
-            {sameInput ? "Session 2 sent the identical input (same hash) and got the same wrong answer, so this is a stable misreading." : ""} It is not always
-            so: 8 of 18 identical requests in an earlier measurement came back different
+            {sameInput ? "Session 2 sent the identical input (same hash) and got the same wrong answer, both times out of two." : ""} That is not guaranteed: 8
+            of 18 identical requests in an earlier measurement came back different
             <Cite id="repeats" />.
           </p>
         </div>
@@ -623,6 +636,7 @@ function VerdictCase({ rows }: { rows: VerdictRow[] }) {
 }
 
 function RejectedFix() {
+  const record = useRecord();
   const [set, setSet] = useState<"diagnostic" | "unseen">("diagnostic");
   const fix = record.rejectedFix;
   const sessions = set === "diagnostic" ? ["s1", "s2"] : ["v1", "v2"];
@@ -675,13 +689,14 @@ function RejectedFix() {
         <h3 className={styles.h3}>Why it did not generalise</h3>
         <p>
           On the unseen cases, {unseenMisses.filter((r) => r.why === "no_actor_in_answer").length} of {unseenMisses.length} misses had no party of the opening
-          acting in the answer: its actor was a name or role the opening&apos;s list does not hold, such as a collateral agent. In the other{" "}
+          acting in the answer: the answer named its actor by a bank&apos;s name where the opening&apos;s list holds only a defined role. In the other{" "}
           {unseenMisses.filter((r) => r.why === "actor_also_in_quote").length}, the party the answer wrongly names also appears in the quote, though not as the
           one who holds the right. In this page&apos;s headline the real holder, the Stockholders&apos; Representative, is not among the parties the check read
           at all. Telling those apart is reading roles, which is the model&apos;s job; a longer pattern list would be fitting these cases.
         </p>
         <p className={styles.decision}>
-          Not adopted. Kept on branch <code>party-check-experiment</code>, commit <code>{shortHash(fix.commit, 7)}</code>.
+          Not adopted. Kept on the unpublished branch <code>party-check-experiment</code>, commit <code>{shortHash(fix.commit, 7)}</code>; its verdict on every
+          answer is in this page&apos;s record.
         </p>
       </div>
     </Section>
@@ -717,14 +732,14 @@ function RuleCard({
   children,
 }: {
   title: string;
-  tone: "good" | "bad";
-  c: CaseRecord;
-  s: SessionRecord;
+  tone: "good" | "bad" | "plain";
+  c: CounterCase;
+  s: CounterCase["sessions"][number];
   explanation: string;
   children?: ReactNode;
 }) {
   return (
-    <article className={`${styles.ruleCard} ${tone === "good" ? styles.ruleGood : styles.ruleBad}`}>
+    <article className={`${styles.ruleCard} ${tone === "good" ? styles.ruleGood : tone === "bad" ? styles.ruleBad : ""}`}>
       <p className={styles.ruleTitle}>{title}</p>
       {children}
       <span className={styles.label}>Question</span>
@@ -737,7 +752,7 @@ function RuleCard({
       </p>
       <div className={styles.ruleStatus}>
         <StatusChip status={s.finding.status} hasGuidance={false} source={s.finding.statusSource} />
-        {s.finding.statusReason ? <span>{s.finding.statusReason}</span> : <span>kept: every value it states is in a verified quote</span>}
+        {s.finding.statusReason ? <span>{s.finding.statusReason}</span> : <span>kept: the value rule found nothing to lower</span>}
       </div>
       <span className={styles.label}>Its quotes · {s.finding.spans.length}</span>
       {s.finding.spans.map((sp) => (
@@ -759,7 +774,7 @@ function RuleCard({
 }
 
 function Counterexample() {
-  const { caught, falseAlarm } = record.counterexample;
+  const { caught, falseAlarm } = useRecord().counterexample;
   const [alarmSession, setAlarmSession] = useState(falseAlarm.sessions.findIndex((s) => s.finding.status !== "pass"));
   const alarm = falseAlarm.sessions[alarmSession];
   return (
@@ -777,13 +792,13 @@ function Counterexample() {
           explanation="The rule caught the $6 million the answer repeated from the question. The error that matters, giving the Company's election to Allegro, is one it cannot see."
         />
         <RuleCard
-          title={alarm.finding.status === "pass" ? "The same answer, kept" : "A correct answer, flagged"}
-          tone={alarm.finding.status === "pass" ? "good" : "bad"}
+          title={alarm.finding.status === "pass" ? "Kept: its quote states the figure" : "A correct answer, flagged"}
+          tone={alarm.finding.status === "pass" ? "plain" : "bad"}
           c={falseAlarm}
           s={alarm}
           explanation={
             alarm.finding.status === "pass"
-              ? "In this session the model also quoted the fee clause, which states $1,500,000. Same answer, same rule, kept."
+              ? "Its first sentence is the other session's, and here the model also quoted the fee clause, which states $1,500,000, so the rule found nothing to lower. The rule judges values only: this answer's added credit-bid sentence is garbled, as the adjudication notes."
               : "The answer is right that Lilly's subsidiary does not pay. But its quotes never state the $1.5 million, so the rule cannot tell a true figure from a repeated premise."
           }
         >
@@ -829,6 +844,7 @@ function YourTurn() {
 // ------------------------------------------------------------------------------------------------- sources
 
 function Sources({ headline }: { headline: CaseRecord }) {
+  const record = useRecord();
   const ev = record.evaluation;
   const runs = headline.sessions.map((s) => s.runId).join(" and ");
   const items: Record<SourceId, ReactNode> = {
@@ -839,8 +855,9 @@ function Sources({ headline }: { headline: CaseRecord }) {
           {headline.source.url}
         </a>
         . The filing up to the script tag SEC appends to each response hashes to <code>{shortHash(headline.source.sha256Filing)}</code> (sha256), as downloaded
-        for the corpus and as served today. Converted to text with {headline.source.conversion.tool}; the text Verity read hashes to{" "}
-        <code>{shortHash(headline.source.sha256Tested)}</code>, the same hash its runs record.
+        for the corpus and as SEC served it when checked in a browser on 10 Oct 2026. Converted to text by the corpus&apos;s converter (
+        {headline.source.conversion.tool}, not in this repository); the text Verity read hashes to <code>{shortHash(headline.source.sha256Tested)}</code>, the
+        same hash its runs record.
       </>
     ),
     record: (
@@ -855,7 +872,7 @@ function Sources({ headline }: { headline: CaseRecord }) {
       <>
         Pre-registered cases, <code>{ev.cases.file}</code> (sha256 <code>{shortHash(ev.cases.sha256)}</code>), and the first set{" "}
         <code>{ev.diagnosticCases.file}</code> (<code>{shortHash(ev.diagnosticCases.sha256)}</code>): written by separate Claude agents from the contracts
-        before any run, each quote checked as an exact substring of the document.
+        before any run, each quote checked as an exact substring of the document. The files are not published; every case this page shows is in its record.
       </>
     ),
     labels: (
@@ -869,9 +886,9 @@ function Sources({ headline }: { headline: CaseRecord }) {
     ),
     verdicts: (
       <>
-        <code>{record.rejectedFix.function}</code> at commit <code>{record.rejectedFix.commit}</code> ({record.rejectedFix.policy}, branch{" "}
+        <code>{record.rejectedFix.function}</code> at commit <code>{record.rejectedFix.commit}</code> ({record.rejectedFix.policy}, on the unpublished branch{" "}
         <code>party-check-experiment</code>), run over every recorded answer; file <code>{ev.verdicts.file}</code> (<code>{shortHash(ev.verdicts.sha256)}</code>
-        ).
+        ). Its verdict on each answer, with the parties it read, is in this page&apos;s record.
       </>
     ),
     repeats: (
@@ -920,30 +937,32 @@ const NAV = [
   ["your-turn", "Your turn"],
 ] as const;
 
-export function BreakStory() {
+export function BreakStory({ record }: { record: PageRecord }) {
   const headline = record.headline;
   return (
-    <div className={styles.page}>
-      <header className={styles.top}>
-        <Link href="/" className={styles.brand}>
-          Verity
-        </Link>
-        <nav aria-label="Sections" className={styles.nav}>
-          {NAV.map(([id, name]) => (
-            <a key={id} href={`#${id}`} className={styles.navLink}>
-              {name}
-            </a>
-          ))}
-        </nav>
-      </header>
-      <main id="main" className={styles.main}>
-        <Failure headline={headline} />
-        <Investigation headline={headline} />
-        <RejectedFix />
-        <Counterexample />
-        <YourTurn />
-        <Sources headline={headline} />
-      </main>
-    </div>
+    <RecordContext.Provider value={record}>
+      <div className={styles.page}>
+        <header className={styles.top}>
+          <Link href="/" className={styles.brand}>
+            Verity
+          </Link>
+          <nav aria-label="Sections" className={styles.nav}>
+            {NAV.map(([id, name]) => (
+              <a key={id} href={`#${id}`} className={styles.navLink}>
+                {name}
+              </a>
+            ))}
+          </nav>
+        </header>
+        <main id="main" className={styles.main}>
+          <Failure headline={headline} />
+          <Investigation headline={headline} />
+          <RejectedFix />
+          <Counterexample />
+          <YourTurn />
+          <Sources headline={headline} />
+        </main>
+      </div>
+    </RecordContext.Provider>
   );
 }

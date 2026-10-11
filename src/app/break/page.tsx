@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { BreakStory } from "@/components/break/BreakStory";
+import raw from "@/components/break/break-record.json";
+import { forPage, type BreakRecord } from "@/components/break/record";
 
 export const metadata: Metadata = {
   title: "Break Verity · Verity",
@@ -8,5 +11,8 @@ export const metadata: Metadata = {
 };
 
 export default function BreakPage() {
-  return <BreakStory />;
+  // The static /state artifact (NEXT_PUBLIC_EXPORT=state) is the frozen research alone; this page belongs to the workbench.
+  if (process.env.NEXT_PUBLIC_EXPORT === "state") notFound();
+  // Trimmed here, on the server: the browser receives what the page renders, not the whole record.
+  return <BreakStory record={forPage(raw as unknown as BreakRecord)} />;
 }
