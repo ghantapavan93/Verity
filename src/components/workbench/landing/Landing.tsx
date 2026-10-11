@@ -21,7 +21,7 @@ const LAYERS = [
     name: "Model proposed",
     text: "An open-weights model reads the sections retrieval chose for the question and proposes an answer, quoting the contract.",
   },
-  { name: "Source checked", text: "Code looks for every quote in the document text. A quote it cannot find is withheld, not shown." },
+  { name: "Source checked", text: "Code looks for every quote in the document text. A quote it cannot find is withheld: never shown as evidence." },
   {
     name: "Code compared",
     text: "Where the contract and your guidance both state a period, code compares the days. A conflict sends the finding to review. A pass stays the model's, with the numbers checked.",
