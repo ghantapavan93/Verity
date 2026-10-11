@@ -798,10 +798,10 @@ where it says support is the model's reading, links to /break. The Findings intr
 site's metadata and the README open with the problem; the README's test counts were nine days stale and are now the
 gate's, dated. Two engineering defects were found by measurement, not reading: the model URL defaulted to `localhost`,
 which cost every request to the model endpoint about two seconds (health 2.4 s to 0.35 s after; `docs/SCALE.md`), and
-`npm audit` reported two high advisories in production dependencies, one of them cache poisoning of statically
-rendered pages in self-hosted Next.js, which is how the site runs (Next 16.3.6 to 16.3.8, source-map-js 1.2.2). Eight
-advisories remain in development tooling (vitest's pool, braces through the lint plugin); their fixes are breaking
-majors and they are not shipped. The import contracts the README promised were kept but not gated; they are now.
+`npm audit` reported two high advisories in production dependencies: Next.js (high for server-side request
+forgery in image optimization, with moderate cache-poisoning advisories for self-hosted static pages, which is how the
+site runs) and source-map-js (Next 16.3.6 to 16.3.8, source-map-js 1.2.2). Eight packages in development tooling still
+carry advisories, two of them critical (vitest's pool); their fixes are breaking majors and none of them is shipped. The import contracts the README promised were kept but not gated; they are now.
 
 Deployment stays what it is: the next interface is built beside the live one, the servers stop, the build is swapped
 (`.next-previous` keeps the last) and the supervisors restart them; rollback is the previous commit through the same
@@ -816,7 +816,7 @@ masked.
 | Google SRE book, monitoring chapter | latency, traffic, errors and saturation, observed per request | request id, path, status and duration per request; stage, duration and queue wait per run; no contract text or prompt in the logs | kept; the health latency above was found this way |
 | Martin Fowler, BlueGreenDeployment | two production environments, traffic switched between them | staged build swapped on one machine | not adopted (above) |
 | OpenTelemetry | one trace across services | one API process; request id and run id join a request to its stages | not adopted: no second service to trace across |
-| OWASP ASVS 5.0, file handling and authorization | type from content, size bounds, every object reached through its owner | `docs/FAILURE-ENVELOPE.md`, `test_anonymous.py`; every data route resolves the workspace (checked route by route, 2026-10-11) | no change needed |
+| OWASP ASVS 5.0, file handling and authorization | type from content, size bounds, every object reached through its owner | `docs/FAILURE-ENVELOPE.md`, `test_anonymous.py`; every data route resolves the workspace (checked route by route, 2026-10-11) | no change needed. Every route that reads visitor records resolves the workspace; batches, goldens and families are owner-only, refused to public workspaces |
 | Karpathy, autoresearch | a fixed evaluation; keep a change only if it measurably improves, else revert | pre-registered unseen cases; the party check kept on its branch, not merged | already the practice |
 | Matt Pocock, diagnosing skill | a red-capable loop before a hypothesis | the health delay: probe, then `localhost` against `127.0.0.1`, then a failing test | applied |
 | Addy Osmani, agent skills (security and hardening) | audit dependencies; separate shipped from dev-only | no audit in the gate | audited once; production clean, dev-only deferred |

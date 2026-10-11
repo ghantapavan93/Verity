@@ -102,13 +102,13 @@ asked for health and its own documents every 500 ms until both answers were in.
 |---|---|
 | Two questions at once | answered one after the other by the model: 54 s and 90 s wall, the second waiting behind the first |
 | The other visitor's document list during inference | 31 requests, p50 13 ms, max 25 ms, none failed |
-| Health for a visitor who has entered | p50 2.5 s, every time, idle or not |
+| Health for a visitor who has entered | 2.3 to 2.4 s idle (8 requests); p50 2.5 s during inference (31 requests) |
 
 The document list shows the event loop is not held by a run: inference waits in Ollama, not in the API. Health was
 slow for an unrelated reason: the model URL defaulted to `localhost`, which resolved to `::1` first while Ollama
 listens on IPv4 only, so every request to the model endpoint waited about two seconds for the IPv6 attempt to fail.
-The live deployment sets no model URL, so it paid this too. The default is now `127.0.0.1`; health went from about
-2.4 s to about 0.35 s (the rest is a real request for the model's tags). Every model call made through the provider
+The live deployment sets no model URL, so it paid this too. The default is now `127.0.0.1`; health for a visitor who
+has entered is now p50 0.35 s, max 0.84 s, over 10 requests (the rest is a real request for the model's tags). Every model call made through the provider
 saves the same two seconds.
 
 What is still true: one GPU, one generation at a time. The public bounds (20 run starts in ten minutes per reader,

@@ -65,7 +65,8 @@ def test_control_by_default_a_signed_in_or_open_health_check_asks_the_model(clie
 def test_the_default_model_address_is_an_ip_literal_not_a_name() -> None:
     # Final release review, 2026-10-11: "localhost" resolved to ::1 first on Windows while Ollama listens on 127.0.0.1
     # only, so every request to the model endpoint (health, the build check, each answer) waited about two seconds for
-    # the IPv6 attempt to fail: /api/health took 2.4 s for every visitor who had entered, against under 0.1 s.
+    # the IPv6 attempt to fail: /api/health took 2.4 s for every visitor who had entered; about 0.35 s after, most of it
+    # a real request for the model's tags.
     import ipaddress
     from urllib.parse import urlsplit
 

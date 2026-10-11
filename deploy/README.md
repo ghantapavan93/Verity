@@ -12,6 +12,10 @@ reader's. The API runs on a store of its own, never the owner's:
 powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Build -Origin https://ivo.pavankg.dev -PublicDataDir "C:\Verity\public-data"
 ```
 
+When `package-lock.json` changed since the release that serves, stop the servers first (`deploy\down.ps1`) and run
+`npm ci` in the checkout before the command above: the build uses `node_modules` as it finds them, and `npm ci` under a
+running `next start` deletes files the server may still load. The site is down from the stop to the restart.
+
 It builds into `.next-staging` while the old release serves, stops the servers and waits for their supervisors, then
 swaps the build in (`.next-previous` keeps the last one; a failed build changes nothing that serves), and
 `-PublicDataDir` implies an empty `-ProofRun`. The owner's store (`backend/data`, every historical run) is left as it was. The API refuses to start with anonymous
