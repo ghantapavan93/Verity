@@ -76,7 +76,7 @@ function WorkbenchSurface() {
   const [pendingName, setPendingName] = useState("");
   const [doc, setDoc] = useState<DocumentView | null>(null);
   const [isSample, setIsSample] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<{ name: string | null; reason: string } | null>(null);
   const [apiHealth, setApiHealth] = useState<Health | null>(null);
   const [accessKnown, setAccessKnown] = useState(true);
   const [evidence, setEvidence] = useState<FindingView | null>(null);
@@ -183,7 +183,7 @@ function WorkbenchSurface() {
           });
         }, READY_PAUSE_MS);
       } catch (error) {
-        setUploadError(errorMessage(error));
+        setUploadError({ name: file.name, reason: errorMessage(error) });
         setStage("empty");
       }
     },
@@ -214,7 +214,7 @@ function WorkbenchSurface() {
       const blob = await response.blob();
       await loadFile(new File([blob], SAMPLE_NAME, { type: blob.type }), true);
     } catch (error) {
-      setUploadError(errorMessage(error));
+      setUploadError({ name: null, reason: errorMessage(error) });
     }
   }, [loadFile]);
 
@@ -369,10 +369,17 @@ function WorkbenchSurface() {
   }, []);
   useHighlightScroll(docPaneRef, highlight, reduceMotion);
 
-  const openEvidence = useCallback((finding: FindingView, trigger: HTMLElement | null) => {
-    evidenceTriggerRef.current = trigger;
-    setEvidence(finding);
-  }, []);
+  // The drawer opens beside the document, so the document shows the passage the drawer is about, from every place the
+  // drawer opens (release readiness, 2026-10-10: the card's "Inspect evidence" left it at the top of the contract).
+  const openEvidence = useCallback(
+    (finding: FindingView, trigger: HTMLElement | null) => {
+      evidenceTriggerRef.current = trigger;
+      const span = finding.spans.find(isLocated);
+      if (span) jumpTo(span.sectionId, span);
+      setEvidence(finding);
+    },
+    [jumpTo],
+  );
 
   /** A decision recorded from the drawer: the run on screen takes the record's review, so the card and the drawer agree. */
   const reviewed = useCallback(
@@ -412,7 +419,7 @@ function WorkbenchSurface() {
   }, [evidence]);
 
   // A finding opened from the Findings surface: once its document and run are on screen
-  // (the workspace mounts after the previous view's exit), jump to its evidence and open the drawer.
+  // (the workspace mounts after the previous view's exit), open the drawer, which jumps to its evidence.
   useEffect(() => {
     if (!pendingFindingId || !run || stage !== "workspace" || view !== "assistant") return;
     const finding = run.findings.find((f) => f.id === pendingFindingId);
@@ -425,12 +432,11 @@ function WorkbenchSurface() {
       const ready = !!pane && (!span || !!pane.querySelector(`[data-section="${span.sectionId}"]`));
       if (!ready && attempts < 40) return;
       window.clearInterval(timer);
-      if (span && ready) jumpTo(span.sectionId, span);
       openEvidence(finding, null);
       setPendingFindingId(null);
     }, 50);
     return () => window.clearInterval(timer);
-  }, [pendingFindingId, run, stage, view, jumpTo, openEvidence]);
+  }, [pendingFindingId, run, stage, view, openEvidence]);
 
   // ---- keyboard ---------------------------------------------------------------------------
 

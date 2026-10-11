@@ -95,6 +95,17 @@ test("a question ends in a finding whose citation opens the document's own text"
   await page.getByRole("button", { name: "Close evidence" }).click();
 });
 
+test("inspecting the evidence shows its passage in the document beside the drawer", async ({ page }) => {
+  // Release readiness, 2026-10-10: the card's primary action opened the drawer and left the document where it was, at
+  // the top of the contract, while opening the same finding from Findings jumped to the passage.
+  await openSample(page);
+  await ask(page, LIABILITY);
+  await expect(page.getByText(/Found in the document text at /)).toBeVisible();
+  await page.getByRole("button", { name: "Inspect evidence" }).first().click();
+  await expect(page.locator('[aria-label="Evidence"]')).toBeVisible();
+  await expect(page.locator("section[data-section] mark").first()).toBeInViewport();
+});
+
 test("the finished review the landing offers opens as the run it names", async ({ page }) => {
   // A complete run with findings must exist in this store; the sample question makes one (or finds the same run again).
   await openSample(page);
