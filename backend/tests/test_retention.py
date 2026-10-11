@@ -9,6 +9,7 @@ record are never candidates; an ended session opens nothing and a new visit gets
 from __future__ import annotations
 
 import os
+import sqlite3
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -249,3 +250,30 @@ def test_an_ended_workspaces_text_does_not_survive_in_the_store_files(public: Te
         connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
     assert b"Wombat-c41d" in store.read_bytes()
     assert [d["name"] for d in b.get("/api/documents").json()] == ["b.txt"]
+
+
+def test_a_checkpoint_a_reader_held_up_is_finished_by_the_next_hourly_pass(public: TestClient) -> None:  # noqa: F811
+    # Review of 8037873 (N4): a visitor reading while a purge ends leaves the ended text in the database file, because
+    # the checkpoint cannot copy the zeroed pages over it. The next hourly pass must finish that even when no other
+    # workspace has expired, or the text stays until one does.
+    marker = "Clause 99. The Licensee shall paint every warehouse vermilion quokka-7f3a."
+    a, _ = arrive(public)
+    work(cast(Reviewer, a), contract=CONTRACT + "\n\n" + marker + "\n")
+    store = Path(str(db_module.engine.url.database))
+    with db_module.engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+    end(a)
+    reader = sqlite3.connect(store, timeout=0)
+    try:
+        reader.execute("BEGIN")
+        reader.execute("SELECT count(*) FROM documents").fetchone()  # a snapshot from before the purge
+        held_up = purge_expired_workspaces(db_module.engine)
+        assert held_up.workspaces and not held_up.checkpointed
+        assert b"quokka-7f3a" in store.read_bytes()  # control: the reader really kept the text in the file
+    finally:
+        reader.close()
+    quiet = purge_expired_workspaces(db_module.engine)
+    assert quiet.workspaces == [] and quiet.checkpointed
+    for path in (store, store.with_name(store.name + "-wal")):
+        if path.exists():
+            assert b"quokka-7f3a" not in path.read_bytes(), path.name

@@ -72,51 +72,51 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None) -> Pur
                 text(f"SELECT 1 FROM runs WHERE workspace_id = :w AND stage NOT IN ({', '.join(repr(s) for s in finished)}) LIMIT 1"), {"w": workspace}
             ).first()
             (report.skipped_in_progress if running else purgeable).append(workspace)
-        if not purgeable:
-            return report
-        triggers = immutability_triggers()
-        for name, _statement in triggers:
-            connection.exec_driver_sql(f"DROP TRIGGER IF EXISTS {name}")
-        for workspace in purgeable:
-            runs = _ids(connection, "SELECT id FROM runs WHERE workspace_id = :w", w=workspace)
-            if runs:
-                where, params = _in("run_id", runs)
-                memo_files += [str(r[0]) for r in connection.execute(text(f"SELECT docx_path FROM memos WHERE {where}"), params)]
-                findings = _ids(connection, f"SELECT id FROM findings WHERE {where}", **params)
-                if findings:
-                    fwhere, fparams = _in("finding_id", findings)
-                    connection.execute(text(f"DELETE FROM evidence_spans WHERE {fwhere}"), fparams)
-                    connection.execute(text(f"DELETE FROM finding_reviews WHERE {fwhere}"), fparams)
-                for table in ("memos", "batch_items", "findings", "run_stages"):
-                    connection.execute(text(f"DELETE FROM {table} WHERE {where}"), params)
-                rwhere, rparams = _in("id", runs)
-                connection.execute(text(f"DELETE FROM runs WHERE {rwhere}"), rparams)
-                report.runs += len(runs)
-            granted = _ids(connection, "SELECT document_id FROM document_access WHERE workspace_id = :w", w=workspace)
-            connection.execute(text("DELETE FROM guidance WHERE workspace_id = :w"), {"w": workspace})
-            connection.execute(text("DELETE FROM document_versions WHERE workspace_id = :w"), {"w": workspace})
-            connection.execute(text("DELETE FROM document_access WHERE workspace_id = :w"), {"w": workspace})
-            connection.execute(text("DELETE FROM visitor_workspaces WHERE workspace_id = :w"), {"w": workspace})
-            for document_id in granted:
-                still_used = connection.execute(
-                    text(
-                        "SELECT 1 FROM document_access WHERE document_id = :d UNION ALL SELECT 1 FROM runs WHERE document_id = :d "
-                        "UNION ALL SELECT 1 FROM document_versions WHERE document_id = :d OR supersedes_document_id = :d "
-                        "UNION ALL SELECT 1 FROM batch_items WHERE document_id = :d LIMIT 1"
-                    ),
-                    {"d": document_id},
-                ).first()
-                if still_used:
-                    continue  # another workspace holds the same bytes, under its own name
-                row = connection.execute(text("SELECT sha256, media_type FROM documents WHERE id = :d"), {"d": document_id}).first()
-                connection.execute(text("DELETE FROM sections WHERE document_id = :d"), {"d": document_id})
-                connection.execute(text("DELETE FROM documents WHERE id = :d"), {"d": document_id})
-                if row is not None:
-                    deleted_documents.append((str(row[0]), str(row[1])))
-                report.documents += 1
-            report.workspaces.append(workspace)
-        for _name, statement in triggers:
-            connection.exec_driver_sql(statement)
+        # Nothing expired still reaches the checkpoint below: it finishes one a reader held up last hour.
+        if purgeable:
+            triggers = immutability_triggers()
+            for name, _statement in triggers:
+                connection.exec_driver_sql(f"DROP TRIGGER IF EXISTS {name}")
+            for workspace in purgeable:
+                runs = _ids(connection, "SELECT id FROM runs WHERE workspace_id = :w", w=workspace)
+                if runs:
+                    where, params = _in("run_id", runs)
+                    memo_files += [str(r[0]) for r in connection.execute(text(f"SELECT docx_path FROM memos WHERE {where}"), params)]
+                    findings = _ids(connection, f"SELECT id FROM findings WHERE {where}", **params)
+                    if findings:
+                        fwhere, fparams = _in("finding_id", findings)
+                        connection.execute(text(f"DELETE FROM evidence_spans WHERE {fwhere}"), fparams)
+                        connection.execute(text(f"DELETE FROM finding_reviews WHERE {fwhere}"), fparams)
+                    for table in ("memos", "batch_items", "findings", "run_stages"):
+                        connection.execute(text(f"DELETE FROM {table} WHERE {where}"), params)
+                    rwhere, rparams = _in("id", runs)
+                    connection.execute(text(f"DELETE FROM runs WHERE {rwhere}"), rparams)
+                    report.runs += len(runs)
+                granted = _ids(connection, "SELECT document_id FROM document_access WHERE workspace_id = :w", w=workspace)
+                connection.execute(text("DELETE FROM guidance WHERE workspace_id = :w"), {"w": workspace})
+                connection.execute(text("DELETE FROM document_versions WHERE workspace_id = :w"), {"w": workspace})
+                connection.execute(text("DELETE FROM document_access WHERE workspace_id = :w"), {"w": workspace})
+                connection.execute(text("DELETE FROM visitor_workspaces WHERE workspace_id = :w"), {"w": workspace})
+                for document_id in granted:
+                    still_used = connection.execute(
+                        text(
+                            "SELECT 1 FROM document_access WHERE document_id = :d UNION ALL SELECT 1 FROM runs WHERE document_id = :d "
+                            "UNION ALL SELECT 1 FROM document_versions WHERE document_id = :d OR supersedes_document_id = :d "
+                            "UNION ALL SELECT 1 FROM batch_items WHERE document_id = :d LIMIT 1"
+                        ),
+                        {"d": document_id},
+                    ).first()
+                    if still_used:
+                        continue  # another workspace holds the same bytes, under its own name
+                    row = connection.execute(text("SELECT sha256, media_type FROM documents WHERE id = :d"), {"d": document_id}).first()
+                    connection.execute(text("DELETE FROM sections WHERE document_id = :d"), {"d": document_id})
+                    connection.execute(text("DELETE FROM documents WHERE id = :d"), {"d": document_id})
+                    if row is not None:
+                        deleted_documents.append((str(row[0]), str(row[1])))
+                    report.documents += 1
+                report.workspaces.append(workspace)
+            for _name, statement in triggers:
+                connection.exec_driver_sql(statement)
     # After the commit: a file goes only once no row needs it.
     with engine.connect() as connection:
         for sha256, media_type in deleted_documents:
@@ -127,7 +127,7 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None) -> Pur
         report.files += _unlink(settings.data_dir / "memos" / PureWindowsPath(recorded).name)
     # secure_delete zeroes what the rows held in the pages they leave; the write-ahead log still holds the frames written
     # before, until a checkpoint copies the zeroed pages back and truncates it. A reader holding an old snapshot can keep
-    # the checkpoint from finishing; the next purge, or the next quiet moment's automatic checkpoint, completes it.
+    # the checkpoint from finishing (checkpointed=False); every hourly pass checkpoints, whether or not it purged.
     with engine.connect() as connection:
         busy, _log, _done = connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)").one()
         report.checkpointed = busy == 0
