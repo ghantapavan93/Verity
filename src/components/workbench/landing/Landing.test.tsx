@@ -166,6 +166,14 @@ describe("Landing: the way to the research", () => {
     expect(links.querySelector('a[href="/state"]')?.textContent).toBe("Research");
     expect(links.querySelector('a[href="https://github.com/ghantapavan93/Verity"]')?.textContent).toBe("Source");
   });
+
+  it("offers the recorded failure, and claims no verification of legal meaning", () => {
+    renderLanding(health("entered"), true);
+    const links = screen.getByRole("navigation", { name: "Elsewhere" });
+    expect(links.querySelector('a[href="/break"]')?.textContent).toBe("Break it");
+    expect(screen.getByRole("link", { name: /passed every check and still gave a right to the wrong party/ }).getAttribute("href")).toBe("/break");
+    expect(document.body.textContent).not.toMatch(/verifies (the )?(legal )?meaning|verified interpretation|proves the answer/i);
+  });
 });
 
 describe("Landing: a public demo", () => {

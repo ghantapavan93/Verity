@@ -99,6 +99,26 @@
   color: var(--text-3);
 }
 
+.breakLine {
+  margin: 14px 0 0;
+  font-size: 14px;
+}
+
+.breakLine a {
+  color: var(--accent-soft);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 4px;
+}
+
+.breakLine a::after {
+  content: " →" / "";
+}
+
+.breakLine a:hover {
+  text-decoration-color: var(--accent);
+}
+
 .lead {
   margin: 22px 0 0;
   max-width: 54ch;

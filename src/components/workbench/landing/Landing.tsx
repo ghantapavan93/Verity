@@ -155,14 +155,17 @@ export function Landing({
               animate={{ scaleX: 1 }}
               transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
             />
-            Contract review
+            Contract AI, under test
           </motion.p>
           <motion.h1 className={styles.title} {...rise(0.06)}>
             Ask about a contract. <span className={styles.titleQuiet}>See who decided each answer.</span>
           </motion.h1>
           <motion.p className={styles.lead} {...rise(0.12)}>
-            Verity hands an open-weights model the sections your question needs, checks every passage it quotes against the document text, and lets code compare
-            the day counts it can compute. A person has the last word on every finding.
+            Verity hands an open-weights model the sections your question needs, checks every passage it quotes against the document text, and records each run
+            so an answer can be replayed and traced. Whether a quote supports the answer is a reading code does not make: a person has the last word.
+          </motion.p>
+          <motion.p className={styles.breakLine} {...rise(0.15)}>
+            <a href="/break">An answer that passed every check and still gave a right to the wrong party</a>
           </motion.p>
 
           <motion.div layoutId="composer" className={`${styles.drop} ${stage !== "empty" ? styles.dropActive : ""}`} transition={morph}>

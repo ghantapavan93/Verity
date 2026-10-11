@@ -10,6 +10,14 @@ decides the status; everywhere else the status is the model's own hint, and the 
 A run that recorded its input can be rebuilt from its record to the same hash. A person can confirm
 or dismiss each finding under a name they type. It runs at $0: Qwen3 8B through Ollama on a laptop.
 
+What it is for is reliability engineering more than review: finding where contract AI goes wrong while looking right,
+reproducing it from the record, and measuring whether a fix holds on contracts it was not built on. Code checks where
+a quote is and what values it states; it does not check what a clause means, and the gap is the subject of
+[`/break`](https://ivo.pavankg.dev/break): a recorded answer whose quote passed every check and still gave a right to
+the wrong party, the deterministic check built to catch such answers (4 of 6 caught on the cases it was revised
+against, 0 of 8 on unseen ones; not adopted), and a policy rule that caught one wrong answer and flagged a right one.
+The adjudications behind it are AI-assisted, and the page says so.
+
 ![The evidence drawer on a recorded run: what the model proposed, what the source says, what code decided, what a person decided](docs/img/evidence-drawer.png)
 
 ## Open it
@@ -17,9 +25,10 @@ or dismiss each finding under a name they type. It runs at $0: Qwen3 8B through 
 | | Where | Who |
 |---|---|---|
 | The live workbench: upload a contract or the sample, ask, open the cited passage, review | [ivo.pavankg.dev](https://ivo.pavankg.dev) | anyone, no sign-in: each browser gets a workspace of its own, deleted after 7 days; up while the host machine is on |
+| Break Verity: one recorded failure, its record, the fix that did not hold, a rule's false alarm | [ivo.pavankg.dev/break](https://ivo.pavankg.dev/break) | anyone |
 | The recorded Contract State research | [ivo.pavankg.dev/state](https://ivo.pavankg.dev/state), and always available as static files at [verity-state.pages.dev](https://verity-state.pages.dev) | anyone |
 
-The two are separate pieces of work that share one rule, that a claim is kept only with the source evidence that
+The workbench and the research are separate pieces of work that share one rule, that a claim is kept only with the source evidence that
 supports it. The workbench checks each answer's quoted passages against the uploaded contract. The research is a
 recorded experiment on real SEC exhibits: when one contract arrives, which derived facts must be recomputed and which
 provably need not, each with a certificate. On the held-out set its relationship audit met the precision gate (1.00)
