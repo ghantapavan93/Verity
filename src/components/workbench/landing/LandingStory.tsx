@@ -91,8 +91,9 @@ export function RecordPipeline({
   documents: DocumentSummary[] | null;
   reduceMotion: boolean;
 }) {
-  // An empty workspace has no record to show: six zeros on a first visit said nothing (final release review, 2026-10-11).
-  if (documents?.length === 0 && citations?.runs === 0) return null;
+  // Shown once there is a contract to count. An empty workspace has no record: six zeros on a first visit said nothing,
+  // and placeholders shown while the counts were read flashed and vanished (final release review, 2026-10-11).
+  if (!documents || documents.length === 0) return null;
   const reviewed = documents ? documents.reduce((n, d) => n + d.reviewedFindings, 0) : null;
   const sections = documents ? documents.reduce((n, d) => n + d.sections, 0) : null;
   const nodes: { label: string; value: number | null; note: string; icon: ReactNode; tone?: "accent" | "bad" | "pass" }[] = [
@@ -174,7 +175,7 @@ export function RecordPipeline({
           The record so far
         </p>
         <h2 id="pipeline-title" className={styles.storyTitle}>
-          What this workspace has recorded.
+          What the record holds.
         </h2>
         <p className={styles.storyLead}>Read from the API when this page opened, in the order a question goes through them.</p>
       </Reveal>

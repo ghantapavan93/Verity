@@ -97,9 +97,9 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
           {records && <span className={styles.count}>{records.length}</span>}
         </h1>
         <p className={styles.lede}>
-          Every finding here cites text that code found in the contract, word for word or differing only in spacing, case, punctuation or how a number is
-          written. Found is not the same as right: open a finding to see its passage in the document and decide. Where a point was not found, the passages
-          marked <em>searched</em> are the closest provisions read, not support for a claim.
+          Every finding here cites text that code found in the contract, word for word or differing only in spacing, case, punctuation, how a number is written,
+          or a section number and heading at the quote&rsquo;s start. Found is not the same as right: open a finding to see its passage in the document and
+          decide. Where a point was not found, the passages marked <em>searched</em> are the closest provisions read, not support for a claim.
           {records && records.length > 0 && ` ${plural(awaiting, "finding")} awaiting review · ${reviewed} reviewed.`}
         </p>
         {records && records.length > 0 && (

@@ -62,3 +62,10 @@ it("control: a workspace with a contract and no question yet still shows its rec
   );
   expect(screen.getByText("34 sections read")).toBeTruthy();
 });
+
+it("shows nothing while the record is being read, so an empty one does not flash and vanish", () => {
+  // Release review, 2026-10-11: with both requests pending the section rendered placeholders, then disappeared for a
+  // new visitor once both came back empty.
+  const { container } = render(<RecordPipeline citations={null} documents={null} reduceMotion />);
+  expect(container.textContent).toBe("");
+});
