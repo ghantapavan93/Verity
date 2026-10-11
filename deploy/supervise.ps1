@@ -32,8 +32,20 @@ $stopFile = Join-Path $logs "$Tag.stop"
 $pidFile = Join-Path $logs "$Tag.pid"
 $supervisorLog = Join-Path $logs "$Tag.supervisor.log"
 
+# The log and the pid file are written for people. Failing to write one must never end the loop that keeps the server
+# up: under $ErrorActionPreference = "Stop" an IOException from Add-Content ended this supervisor, and a reader holding
+# the log without write sharing (Git Bash's `tail -F`) left the API unsupervised for 17 minutes (2026-10-11). Every
+# write to either file goes through Write-Record, which retries briefly and then gives the record up.
+function Write-Record([scriptblock]$write) {
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    try { & $write; return $true } catch { Start-Sleep -Milliseconds 200 }
+  }
+  return $false
+}
+
 function Write-Line([string]$message) {
-  Add-Content -Path $supervisorLog -Value ("{0} {1}" -f (Get-Date).ToString("o"), $message) -Encoding utf8
+  $line = "{0} {1}" -f (Get-Date).ToString("o"), $message
+  [void](Write-Record { Add-Content -Path $supervisorLog -Value $line -Encoding utf8 })
 }
 
 if (Test-Path $stopFile) { Write-Line "supervisor not started: stop file present ($stopFile); remove it to allow restarts"; exit 0 }
@@ -92,8 +104,8 @@ while ($true) {
       -WorkingDirectory $root -RedirectStandardOutput $out -RedirectStandardError $err -WindowStyle Hidden -PassThru
   }
   $null = $process.Handle  # cache the handle now, or Windows PowerShell cannot read the exit code after the exit
-  Set-Content -Path $pidFile -Value $process.Id -Encoding ascii
-  Write-Line "started $Name pid $($process.Id) (output $Tag.$stamp.out.log)"
+  $recorded = Write-Record { Set-Content -Path $pidFile -Value $process.Id -Encoding ascii }
+  Write-Line "started $Name pid $($process.Id) (output $Tag.$stamp.out.log)$(if (-not $recorded) { '; pid file not written: down.ps1 cannot stop this server by pid' })"
   $began = Get-Date
   # Alive is not answering: on 2026-10-09 the API's accept loop died (asyncio, WinError 64) and the process stayed up,
   # so a supervisor that waited only for an exit left the public API at 502 for 33 minutes. The server is probed on its
