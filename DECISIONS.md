@@ -795,7 +795,7 @@ conclusion. What did not serve it was changed; nothing was redesigned for its ow
 counted six zeros under "Every question passes through the same six hands"; it now shows the record only once there is
 one. The limits list says what code does not check (who holds a right, a missing condition). The evidence drawer,
 where it says support is the model's reading, links to /break. The Findings introduction was one 70-word sentence. The
-site's metadata and the README open with the problem; the README's test counts were eight days stale and are now the
+site's metadata and the README open with the problem; the README's test counts were nine days stale and are now the
 gate's, dated. Two engineering defects were found by measurement, not reading: the model URL defaulted to `localhost`,
 which cost every request to the model endpoint about two seconds (health 2.4 s to 0.35 s after; `docs/SCALE.md`), and
 `npm audit` reported two high advisories in production dependencies, one of them cache poisoning of statically
