@@ -14,8 +14,8 @@ What it is for is reliability engineering more than review: finding where contra
 reproducing it from the record, and measuring whether a fix holds on contracts it was not built on. Code checks where
 a quote is and what values it states; it does not check what a clause means, and the gap is the subject of
 [`/break`](https://ivo.pavankg.dev/break): a recorded answer whose quote passed every check and still gave a right to
-the wrong party, the deterministic check built to catch such answers (4 of 6 caught on the cases it was revised
-against, 0 of 8 on unseen ones; not adopted), and a policy rule that caught one wrong answer and flagged a right one.
+the wrong party, the deterministic check built to catch such answers (4 of 6 caught per session on the cases it was
+revised against, 0 of 4 per session on unseen ones; not adopted), and a policy rule that caught one wrong answer and flagged a right one.
 The adjudications behind it are AI-assisted, and the page says so.
 
 ![The evidence drawer on a recorded run: what the model proposed, what the source says, what code decided, what a person decided](docs/img/evidence-drawer.png)
