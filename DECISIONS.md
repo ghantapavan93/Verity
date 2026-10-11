@@ -851,3 +851,22 @@ elevation, so nothing is claimed); pinning the Python requirements (the live and
 packages, both audited clean with pip-audit; pinning is a change to how releases are made, left for a decision); a
 security contact (GitHub's private vulnerability reporting is a repository setting the owner turns on; a SECURITY.md
 pointing at it before then would point at nothing).
+
+**The m9 follow-up (2026-10-11).** Three things found while preparing the trust release changed code. First, an incident:
+at 05:44 the live API stopped accepting (WinError 64, the failure 03f056d fixes) and its supervisor died on its next
+log line, because an operator's `tail -F` held `api.supervisor.log` without write sharing and the bare `Add-Content`
+threw under `$ErrorActionPreference = "Stop"`. The API stayed down for 17 minutes, until the reader was stopped and
+the scheduled task started again. Every write the supervisor makes to its log or pid file now goes through
+`Write-Record`, which retries and then gives the record up (`tests/test_supervisor_records.py`, with a control showing
+the same lock ending a bare write). Second, the trust release's own flood test failed in 3 of 5 runs alone: when a
+client resets during close, CPython 3.13.2's `_call_connection_lost` raises between `shutdown()` and `close()`, leaving
+the socket to the finaliser and the server counting the connection. The loop's connections now use
+`ResilientSocketTransport`, which finishes the close for a client-caused failure only; the flood test passed 20 of 20.
+Third, a fresh-context first-visit review of the landing and /break: the unseen score counted the same four questions
+twice ("0 of 8"), the misses below it likewise, the status line printed one sentence twice, the landing contradicted
+itself about withheld quotes, and the rejected fix opened on its tuned score. Each is fixed from the record with a
+test; the default view is its own commit so it can be dropped alone. Considered and not done: a role key under the
+quote (it would name an individual while whether such names stay is the owner's open decision), an accept / review /
+escalate step before the reveal (it would hide a verdict the first screen now shows, and is close to the onboarding
+tour the visual rules exclude), and any party, condition or obligation field (the domain review found it would change
+what the model is asked, not what code can verify; the party check already failed on unseen cases).
