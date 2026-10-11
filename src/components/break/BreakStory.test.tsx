@@ -62,7 +62,7 @@ describe("why it matters", () => {
     // Which conditions, found in the record by what they say rather than by position, so a re-export in another order
     // cannot swap in the delivery deadline (review of 8037873).
     const condition = (about: RegExp) => headline.requiredConditions.find((c) => about.test(c)) ?? "";
-    expect(condition(/objection right belongs/)).not.toBe("");
+    for (const about of [/objection right belongs/, /final and binding/, /delivery deadline/]) expect(condition(about)).not.toBe("");
     expect(text).toContain(condition(/objection right belongs/));
     expect(text).toContain(condition(/final and binding/));
     expect(text).not.toContain(condition(/delivery deadline/));
