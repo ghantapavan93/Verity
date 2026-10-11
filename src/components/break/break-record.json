@@ -3216,7 +3216,7 @@
   }
  },
  "masking": {
-  "emailAddresses": 10,
+  "inInput": 5,
   "mask": "[email address masked]"
  }
 }

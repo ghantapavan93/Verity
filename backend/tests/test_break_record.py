@@ -82,11 +82,15 @@ def test_policy_v6_decides_each_shown_finding_as_recorded(record: dict) -> None:
             assert (again.status, again.reason or None) == (finding["status"], finding["statusReason"]), (case["id"], session["session"])
 
 
-def test_the_false_alarm_differs_from_the_kept_pass_only_by_what_its_quotes_state(record: dict) -> None:
+def test_the_false_alarm_and_the_kept_pass_open_alike_and_only_the_kept_ones_quotes_state_the_figure(record: dict) -> None:
     sessions = {s["session"]: s for s in record["counterexample"]["falseAlarm"]["sessions"]}
     kept, lowered = sessions["v1"], sessions["v2"]
     assert kept["finding"]["status"] == "pass" and lowered["finding"]["status"] == "needs_review"
     assert kept["adjudication"]["label"] == lowered["adjudication"]["label"] == "correct"
+    # The same first sentence, the premise denied; the kept answer goes on to say more, which the rule does not judge.
+    first = re.compile(r"^.*?[.!?](?=\s|$)")
+    opening = [first.match(s["finding"]["conclusion"]) for s in (kept, lowered)]
+    assert opening[0] and opening[1] and opening[0].group(0) == opening[1].group(0)
     assert any("$1,500,000" in s["quote"] for s in kept["finding"]["spans"])
     assert not any(re.search(r"1,500,000|1\.5 million", s["quote"]) for s in lowered["finding"]["spans"])
 
@@ -113,4 +117,4 @@ def test_the_record_carries_no_email_address_or_machine_path(record: dict) -> No
     text = RECORD.read_text(encoding="utf-8")
     assert not re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text)
     assert not re.search(r"[A-Za-z]:[\\/](Users|Temp)|/Users/|AppData", text)
-    assert record["masking"]["emailAddresses"] > 0
+    assert record["masking"]["inInput"] == record["headline"]["input"]["user"].count(record["masking"]["mask"]) > 0

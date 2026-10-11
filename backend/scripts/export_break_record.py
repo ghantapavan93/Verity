@@ -267,10 +267,9 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
         print(json.dumps(dump_store(args.dump.split(","))))
         return
-    count = [0]
-    record = masked(build(args), count)
+    record = masked(build(args), [0])
     assert isinstance(record, dict)
-    record["masking"] = {"emailAddresses": count[0], "mask": EMAIL_MASK}
+    record["masking"] = {"inInput": record["headline"]["input"]["user"].count(EMAIL_MASK), "mask": EMAIL_MASK}
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(record, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
