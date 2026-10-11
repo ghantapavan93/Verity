@@ -144,7 +144,7 @@ export function RecordPipeline({
     {
       label: "Code withheld",
       value: citations ? citations.spans - citations.verifiedSpans : null,
-      note: citations ? `${grouped.format(citations.withheldFindings)} findings held back` : "not found, not shown",
+      note: citations ? `${grouped.format(citations.withheldFindings)} findings held back` : "never shown as evidence",
       tone: "bad",
       icon: (
         <Stroke>

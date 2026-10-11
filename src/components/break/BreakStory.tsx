@@ -658,6 +658,8 @@ function RejectedFix() {
     .sort((a, b) => a.localeCompare(b, "en", { numeric: true }))
     .map((c) => wrong.filter((r) => r.case === c).sort((a, b) => a.session.localeCompare(b.session)));
   const unseenMisses = fix.rows.filter((r) => r.set === "unseen" && r.label === "wrong_party" && !r.flagged);
+  // In cases, not answers: each unseen case was asked once per session, so a case missed twice is one case.
+  const missedCases = (why?: string) => new Set(unseenMisses.filter((r) => why === undefined || r.why === why).map((r) => r.case)).size;
   const total = (k: "caught" | "wrong" | "lowered" | "correct") => scores.reduce((n, s) => n + s[k], 0);
   return (
     <Section id="fix" kicker="The rejected fix" title="A check that worked on the cases it was built on, and missed every new one.">
@@ -700,11 +702,11 @@ function RejectedFix() {
       <div className={styles.why}>
         <h3 className={styles.h3}>Why it did not generalise</h3>
         <p>
-          On the unseen cases, {unseenMisses.filter((r) => r.why === "no_actor_in_answer").length} of {unseenMisses.length} misses had no party of the opening
-          acting in the answer: the answer named its actor by a bank&apos;s name where the opening&apos;s list holds only a defined role. In the other{" "}
-          {unseenMisses.filter((r) => r.why === "actor_also_in_quote").length}, the party the answer wrongly names also appears in the quote, though not as the
-          one who holds the right. In this page&apos;s headline the real holder, the Stockholders&apos; Representative, is not among the parties the check read
-          at all. Telling those apart is reading roles, which is the model&apos;s job; a longer pattern list would be fitting these cases.
+          On the unseen cases, {missedCases("no_actor_in_answer")} of {missedCases()} missed cases had no party of the opening acting in the answer: the answer
+          named its actor by a bank&apos;s name where the opening&apos;s list holds only a defined role. In the other {missedCases("actor_also_in_quote")}, the
+          party the answer wrongly names also appears in the quote, though not as the one who holds the right. In this page&apos;s headline the real holder, the
+          Stockholders&apos; Representative, is not among the parties the check read at all. Telling those apart is reading roles, which is the model&apos;s
+          job; a longer pattern list would be fitting these cases.
         </p>
         <p className={styles.decision}>
           Not adopted. Kept on the unpublished branch <code>party-check-experiment</code>, commit <code>{shortHash(fix.commit, 7)}</code>; its verdict on every

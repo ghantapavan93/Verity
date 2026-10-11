@@ -170,6 +170,18 @@ describe("the rejected fix", () => {
     expect(text).not.toContain(`0 of ${unseen.length} caught`);
   });
 
+  it("explains the unseen misses in cases, each case with one reason", () => {
+    renderPage();
+    const missed = record.rejectedFix.rows.filter((r) => r.set === "unseen" && r.label === "wrong_party" && !r.flagged);
+    const cases = (why?: string) => new Set(missed.filter((r) => why === undefined || r.why === why).map((r) => r.case)).size;
+    // One reason per case, or the two counts below would overlap.
+    expect(cases("no_actor_in_answer") + cases("actor_also_in_quote")).toBe(cases());
+    const why = (screen.getByRole("heading", { name: "Why it did not generalise" }).parentElement?.textContent ?? "").replace(/\s+/g, " ");
+    expect(why).toContain(`${cases("no_actor_in_answer")} of ${cases()} missed cases had no party of the opening acting in the answer`);
+    expect(why).toContain(`In the other ${cases("actor_also_in_quote")}, the party the answer wrongly names`);
+    expect(why).not.toContain(`of ${missed.length} misses`);
+  });
+
   it("states a partial unseen score in answers and cases alike", () => {
     expect(unseenSummary(0, 8, 4)).toBe("It caught none of the 4 wrong-party cases, in either session.");
     expect(unseenSummary(3, 8, 4)).toBe("It caught 3 of 8 wrong-party answers: 4 cases, each asked once per session.");
