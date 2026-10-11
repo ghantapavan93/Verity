@@ -9,6 +9,11 @@ the client is retried, and every other failure is handled as CPython handles it 
 
 Those retries are logged as a count, not one line each: a client can reset thousands of connections, and CPython's own
 accept task would add a traceback for every one ("Task exception was never retrieved").
+
+The same reset can also arrive after the accept, while the server closes the connection: CPython's shutdown() then
+raises ConnectionResetError between the shutdown and the close, so the socket was left to the finaliser, the server went
+on counting the connection, and the error was logged with a traceback (seen as a flaky test, m9 gate, 2026-10-11). The
+connections this loop makes finish that close; any other failure there still propagates as in CPython.
 """
 
 from __future__ import annotations
@@ -38,11 +43,45 @@ def client_caused(error: OSError) -> bool:
 
 
 if sys.platform == "win32":
-    from asyncio import exceptions, trsock
+    from asyncio import exceptions, proactor_events, trsock
+
+    class ResilientSocketTransport(proactor_events._ProactorSocketTransport):
+        def _call_connection_lost(self, exc: BaseException | None) -> None:
+            # CPython 3.13's _ProactorBasePipeTransport._call_connection_lost, with a client-caused shutdown failure
+            # allowed: the client already reset the connection, and the close and the server's bookkeeping still run.
+            t: Any = self  # the base class's private attributes, as CPython uses them
+            if t._called_connection_lost:
+                return
+            try:
+                t._protocol.connection_lost(exc)
+            finally:
+                if hasattr(t._sock, "shutdown") and t._sock.fileno() != -1:
+                    try:
+                        t._sock.shutdown(socket.SHUT_RDWR)
+                    except OSError as error:
+                        if not client_caused(error):
+                            raise
+                t._sock.close()
+                t._sock = None
+                server = t._server
+                if server is not None:
+                    server._detach(t)
+                    t._server = None
+                t._called_connection_lost = True
 
     class ResilientProactorEventLoop(asyncio.ProactorEventLoop):
         _retried = 0
         _window: asyncio.TimerHandle | None = None
+
+        def _make_socket_transport(
+            self,
+            sock: socket.socket,
+            protocol: asyncio.BaseProtocol,
+            waiter: asyncio.Future[Any] | None = None,
+            extra: dict[str, Any] | None = None,
+            server: asyncio.AbstractServer | None = None,
+        ) -> ResilientSocketTransport:
+            return ResilientSocketTransport(self, sock, protocol, waiter, extra, server)  # type: ignore[arg-type]
 
         def _client_went_away(self, error: OSError) -> None:
             if self._window is None:
@@ -101,7 +140,7 @@ if sys.platform == "win32":
                                 ssl_shutdown_timeout=ssl_shutdown_timeout,
                             )
                         else:
-                            self._make_socket_transport(conn, protocol, extra={"peername": addr}, server=server)  # type: ignore[attr-defined]
+                            self._make_socket_transport(conn, protocol, extra={"peername": addr}, server=server)
                     if self.is_closed():
                         return
                     accepting = True

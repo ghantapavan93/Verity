@@ -24,6 +24,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -231,3 +232,89 @@ def test_the_cpython_code_the_loop_copies_is_the_code_it_was_written_against() -
 
     assert digest(asyncio.proactor_events.BaseProactorEventLoop._start_serving) == "7b6bcf24da6fafb38c63e276e1de553706da3f0d0bbc7300b521cb4599145afe"  # type: ignore[attr-defined]
     assert digest(asyncio.windows_events.IocpProactor.accept) == "66c5aee644d5fafa38425393e30a71bf12b57b1f4fafd4340126ce6869956185"
+    # ResilientSocketTransport copies _call_connection_lost and the loop replaces _make_socket_transport (m9).
+    lost = asyncio.proactor_events._ProactorBasePipeTransport._call_connection_lost  # type: ignore[attr-defined]
+    make = asyncio.proactor_events.BaseProactorEventLoop._make_socket_transport  # type: ignore[attr-defined]
+    assert digest(lost) == "21755f1f4d9172c66ccb8ff6787e522916a0375b1e47222cb5f74916f30fa5ef"
+    assert digest(make) == "1811908cb3d4c5d7302c2f554515621e8df19f71edd7c5e1985e6736a297b256"
+
+
+class ClosingSocket:
+    """A connected socket whose shutdown fails the way a reset one does on Windows, recording what was done to it."""
+
+    def __init__(self, error: OSError) -> None:
+        self.error, self.closed = error, False
+
+    def fileno(self) -> int:
+        return -1 if self.closed else 5
+
+    def shutdown(self, how: int) -> None:
+        raise self.error
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def closing_transport(error: OSError) -> SimpleNamespace:
+    """The state _call_connection_lost reads and writes, without a live connection behind it."""
+    server = SimpleNamespace(detached=[])
+    server._detach = server.detached.append
+    protocol = SimpleNamespace(lost=[])
+    protocol.connection_lost = protocol.lost.append
+    return SimpleNamespace(_called_connection_lost=False, _protocol=protocol, _sock=ClosingSocket(error), _server=server)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [ConnectionResetError(10054, "reset by peer"), ConnectionAbortedError(10053, "aborted"), OSError(22, "gone", None, 64)],
+    ids=["reset", "aborted", "netname-deleted"],
+)
+def test_a_connection_the_client_reset_is_closed_and_released(error: OSError) -> None:
+    # CPython 3.13.2 let this error escape after protocol.connection_lost: no close, the server still counting the
+    # connection, and a traceback in the log (the flaky m9 gate). The transport the loop makes finishes all three.
+    from app.serving import ResilientSocketTransport
+
+    t = closing_transport(error)
+    sock, server = t._sock, t._server
+    ResilientSocketTransport._call_connection_lost(t, None)  # type: ignore[arg-type]
+    assert t._protocol.lost == [None]
+    assert sock.closed and t._sock is None
+    assert server.detached == [t] and t._server is None
+    assert t._called_connection_lost
+    ResilientSocketTransport._call_connection_lost(t, None)  # type: ignore[arg-type]  # a second call is a no-op
+    assert t._protocol.lost == [None]
+
+
+def test_control_a_shutdown_failure_the_client_did_not_cause_still_propagates() -> None:
+    from app.serving import ResilientSocketTransport
+
+    t = closing_transport(OSError(9, "bad file descriptor"))
+    with pytest.raises(OSError, match="bad file descriptor"):
+        ResilientSocketTransport._call_connection_lost(t, None)  # type: ignore[arg-type]
+    assert not t._called_connection_lost
+
+
+def test_the_loop_serves_every_connection_on_that_transport() -> None:
+    from app.serving import ResilientProactorEventLoop, ResilientSocketTransport
+
+    seen: list[object] = []
+
+    async def scenario() -> None:
+        async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            seen.append(writer.transport)
+            writer.close()
+
+        server = await asyncio.start_server(handle, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        _, writer = await asyncio.open_connection("127.0.0.1", port)
+        await asyncio.sleep(0.2)
+        writer.close()
+        server.close()
+        await server.wait_closed()
+
+    loop = ResilientProactorEventLoop()
+    try:
+        loop.run_until_complete(scenario())
+    finally:
+        loop.close()
+    assert [type(t) for t in seen] == [ResilientSocketTransport]
