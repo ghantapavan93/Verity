@@ -43,7 +43,13 @@ vi.stubGlobal(
   },
 );
 
-function renderLanding(apiHealth: Health | null, accessKnown: boolean, proof: RunSummary | null = null, proofStory = false) {
+function renderLanding(
+  apiHealth: Health | null,
+  accessKnown: boolean,
+  proof: RunSummary | null = null,
+  proofStory = false,
+  uploadError: { name: string | null; reason: string } | null = null,
+) {
   return render(
     <Landing
       stage="empty"
@@ -57,7 +63,7 @@ function renderLanding(apiHealth: Health | null, accessKnown: boolean, proof: Ru
       proof={proof}
       proofStory={proofStory}
       onOpenProof={vi.fn()}
-      uploadError={null}
+      uploadError={uploadError}
       apiHealth={apiHealth}
       accessKnown={accessKnown}
       recent={[]}
@@ -196,6 +202,23 @@ describe("Landing: a public demo", () => {
     expect(text).toMatch(/deleted automatically 7 days after your first visit/);
     expect(text).toMatch(/[Cc]learing (your )?cookies/);
     expect(text).not.toMatch(/invite/i);
+  });
+});
+
+describe("Landing: a file that could not be added", () => {
+  // Release readiness, 2026-10-10: the refusal was printed below the demo notice, under the fold on a phone, without
+  // the file's name, starting mid-sentence ("the PDF has no text layer…").
+  it("names the file and says why, directly under the drop zone", () => {
+    renderLanding(health("entered"), true, null, false, { name: "scan.pdf", reason: "the PDF has no text layer on any page" });
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe("scan.pdf was not added: the PDF has no text layer on any page");
+    const sample = screen.getByText(/No contract to hand\?/);
+    expect(alert.compareDocumentPosition(sample) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("control: a refusal with no file to name says only why", () => {
+    renderLanding(health("entered"), true, null, false, { name: null, reason: "The sample agreement is missing from this build." });
+    expect(screen.getByRole("alert").textContent).toBe("The sample agreement is missing from this build.");
   });
 });
 

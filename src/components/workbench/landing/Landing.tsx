@@ -63,7 +63,8 @@ export function Landing({
   /** The proof is the configured proof run (NEXT_PUBLIC_PROOF_RUN): the four-step story is written about that run alone. */
   proofStory?: boolean;
   onOpenProof: (runId: string, findingId?: string) => void;
-  uploadError: string | null;
+  /** Why the last file was not added, and its name when there was a file (a missing sample has none). */
+  uploadError: { name: string | null; reason: string } | null;
   apiHealth: Health | null;
   /** Whether the API has said what its door is; until it has, the screen claims neither open nor private. */
   accessKnown: boolean;
@@ -233,6 +234,12 @@ export function Landing({
 
           {stage === "empty" && (
             <>
+              {/* Right under the box the file was dropped on, where the eye still is (release readiness, 2026-10-10). */}
+              {uploadError && (
+                <p className={styles.error} role="alert">
+                  {uploadError.name ? `${uploadError.name} was not added: ${uploadError.reason}` : uploadError.reason}
+                </p>
+              )}
               <p className={styles.after}>
                 No contract to hand? Use the sample, a real standard agreement:{" "}
                 <button type="button" className={styles.link} onClick={onLoadSample} disabled={unreachable}>
@@ -243,11 +250,6 @@ export function Landing({
                 <p className={styles.after}>
                   A public demo: use public, synthetic or non-sensitive agreements. What you add is kept in a workspace only this browser can open, and is
                   deleted automatically {demo.retentionDays} days after your first visit. Clearing cookies loses access to it.
-                </p>
-              )}
-              {uploadError && (
-                <p className={styles.error} role="alert">
-                  {uploadError}
                 </p>
               )}
               {unreachable ? (
