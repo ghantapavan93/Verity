@@ -11,9 +11,11 @@ Those retries are logged as a count, not one line each: a client can reset thous
 accept task would add a traceback for every one ("Task exception was never retrieved").
 
 The same reset can also arrive after the accept, while the server closes the connection: CPython's shutdown() then
-raises ConnectionResetError between the shutdown and the close, so the socket was left to the finaliser, the server went
-on counting the connection, and the error was logged with a traceback (seen as a flaky test, m9 gate, 2026-10-11). The
-connections this loop makes finish that close; any other failure there still propagates as in CPython.
+raises ConnectionResetError between the shutdown and the close, so the socket was left to the finaliser, the server kept
+the connection until the transport was collected, and the error was logged with a traceback (seen as a flaky test, m9
+gate, 2026-10-11). The plain connections this loop makes finish that close; any other failure there still propagates as
+in CPython. TLS connections, which CPython's _make_ssl_transport builds itself, keep its behaviour; the deployment
+serves plain HTTP on loopback behind the tunnel.
 """
 
 from __future__ import annotations

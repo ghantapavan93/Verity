@@ -310,7 +310,8 @@ def test_the_loop_serves_every_connection_on_that_transport() -> None:
         await asyncio.sleep(0.2)
         writer.close()
         server.close()
-        await server.wait_closed()
+        # Bounded: a transport that never detaches would keep wait_closed() waiting, and the suite has no timeout plugin.
+        await asyncio.wait_for(server.wait_closed(), timeout=10)
 
     loop = ResilientProactorEventLoop()
     try:

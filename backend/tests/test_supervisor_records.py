@@ -13,9 +13,11 @@ from __future__ import annotations
 import ctypes
 import re
 import shutil
+import socket
 import subprocess
 import sys
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -53,7 +55,9 @@ def held_without_write_sharing(path: Path) -> Iterator[None]:
 
 
 def run_powershell(body: str, log: Path) -> subprocess.CompletedProcess[str]:
-    script = f"$ErrorActionPreference = 'Stop'\n$supervisorLog = '{log}'\n$pidFile = '{log.with_suffix('.pid')}'\n{body}\n'still supervising'"
+    script = (
+        f"$ErrorActionPreference = 'Stop'\n$supervisorLog = '{log}'\n$pidFile = '{log.with_suffix('.pid')}'\n$droppedLines = 0\n{body}\n'still supervising'"
+    )
     return subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, timeout=60)
 
 
@@ -87,6 +91,18 @@ def test_an_unlocked_log_gets_the_line(tmp_path: Path) -> None:
     assert log.read_text(encoding="utf-8-sig").rstrip().endswith("started api pid 1")
 
 
+def test_lines_lost_to_a_lock_are_counted_on_the_next_line_written(tmp_path: Path) -> None:
+    log = tmp_path / "api.supervisor.log"
+    locked = "Write-Line 'did not answer (1 of 3)'\nWrite-Line 'did not answer (2 of 3)'"
+    with held_without_write_sharing(log):
+        first = run_powershell(f"{record_functions()}\n{locked}\n$droppedLines", log)
+    assert first.returncode == 0, first.stderr
+    assert first.stdout.splitlines()[0] == "2"
+    after = run_powershell(f"{record_functions()}\n$droppedLines = 2\nWrite-Line 'started api pid 7'\n$droppedLines", log)
+    assert after.stdout.splitlines()[0] == "0"
+    assert log.read_text(encoding="utf-8-sig").rstrip().endswith("started api pid 7 (2 earlier line(s) could not be written)")
+
+
 def test_control_the_lock_breaks_a_bare_add_content(tmp_path: Path) -> None:
     # The write the supervisor used before: without Write-Record the same lock ends the script.
     log = tmp_path / "api.supervisor.log"
@@ -97,9 +113,50 @@ def test_control_the_lock_breaks_a_bare_add_content(tmp_path: Path) -> None:
 
 
 def test_every_record_write_goes_through_write_record() -> None:
+    # Each write to a file, by cmdlet, .NET call or redirection, sits inside a Write-Record block on its own line.
     script = SUPERVISE.read_text(encoding="utf-8")
-    inside = function_source(script, "Write-Record") + function_source(script, "Write-Line")
     code = [line.strip() for line in script.splitlines() if not line.strip().startswith("#")]
-    writes = [line for line in code if re.search(r"\b(Add-Content|Set-Content|Out-File)\b", line)]
-    unguarded = [line for line in writes if "Write-Record" not in line and line not in inside]
+    write = re.compile(r"\b(Add-Content|Set-Content|Out-File|AppendAllText|WriteAllText|WriteAllLines)\b|\s>>?\s*[$\"'A-Za-z]")
+    writes = [line for line in code if write.search(line)]
+    assert len(writes) >= 2, writes
+    unguarded = [line for line in writes if "Write-Record {" not in line]
     assert unguarded == [], unguarded
+
+
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+def wait_for(predicate: Callable[[], bool], seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.25)
+    return predicate()
+
+
+def test_only_the_stop_file_ends_the_supervisor(tmp_path: Path) -> None:
+    # The real script, run as deployed, where a pass fails twice over: an empty access.secret (its Trim() threw on
+    # null) and no backend venv (Start-Process throws). Before m9 either ended the supervisor with code 1.
+    (tmp_path / "deploy").mkdir()
+    shutil.copy(SUPERVISE, tmp_path / "deploy" / "supervise.ps1")
+    (tmp_path / "backend" / "data").mkdir(parents=True)
+    (tmp_path / "backend" / "data" / "access.secret").write_text("", encoding="ascii")
+    logs = tmp_path / "backend" / "data" / "logs" / "deploy"
+    log = logs / "t.supervisor.log"
+    command = ["powershell", "-NoProfile", "-NonInteractive", "-File", str(tmp_path / "deploy" / "supervise.ps1")]
+    supervisor = subprocess.Popen([*command, "-Name", "api", "-Port", str(free_port()), "-Tag", "t"])
+    try:
+        assert wait_for(lambda: log.exists() and "supervisor pass failed" in log.read_text(encoding="utf-8-sig"), 30)
+        text = log.read_text(encoding="utf-8-sig")
+        assert "no access secret" in text
+        assert supervisor.poll() is None, "the supervisor ended on a failed pass"
+        (logs / "t.stop").write_text("stop", encoding="ascii")
+        assert supervisor.wait(timeout=60) == 0
+        assert "stop file present; supervisor exiting" in log.read_text(encoding="utf-8-sig")
+    finally:
+        if supervisor.poll() is None:
+            supervisor.kill()

@@ -858,7 +858,10 @@ log line, because an operator's `tail -F` held `api.supervisor.log` without writ
 threw under `$ErrorActionPreference = "Stop"`. The API stayed down for 17 minutes, until the reader was stopped and
 the scheduled task started again. Every write the supervisor makes to its log or pid file now goes through
 `Write-Record`, which retries and then gives the record up (`tests/test_supervisor_records.py`, with a control showing
-the same lock ending a bare write). Second, the trust release's own flood test failed in 3 of 5 runs alone: when a
+the same lock ending a bare write); a line it gives up is counted on the next one written. Two reviews found the same
+class elsewhere in the loop (an empty `access.secret` made `.Trim()` throw on null; a missing executable made
+`Start-Process` throw), so the invariant is now held at the loop: only the stop file ends it, and a pass that fails
+anywhere is logged, stops the server it started, and is retried on the backoff, shown on the real script. Second, the trust release's own flood test failed in 3 of 5 runs alone: when a
 client resets during close, CPython 3.13.2's `_call_connection_lost` raises between `shutdown()` and `close()`, leaving
 the socket to the finaliser and the server counting the connection. The loop's connections now use
 `ResilientSocketTransport`, which finishes the close for a client-caused failure only; the flood test passed 20 of 20.
