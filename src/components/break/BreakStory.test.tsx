@@ -6,7 +6,9 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { BreakStory } from "./BreakStory";
+import { STATUS_SOURCE_LABELS } from "@/lib/types";
+
+import { BreakStory, unseenSummary } from "./BreakStory";
 import raw from "./break-record.json";
 import { forPage, type BreakRecord } from "./record";
 
@@ -108,6 +110,14 @@ describe("the investigation", () => {
     expect(within(slices).getAllByRole("button")).toHaveLength(headline.sessions[0].retrieval.length);
   });
 
+  it("says once, in words, who set the status", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("tab", { name: /What code checked/ }));
+    const line = screen.getByText(/Who set the status\./).closest("li")?.textContent ?? "";
+    expect(line).toBe(`Who set the status. ${STATUS_SOURCE_LABELS[headline.sessions[0].finding.statusSource]}.`);
+    expect(line).not.toContain(headline.sessions[0].finding.policy.summary);
+  });
+
   it("shows the exact input and its recorded hash", () => {
     renderPage();
     expect(screen.getByLabelText("The user message").textContent).toBe(headline.input.user);
@@ -146,6 +156,23 @@ describe("the rejected fix", () => {
     fireEvent.click(screen.getByRole("button", { name: "Unseen cases" }));
     expect(scores()).toContain("0 of 4 wrong-party answers caught, session 1");
     expect(scores()).toContain("0 of 32 correct answers lowered");
+  });
+
+  it("counts the unseen score in cases, each asked in both sessions, not in answers", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Unseen cases" }));
+    const unseen = record.rejectedFix.rows.filter((r) => r.set === "unseen" && r.label === "wrong_party");
+    const cases = new Set(unseen.map((r) => r.case)).size;
+    const text = (document.body.textContent ?? "").replace(/\s+/g, " ");
+    expect(unseen.some((r) => r.flagged)).toBe(false);
+    expect(text).toContain(`It caught none of the ${cases} wrong-party cases, in either session.`);
+    expect(text).not.toContain(`0 of ${unseen.length} caught`);
+  });
+
+  it("states a partial unseen score in answers and cases alike", () => {
+    expect(unseenSummary(0, 8, 4)).toBe("It caught none of the 4 wrong-party cases, in either session.");
+    expect(unseenSummary(3, 8, 4)).toBe("It caught 3 of 8 wrong-party answers: 4 cases, each asked once per session.");
+    expect(unseenSummary(0, 2, 1)).toBe("It missed the one wrong-party case, in both sessions.");
   });
 
   it("opens a missed case to say what the check saw", () => {

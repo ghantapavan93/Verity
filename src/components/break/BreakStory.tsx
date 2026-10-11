@@ -498,7 +498,7 @@ function BoundaryPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
             <strong>Every value the answer states is in a verified quote.</strong> Policy-v6&apos;s value rule; here it found nothing to lower.
           </li>
           <li>
-            <strong>Who set the status.</strong> {s.finding.policy.summary}. {STATUS_SOURCE_LABELS[s.finding.statusSource] ?? ""}
+            <strong>Who set the status.</strong> {STATUS_SOURCE_LABELS[s.finding.statusSource] ?? s.finding.policy.summary}.
           </li>
         </ul>
       </div>
@@ -689,7 +689,7 @@ function RejectedFix() {
       <p className={styles.setNote}>
         {set === "diagnostic"
           ? "These cases were written first, and the check was revised against them. A score here says what it was tuned to do."
-          : `Written afterwards by a separate annotator agent, on contracts the check had never read: ${total("caught")} of ${total("wrong")} caught.`}
+          : `Written afterwards by a separate annotator agent, on contracts the check had never read. ${unseenSummary(total("caught"), total("wrong"), byCase.length)}`}
       </p>
       <ul className={styles.verdictList} aria-label="Wrong-party answers and the check's verdict">
         {byCase.map((rows) => (
@@ -948,6 +948,17 @@ const NAV = [
   ["counterexample", "Counterexample"],
   ["your-turn", "Your turn"],
 ] as const;
+
+/**
+ * The unseen score in cases, not answers: each case was asked once per session, so "0 of 8" would count the same four
+ * questions twice (first-visit review, m9).
+ */
+export function unseenSummary(caught: number, answers: number, cases: number): string {
+  const noun = cases === 1 ? "case" : "cases";
+  if (caught === 0)
+    return cases === 1 ? "It missed the one wrong-party case, in both sessions." : `It caught none of the ${cases} wrong-party cases, in either session.`;
+  return `It caught ${caught} of ${answers} wrong-party answers: ${cases} ${noun}, each asked once per session.`;
+}
 
 /** What the exporter masked in the headline's input, or nothing when it masked nothing. */
 function maskingNote({ inInput, names }: { inInput: number; names: number }): string {
