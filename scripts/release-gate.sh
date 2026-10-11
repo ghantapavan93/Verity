@@ -45,6 +45,8 @@ echo "== backend: lint, format, types"
 $PY -m ruff check . 2>&1 | tail -1; check "ruff check" "${PIPESTATUS[0]}"
 $PY -m ruff format --check . 2>&1 | tail -1; check "ruff format" "${PIPESTATUS[0]}"
 $PY -m mypy app scripts/export_review_evidence.py tests/test_review_evidence_export.py 2>&1 | tail -1; check "mypy" "${PIPESTATUS[0]}"
+# The layering the README promises (.importlinter: verifier pure, providers blind, layers downward); not gated until 2026-10-11.
+"$(dirname "$PY")/lint-imports" 2>&1 | tail -1; check "import contracts" "${PIPESTATUS[0]}"
 echo "== backend: version-aware trust fault matrix"
 $PY scripts/trust_faults.py 2>&1 | tail -3; check "trust fault matrix (every fault caught, every file restored)" "${PIPESTATUS[0]}"
 dirty=$(git status --porcelain | wc -l)
