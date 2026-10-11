@@ -75,8 +75,11 @@ while ($true) {
     }
     if ($env:WORKBENCH_ACCESS_SECRET.Length -lt 32) { Write-Line "no access secret at ${secretFile}: the API will refuse to start (WORKBENCH_ACCESS_REQUIRED=1)" }
     $env:WORKBENCH_ACCESS_REVOKED = if (Test-Path $revokedFile) { ((Get-Content $revokedFile) | Where-Object { $_.Trim() } | ForEach-Object { $_.Trim() }) -join "," } else { "" }
+    # The selector loop, not Windows' default proactor: the proactor closes its listening socket when an accept fails
+    # with WinError 64 (a client resetting mid-handshake), and the API then answers no one until restarted; 18 such
+    # restarts between 2026-10-09 and 2026-10-11 (backend/tests/test_accept_resets.py).
     $process = Start-Process -FilePath (Join-Path $backend ".venv\Scripts\python.exe") `
-      -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$Port" `
+      -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$Port", "--loop", "asyncio:SelectorEventLoop" `
       -WorkingDirectory $backend -RedirectStandardOutput $out -RedirectStandardError $err -WindowStyle Hidden -PassThru
   } else {
     # A deploy interrupted between its two renames can leave no .next: finish or undo it before starting (swap-build.ps1).
