@@ -14,7 +14,10 @@ powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Build -
 
 When `package-lock.json` changed since the release that serves, stop the servers first (`deploy\down.ps1`) and run
 `npm ci` in the checkout before the command above: the build uses `node_modules` as it finds them, and `npm ci` under a
-running `next start` deletes files the server may still load. The site is down from the stop to the restart.
+running `next start` deletes files the server may still load. After `down.ps1`, wait until the scheduled tasks
+"Verity API" and "Verity Web" are no longer Running (each supervisor exits on its next loop), as the installer does,
+before `npm ci`. The site is down from the stop to the restart. A rollback across such a release is the same three
+steps at the previous commit: the old build needs the old `node_modules`.
 
 It builds into `.next-staging` while the old release serves, stops the servers and waits for their supervisors, then
 swaps the build in (`.next-previous` keeps the last one; a failed build changes nothing that serves), and
