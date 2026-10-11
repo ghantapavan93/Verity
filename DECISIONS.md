@@ -775,3 +775,16 @@ refused upload was printed below the demo notice, under the fold on a phone, beg
 name; it now reads "scan.pdf was not added: …" directly under the drop zone. The ghosted drawer in two captures is its
 0.22 s cross-fade caught mid-way, not a defect. Left as they are: the Findings introduction is long on a phone, and a
 TXT read with little structure labels a searched passage by a fragment of a heading ("SUCH SECURITIES (part 10)").
+
+**Break Verity, a recorded failure in public (2026-10-11).** `/break` tells one answer that passed every check code
+runs and was wrong: an unseen, pre-registered question (Q-1) about a merger agreement filed with the SEC, answered
+the same way in two model sessions from the same input, with a quote located word for word, and labelled wrong party
+by an AI-assisted, blind adjudication. The page is the recording, not a re-run: `backend/scripts/export_break_record.py`
+writes `src/components/break/break-record.json` from the evaluation stores through the API's own run detail and
+explanation (the store is copied, never opened for writing; email addresses in the notice clause are masked), and
+`backend/tests/test_break_record.py` locates every quote again, runs the value rule again and recounts the party
+check's numbers. The rejected party check's verdicts come from its own code at 57e4dae; the policy-v6 rule's catch and
+false alarm are the Q-3 and Q-2 findings traced above. Every filing the page links was fetched in a browser on
+2026-10-11 and matched the corpus download byte for byte up to the script tag SEC appends to each response; that
+prefix's sha256 is in the record. The page calls no API, runs no model and offers no upload of its own; it links to the
+workbench, with a warning that nothing detects or refuses a confidential document.
