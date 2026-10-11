@@ -331,7 +331,7 @@ function InputPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
         Rebuilt from the record and equal to the hash the run recorded when it called the model
         <Cite id="record" />.{" "}
         {record.masking.inInput > 0 &&
-          `Email addresses in the contract's notice clause are masked here (${record.masking.inInput} places); the hash covers the record as stored.`}
+          `Email addresses in the contract's notice clause (${record.masking.inInput} places), and the names of its notice contacts and signatories, are masked here; the hash covers the record as stored.`}
       </p>
     </div>
   );
@@ -556,8 +556,8 @@ function Investigation({ headline }: { headline: CaseRecord }) {
         <div>
           <h3 className={styles.h3}>Replaying the record</h3>
           <p>
-            Everything above is the stored record; only email addresses are masked. Nothing on this page asks a model anything, so opening it twice shows the
-            same answer.
+            Everything above is the stored record; only email addresses and the names of people the story does not need are masked. Nothing on this page asks a
+            model anything, so opening it twice shows the same answer.
           </p>
         </div>
         <div>

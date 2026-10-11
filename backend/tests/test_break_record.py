@@ -118,3 +118,33 @@ def test_the_record_carries_no_email_address_or_machine_path(record: dict) -> No
     assert not re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text)
     assert not re.search(r"[A-Za-z]:[\\/](Users|Temp)|/Users/|AppData", text)
     assert record["masking"]["inInput"] == record["headline"]["input"]["user"].count(record["masking"]["mask"]) > 0
+
+
+def test_people_the_story_does_not_need_are_not_named(record: dict) -> None:
+    # Release hygiene, 2026-10-11: the published record named notice contacts (law-firm and company addresses'
+    # "Attention:" lines), signatories ("/s/ …", "Name: …") and an executive in one diagnostic case. None of them is part
+    # of the story. The headline keeps the stockholders' representative: the question's false premise is about her role.
+    text = RECORD.read_text(encoding="utf-8")
+    assert not re.search(r"Attention:\s*\|?\s*[A-Z][a-z]", text)
+    assert not re.search(r"/s/\s*[A-Z][a-z]", text)
+    assert not re.search(r"Name:\s*\|?\s*[A-Z][a-z]+\s+[A-Z]", text)
+    assert "Doug Stiles" not in text
+    assert "Michelle Jarrard" in record["headline"]["question"]
+    assert record["masking"]["names"] > 0
+
+
+def test_a_signature_block_loses_every_name_and_keeps_its_shape() -> None:
+    # A name never spans a line break: "/s/ Jane Roe\n\nName: Jane Roe" read as one three-word name hid the "Name:" line.
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "export_break_record.py"
+    spec = importlib.util.spec_from_file_location("export_break_record", path)
+    assert spec and spec.loader
+    exporter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(exporter)
+    block = "ACME, INC\nBy: | /s/ Jane Q. Roe\n\nName: | Jane Q. Roe\n\nTitle: | Chief Executive Officer\nAttention: John Doe, General Counsel"
+    count = {"emails": 0, "names": 0}
+    out = exporter.masked(block, count, [])
+    assert "Roe" not in out and "John Doe" not in out
+    assert out == ("ACME, INC\nBy: | /s/ [name masked]\n\nName: | [name masked]\n\nTitle: | Chief Executive Officer\nAttention: [name masked], General Counsel")
+    assert count["names"] == 3

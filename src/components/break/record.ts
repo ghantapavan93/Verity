@@ -115,7 +115,7 @@ export interface BreakRecord {
   rejectedFix: { commit: string; policy: string; function: string; rows: VerdictRow[] };
   counterexample: { caught: CaseRecord; falseAlarm: CaseRecord };
   /** How many email addresses are masked in the headline's input, as the Input panel shows it. */
-  masking: { inInput: number; mask: string };
+  masking: { inInput: number; mask: string; names: number; nameMask: string };
 }
 
 /** A counterexample as the page renders it: the question, the source, and each session's finding and label. */

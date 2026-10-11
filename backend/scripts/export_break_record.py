@@ -9,7 +9,8 @@ manifest; the rejected party check's verdicts from a file its own code wrote at 
 
     python scripts/export_break_record.py --store v1=<store dir> --store v2=<store dir> --cases <party-cases-2.json>
         --labels <party2-labels.jsonl> --manifest <corpus manifest.json> --verdicts <party-verdicts.json>
-        --diagnostic-cases <party-cases.json> --diagnostic-labels <party-labels.jsonl> --raw <corpus raw dir> [--out ../src/components/break/break-record.json]
+        --diagnostic-cases <party-cases.json> --diagnostic-labels <party-labels.jsonl> --raw <corpus raw dir>
+        [--mask-name "<a person the story does not need>" ...] [--out ../src/components/break/break-record.json]
 
 The output is deterministic for the same inputs: no clock, no machine path. tests/test_break_record.py re-checks it.
 """
@@ -42,18 +43,34 @@ FALSE_ALARM = "Q-2"
 # the unmasked record before masking (dump_store refuses a mismatch); the page says the addresses are masked.
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 EMAIL_MASK = "[email address masked]"
+# People the story does not need are masked the same way (release hygiene, 2026-10-11): the contacts a notice clause
+# addresses ("Attention: …") and the people who signed ("/s/ …", "Name: …"), found by where a filing puts them, and
+# anyone named with --mask-name (a person a case's question or label named). The headline keeps the stockholders'
+# representative: its recorded question is about her role.
+# A name is words on one line: a signature line followed by a "Name:" line must not read as one name that swallows "Name".
+PERSON = r"[A-Z][a-z]+(?: [A-Z]\.)?(?: [A-Z][a-z'-]+){1,2}"
+NAME_PLACES = [re.compile(rf"((?:Attention|Attn)[ ]*:?[ ]*\|?[ ]*){PERSON}"), re.compile(rf"(/s/[ ]*){PERSON}"), re.compile(rf"(Name:[ ]*\|?[ ]*){PERSON}")]
+NAME_MASK = "[name masked]"
 
 
-def masked(value: object, count: list[int]) -> object:
-    """``value`` with every email address in its strings replaced by EMAIL_MASK; ``count`` collects how many."""
+def masked(value: object, count: dict[str, int], names: list[str]) -> object:
+    """``value`` with email addresses and people the story does not need replaced by their masks; ``count`` collects
+    how many of each."""
     if isinstance(value, str):
         found = EMAIL.findall(value)
-        count[0] += len(found)
-        return EMAIL.sub(EMAIL_MASK, value) if found else value
+        count["emails"] += len(found)
+        value = EMAIL.sub(EMAIL_MASK, value) if found else value
+        for place in NAME_PLACES:
+            value, n = place.subn(lambda m: m.group(1) + NAME_MASK, value)
+            count["names"] += n
+        for name in names:
+            count["names"] += value.count(name)
+            value = value.replace(name, NAME_MASK)
+        return value
     if isinstance(value, list):
-        return [masked(v, count) for v in value]
+        return [masked(v, count, names) for v in value]
     if isinstance(value, dict):
-        return {k: masked(v, count) for k, v in value.items()}
+        return {k: masked(v, count, names) for k, v in value.items()}
     return value
 
 
@@ -261,15 +278,22 @@ def main() -> None:
     parser.add_argument("--diagnostic-cases")
     parser.add_argument("--diagnostic-labels")
     parser.add_argument("--raw", help="the corpus's downloaded filings, <id>.<format>")
+    parser.add_argument("--mask-name", action="append", default=[], help="a person the story does not need, masked wherever named")
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     args = parser.parse_args()
     if args.dump is not None:
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
         print(json.dumps(dump_store(args.dump.split(","))))
         return
-    record = masked(build(args), [0])
+    count = {"emails": 0, "names": 0}
+    record = masked(build(args), count, args.mask_name)
     assert isinstance(record, dict)
-    record["masking"] = {"inInput": record["headline"]["input"]["user"].count(EMAIL_MASK), "mask": EMAIL_MASK}
+    record["masking"] = {
+        "inInput": record["headline"]["input"]["user"].count(EMAIL_MASK),
+        "mask": EMAIL_MASK,
+        "names": count["names"],
+        "nameMask": NAME_MASK,
+    }
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(record, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
