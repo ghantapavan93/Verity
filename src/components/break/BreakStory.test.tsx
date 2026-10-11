@@ -117,7 +117,7 @@ describe("the rejected fix", () => {
 });
 
 describe("the counterexample", () => {
-  it("shows the same correct answer kept in one session and flagged in the other", () => {
+  it("shows the correct answer kept in the session whose quote states the figure, and flagged in the other", () => {
     renderPage();
     const group = screen.getByRole("group", { name: "Model session for this question" });
     const card = group.closest("article")!;

@@ -46,7 +46,7 @@ test("Break Verity tells one recorded failure, its record, the rejected fix and 
     await list.getByRole("button", { name: new RegExp(`^${headline.id}(?![0-9])`) }).click();
     await expect(list).toContainText("acting in the quote too");
 
-    // The counterexample: the same correct answer, kept in one session and flagged in the other.
+    // The counterexample: the correct answer, kept where its quote states the figure and flagged where it does not.
     const sessions = page.getByRole("group", { name: "Model session for this question" });
     await sessions.getByRole("button", { name: "Session 1" }).click();
     await expect(page.getByText("Kept: its quote states the figure")).toBeVisible();

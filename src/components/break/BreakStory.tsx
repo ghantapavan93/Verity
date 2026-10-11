@@ -182,7 +182,7 @@ function Failure({ headline }: { headline: CaseRecord }) {
               too
               <Cite id="verdicts" />.
             </span>
-            <span className={styles.byNone}>no one</span>
+            <span className={styles.byNone}>not code</span>
           </li>
         </ul>
 
@@ -564,7 +564,7 @@ function Investigation({ headline }: { headline: CaseRecord }) {
           <h3 className={styles.h3}>Asking the model again</h3>
           <p>
             A new call is a new answer.{" "}
-            {sameInput ? "Session 2 sent the identical input (same hash) and got the same wrong answer, both times out of two." : ""} That is not guaranteed: 8
+            {sameInput ? "Session 2 sent the identical input (same hash) and got the same wrong answer: two calls, one answer." : ""} That is not guaranteed: 8
             of 18 identical requests in an earlier measurement came back different
             <Cite id="repeats" />.
           </p>
@@ -855,7 +855,7 @@ function Sources({ headline }: { headline: CaseRecord }) {
           {headline.source.url}
         </a>
         . The filing up to the script tag SEC appends to each response hashes to <code>{shortHash(headline.source.sha256Filing)}</code> (sha256), as downloaded
-        for the corpus and as SEC served it when checked in a browser on 10 Oct 2026. Converted to text by the corpus&apos;s converter (
+        for the corpus and as SEC served it when checked in a browser on 11 Oct 2026 (UTC). Converted to text by the corpus&apos;s converter (
         {headline.source.conversion.tool}, not in this repository); the text Verity read hashes to <code>{shortHash(headline.source.sha256Tested)}</code>, the
         same hash its runs record.
       </>
@@ -872,7 +872,8 @@ function Sources({ headline }: { headline: CaseRecord }) {
       <>
         Pre-registered cases, <code>{ev.cases.file}</code> (sha256 <code>{shortHash(ev.cases.sha256)}</code>), and the first set{" "}
         <code>{ev.diagnosticCases.file}</code> (<code>{shortHash(ev.diagnosticCases.sha256)}</code>): written by separate Claude agents from the contracts
-        before any run, each quote checked as an exact substring of the document. The files are not published; every case this page shows is in its record.
+        before any run, each quote checked as an exact substring of the document. The files are not published; the question, answer, quotes and label of every
+        case this page shows are in its record, and the headline&apos;s expected answer.
       </>
     ),
     labels: (
