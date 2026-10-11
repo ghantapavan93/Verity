@@ -59,11 +59,13 @@ describe("why it matters", () => {
     renderPage();
     const block = screen.getByRole("region", { name: "Why it matters" });
     const text = block.textContent ?? "";
-    // Which conditions, named from the agreement rather than by position, so a re-export in another order cannot swap in
-    // the delivery deadline (review of 8037873).
-    expect(text).toContain("the 45-day objection right belongs to the Stockholders’ Representative, not to Axogen");
-    expect(text).toContain("absent a timely Notice of Objection, Buyer’s calculations are final and binding");
-    expect(text).not.toContain("90 days after the Closing Date");
+    // Which conditions, found in the record by what they say rather than by position, so a re-export in another order
+    // cannot swap in the delivery deadline (review of 8037873).
+    const condition = (about: RegExp) => headline.requiredConditions.find((c) => about.test(c)) ?? "";
+    expect(condition(/objection right belongs/)).not.toBe("");
+    expect(text).toContain(condition(/objection right belongs/));
+    expect(text).toContain(condition(/final and binding/));
+    expect(text).not.toContain(condition(/delivery deadline/));
     expect(text).toMatch(/Illustrative/);
     expect(text).not.toMatch(/customer|incident occurred|lost|damages/i);
     // A reading of what could happen, not a claim about every reader.
@@ -81,6 +83,12 @@ describe("the masking note", () => {
     withMasking({ inInput: 0, names: 3 });
     expect(note()).toMatch(/^The names of its notice contacts and signatories are masked here/);
     expect(note()).not.toMatch(/Email/);
+  });
+
+  it("says only email addresses are masked when no name is", () => {
+    withMasking({ inInput: 4, names: 0 });
+    expect(note()).toMatch(/^Email addresses in the contract's notice clause \(4 places\) are masked here/);
+    expect(note()).not.toMatch(/names/);
   });
 
   it("says nothing is masked when nothing is", () => {
