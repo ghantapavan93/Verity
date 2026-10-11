@@ -119,6 +119,16 @@ describe("Landing: where the model runs", () => {
     expect(text).not.toContain("this machine");
   });
 
+  it("names the path an upload takes, Cloudflare included, and claims no more", () => {
+    // Release trust review, 2026-10-11: "It does not send the contract anywhere" left out that HTTPS ends at Cloudflare,
+    // which serves the site and so handles its traffic before the tunnel to the server.
+    renderLanding(at("server"), true);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("It sends the contract to no model provider.");
+    expect(text).toMatch(/through Cloudflare, which serves this site and so handles its traffic/);
+    expect(text).not.toMatch(/does not send the contract anywhere/);
+  });
+
   it("control: claims no place before the API has said", () => {
     renderLanding(null, false);
     expect(document.body.textContent).not.toMatch(/this machine|No contract is sent|sent there|does not send the contract anywhere/);
@@ -210,6 +220,12 @@ describe("Landing: a public demo", () => {
     expect(text).toMatch(/deleted automatically 7 days after your first visit/);
     expect(text).toMatch(/[Cc]learing (your )?cookies/);
     expect(text).not.toMatch(/invite/i);
+    // What deleted covers, and where to check it; no claim that no copy exists anywhere.
+    expect(text).toMatch(/the rows, the files and their bytes on disk/);
+    expect(text).toMatch(/No scheduled backup copies the public store/);
+    const tests = [...document.querySelectorAll("a")].map((a) => a.getAttribute("href") ?? "");
+    expect(tests).toContain("https://github.com/ghantapavan93/Verity/blob/main/backend/tests/test_anonymous.py");
+    expect(tests).toContain("https://github.com/ghantapavan93/Verity/blob/main/backend/tests/test_retention.py");
   });
 });
 

@@ -309,7 +309,11 @@ function whereItGoes(place: { hosted: boolean; place: string } | null): { head: 
         head: "It sends the contract to its model and nowhere else.",
         text: `The model runs on ${place.place}: the question, the guidance and the sections retrieval chose go there to be answered. ${record}`,
       }
-    : { head: "It does not send the contract anywhere.", text: `The model runs on ${place.place}. ${record}` };
+    : {
+        head: "It sends the contract to no model provider.",
+        // HTTPS ends at Cloudflare, which forwards the upload through a tunnel: name it (release trust review, 2026-10-11).
+        text: `The model runs on ${place.place}. An upload reaches it through Cloudflare, which serves this site and so handles its traffic. ${record}`,
+      };
 }
 
 export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place: { hosted: boolean; place: string } | null }) {

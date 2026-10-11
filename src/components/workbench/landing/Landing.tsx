@@ -10,7 +10,7 @@ import { OneRun, RecordPipeline, Refusals } from "./LandingStory";
 import { getCitations, getRun, listDocuments, type Health } from "@/lib/api";
 import { plural } from "@/lib/format";
 import { modelPlace } from "@/lib/modelPlace";
-import { TopLinks } from "./TopLinks";
+import { SOURCE, TopLinks } from "./TopLinks";
 import { PublicDemo } from "../access/PublicDemo";
 import { runOutcome } from "@/lib/checks";
 import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
@@ -252,7 +252,16 @@ export function Landing({
               {demo && (
                 <p className={styles.after}>
                   A public demo: use public, synthetic or non-sensitive agreements. What you add is kept in a workspace only this browser can open, and is
-                  deleted automatically {demo.retentionDays} days after your first visit. Clearing cookies loses access to it.
+                  deleted automatically {demo.retentionDays} days after your first visit: the rows, the files and their bytes on disk. No scheduled backup
+                  copies the public store. Clearing cookies loses access to it. Tested in{" "}
+                  <a className={styles.link} href={`${SOURCE}/blob/main/backend/tests/test_anonymous.py`}>
+                    isolation
+                  </a>{" "}
+                  and{" "}
+                  <a className={styles.link} href={`${SOURCE}/blob/main/backend/tests/test_retention.py`}>
+                    deletion
+                  </a>{" "}
+                  tests.
                 </p>
               )}
               {unreachable ? (
