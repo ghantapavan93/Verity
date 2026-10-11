@@ -827,18 +827,22 @@ systems do or lack, and nothing here says so.
 **The trust review (2026-10-11).** Ivo's public customer stories and Trust Center were read for what enterprise legal
 teams expect, not to claim any of it. Two things changed how Verity is presented. First, the workflow: in a public
 customer story a contracts manager without a legal background triages vendor contracts from an AI summary and escalates
-only what looks high-risk. An answer that names the wrong holder of a right carries a real quote and no warning, so in
-that kind of triage nothing marks it for escalation; /break now says what acting on its answer would get wrong, from
+only what looks high-risk. A Verity answer that names the wrong holder of a right carries a real quote and no warning, so in
+that kind of triage it may not be escalated; /break now says what acting on its answer would get wrong, from
 the pre-registered conditions, labelled as a reading of the clause and not an incident. Second, disclosure: a trust
 center names everyone who handles customer data. Verity's landing said "It does not send the contract anywhere",
 though HTTPS ends at Cloudflare, which carries the site's traffic before the tunnel; it now says so.
 
 Two weaknesses were found in the record and fixed with tests that failed first. Retention deleted a visitor's rows and
 files, but SQLite left the deleted text in the database file's free pages and write-ahead log, so "deleted 7 days after
-your first visit" was not true of the disk; `secure_delete` and a checkpoint after each purge make it so. No purge had
-run on the live store: its earliest workspace ends 2026-10-16 10:17 UTC, so a release before then leaves nothing to
-clean. And the API, on Windows' default event loop, stopped accepting connections after a client reset during accept;
-the supervisor's logs show 18 such restarts in 27 hours. The selector loop does not have the failure.
+your first visit" was not true of the disk; `secure_delete` and a checkpoint on every hourly pass make it so for
+the rows. Residue written before `secure_delete` (rows deleted or rewritten earlier) is outside a purge's reach; the
+review reproduced it, and a one-time VACUUM of the live store, before its earliest workspace ends (2026-10-16 10:17
+UTC), clears it. Removed files are unlinked, not overwritten, and the landing no longer says otherwise. And the API, on Windows' default event loop, stopped accepting connections after a client reset during accept;
+the supervisor's logs show 18 such restarts in 27 hours. The first fix, the selector loop, traded that for a
+512-socket cap one visitor holding progress streams could reach (found in review). The deployed loop is Windows'
+proactor with one change, in `app.serving`: an accept the client caused to fail is retried, and counted in the log
+rather than written out with a traceback each time.
 
 Considered and not done: a separate trust page (the three questions a visitor has are answered where they upload, with
 links to the isolation and deletion tests; a page would repeat them further from the decision); a public encryption-
