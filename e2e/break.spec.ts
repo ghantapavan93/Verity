@@ -1,0 +1,60 @@
+// /break in a real browser, against the production build, on a desktop and a phone: the recorded failure reads at
+// once, the investigation's controls work, the page asks the API nothing, and no WCAG A/AA violation is serious.
+// One flow, two widths: it starts no run, so it costs nothing of the API's run-start budget the other flows share.
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Page } from "@playwright/test";
+import record from "../src/components/break/break-record.json";
+
+async function serious(page: Page): Promise<string[]> {
+  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  return results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.length} node(s)`);
+}
+
+test("Break Verity tells one recorded failure, its record, the rejected fix and the rule's false alarm", async ({ page }) => {
+  const errors: string[] = [];
+  const api: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => message.type() === "error" && errors.push(message.text()));
+  page.on("request", (request) => request.url().includes("/api/") && api.push(request.url()));
+  const headline = record.headline;
+
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 375, height: 812 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/break");
+    const exhibit = page.getByRole("figure", { name: /the question, the answer and the quote/i });
+    await expect(exhibit).toContainText(headline.sessions[0].finding.conclusion);
+    await expect(exhibit).toContainText("status: pass");
+    await expect(exhibit).toContainText("Wrong party");
+    await expect(exhibit.locator("mark").first()).toContainText("Representative notifies Buyer");
+    await expect(page.getByRole("link", { name: "the filing on SEC EDGAR" })).toHaveAttribute("href", headline.source.url);
+
+    // The investigation: the quote checked in the browser, the section opened at the quote.
+    await page.getByRole("tab", { name: /What code checked/ }).click();
+    await page.getByRole("button", { name: "Check it in your browser" }).click();
+    await expect(page.getByText(/^Same \d+ words in the same order\./)).toBeVisible();
+    await page.getByRole("tab", { name: /Retrieved/ }).click();
+    const span = headline.sessions[0].finding.spans[0];
+    await expect(page.getByLabel(`Section text: ${headline.sections[span.sectionId as keyof typeof headline.sections].heading}`).locator("mark")).toBeVisible();
+
+    // The rejected fix on unseen cases, and why it missed this page's headline.
+    await page.getByRole("button", { name: "Unseen cases" }).click();
+    await expect(page.getByText(/0\s+of 4\s+wrong-party answers caught, session 1/)).toBeVisible();
+    const list = page.getByRole("list", { name: /Wrong-party answers/ });
+    await list.getByRole("button", { name: new RegExp(`^${headline.id}(?![0-9])`) }).click();
+    await expect(list).toContainText("acting in the quote too");
+
+    // The counterexample: the same correct answer, kept in one session and flagged in the other.
+    const sessions = page.getByRole("group", { name: "Model session for this question" });
+    await sessions.getByRole("button", { name: "Session 1" }).click();
+    await expect(page.getByText("The same answer, kept")).toBeVisible();
+
+    await expect(page.getByRole("link", { name: "Open the workbench" })).toHaveAttribute("href", "/");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    expect(await serious(page)).toEqual([]);
+  }
+  expect(api).toEqual([]);
+  expect(errors).toEqual([]);
+});
