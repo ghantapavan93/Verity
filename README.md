@@ -1,22 +1,25 @@
 # Verity
 
-**A contract workbench that knows what not to trust.**
+**A contract AI can quote the right passage and still reach the wrong conclusion.** Verity is built to show
+where that happens: it separates what code can check about an answer from what remains a reading, keeps the
+evidence, and measures whether a fix holds on contracts it was not built on.
 
-Upload a contract and the guidance your legal team actually uses, ask a question, and get findings
-whose evidence opens the exact clause. A small local model proposes. Code looks for every quoted
-passage in the document's own text and withholds a finding whose quote it cannot find. Where the
-guidance states a rule code can compare, a notice period against a minimum for example, code
-decides the status; everywhere else the status is the model's own hint, and the record says so.
-A run that recorded its input can be rebuilt from its record to the same hash. A person can confirm
-or dismiss each finding under a name they type. It runs at $0: Qwen3 8B through Ollama on a laptop.
+It has three parts that share one rule, that a claim is kept only with the source evidence for it:
 
-What it is for is reliability engineering more than review: finding where contract AI goes wrong while looking right,
-reproducing it from the record, and measuring whether a fix holds on contracts it was not built on. Code checks where
-a quote is and what values it states; it does not check what a clause means, and the gap is the subject of
-[`/break`](https://ivo.pavankg.dev/break): a recorded answer whose quote passed every check and still gave a right to
-the wrong party, the deterministic check built to catch such answers (4 of 6 caught per session on the cases it was
-revised against, 0 of 4 per session on unseen ones; not adopted), and a policy rule that caught one wrong answer and flagged a right one.
-The adjudications behind it are AI-assisted, and the page says so.
+- **The workbench.** Upload a contract (PDF, DOCX or TXT) and, optionally, the guidance your team uses; ask a
+  question. A small local model (Qwen3 8B through Ollama, $0) answers from the sections retrieval chose. Code looks
+  for every quoted passage in the document's own text and withholds a finding whose quote it cannot find. Where the
+  guidance states a rule code can compare, a notice period against a minimum for example, code decides the status;
+  everywhere else the status is the model's own hint, and the record says so. Every run can be rebuilt from its
+  record to the same hash, and a person confirms or dismisses each finding under a name they type.
+- **Break Verity** ([`/break`](https://ivo.pavankg.dev/break)). One recorded answer whose quote passed every check
+  and still gave a right to the wrong party; the deterministic check built to catch such answers (4 of 6 caught per
+  session on the cases it was revised against, 0 of 4 per session on unseen ones; not adopted); and a policy rule
+  that caught one wrong answer and flagged a right one. The adjudications are AI-assisted, and the page says so.
+- **Contract State research** ([`/state`](https://ivo.pavankg.dev/state)). A separate, frozen experiment on which
+  derived facts one arriving contract changes. The workbench does not run its engine.
+
+Code does not check what a clause means: who holds a right, or whether a condition was left out, stays a person's call.
 
 ![The evidence drawer on a recorded run: what the model proposed, what the source says, what code decided, what a person decided](docs/img/evidence-drawer.png)
 
@@ -28,11 +31,9 @@ The adjudications behind it are AI-assisted, and the page says so.
 | Break Verity: one recorded failure, its record, the fix that did not hold, a rule's false alarm | [ivo.pavankg.dev/break](https://ivo.pavankg.dev/break) | anyone |
 | The recorded Contract State research | [ivo.pavankg.dev/state](https://ivo.pavankg.dev/state), and always available as static files at [verity-state.pages.dev](https://verity-state.pages.dev) | anyone |
 
-The workbench and the research are separate pieces of work that share one rule, that a claim is kept only with the source evidence that
-supports it. The workbench checks each answer's quoted passages against the uploaded contract. The research is a
-recorded experiment on real SEC exhibits: when one contract arrives, which derived facts must be recomputed and which
+The research is a recorded experiment on real SEC exhibits: when one contract arrives, which derived facts must be recomputed and which
 provably need not, each with a certificate. On the held-out set its relationship audit met the precision gate (1.00)
-and missed the recall gate (0.836 against 0.85); the page shows the misses. The workbench does not run the research engine.
+and missed the recall gate (0.836 against 0.85); the page shows the misses.
 
 ## One run, as recorded
 
@@ -62,7 +63,7 @@ the drawer opens the rest: the offsets, the hashes, what retrieval chose, the ex
 | Quality is a number with its failures named | golden set 37 of 44; the seven that fail are listed, with the rule for keeping a prompt change | `docs/GOLDENS.md` |
 | A crash neither loses nor fakes a result | the API killed mid-run under the real model: on restart the run is failed with the dead process named, and its stream ends | `DECISIONS.md` |
 | The model answers only about what it was handed, and the answer says how much that was | a prompt larger than the context window is refused, not cut (left to its default the model server evaluated 8,194 of 20,695 tokens and answered "30 days" where the text said 47); each answer states how many of the document's sections the model was handed (median 4.9% over 850 runs), and "not found" reads "not found in the sections read" | `DECISIONS.md` |
-| It is tested like it matters | 441 backend tests (eight Hypothesis properties, one Schemathesis fuzz, a hostile DOCX), 24 hand mutants killed, 57 interface unit tests, 21 browser flows; no CI has run them, every one runs locally | [Checks](#checks) |
+| What the tests cover | on 2026-10-11, at the release gate: 1,260 backend tests (1,259 pass, 1 skipped; Hypothesis properties, a Schemathesis fuzz of every route, hostile files), 24 hand mutants killed, a trust fault matrix of 17 planted faults, 179 interface unit tests and 30 browser flows; no CI has run them, every one runs locally | [Checks](#checks) |
 | Ideas are allowed to die | three pre-registered experiments were killed by their own results before this was built; their records are on the Runs surface | `docs/` |
 
 The counts are of the store on 2026-10-02, after the release's own smoke run; every new run moves them, and
@@ -125,12 +126,12 @@ cd backend
 .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check .   # style and lint, pyproject.toml
 .venv/Scripts/python -m mypy                                                            # strict, app + scripts + tests
 .venv/Scripts/lint-imports                                                              # the three import contracts: verifier pure, providers blind, layers downward (.importlinter)
-.venv/Scripts/python -m pytest -q                                                       # 441 tests, no model needed; seven Hypothesis properties of the verifier, one stateful property of the run record, one Schemathesis fuzz of every route (WORKBENCH_FUZZ_SCALE=20 for the deep pass)
+.venv/Scripts/python -m pytest -q                                                       # 1,260 tests on 2026-10-11, no model needed; Hypothesis properties of the verifier and the run record, one Schemathesis fuzz of every route (WORKBENCH_FUZZ_SCALE=20 for the deep pass)
 
 npm run typecheck && npm run lint && npm run format:check   # tsc strict, eslint, prettier
-npm test                                                    # Vitest: the run follower, the API client, the evidence drawer, the explanation, the access gate, the scroll to a cited passage and the day gauge's parse and the Back button, 57 tests
+npm test                                                    # Vitest: 179 tests on 2026-10-11, among them the run follower, the API client, the evidence drawer, the access gate, the landing and /break
 npx playwright install chromium                             # once per machine: the browser the flows run in; the npm package alone does not bring it
-npm run e2e                                                 # Playwright: twenty-one browser flows, real API, the model's recorded answers replayed, faults by marker
+npm run e2e                                                 # Playwright: thirty browser flows on 2026-10-11, real API, the model's recorded answers replayed, faults by marker
 ```
 
 A fresh clone of `main` at `c4dd415` was set up from this file alone on 2026-09-30 and every command
@@ -262,8 +263,8 @@ repository and appear under this product's Runs surface as records.
 | Domain review | ten findings packed for a practising lawyer with five questions and room for disagreement, built from the record by document, model, prompt and retrieval (`backend/scripts/domain_review_pack.py`, `docs/DOMAIN-REVIEW.md`); not yet reviewed |
 | Independent review | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true, recorded as delivered before any fix, with what changed after (`docs/REVIEW-INDEPENDENT.md`) |
 | Validation | what is proven, partial, missing and not justified, capability by capability, with the validator that holds each claim (`docs/VALIDATION.md`) |
-| Browser flows | twenty-one Playwright flows against the production build and the real API: the eight happy paths (landing, the finished review opened from it, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; and three flows the validation brief named: a review against guidance that ends in a finding with a status and the guidance in the drawer, a malformed upload refused with the reason and nothing opened, a refresh once the run is in the URL brings it back (the run id reaches the URL only when the run has finished, so this reloads after completion; a true mid-run refresh is unproven); traces kept on failure |
-| Checks | backend 441 tests (eight Hypothesis properties, one Schemathesis fuzz, a hostile DOCX, a hostile second reviewer), ruff, mypy strict, import-linter, twenty-four hand mutants killed; interface 57 unit tests and 21 browser flows, tsc, eslint, prettier, production build; results page 23; all run locally. No CI has run: the workflow exists only on a local branch (see Checks) |
+| Browser flows | thirty Playwright flows on 2026-10-11 against the production build and the real API; the twenty-one first written are these: the eight happy paths (landing, the finished review opened from it, sample, question to a verified citation whose highlight is the quote's own text, the withheld question, reload, Findings and Runs with the evidence pack, the memo) and ten reliability flows: a provider outage and non-schema output end as failed runs with the reason and never a verdict, a dropped event stream still finishes through polling, the same question twice returns the same run, the document travels gzipped, the memo names its run, a confirmed finding survives a reload, the URL alone restores a run, Escape closes the drawer, a narrow window gets the plain note, and axe finds no serious or critical WCAG 2.1 AA violation on the landing, the workspace or the open drawer; the model's answers recorded once and replayed, faults injected by markers the replay provider honours; and three flows the validation brief named: a review against guidance that ends in a finding with a status and the guidance in the drawer, a malformed upload refused with the reason and nothing opened, a refresh once the run is in the URL brings it back (the run id reaches the URL only when the run has finished, so this reloads after completion; a true mid-run refresh is unproven); traces kept on failure |
+| Checks | on 2026-10-11: backend 1,260 tests, ruff, mypy strict, import-linter, twenty-four hand mutants killed, 17 of 17 planted trust faults caught; interface 179 unit tests and 30 browser flows, tsc, eslint, prettier, production build; all run locally by `scripts/release-gate.sh`. No CI has run: the workflow exists only on a local branch (see Checks) |
 
 ## What is deliberately not here yet
 
