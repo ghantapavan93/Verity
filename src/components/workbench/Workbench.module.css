@@ -1599,6 +1599,17 @@
   color: var(--text-2);
 }
 
+.drawerRefStatic a {
+  color: var(--accent-soft);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 3px;
+}
+
+.drawerRefStatic a:hover {
+  text-decoration-color: var(--accent);
+}
+
 /* A passage of the contract, set as the contract is set: on paper. */
 .drawerQuote {
   margin: 10px 0 0;

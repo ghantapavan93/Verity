@@ -156,6 +156,8 @@ describe("EvidenceDrawer", () => {
     expect(source.textContent).toContain("Found in the document text · relocated:exact");
     // What code checked is said beside the passages: their presence in the text, not that they support the answer.
     expect(within(source).getByTestId("source-limit").textContent).toContain("Whether it supports the answer is the model");
+    // And where to see that gap in a recorded answer (final release review, 2026-10-11).
+    expect(within(within(source).getByTestId("source-limit")).getByRole("link").getAttribute("href")).toBe("/break");
     expect(source.textContent).toContain("Found in EXHIBIT 10.102 (part 1), not in the section the model cited.");
 
     // Code found a conflict: observed against required, the sentence, the final status; the guidance it was checked against.

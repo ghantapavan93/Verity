@@ -329,7 +329,8 @@ function EvidenceBody({
         {finding.spans.length === 0 && <p className={styles.drawerRefStatic}>No passage was cited.</p>}
         {finding.spans.some((span) => span.verified) && (
           <p className={styles.drawerRefStatic} data-testid="source-limit">
-            Code checked that each passage is in the document text. Whether it supports the answer is the model&apos;s reading, and yours to decide.
+            Code checked that each passage is in the document text. Whether it supports the answer is the model&apos;s reading, and yours to decide.{" "}
+            <a href="/break">A recorded answer where it did not</a>.
           </p>
         )}
       </section>
