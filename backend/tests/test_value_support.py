@@ -68,6 +68,23 @@ def test_a_value_taken_from_the_question_is_a_premise_not_evidence() -> None:
     )
 
 
+def test_a_question_figure_is_lowered_whatever_role_the_answer_gives_it() -> None:
+    # Release readiness, 2026-10-10: of 11 recorded passes this rule lowered, 3 were correct answers (a true figure the
+    # quote did not state; a day the reader chose). Code cannot tell those from the other 8: a denial still presupposes
+    # the figure, a hypothetical input was the figure two wrong answers repeated, and a figure the cited section states
+    # can have another role there (a floor price taken for the conversion price). So the role is not an exemption.
+    fee = "Upon a Fee Event, Seller shall pay to Buyer a break-up fee equal to $1,500,000."
+    credit = "Buyer may credit bid any amounts owing on account of the Bid Protections at any auction."
+    question = "Does the Buyer have to pay the Seller the $1.5 million break-up fee?"
+    denial = "The Buyer does not have to pay the Seller the $1.5 million break-up fee."
+    assert lowered(check_values(PASS, denial, [credit], question, None))
+    assert check_values(PASS, denial, [fee, credit], question, None) == PASS
+    tiers = "Availability of 97.0% to 97.99%: a credit of 10% of the monthly fee."
+    hypothetical = "What credit applies if availability is 97.4%?"
+    assert lowered(check_values(PASS, "A credit of 10% applies if availability is 97.4%.", [tiers], hypothetical, None))
+    assert check_values(PASS, "A credit of 10% of the monthly fee applies.", [tiers], hypothetical, None) == PASS
+
+
 def test_changing_the_quoted_amount_does_not_let_the_old_answer_stand() -> None:
     # Metamorphic: the same conclusion over a quote whose amount was changed is no longer shown by its evidence.
     answer = "The annual fee is $40,000."
