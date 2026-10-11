@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
+import inspect
+import logging
 import os
 import re
 import socket
@@ -30,9 +33,9 @@ SUPERVISE = BACKEND.parent / "deploy" / "supervise.ps1"
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="the proactor accept failure is a Windows behaviour")
 
 
-def deployed_loop() -> str | None:
-    """The --loop the supervisor gives uvicorn, or None when it gives none (uvicorn's default)."""
-    line = next(line for line in SUPERVISE.read_text(encoding="utf-8").splitlines() if '"uvicorn"' in line)
+def deployed_loop(script: Path = SUPERVISE) -> str | None:
+    """The --loop a deploy script gives uvicorn, or None when it gives none (uvicorn's default)."""
+    line = next(line for line in script.read_text(encoding="utf-8").splitlines() if '"uvicorn"' in line)
     found = re.search(r'"--loop",\s*"([^"]+)"', line)
     return found.group(1) if found else None
 
@@ -112,6 +115,7 @@ def holds_connections(loop: str | None, tmp_path: Path, held: int = 600) -> bool
 
 def test_the_deployed_api_keeps_accepting_after_connection_resets(tmp_path: Path) -> None:
     assert deployed_loop() == "app.serving:ResilientProactorEventLoop"
+    assert deployed_loop(SUPERVISE.with_name("up.ps1")) == deployed_loop()  # the manual start runs the same loop
     assert survives_resets(deployed_loop(), tmp_path)
 
 
@@ -166,3 +170,64 @@ def test_control_other_unretrieved_errors_are_still_reported() -> None:
         assert len(reported) == 2
     finally:
         loop.close()
+
+
+def test_every_retried_accept_is_counted_in_the_log(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    # Review of 39ade6e: a burst shorter than the report window was logged as "1 accept(s)" and the rest never reported.
+    # The first failure is logged at once; those that follow are reported when the window closes, so the counts add up.
+    from app import serving
+
+    monkeypatch.setattr(serving, "REPORT_EVERY_SECONDS", 0.05)
+    loop = serving.ResilientProactorEventLoop()
+    reset = OSError(22, "The specified network name is no longer available", None, 64)
+    try:
+        with caplog.at_level(logging.WARNING, logger="app.serving"):
+            for _ in range(37):
+                loop._client_went_away(reset)
+            loop.run_until_complete(asyncio.sleep(0.2))
+            for _ in range(5):  # a second burst, after a quiet window
+                loop._client_went_away(reset)
+            loop.run_until_complete(asyncio.sleep(0.2))
+    finally:
+        loop.close()
+    counts = [int(m) for m in re.findall(r"(\d+) (?:more )?accept\(s\) failed", caplog.text)]
+    assert sum(counts) == 42
+    assert len(counts) == 4  # each burst: the first at once, the rest together
+
+
+def test_an_accept_that_fails_to_start_is_retried_after_a_pause_not_in_a_spin() -> None:
+    # Review of 39ade6e: an accept failing as it starts, rather than when a client arrives, has nothing to wait for; an
+    # immediate retry would spin a core while the throttled log showed one line a minute.
+    from app.serving import RETRY_PAUSE_SECONDS, ResilientProactorEventLoop
+
+    loop = ResilientProactorEventLoop()
+    listener = socket.create_server(("127.0.0.1", 0))
+    attempts = 0
+
+    def refuse(_sock: socket.socket) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise ConnectionResetError(10054, "reset as the accept started")
+
+    try:
+        loop._proactor.accept = refuse  # type: ignore[attr-defined]
+        loop._start_serving(asyncio.Protocol, listener)
+        loop.run_until_complete(asyncio.sleep(1.0))
+        assert 1 < attempts <= 1.0 / RETRY_PAUSE_SECONDS + 1  # retried, and paced
+        assert listener.fileno() != -1  # still listening
+    finally:
+        listener.close()
+        loop.close()
+
+
+def test_the_cpython_code_the_loop_copies_is_the_code_it_was_written_against() -> None:
+    # app.serving copies BaseProactorEventLoop._start_serving and relies on IocpProactor.accept's task name and private
+    # attributes (CPython 3.13.2). A Python upgrade that changes either fails here, to be compared before it ships.
+    import asyncio.proactor_events
+    import asyncio.windows_events
+
+    def digest(function: object) -> str:
+        return hashlib.sha256(inspect.getsource(function).encode()).hexdigest()  # type: ignore[arg-type]
+
+    assert digest(asyncio.proactor_events.BaseProactorEventLoop._start_serving) == "7b6bcf24da6fafb38c63e276e1de553706da3f0d0bbc7300b521cb4599145afe"  # type: ignore[attr-defined]
+    assert digest(asyncio.windows_events.IocpProactor.accept) == "66c5aee644d5fafa38425393e30a71bf12b57b1f4fafd4340126ce6869956185"

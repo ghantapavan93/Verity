@@ -18,7 +18,6 @@ import logging
 import socket
 import ssl
 import sys
-import time
 from collections.abc import Callable
 from typing import Any
 
@@ -28,8 +27,10 @@ log = logging.getLogger(__name__)
 ERROR_NETNAME_DELETED = 64
 ERROR_CONNECTION_ABORTED = 1236
 
-# Retried accepts are reported at most this often, with the count since the last report.
+# The first retried accept is logged at once; any that follow within this window are logged together when it closes.
 REPORT_EVERY_SECONDS = 60.0
+# An accept that fails before it is even started is retried after this pause, so a failure that repeats cannot spin.
+RETRY_PAUSE_SECONDS = 0.5
 
 
 def client_caused(error: OSError) -> bool:
@@ -41,14 +42,22 @@ if sys.platform == "win32":
 
     class ResilientProactorEventLoop(asyncio.ProactorEventLoop):
         _retried = 0
-        _reported_at: float | None = None
+        _window: asyncio.TimerHandle | None = None
 
         def _client_went_away(self, error: OSError) -> None:
-            self._retried += 1
-            now = time.monotonic()
-            if self._reported_at is None or now - self._reported_at >= REPORT_EVERY_SECONDS:
-                log.warning("%d accept(s) failed because the client went away (last: %s); accepting again", self._retried, error)
-                self._retried, self._reported_at = 0, now
+            if self._window is None:
+                log.warning("1 accept(s) failed because the client went away (%s); accepting again", error)
+                self._window = self.call_later(REPORT_EVERY_SECONDS, self._report_retried)
+            else:
+                self._retried += 1
+
+        def _report_retried(self) -> None:
+            if self._retried == 0:
+                self._window = None
+                return
+            log.warning("%d more accept(s) failed because the client went away in %gs; accepting again", self._retried, REPORT_EVERY_SECONDS)
+            self._retried = 0
+            self._window = self.call_later(REPORT_EVERY_SECONDS, self._report_retried)
 
         def call_exception_handler(self, context: dict[str, Any]) -> None:
             # IocpProactor.accept wraps each accept in a task no one awaits; when the client went away its exception is
@@ -75,6 +84,7 @@ if sys.platform == "win32":
         ) -> None:
             # CPython 3.13's BaseProactorEventLoop._start_serving, with the client-caused accept failure retried.
             def loop(f: asyncio.Future[tuple[socket.socket, object]] | None = None) -> None:
+                accepting = False
                 try:
                     if f is not None:
                         conn, addr = f.result()
@@ -94,11 +104,16 @@ if sys.platform == "win32":
                             self._make_socket_transport(conn, protocol, extra={"peername": addr}, server=server)  # type: ignore[attr-defined]
                     if self.is_closed():
                         return
+                    accepting = True
                     f = self._proactor.accept(sock)  # type: ignore[attr-defined]
                 except OSError as exc:
                     if sock.fileno() != -1 and client_caused(exc):
                         self._client_went_away(exc)
-                        self.call_soon(loop)
+                        # A completed accept that failed waits for the next client; one that failed to start would not.
+                        if accepting:
+                            self.call_later(RETRY_PAUSE_SECONDS, loop)
+                        else:
+                            self.call_soon(loop)
                     elif sock.fileno() != -1:
                         self.call_exception_handler({"message": "Accept failed on a socket", "exception": exc, "socket": trsock.TransportSocket(sock)})
                         sock.close()
