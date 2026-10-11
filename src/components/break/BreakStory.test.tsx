@@ -59,9 +59,33 @@ describe("why it matters", () => {
     renderPage();
     const block = screen.getByRole("region", { name: "Why it matters" });
     const text = block.textContent ?? "";
-    for (const condition of headline.requiredConditions.slice(2)) expect(text).toContain(condition);
+    // Which conditions, named from the agreement rather than by position, so a re-export in another order cannot swap in
+    // the delivery deadline (review of 8037873).
+    expect(text).toContain("the 45-day objection right belongs to the Stockholders’ Representative, not to Axogen");
+    expect(text).toContain("absent a timely Notice of Objection, Buyer’s calculations are final and binding");
+    expect(text).not.toContain("90 days after the Closing Date");
     expect(text).toMatch(/Illustrative/);
     expect(text).not.toMatch(/customer|incident occurred|lost|damages/i);
+    // A reading of what could happen, not a claim about every reader.
+    expect(text).toMatch(/a quick triage may not escalate it/);
+    expect(text).not.toMatch(/nothing about it/);
+  });
+});
+
+describe("the masking note", () => {
+  const note = () => screen.getByText(/the hash covers the record as stored/).textContent ?? "";
+  const withMasking = (masking: Partial<BreakRecord["masking"]>) =>
+    render(<BreakStory record={forPage({ ...record, masking: { ...record.masking, ...masking } })} />);
+
+  it("says what is masked when names are masked and no email address is", () => {
+    withMasking({ inInput: 0, names: 3 });
+    expect(note()).toMatch(/^The names of its notice contacts and signatories are masked here/);
+    expect(note()).not.toMatch(/Email/);
+  });
+
+  it("says nothing is masked when nothing is", () => {
+    withMasking({ inInput: 0, names: 0 });
+    expect(screen.queryByText(/are masked here/)).toBeNull();
   });
 });
 

@@ -202,8 +202,9 @@ function Failure({ headline }: { headline: CaseRecord }) {
         </h2>
         <p>
           A reader acting on this answer would plan an objection the agreement does not give Axogen, and miss what it does say:{" "}
+          {/* The headline's pre-registered conditions in their recorded order: the delivery terms, then the objection right and finality. */}
           {headline.requiredConditions.slice(2).join("; ")}
-          <Cite id="cases" />. The answer carries a real quote and no warning, so in a quick triage nothing about it looks like a reason to escalate.
+          <Cite id="cases" />. The answer carries a real quote and no warning, so a quick triage may not escalate it.
         </p>
         <p className={styles.mattersNote}>Illustrative: what the clause implies for someone who relies on the answer, not a reported incident.</p>
       </section>
@@ -341,9 +342,7 @@ function InputPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
         <span className={styles.hashTag}>sha256</span> <code>{c.input.sha256}</code>
         <br />
         Rebuilt from the record and equal to the hash the run recorded when it called the model
-        <Cite id="record" />.{" "}
-        {record.masking.inInput > 0 &&
-          `Email addresses in the contract's notice clause (${record.masking.inInput} places), and the names of its notice contacts and signatories, are masked here; the hash covers the record as stored.`}
+        <Cite id="record" />. {(record.masking.inInput > 0 || record.masking.names > 0) && <span>{maskingNote(record.masking)}</span>}
       </p>
     </div>
   );
@@ -949,6 +948,17 @@ const NAV = [
   ["counterexample", "Counterexample"],
   ["your-turn", "Your turn"],
 ] as const;
+
+/** What the exporter masked in the headline's input, or nothing when it masked nothing. */
+function maskingNote({ inInput, names }: { inInput: number; names: number }): string {
+  const masked = [
+    inInput > 0 && `email addresses in the contract's notice clause (${inInput} places)`,
+    names > 0 && "the names of its notice contacts and signatories",
+  ]
+    .filter(Boolean)
+    .join(", and ");
+  return `${masked.charAt(0).toUpperCase()}${masked.slice(1)} are masked here; the hash covers the record as stored.`;
+}
 
 export function BreakStory({ record }: { record: PageRecord }) {
   const headline = record.headline;
