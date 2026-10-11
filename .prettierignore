@@ -1,2 +1,4 @@
 # Generated from openapi.json by `npm run api:types`; its formatting belongs to the generator.
 src/lib/api.schema.ts
+# Written by backend/scripts/export_break_record.py; its bytes are the exporter's, re-checked by backend/tests/test_break_record.py.
+src/components/break/break-record.json
