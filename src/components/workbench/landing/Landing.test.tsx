@@ -220,9 +220,10 @@ describe("Landing: a public demo", () => {
     expect(text).toMatch(/deleted automatically 7 days after your first visit/);
     expect(text).toMatch(/[Cc]learing (your )?cookies/);
     expect(text).not.toMatch(/invite/i);
-    // What deleted covers, and where to check it; no claim that no copy exists anywhere.
-    expect(text).toMatch(/the rows, the files and their bytes on disk/);
-    expect(text).toMatch(/No scheduled backup copies the public store/);
+    // What deleted covers, and where to check it. Review of 8037873: the database overwrites what its rows held, but a
+    // removed file is not overwritten and a copy made by hand is not the code's to delete, so neither is promised.
+    expect(text).toMatch(/its rows and files are removed, and the database overwrites the text the rows held/);
+    expect(text).not.toMatch(/bytes on disk|backup|no copy/i);
     const tests = [...document.querySelectorAll("a")].map((a) => a.getAttribute("href") ?? "");
     expect(tests).toContain("https://github.com/ghantapavan93/Verity/blob/main/backend/tests/test_anonymous.py");
     expect(tests).toContain("https://github.com/ghantapavan93/Verity/blob/main/backend/tests/test_retention.py");

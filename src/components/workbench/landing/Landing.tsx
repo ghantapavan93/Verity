@@ -252,8 +252,8 @@ export function Landing({
               {demo && (
                 <p className={styles.after}>
                   A public demo: use public, synthetic or non-sensitive agreements. What you add is kept in a workspace only this browser can open, and is
-                  deleted automatically {demo.retentionDays} days after your first visit: the rows, the files and their bytes on disk. No scheduled backup
-                  copies the public store. Clearing cookies loses access to it. Tested in{" "}
+                  deleted automatically {demo.retentionDays} days after your first visit: its rows and files are removed, and the database overwrites the
+                  text the rows held. Clearing cookies loses access to it. Tested in{" "}
                   <a className={styles.link} href={`${SOURCE}/blob/main/backend/tests/test_anonymous.py`}>
                     isolation
                   </a>{" "}
