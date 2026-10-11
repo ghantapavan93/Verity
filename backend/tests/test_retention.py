@@ -267,11 +267,17 @@ def test_a_checkpoint_a_reader_held_up_is_finished_by_the_next_hourly_pass(publi
     try:
         reader.execute("BEGIN")
         reader.execute("SELECT count(*) FROM documents").fetchone()  # a snapshot from before the purge
+        started = time.monotonic()
         held_up = purge_expired_workspaces(db_module.engine)
         assert held_up.workspaces and not held_up.checkpointed
+        # Review of 39ade6e: a checkpoint waiting out the busy timeout for the reader blocks every writer meanwhile, now
+        # every hour; it gives up at once and the next pass retries.
+        assert time.monotonic() - started < 2
         assert b"quokka-7f3a" in store.read_bytes()  # control: the reader really kept the text in the file
     finally:
         reader.close()
+    with db_module.engine.connect() as connection:  # control: the pooled connection still waits for writers as before
+        assert connection.exec_driver_sql("PRAGMA busy_timeout").scalar() > 0
     quiet = purge_expired_workspaces(db_module.engine)
     assert quiet.workspaces == [] and quiet.checkpointed
     for path in (store, store.with_name(store.name + "-wal")):

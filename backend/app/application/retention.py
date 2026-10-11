@@ -127,9 +127,15 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None) -> Pur
         report.files += _unlink(settings.data_dir / "memos" / PureWindowsPath(recorded).name)
     # secure_delete zeroes what the rows held in the pages they leave; the write-ahead log still holds the frames written
     # before, until a checkpoint copies the zeroed pages back and truncates it. A reader holding an old snapshot can keep
-    # the checkpoint from finishing (checkpointed=False); every hourly pass checkpoints, whether or not it purged.
+    # the checkpoint from finishing (checkpointed=False); every hourly pass checkpoints, whether or not it purged. It does
+    # not wait for that reader: writers queue behind a waiting checkpoint, so it gives up at once and the next pass retries.
     with engine.connect() as connection:
-        busy, _log, _done = connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)").one()
+        waits = connection.exec_driver_sql("PRAGMA busy_timeout").scalar()
+        connection.exec_driver_sql("PRAGMA busy_timeout=0")
+        try:
+            busy, _log, _done = connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)").one()
+        finally:
+            connection.exec_driver_sql(f"PRAGMA busy_timeout={int(waits or 0)}")
         report.checkpointed = busy == 0
     log.info(
         "retention purged workspaces=%d runs=%d documents=%d files=%d skipped_in_progress=%d checkpointed=%s",
