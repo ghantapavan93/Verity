@@ -56,7 +56,7 @@ $revokedFile = Join-Path $backend "data\access.revoked"
 $env:WORKBENCH_ACCESS_SECRET = if (Test-Path $secretFile) { (Get-Content $secretFile -Raw).Trim() } else { "" }
 $env:WORKBENCH_ACCESS_REVOKED = if (Test-Path $revokedFile) { ((Get-Content $revokedFile) | Where-Object { $_.Trim() } | ForEach-Object { $_.Trim() }) -join "," } else { "" }
 $api = Start-Process -FilePath (Join-Path $backend ".venv\Scripts\python.exe") `
-  -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000", "--loop", "asyncio:SelectorEventLoop" `
+  -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000", "--loop", "app.serving:ResilientProactorEventLoop" `
   -WorkingDirectory $backend -WindowStyle Hidden -PassThru `
   -RedirectStandardOutput (Join-Path $logs "api.out.log") -RedirectStandardError (Join-Path $logs "api.err.log")
 Write-Host "API starting (pid $($api.Id)) with WORKBENCH_APP_URL=$publicOrigin"
