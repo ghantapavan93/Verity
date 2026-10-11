@@ -755,20 +755,22 @@ named its figure. Which party holds a right is a reading the model must make, an
 **The question-figure rule's false positive, traced (2026-10-10).** The correct answer that rejected a false premise and
 was lowered for naming the question's $1.5 million did not hold that figure in any of its quotes; the same answer in
 the other session quoted the fee clause and kept its pass. Across every recorded store the rule lowered 11 passes: 5
-had accepted a false premise, 3 restated a hypothetical the reader set and answered it wrongly or incompletely, and 3
-were correct (two true figures the quote left out, one day the reader chose). Each separator code can compute was
+had accepted a false premise, 3 restated the question's own condition (a level or a period the reader set) and
+answered it wrongly or incompletely, and 3 were correct (two true figures the quote left out, one day the reader chose). Each separator code can compute was
 measured on those 11: a negation in the answer's sentence (it would spare 2 correct answers and release 1 incomplete
 one, but only one of the three negations is a denial, the other two are the question's own words, and a denial still
 presupposes the figure: "does not have to pay the $1.5 million fee"), the figure in the cited section (it releases a floor price taken for the conversion price, an
 accepted false premise), the figure anywhere in the document (it releases all 5 false premises), and a figure inside
 the question's "if" clause (it releases two wrong answers and spares no correct one). The cause is the one the party
 check met: which role a figure has in the contract is a reading, and code sees only whether a quote states it. The
-rule is unchanged; its controls are pinned in `tests/test_value_support.py`.
+rule is unchanged. The two separators a unit test can express (a denial, an echoed hypothetical) are pinned with
+their controls in `tests/test_value_support.py`; the other two need section text `check_values` is not given.
 
 **The interface against its design, after m7 (2026-10-10).** The m7 desktop and phone screenshots were read against
 docs/DESIGN.md and the m4 and m6 captures. Two defects were real, and are fixed with a test that failed first. The
 card's primary action, "Inspect evidence", opened the drawer and left the document at the top of the contract, while the
-same finding opened from Findings jumped to its passage; every way the drawer opens now marks the passage beside it. A
+same finding opened from Findings jumped to its passage; on a wide screen every way the drawer opens now marks the
+passage beside it, except for a finding the verifier withheld, whose passage was not relied on. A
 refused upload was printed below the demo notice, under the fold on a phone, beginning mid-sentence without the file's
 name; it now reads "scan.pdf was not added: …" directly under the drop zone. The ghosted drawer in two captures is its
 0.22 s cross-fade caught mid-way, not a defect. Left as they are: the Findings introduction is long on a phone, and a
