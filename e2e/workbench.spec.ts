@@ -60,15 +60,13 @@ test("a question ends in a finding whose citation opens the document's own text"
   await expect(evidenceHead).toBeVisible();
   await expect(page).toHaveURL(/[?&]run=/);
 
-  await page.getByTitle("Show in the document").first().click();
-  const mark = page.locator("section[data-section] mark").first();
-  await expect(mark).toBeVisible();
-  // On screen, not only in the document: the pane scrolls to the passage itself.
-  await expect(mark).toBeInViewport();
-
+  // Inspecting the evidence shows its passage in the document beside the drawer (release readiness, 2026-10-10: the
+  // card's primary action left the document at the top of the contract, while opening from Findings jumped to it).
   await page.getByRole("button", { name: "Inspect evidence" }).first().click();
   const drawer = page.locator('[aria-label="Evidence"]');
   await expect(drawer).toBeVisible();
+  const mark = page.locator("section[data-section] mark").first();
+  await expect(mark).toBeInViewport();
   const tag = drawer.getByText(/Found (word for word )?in the document text · /).first();
   await expect(tag).toBeVisible();
   const quoted = (await drawer.locator("blockquote").first().innerText()).replace(/^[“"]|[”"]$/g, "");
@@ -93,17 +91,16 @@ test("a question ends in a finding whose citation opens the document's own text"
   await expect(why.getByTestId("policy-evaluation").first()).toContainText("Final status");
   await expect(why).toContainText("rebuilt input matches");
   await page.getByRole("button", { name: "Close evidence" }).click();
-});
 
-test("inspecting the evidence shows its passage in the document beside the drawer", async ({ page }) => {
-  // Release readiness, 2026-10-10: the card's primary action opened the drawer and left the document where it was, at
-  // the top of the contract, while opening the same finding from Findings jumped to the passage.
-  await openSample(page);
-  await ask(page, LIABILITY);
-  await expect(page.getByText(/Found in the document text at /)).toBeVisible();
-  await page.getByRole("button", { name: "Inspect evidence" }).first().click();
-  await expect(page.locator('[aria-label="Evidence"]')).toBeVisible();
-  await expect(page.locator("section[data-section] mark").first()).toBeInViewport();
+  // The citation row jumps on its own: from the top of the contract, the pane scrolls to the passage itself.
+  await mark.evaluate((el) => {
+    let pane = el.parentElement;
+    while (pane && pane.scrollHeight <= pane.clientHeight) pane = pane.parentElement;
+    pane?.scrollTo({ top: 0 });
+  });
+  await expect(mark).not.toBeInViewport();
+  await page.getByTitle("Show in the document").first().click();
+  await expect(mark).toBeInViewport();
 });
 
 test("the finished review the landing offers opens as the run it names", async ({ page }) => {
