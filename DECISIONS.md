@@ -873,3 +873,16 @@ quote (it would name an individual while whether such names stay is the owner's 
 escalate step before the reveal (it would hide a verdict the first screen now shows, and is close to the onboarding
 tour the visual rules exclude), and any party, condition or obligation field (the domain review found it would change
 what the model is asked, not what code can verify; the party check already failed on unseen cases).
+
+**The review race (2026-10-11).** The live smoke test of bd8d470 confirmed a finding in the drawer, closed it and
+asked the next question at once: the new run finished on the server, but the screen and the URL stayed on the
+reviewed run, with no progress shown. Reproduced twice on the public site; with a five-second pause it did not happen.
+The cause: after a review the workbench re-read the reviewed run and showed it through the follower's `show`, which
+stops whatever it follows; that read could land after the next question had started. The invariant is now held in
+the follower (`hooks/useRunFollower.ts`): a record that arrives after the person moved on never takes the screen.
+`refresh` replaces only the finished run that is still on screen; `claim` marks a newer intent, so `openRun` checks
+after its fetches that no question was asked and no other run opened meanwhile. Both review updates and the re-read
+on returning to the Assistant go through `refresh`, which retires that effect's own cancel flag. Tests: four
+follower cases (the race itself, a refresh of a run in flight, a refresh of the run on screen, claims), and a browser
+flow that holds the re-read back two seconds and asks at once; it failed twice on the old code with the URL still on
+the reviewed run, and passes on either review path (confirm, or clear an earlier decision).
