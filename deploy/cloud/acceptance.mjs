@@ -26,7 +26,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
 
-const BASE = process.env.BASE ?? "https://ivo.pavankg.dev";
+// No default: the check asks a live model questions, and must never run against a site nobody named.
+const BASE = process.env.BASE;
+if (!BASE) throw new Error("BASE=<https origin of the deployment> is required");
 const API = process.env.API ?? BASE;
 const SHA = process.env.SHA ?? "";
 const REPO = process.env.REPO ?? ".";
