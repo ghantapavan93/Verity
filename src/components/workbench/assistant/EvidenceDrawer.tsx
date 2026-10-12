@@ -235,13 +235,14 @@ function EvidenceBody({
           </dl>
         )}
         {/* Where the product does not repeat the model's sentence (a point reported as not found), it is kept here,
-            as the model's: it may word the absence as a fact about the agreement, which the sections read cannot show. */}
-        {finding.modelConclusion && finding.modelConclusion !== finding.conclusion && (
+            as the model's: it may word the absence as a fact about the agreement, which the sections read cannot show.
+            The API decides when there is one (Finding.withheld_conclusion), as for the card and the memo. */}
+        {finding.withheldConclusion && (
           <dl className={styles.drawerFacts} data-testid="model-sentence">
             <div>
               <dt>Its sentence</dt>
               <dd>
-                <span className={styles.modelPassage}>{finding.modelConclusion}</span>
+                <span className={styles.modelPassage}>{finding.withheldConclusion}</span>
               </dd>
             </div>
           </dl>

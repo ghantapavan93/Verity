@@ -928,7 +928,7 @@ wrong-party questions, in every session, in both places. The box note now says w
 defined term in the quote, the name it defines in the answer). The card and the memo decided the withheld sentence
 apart, the card from the raw fields and the memo from `Finding.withheld_conclusion`, and could disagree on a sentence
 of whitespace or the product's own sentence with a trailing newline; the API now sends `withheld_conclusion` and the
-card renders only that. `firstOccurrences` compared each box with the one before it even when that one had been
+card renders only that, as does the evidence drawer, which had decided the same thing for itself since before m10. `firstOccurrences` compared each box with the one before it even when that one had been
 dropped, so a third phrase could overlap a kept box and print its text twice; it now compares with the last box kept,
 under a property test of 500 random phrase sets. The counterexample's two "found nothing to lower" sentences now say
 what the tests establish, as the headline's does, and the hand-off no longer promises one model call per answer (a run

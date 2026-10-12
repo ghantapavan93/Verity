@@ -290,7 +290,7 @@ class Finding(Base):
     @property
     def withheld_conclusion(self) -> str | None:
         """The model's own sentence where the product shows the not-found line instead, or None. Shown only labelled as
-        the model's (card, memo, drawer, pack), never as the finding: of 23 such recorded sentences 7 were right, 7
+        the model's (card, drawer, memo), never as the finding: of 23 such recorded sentences 7 were right, 7
         incomplete and 9 wrong, and nothing in code tells them apart (m10, 2026-10-12)."""
         withheld = self.conclusion.strip()
         return withheld if self.status == "missing" and withheld and withheld != NOT_FOUND_CONCLUSION else None

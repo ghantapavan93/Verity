@@ -236,6 +236,7 @@ describe("EvidenceDrawer", () => {
       evidenceKind: "coverage",
       conclusion: "The model did not find this in the sections it was given.",
       modelConclusion: "The contract does not provide for termination for convenience.",
+      withheldConclusion: "The contract does not provide for termination for convenience.",
     } as unknown as FindingView;
     renderDrawer(notFound);
     const model = within(screen.getByLabelText("Evidence")).getByTestId("layer-model");
@@ -243,7 +244,13 @@ describe("EvidenceDrawer", () => {
     await screen.findByText("Its hint");
     cleanup();
     // Where the product shows the model's conclusion as the finding, it is not said twice.
-    renderDrawer({ ...finding(null), modelConclusion: finding(null).conclusion } as unknown as FindingView);
+    renderDrawer({ ...finding(null), modelConclusion: finding(null).conclusion, withheldConclusion: null } as unknown as FindingView);
+    expect(within(screen.getByLabelText("Evidence")).queryByTestId("model-sentence")).toBeNull();
+    await screen.findByText("Its hint");
+    cleanup();
+    // The drawer decides nothing itself: a not-found finding the API sends without a withheld sentence (here the
+    // model's was only whitespace) shows none, as the card and the memo show none (review of d2672cc).
+    renderDrawer({ ...notFound, modelConclusion: "   ", withheldConclusion: null } as unknown as FindingView);
     expect(within(screen.getByLabelText("Evidence")).queryByTestId("model-sentence")).toBeNull();
     await screen.findByText("Its hint");
   });
