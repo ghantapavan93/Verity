@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { STATUS_SOURCE_LABELS } from "@/lib/types";
 
 import { BreakStory, unseenSummary } from "./BreakStory";
+import { definedParties, fixScore } from "./record";
 import raw from "./break-record.json";
 import { forPage, type BreakRecord } from "./record";
 
@@ -39,6 +40,44 @@ describe("the failure", () => {
         .getByText(/Who holds the right\./)
         .closest("li")?.textContent,
     ).toContain("Not checked by the released code (policy-v6)");
+  });
+
+  it("says who is who from the recorded definitions, and that the boxes are this page's text search, not a check", () => {
+    renderPage();
+    const key = screen.getByRole("group", { name: "Who is who in this clause" });
+    const parties = definedParties(headline, headline.sessions[0].finding.spans[0].sectionId);
+    expect(parties.length).toBe(2);
+    for (const p of parties) expect(key.textContent).toContain(p.definition);
+    expect(key.textContent).toContain("Boxes drawn by this page, by searching the text for each defined term.");
+    expect(key.textContent).toContain("no released code checks it");
+    const exhibit = screen.getByRole("figure", { name: /the question, the answer and the quote/i });
+    // The model's answer reads out verbatim: a box changes how it looks, not what it says.
+    expect(exhibit.textContent).toContain(headline.sessions[0].finding.conclusion);
+    // Each defined term is boxed once in the quote.
+    const quote = exhibit.querySelector("blockquote") as HTMLElement;
+    for (const p of parties) expect(within(quote).getByText(p.term, { selector: "span" })).toBeTruthy();
+  });
+
+  it("says the question carried a planted false premise, with the pre-registered answer's own words", () => {
+    renderPage();
+    const exhibit = screen.getByRole("figure", { name: /the question, the answer and the quote/i });
+    expect(headline.family).toBe("false_premise");
+    expect(exhibit.textContent).toContain("Planted false premise");
+    expect(exhibit.textContent).toContain(
+      headline.expectedAnswer
+        .split(/(?<=\.)\s+/)
+        .slice(0, 2)
+        .join(" "),
+    );
+  });
+
+  it("says what a found quote means, and states the value rule's result only as the tests establish it", () => {
+    renderPage();
+    const exhibit = (screen.getByRole("figure", { name: /the question, the answer and the quote/i }).textContent ?? "").replace(/\s+/g, " ");
+    expect(exhibit).toContain("Found means the words are there. It does not mean they support the answer.");
+    expect(exhibit).toContain("run again on this answer by the page's tests, decides it as recorded");
+    expect(exhibit).toContain(`recorded under ${String(headline.sessions[0].options.policy_version)}, policy-v6 plus the rejected party check`);
+    expect(document.body.textContent).not.toContain("here it found nothing to lower");
   });
 
   it("links the contract to its SEC filing", () => {
@@ -149,25 +188,37 @@ describe("the investigation", () => {
 });
 
 describe("the rejected fix", () => {
-  it("opens on its score on unseen cases, then shows the cases it was built on", () => {
+  const side = (name: string) => (screen.getByRole("region", { name }).textContent ?? "").replace(/\s+/g, " ");
+
+  it("shows both sets side by side, counted in questions first and in findings second", () => {
     renderPage();
-    const scores = () => (document.querySelector('[aria-live="polite"]')?.textContent ?? "").replace(/\s+/g, " ");
-    expect(screen.getByRole("button", { name: "Unseen cases" }).getAttribute("aria-pressed")).toBe("true");
-    expect(scores()).toContain("0 of 4 wrong-party answers caught, session 1");
-    expect(scores()).toContain("0 of 32 correct answers lowered");
-    fireEvent.click(screen.getByRole("button", { name: "Cases it was built on" }));
-    expect(scores()).toContain("4 of 6 wrong-party answers caught, session 1");
+    const built = fixScore(record.rejectedFix.rows, "diagnostic");
+    const unseen = fixScore(record.rejectedFix.rows, "unseen");
+    expect(document.body.textContent).toContain(
+      `Built on: ${built.caughtEverySession} of ${built.questions} questions caught. Unseen: ${unseen.caughtEverySession} of ${unseen.questions}.`,
+    );
+    expect(side("Cases it was built on")).toContain(`${built.caughtEverySession} of ${built.questions} wrong-party questions caught in every session`);
+    expect(side("Cases it was built on")).toContain(`${built.caughtFindings} of ${built.findings} wrong-party findings caught across both sessions`);
+    expect(side("Cases it was built on")).toContain(`Correct findings it lowered: ${built.loweredFindings} of ${built.correctFindings}`);
+    expect(side("Unseen cases")).toContain(`${unseen.caughtEverySession} of ${unseen.questions} wrong-party questions caught in every session`);
+    expect(side("Unseen cases")).toContain(`Correct findings it lowered: ${unseen.loweredFindings} of ${unseen.correctFindings}`);
+    // Nothing to switch: both sets are on screen.
+    expect(screen.queryByRole("button", { name: "Unseen cases" })).toBeNull();
   });
 
-  it("counts the unseen score in cases, each asked in both sessions, not in answers", () => {
+  it("titles the section with the counts, not a claim that it worked", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Unseen cases" }));
+    const heading = screen.getByRole("heading", { name: /A check that caught/ }).textContent ?? "";
+    expect(heading).toBe("A check that caught 4 of 5 cases it was built on, and missed every new one.");
+  });
+
+  it("counts the unseen score in questions, each asked in both sessions, not in findings", () => {
+    renderPage();
     const unseen = record.rejectedFix.rows.filter((r) => r.set === "unseen" && r.label === "wrong_party");
-    const cases = new Set(unseen.map((r) => r.case)).size;
-    const text = (document.body.textContent ?? "").replace(/\s+/g, " ");
+    const questions = new Set(unseen.map((r) => r.case)).size;
     expect(unseen.some((r) => r.flagged)).toBe(false);
-    expect(text).toContain(`It caught none of the ${cases} wrong-party cases, in either session.`);
-    expect(text).not.toContain(`0 of ${unseen.length} caught`);
+    expect(side("Unseen cases")).toContain(`It caught none of the ${questions} wrong-party questions, in either session.`);
+    expect(side("Unseen cases")).not.toContain(`0 of ${unseen.length} caught`);
   });
 
   it("explains the unseen misses in cases, each case with one reason", () => {
@@ -179,19 +230,19 @@ describe("the rejected fix", () => {
     const why = (screen.getByRole("heading", { name: "Why it did not generalise" }).parentElement?.textContent ?? "").replace(/\s+/g, " ");
     expect(why).toContain(`${cases("no_actor_in_answer")} of ${cases()} missed cases had no party of the opening acting in the answer`);
     expect(why).toContain(`In the other ${cases("actor_also_in_quote")}, the party the answer wrongly names`);
-    expect(why).not.toContain(`of ${missed.length} misses`);
+    expect(why).toContain("which is the model's job and a reviewer's to check");
   });
 
-  it("states a partial unseen score in answers and cases alike", () => {
-    expect(unseenSummary(0, 8, 4)).toBe("It caught none of the 4 wrong-party cases, in either session.");
-    expect(unseenSummary(3, 8, 4)).toBe("It caught 3 of 8 wrong-party answers: 4 cases, each asked once per session.");
-    expect(unseenSummary(0, 2, 1)).toBe("It missed the one wrong-party case, in both sessions.");
+  it("states a partial unseen score in findings and questions alike", () => {
+    expect(unseenSummary(0, 8, 4)).toBe("It caught none of the 4 wrong-party questions, in either session.");
+    expect(unseenSummary(3, 8, 4)).toBe("It caught 3 of 8 wrong-party findings across both sessions, over 4 questions.");
+    expect(unseenSummary(0, 2, 1)).toBe("It missed the one wrong-party question, in both sessions.");
+    expect(unseenSummary(1, 2, 1)).toBe("It caught 1 of 2 wrong-party findings across both sessions, over 1 question.");
   });
 
   it("opens a missed case to say what the check saw", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Unseen cases" }));
-    const list = screen.getByRole("list", { name: /Wrong-party answers and the check's verdict/ });
+    const list = screen.getByRole("list", { name: /Unseen cases: each question and the check's verdict/ });
     const q1 = within(list)
       .getAllByRole("button")
       .find((b) => new RegExp(`^${headline.id}(?![0-9])`).test(b.textContent ?? ""));

@@ -221,11 +221,55 @@ export function charDiff(left: string, right: string): { same: boolean; left: Di
   return { same: left === right, left: pieces(left, keptLeft), right: pieces(right, keptRight) };
 }
 
-export function partyCheckScore(rows: VerdictRow[], set: VerdictRow["set"], session: string) {
-  const mine = rows.filter((r) => r.set === set && r.session === session);
-  const wrong = mine.filter((r) => r.label === "wrong_party");
-  const correct = mine.filter((r) => r.label === "correct");
-  return { caught: wrong.filter((r) => r.flagged).length, wrong: wrong.length, lowered: correct.filter((r) => r.flagged).length, correct: correct.length };
+/**
+ * The rejected check over one evaluation set, counted two ways. A question is a case; a finding is one answer the model
+ * gave to it in one session, and a session can give several (P-14 gave two). Correct findings are counted apart: a
+ * case can hold a wrong-party finding and a correct one, so the two question counts overlap and are not added.
+ */
+export function fixScore(rows: VerdictRow[], set: VerdictRow["set"]) {
+  const wrong = rows.filter((r) => r.set === set && r.label === "wrong_party");
+  const correct = rows.filter((r) => r.set === set && r.label === "correct");
+  const cases = [...new Set(wrong.map((r) => r.case))];
+  const caughtIn = (c: string) => wrong.filter((r) => r.case === c);
+  return {
+    questions: cases.length,
+    caughtEverySession: cases.filter((c) => caughtIn(c).every((r) => r.flagged)).length,
+    caughtAnySession: cases.filter((c) => caughtIn(c).some((r) => r.flagged)).length,
+    findings: wrong.length,
+    caughtFindings: wrong.filter((r) => r.flagged).length,
+    correctFindings: correct.length,
+    loweredFindings: correct.filter((r) => r.flagged).length,
+  };
+}
+
+/** A party as the agreement defines it: the defined term between curly quotes, and the name the definition opens with. */
+export interface DefinedParty {
+  term: string;
+  name: string;
+  definition: string;
+  heading: string;
+}
+
+/**
+ * The parties the pre-registered answer cites from outside the clause the model quoted: their definitions, read from the
+ * record's text. A display aid: the term is found by its curly quotes, not checked against the agreement.
+ */
+export function definedParties(c: CaseRecord, citedSectionId: string): DefinedParty[] {
+  return c.decisivePassages.flatMap((p) => {
+    if (p.sectionId === citedSectionId) return [];
+    const term = /\((?:the\s+)?“([^”]+)”\)\s*$/u.exec(p.quote)?.[1];
+    const name = p.quote.split(",")[0].trim();
+    return term && name && name !== p.quote.trim() ? [{ term, name, definition: p.quote, heading: p.heading }] : [];
+  });
+}
+
+/** Where each phrase first occurs in the text, in text order, dropping any that overlap an earlier one. */
+export function firstOccurrences(text: string, phrases: { phrase: string; kind: number }[]): { start: number; end: number; kind: number }[] {
+  const found = phrases
+    .map(({ phrase, kind }) => ({ start: text.indexOf(phrase), end: text.indexOf(phrase) + phrase.length, kind }))
+    .filter((r) => r.start >= 0)
+    .sort((a, b) => a.start - b.start);
+  return found.filter((r, i) => i === 0 || r.start >= found[i - 1].end);
 }
 
 export function listed(names: string[]): string {

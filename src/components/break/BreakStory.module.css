@@ -183,10 +183,14 @@
 .exhibit {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  /* The left column reads question, answer, checks; the right, the quote with who is who, then the verdict (m10). */
   grid-template-areas:
     "question quote"
     "answer quote"
+    "checks quote"
     "checks verdict";
+  grid-template-rows: auto auto auto 1fr;
+  align-items: start;
   gap: 16px 28px;
   margin: 24px 0 18px;
 }
@@ -419,8 +423,7 @@
   color: var(--text-3);
 }
 
-.switch,
-.setSwitch {
+.switch {
   display: inline-flex;
   justify-self: start;
   width: max-content;
@@ -430,8 +433,7 @@
   background: var(--surface);
 }
 
-.switchButton,
-.setSwitch button {
+.switchButton {
   padding: 6px 14px;
   border: 0;
   border-radius: 999px;
@@ -444,14 +446,9 @@
     color var(--dur-fast) var(--ease);
 }
 
-.switchButton[aria-pressed="true"],
-.setSwitch button[aria-pressed="true"] {
+.switchButton[aria-pressed="true"] {
   background: var(--surface-3);
   color: var(--text);
-}
-
-.setSwitch {
-  margin-bottom: 18px;
 }
 
 /* tabs: the record, one step at a time */
@@ -889,12 +886,6 @@
 
 /* ------------------------------------------------------------------------------------ 3. the rejected fix */
 
-.scores {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
 .score {
   display: grid;
   gap: 4px;
@@ -1231,7 +1222,6 @@
     font-size: 16px;
   }
 
-  .scores,
   .replay,
   .diffGrid {
     grid-template-columns: minmax(0, 1fr);
@@ -1264,8 +1254,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .switchButton,
-  .setSwitch button {
+  .switchButton {
     transition: none;
   }
 }
@@ -1282,4 +1271,154 @@
   padding: 10px 12px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-m);
+}
+
+/* Who is who in the quoted clause (m10): parties boxed by shape, solid for the first defined party, dashed for the
+   second, drawn in the text's own colour so the box keeps the text's contrast on paper and on graphite. */
+.partyFirst,
+.partySecond {
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  padding: 0 2px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.partySecond {
+  border-style: dashed;
+}
+
+.roleKey {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--doc-edge);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--doc-text-2);
+}
+
+.roleKeyTitle {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.roleList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.roleList li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.roleList strong,
+.roleList q {
+  color: var(--doc-text);
+}
+
+.roleList q,
+.roleReading q {
+  font-family: var(--font-serif);
+}
+
+.swatchFirst,
+.swatchSecond {
+  display: inline-block;
+  width: 20px;
+  height: 11px;
+  border: 1.5px solid var(--doc-text);
+  border-radius: 3px;
+}
+
+.swatchSecond {
+  border-style: dashed;
+}
+
+.roleReading {
+  margin: 8px 0 0;
+  color: var(--doc-text);
+}
+
+.roleNote {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.premise {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.premise q {
+  font-family: var(--font-serif);
+  color: var(--text);
+}
+
+.premiseTag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--status-review-border);
+  border-radius: 5px;
+  color: var(--status-review-text);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* The rejected fix: both evaluation sets side by side, counted in questions first (m10). */
+.fixSummary {
+  margin: 4px 0 14px;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.fixSides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.fixSide {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+}
+
+.fixSideTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.fixSideNote {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  color: var(--text-3);
+  max-width: 60ch;
+}
+
+.fixCounts {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+@media (max-width: 860px) {
+  .fixSides {
+    grid-template-columns: 1fr;
+  }
 }

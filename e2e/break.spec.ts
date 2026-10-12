@@ -39,10 +39,16 @@ test("Break Verity tells one recorded failure, its record, the rejected fix and 
     const span = headline.sessions[0].finding.spans[0];
     await expect(page.getByLabel(`Section text: ${headline.sections[span.sectionId as keyof typeof headline.sections].heading}`).locator("mark")).toBeVisible();
 
-    // The rejected fix on unseen cases, and why it missed this page's headline.
-    await page.getByRole("button", { name: "Unseen cases" }).click();
-    await expect(page.getByText(/0\s+of 4\s+wrong-party answers caught, session 1/)).toBeVisible();
-    const list = page.getByRole("list", { name: /Wrong-party answers/ });
+    // Who is who in the quoted clause: the recorded definitions, beside the quote, on load.
+    await expect(page.getByRole("group", { name: "Who is who in this clause" })).toContainText("Axogen, Inc., a Minnesota corporation");
+
+    // The rejected fix, both sets side by side, and why it missed this page's headline.
+    const unseen = page.getByRole("region", { name: "Unseen cases", exact: true });
+    await expect(unseen).toContainText(/0\s+of 4\s+wrong-party questions caught in every session/);
+    await expect(page.getByRole("region", { name: "Cases it was built on", exact: true })).toContainText(
+      /4\s+of 5\s+wrong-party questions caught in every session/,
+    );
+    const list = page.getByRole("list", { name: /Unseen cases: each question/ });
     await list.getByRole("button", { name: new RegExp(`^${headline.id}(?![0-9])`) }).click();
     await expect(list).toContainText("acting in the quote too");
 

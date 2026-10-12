@@ -11,7 +11,7 @@
  */
 
 import Link from "next/link";
-import { createContext, useContext, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, Fragment, useContext, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { StatusChip } from "../workbench/shell/primitives";
 import { STATUS_SOURCE_LABELS } from "@/lib/types";
@@ -19,13 +19,16 @@ import { shortHash } from "@/lib/format";
 import styles from "./BreakStory.module.css";
 import {
   charDiff,
+  definedParties,
+  firstOccurrences,
+  fixScore,
   listed,
-  partyCheckScore,
   sharedRun,
   whyMissed,
   wordsOf,
   type CaseRecord,
   type CounterCase,
+  type DefinedParty,
   type PageRecord,
   type SessionRecord,
   type SpanRecord,
@@ -70,14 +73,65 @@ function Cite({ id }: { id: SourceId }) {
 
 // ------------------------------------------------------------------------------------------------- small parts
 
-function Marked({ text, run }: { text: string; run: { start: number; end: number } | null }) {
-  if (!run) return <>{text}</>;
+/**
+ * Text with the expected answer's words marked and each defined party boxed (solid for the first, dashed for the
+ * second). Both are display aids found by text search on the record; neither is a check.
+ */
+function Annotated({ text, run, boxes }: { text: string; run: { start: number; end: number } | null; boxes: { start: number; end: number; kind: number }[] }) {
+  // Boxes within [from, to), each clipped to it, between plain text.
+  const boxed = (from: number, to: number) => {
+    const pieces: ReactNode[] = [];
+    let at = from;
+    for (const b of boxes) {
+      const [start, end] = [Math.max(b.start, from), Math.min(b.end, to)];
+      if (start >= end) continue;
+      if (at < start) pieces.push(<Fragment key={at}>{text.slice(at, start)}</Fragment>);
+      pieces.push(
+        <span key={start} className={b.kind === 0 ? styles.partyFirst : styles.partySecond}>
+          {text.slice(start, end)}
+        </span>,
+      );
+      at = end;
+    }
+    if (at < to) pieces.push(<Fragment key={at}>{text.slice(at, to)}</Fragment>);
+    return pieces;
+  };
+  // The expected answer's words stay one mark, as before the boxes, with any box inside it.
+  if (!run) return <>{boxed(0, text.length)}</>;
   return (
     <>
-      {text.slice(0, run.start)}
-      <mark className={styles.mark}>{text.slice(run.start, run.end)}</mark>
-      {text.slice(run.end)}
+      {boxed(0, run.start)}
+      <mark className={styles.mark}>{boxed(run.start, run.end)}</mark>
+      {boxed(run.end, text.length)}
     </>
+  );
+}
+
+/** Who is who in the quoted clause: each party's definition, as the expected answer cites it, and that answer's reading. */
+function RoleKey({ parties, conditions }: { parties: DefinedParty[]; conditions: string[] }) {
+  return (
+    <div className={styles.roleKey} aria-label="Who is who in this clause" role="group">
+      <p className={styles.roleKeyTitle}>Who is who</p>
+      <ul className={styles.roleList}>
+        {parties.map((p, i) => (
+          <li key={p.term}>
+            <span className={i === 0 ? styles.swatchFirst : styles.swatchSecond} aria-hidden="true" />
+            <span>
+              <strong>{p.term}</strong> is defined in “{p.heading.toLowerCase().replace(/(^|\s)\w/g, (c) => c.toUpperCase())}”: <q>{p.definition}</q>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {conditions.length > 0 && (
+        <p className={styles.roleReading}>
+          The pre-registered answer, written before the run: {conditions.map((c, i) => [i > 0 ? " · " : "", <q key={c}>{c}</q>])}
+          <Cite id="cases" />
+        </p>
+      )}
+      <p className={styles.roleNote}>
+        Boxes drawn by this page, by searching the text for each defined term. Who holds the right is that answer&apos;s reading; no released code checks it.
+      </p>
+    </div>
   );
 }
 
@@ -120,6 +174,22 @@ function Failure({ headline }: { headline: CaseRecord }) {
   );
   const heading = headline.sections[span.sectionId]?.heading ?? span.citedSectionLabel;
   const sameAnswer = new Set(headline.sessions.map((s) => s.finding.conclusion)).size === 1;
+  // Who is who: the parties' definitions the expected answer cites from outside the quoted clause (display aids, record.ts).
+  const parties = definedParties(headline, span.sectionId);
+  const quoteBoxes = firstOccurrences(
+    span.quote,
+    parties.map((p, kind) => ({ phrase: p.term, kind })),
+  );
+  const answerBoxes = firstOccurrences(
+    first.finding.conclusion,
+    parties.map((p, kind) => ({ phrase: p.name, kind })),
+  );
+  const reading = headline.requiredConditions.filter((c) => parties.length > 1 && parties.every((p) => c.includes(p.term) || c.includes(p.name)));
+  const premise = headline.expectedAnswer
+    .split(/(?<=\.)\s+/)
+    .slice(0, 2)
+    .join(" ");
+  const recordedUnder = String(first.options.policy_version);
   return (
     <section className={styles.hero} aria-labelledby="failure-title" id="failure">
       <p className={styles.kicker}>Break Verity · one recorded failure</p>
@@ -133,6 +203,13 @@ function Failure({ headline }: { headline: CaseRecord }) {
         <div className={styles.exhibitQuestion}>
           <span className={styles.label}>Question</span>
           <p className={styles.question}>{headline.question}</p>
+          {headline.family === "false_premise" && (
+            <p className={styles.premise}>
+              <span className={styles.premiseTag}>Planted false premise</span> The question was written wrong on purpose, before the run. The pre-registered
+              answer begins: <q>{premise}</q>
+              <Cite id="cases" />
+            </p>
+          )}
         </div>
 
         <div className={styles.exhibitAnswer}>
@@ -141,15 +218,18 @@ function Failure({ headline }: { headline: CaseRecord }) {
             <StatusChip status={first.finding.status} hasGuidance={false} source={first.finding.statusSource} />
             <code className={styles.statusCode}>status: {first.finding.status}</code>
           </div>
-          <p className={styles.answer}>{first.finding.conclusion}</p>
+          <p className={styles.answer}>
+            <Annotated text={first.finding.conclusion} run={null} boxes={answerBoxes} />
+          </p>
         </div>
 
         <div className={styles.exhibitQuote}>
           <span className={styles.labelDark}>The quote it cites · {heading}</span>
           <blockquote className={styles.paperQuote}>
-            <Marked text={span.quote} run={run} />
+            <Annotated text={span.quote} run={run} boxes={quoteBoxes} />
           </blockquote>
           {run && <p className={styles.markNote}>Marked: the words the pre-registered expected answer cites.</p>}
+          {parties.length > 0 && <RoleKey parties={parties} conditions={reading} />}
         </div>
 
         <ul className={styles.checks} aria-label="What was checked">
@@ -159,7 +239,7 @@ function Failure({ headline }: { headline: CaseRecord }) {
             </span>
             <span>
               <strong>Found in the contract.</strong> Code located the quote at characters {span.start}–{span.end} of its section
-              <Cite id="record" />.
+              <Cite id="record" />. Found means the words are there. It does not mean they support the answer.
             </span>
             <span className={styles.by}>code</span>
           </li>
@@ -168,7 +248,9 @@ function Failure({ headline }: { headline: CaseRecord }) {
               ✓
             </span>
             <span>
-              <strong>No unsupported value.</strong> Every value the answer states is in the quote (policy-v6)
+              <strong>No unsupported value.</strong> The released value rule (policy-v6), run again on this answer by the page&apos;s tests, decides it as
+              recorded: every value it states is in the verified quote. The run itself was recorded under {recordedUnder}, policy-v6 plus the rejected party
+              check, which did not fire on it
               <Cite id="record" />.
             </span>
             <span className={styles.by}>code</span>
@@ -495,7 +577,9 @@ function BoundaryPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
             <BrowserCheck c={c} span={span} />
           </li>
           <li>
-            <strong>Every value the answer states is in a verified quote.</strong> Policy-v6&apos;s value rule; here it found nothing to lower.
+            <strong>Every value the answer states is in a verified quote.</strong> The released value rule (policy-v6), run again on this answer by the
+            page&apos;s tests, decides it as recorded. The run was recorded under {String(s.options.policy_version)}: policy-v6 plus the rejected party check,
+            which did not fire on it.
           </li>
           <li>
             <strong>Who set the status.</strong> {STATUS_SOURCE_LABELS[s.finding.statusSource] ?? s.finding.policy.summary}.
@@ -646,67 +730,84 @@ function VerdictCase({ rows }: { rows: VerdictRow[] }) {
   );
 }
 
-function RejectedFix() {
+/** One evaluation set of the rejected check: its score in questions, then in findings, then its verdict per question. */
+function FixSide({ set, title, note }: { set: VerdictRow["set"]; title: string; note: string }) {
   const record = useRecord();
-  // Opens on the unseen cases: the evidence the decision rests on comes before the score the check was tuned to.
-  const [set, setSet] = useState<"diagnostic" | "unseen">("unseen");
-  const fix = record.rejectedFix;
-  const sessions = set === "diagnostic" ? ["s1", "s2"] : ["v1", "v2"];
-  const scores = sessions.map((s) => partyCheckScore(fix.rows, set, s));
-  const wrong = fix.rows.filter((r) => r.set === set && r.label === "wrong_party");
+  const rows = record.rejectedFix.rows;
+  const score = fixScore(rows, set);
+  const wrong = rows.filter((r) => r.set === set && r.label === "wrong_party");
   const byCase = [...new Set(wrong.map((r) => r.case))]
     .sort((a, b) => a.localeCompare(b, "en", { numeric: true }))
     .map((c) => wrong.filter((r) => r.case === c).sort((a, b) => a.session.localeCompare(b.session)));
+  const headingId = useId();
+  return (
+    <section className={styles.fixSide} aria-labelledby={headingId}>
+      <h3 id={headingId} className={styles.fixSideTitle}>
+        {title}
+      </h3>
+      <p className={styles.fixSideNote}>{note}</p>
+      <Score
+        caught={score.caughtEverySession}
+        of={score.questions}
+        label="wrong-party questions caught in every session"
+        tone={score.caughtEverySession > 0 ? "good" : "bad"}
+      />
+      <p className={styles.fixCounts}>
+        {score.caughtFindings} of {score.findings} wrong-party findings caught across both sessions (a session can give a question more than one finding).
+        Correct findings it lowered: {score.loweredFindings} of {score.correctFindings}.
+      </p>
+      <ul className={styles.verdictList} aria-label={`${title}: each question and the check's verdict`}>
+        {byCase.map((caseRows) => (
+          <VerdictCase key={caseRows[0].case} rows={caseRows} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function RejectedFix() {
+  const record = useRecord();
+  const fix = record.rejectedFix;
+  const built = fixScore(fix.rows, "diagnostic");
+  const unseen = fixScore(fix.rows, "unseen");
   const unseenMisses = fix.rows.filter((r) => r.set === "unseen" && r.label === "wrong_party" && !r.flagged);
   // In cases, not answers: each unseen case was asked once per session, so a case missed twice is one case.
   const missedCases = (why?: string) => new Set(unseenMisses.filter((r) => why === undefined || r.why === why).map((r) => r.case)).size;
-  const total = (k: "caught" | "wrong" | "lowered" | "correct") => scores.reduce((n, s) => n + s[k], 0);
   return (
-    <Section id="fix" kicker="The rejected fix" title="A check that worked on the cases it was built on, and missed every new one.">
+    <Section
+      id="fix"
+      kicker="The rejected fix"
+      title={`A check that caught ${built.caughtEverySession} of ${built.questions} cases it was built on, and ${unseen.caughtAnySession === 0 ? "missed every new one" : `${unseen.caughtAnySession} of ${unseen.questions} new ones`}.`}
+    >
       <p className={styles.body}>
         The idea: read the parties from the contract&apos;s opening clause, find who acts in the answer and who acts in the quote, and lower the pass when they
         differ. Deterministic and cheap. Below are its verdicts, run again from its own code over the recorded answers
         <Cite id="verdicts" />, against the AI-assisted labels
         <Cite id="labels" />.
       </p>
-      <div className={styles.setSwitch} role="group" aria-label="Which cases">
-        <button type="button" aria-pressed={set === "diagnostic"} onClick={() => setSet("diagnostic")}>
-          Cases it was built on
-        </button>
-        <button type="button" aria-pressed={set === "unseen"} onClick={() => setSet("unseen")}>
-          Unseen cases
-        </button>
-      </div>
-      <div className={styles.scores} aria-live="polite">
-        {scores.map((s, i) => (
-          <Score
-            key={sessions[i]}
-            caught={s.caught}
-            of={s.wrong}
-            label={`wrong-party answers caught, ${SESSION_NAME[sessions[i]].toLowerCase()}`}
-            tone={s.caught > 0 ? "good" : "bad"}
-          />
-        ))}
-        <Score caught={total("lowered")} of={total("correct")} label="correct answers lowered, both sessions" tone="plain" />
-      </div>
-      <p className={styles.setNote}>
-        {set === "diagnostic"
-          ? "These cases were written first, and the check was revised against them. A score here says what it was tuned to do."
-          : `Written afterwards by a separate annotator agent, on contracts the check had never read. ${unseenSummary(total("caught"), total("wrong"), byCase.length)}`}
+      <p className={styles.fixSummary}>
+        Built on: {built.caughtEverySession} of {built.questions} questions caught. Unseen: {unseen.caughtEverySession} of {unseen.questions}.
       </p>
-      <ul className={styles.verdictList} aria-label="Wrong-party answers and the check's verdict">
-        {byCase.map((rows) => (
-          <VerdictCase key={rows[0].case} rows={rows} />
-        ))}
-      </ul>
+      <div className={styles.fixSides}>
+        <FixSide
+          set="diagnostic"
+          title="Cases it was built on"
+          note="Written first; the check was revised against them. A score here says what it was tuned to do."
+        />
+        <FixSide
+          set="unseen"
+          title="Unseen cases"
+          note={`Written afterwards by a separate annotator agent, on contracts the check itself had never read. ${unseenSummary(unseen.caughtFindings, unseen.findings, unseen.questions)}`}
+        />
+      </div>
       <div className={styles.why}>
         <h3 className={styles.h3}>Why it did not generalise</h3>
         <p>
           On the unseen cases, {missedCases("no_actor_in_answer")} of {missedCases()} missed cases had no party of the opening acting in the answer: the answer
           named its actor by a bank&apos;s name where the opening&apos;s list holds only a defined role. In the other {missedCases("actor_also_in_quote")}, the
           party the answer wrongly names also appears in the quote, though not as the one who holds the right. In this page&apos;s headline the real holder, the
-          Stockholders&apos; Representative, is not among the parties the check read at all. Telling those apart is reading roles, which is the model&apos;s
-          job; a longer pattern list would be fitting these cases.
+          Stockholders&apos; Representative, is not among the parties the check read at all. Telling those apart is reading roles, which is the model&apos;s job
+          and a reviewer&apos;s to check; a longer pattern list would be fitting these cases.
         </p>
         <p className={styles.decision}>
           Not adopted. Kept on the unpublished branch <code>party-check-experiment</code>, commit <code>{shortHash(fix.commit, 7)}</code>; its verdict on every
@@ -839,6 +940,10 @@ function YourTurn() {
             Add a public contract, ask a question, and open the evidence: every quote is located in the text, and the drawer says what code checked and what it
             did not. In Runs, each run downloads as an evidence pack: its record, its quotes and the hashes to check them.
           </p>
+          <p className={styles.dim}>
+            The workbench runs live on one laptop with one GPU: each answer waits on one model call, usually half a minute or more, and when the laptop is off
+            so is the workbench. This page is a recording and works either way.
+          </p>
           <Link href="/" className={styles.primaryLink}>
             Open the workbench
           </Link>
@@ -953,14 +1058,15 @@ const NAV = [
 ] as const;
 
 /**
- * The unseen score in cases, not answers: each case was asked once per session, so "0 of 8" would count the same four
- * questions twice (first-visit review, m9).
+ * The unseen score in questions, not findings: each question was asked once per session, and a session can give more
+ * than one finding, so "0 of 8" would count the same four questions twice (first-visit review, m9; m10 review).
  */
-export function unseenSummary(caught: number, answers: number, cases: number): string {
-  const noun = cases === 1 ? "case" : "cases";
+export function unseenSummary(caught: number, findings: number, questions: number): string {
   if (caught === 0)
-    return cases === 1 ? "It missed the one wrong-party case, in both sessions." : `It caught none of the ${cases} wrong-party cases, in either session.`;
-  return `It caught ${caught} of ${answers} wrong-party answers: ${cases} ${noun}, each asked once per session.`;
+    return questions === 1
+      ? "It missed the one wrong-party question, in both sessions."
+      : `It caught none of the ${questions} wrong-party questions, in either session.`;
+  return `It caught ${caught} of ${findings} wrong-party findings across both sessions, over ${questions} question${questions === 1 ? "" : "s"}.`;
 }
 
 /** What the exporter masked in the headline's input, or nothing when it masked nothing. */
