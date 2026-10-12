@@ -195,6 +195,22 @@ def test_the_sweep_removes_old_partial_writes_whatever_hash_they_carry(public: T
     assert young.exists() and named.exists(), "control: a write in progress and a named file stay"
 
 
+def test_the_sweep_removes_a_memo_draft_a_killed_process_left(public: TestClient) -> None:  # noqa: F811
+    """A memo's DOCX is written under memos/pending/<token>/ before it is moved beside the others; a process killed in
+    between left the visitor's draft there for good, below the sweep's reach (cloud readiness review, 2026-10-12)."""
+    pending = config.settings.data_dir / "memos" / "pending"
+    old, young = pending / ("a" * 32), pending / ("b" * 32)
+    for folder in (old, young):
+        folder.mkdir(parents=True)
+        (folder / "memo-run.docx").write_bytes(b"a visitor's memo")
+    hours_ago = time.time() - 2 * 3600
+    for path in (old / "memo-run.docx", old):
+        os.utime(path, (hours_ago, hours_ago))
+    assert sweep_orphaned_files(db_module.engine) == 1
+    assert not old.exists(), "the abandoned draft and its folder are gone"
+    assert (young / "memo-run.docx").exists(), "control: a memo being written stays"
+
+
 def test_the_corpus_tools_are_not_a_visitors(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: F811
     visitor, _ = arrive(public)
     for path in ("/api/engineering/goldens", "/api/engineering/families", "/api/batches"):

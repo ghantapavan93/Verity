@@ -17,6 +17,7 @@ refuses to delete one (db.immutability_triggers). This is the one, scoped except
 from __future__ import annotations
 
 import logging
+import shutil
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PureWindowsPath
@@ -164,6 +165,14 @@ def sweep_orphaned_files(engine: Engine, now: datetime | None = None) -> int:
     for path in (settings.data_dir / "memos").glob("*"):
         if path.is_file() and path.stat().st_mtime < cutoff and path.name not in memos:
             removed += _unlink(path)
+    # A memo is written in memos/pending/<token>/ and moved out before its row exists (create_memo); a process killed in
+    # between leaves the visitor's draft there, below the loop above (cloud readiness review, 2026-10-12). No request
+    # writes a draft for longer than the grace.
+    for folder in (settings.data_dir / "memos" / "pending").glob("*"):
+        drafts = [p for p in folder.rglob("*") if p.is_file()] if folder.is_dir() else []
+        if folder.is_dir() and all(p.stat().st_mtime < cutoff for p in [folder, *drafts]):
+            removed += sum(_unlink(p) for p in drafts)
+            shutil.rmtree(folder, ignore_errors=True)
     return removed
 
 
