@@ -27,19 +27,27 @@ services:
     environment:
       WORKBENCH_DATA_DIR: /data
       WORKBENCH_CONTRACT_STATE: /app/record/contract-state.json
+      # SQLite writes its temporary files under /var/tmp, on the container's disk, unless told otherwise; a purge's
+      # statement journal can carry a contract's text (independent review, 2026-10-12, with a probe in the image).
+      TMPDIR: /tmp
     volumes:
       - verity-data:/data
       # The frozen research record /state shows, read-only (README: the record). Absent, /state says it is unavailable.
       - ./contract-state.json:/app/record/contract-state.json:ro
-    # Uploads over 1 MB are spooled to the temporary directory while they are read; in memory, a visitor's file never
-    # reaches a disk that no retention pass covers.
+    # Uploads over 1 MB are spooled to the temporary directory while they are read, and SQLite writes its temporary files
+    # there (TMPDIR); in memory, a visitor's words never reach a disk that no retention pass covers. Four 25 MB uploads at
+    # once used 121 MiB of it (rehearsal, 2026-10-12); the bound costs memory only when used.
     tmpfs:
-      - /tmp:size=256m,mode=1777
+      - /tmp:size=512m,mode=1777
+    # No core file: a crashing reader would write memory holding a contract to disk.
+    ulimits:
+      core: 0
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     logging: *logging
-    extra_hosts:
-      # Lets a rehearsal reach a model on the machine running Docker; unused when WORKBENCH_OLLAMA_URL is remote.
-      - "host.docker.internal:host-gateway"
 
   web:
     build:
@@ -48,6 +56,10 @@ services:
       args:
         NEXT_PUBLIC_BUILD_SHA: ${VERITY_BUILD_SHA:-}
     image: verity-web:${VERITY_TAG:-local}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     logging: *logging
     depends_on:

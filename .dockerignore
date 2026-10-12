@@ -15,4 +15,5 @@ backend/.pytest_cache
 backend/.ruff_cache
 **/*.secret
 **/.env
+**/.env*
 deploy/cloud/.env

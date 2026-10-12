@@ -3,6 +3,10 @@
 # attempts against production count toward its rate limits and can lock the name out for hours.
 {
 	acme_ca {$VERITY_ACME_CA}
+	# HTTP/1.1 and HTTP/2 only: the firewall opens TCP 443, not the UDP HTTP/3 would need, so it is not advertised.
+	servers {
+		protocols h1 h2
+	}
 }
 
 # One origin for the workbench: TLS here, /api to the API, everything else to the interface. Same origin means no CORS,
@@ -27,13 +31,18 @@
 	}
 
 	handle {
-		reverse_proxy web:3000
+		reverse_proxy web:3000 {
+			header_down -X-Powered-By
+		}
 	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		# No page is meant to be framed. Set only where the response has no policy of its own (the memo has).
+		?Content-Security-Policy "frame-ancestors 'none'"
 		-Server
+		defer
 	}
 }
