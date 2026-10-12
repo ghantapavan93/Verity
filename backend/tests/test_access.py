@@ -245,3 +245,17 @@ def test_the_recorded_research_is_readable_without_a_session(gated: TestClient) 
     assert record.status_code == 200, record.text[:200]
     for private in ("/api/engineering/goldens", "/api/engineering/citations", "/api/engineering/families"):
         assert gated.get(private).status_code == 401, private
+
+
+@pytest.mark.parametrize(("environment", "expected"), [({}, 20), ({"WORKBENCH_RUN_START_LIMIT": "1000"}, 1000)], ids=["production", "browser-flows"])
+def test_the_run_start_limit_is_20_unless_the_browser_flows_raise_it(environment: dict[str, str], expected: int) -> None:
+    # A fresh interpreter: settings are read once, when app.config is first imported (m9, 2026-10-11).
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = {k: v for k, v in os.environ.items() if k != "WORKBENCH_RUN_START_LIMIT"} | environment
+    probe = "from app.api import access; print(access.RUN_LIMIT, access.run_starts.limit)"
+    out = subprocess.run([sys.executable, "-c", probe], cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True, check=True)
+    assert out.stdout.split() == [str(expected), str(expected)]

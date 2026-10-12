@@ -63,7 +63,7 @@ CLOCK_SKEW_S = 60
 # first (nobody is known yet), per reader for the second. In memory, in this process: one API process serves the
 # preview, and a limit that forgets on restart is still a limit.
 EXCHANGE_LIMIT, EXCHANGE_WINDOW_S = 10, 600
-RUN_LIMIT, RUN_WINDOW_S = 20, 600
+RUN_LIMIT, RUN_WINDOW_S = settings.run_start_limit, 600
 # Public use: a new anonymous session costs nothing to ask for, so a per-session bound alone could be escaped by asking
 # again. These hold per client address (the address Cloudflare saw), across every session from it. New sessions have no
 # global ceiling on purpose: anyone could spend it and shut every new visitor out. What costs is bounded instead.

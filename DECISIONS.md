@@ -886,3 +886,8 @@ on returning to the Assistant go through `refresh`, which retires that effect's 
 follower cases (the race itself, a refresh of a run in flight, a refresh of the run on screen, claims), and a browser
 flow that holds the re-read back two seconds and asks at once; it failed twice on the old code with the URL still on
 the reviewed run, and passes on either review path (confirm, or clear an earlier decision).
+The first gate of that change failed two flows on HTTP 429: every browser flow comes from one address, the API allows
+20 run starts per reader in ten minutes, and the bd8d470 suite had made exactly 20, so the new flow's two questions
+tipped the last two flows over. The limit is now a setting, `run_start_limit` (`WORKBENCH_RUN_START_LIMIT`, default
+20, which production keeps), and the browser flows' own API raises it to 1,000; no flow tests the limit, and the
+backend tests that do patch the limiter directly. A test checks that the limit is 20 unless the setting is given.

@@ -54,6 +54,8 @@ export default defineConfig({
         WORKBENCH_DATA_DIR: dataDir,
         WORKBENCH_CORS_ORIGINS: `${WEB_URL},http://127.0.0.1:${WEB_PORT}`,
         WORKBENCH_APP_URL: WEB_URL,
+        // Every flow comes from this one address; the production limit of 20 run starts in ten minutes is not under test here.
+        WORKBENCH_RUN_START_LIMIT: "1000",
       },
     },
     {
