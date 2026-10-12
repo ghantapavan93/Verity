@@ -30,9 +30,11 @@ git clone -q "$SRC" "$CLONE" && cd "$CLONE" && git checkout -q "$SHA" && echo "H
 echo "porcelain lines before anything: $(git status --porcelain | wc -l)"
 git diff --name-only HEAD~1 HEAD | sed 's/^/  changed by the last commit: /'
 
-echo "== backend: a fresh environment from the committed requirements"
+echo "== backend: a fresh environment from the committed lock"
 cd "$CLONE/backend"
-python -m venv .venv >/dev/null && "$(venv_python .venv)" -m pip install -q -r requirements.txt -r requirements-dev.txt 2>&1 | grep -v -i notice | tail -3
+# The lock the workstation's API and the cloud image both install (README; deploy/cloud/Dockerfile.api), not the newest
+# versions on the day: until 2026-10-12 the gate tested FastAPI 0.143 while the workstation ran 0.141 (cloud review).
+python -m venv .venv >/dev/null && "$(venv_python .venv)" -m pip install -q -r requirements.lock -r requirements-dev.txt 2>&1 | grep -v -i notice | tail -3
 check "backend environment" "${PIPESTATUS[0]}"
 PY="$(venv_python .venv)"
 echo "== backend: full suite"
