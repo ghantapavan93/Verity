@@ -47,6 +47,8 @@ describe("checkLedger: what was checked, and by whom", () => {
     expect(row(rows, "quote")?.text).toMatch(/^Found in the document text at §5.3 · Termination, word for word/);
     expect(row(rows, "support")).toMatchObject({ by: "model" });
     expect(row(rows, "support")?.text).toMatch(/^Not checked by code/);
+    // A verified quote can hold the right clause with the parties swapped; the row says code does not check that.
+    expect(row(rows, "support")?.text).toBe("Not checked by code: whether the passage supports the answer, including who holds the right or owes the duty");
     expect(row(rows, "comparison")).toMatchObject({ by: "nobody" });
     expect(row(rows, "comparison")?.text).toMatch(/the status is the model's view/);
     // Policy v4 can leave a guidance period unread on purpose; the row never says the guidance has none.
