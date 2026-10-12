@@ -72,7 +72,7 @@ export function checkLedger(
       label: "Supports it?",
       // Who holds the right or owes the duty is named because code cannot see it: a verified quote can carry the
       // right clause with the parties swapped (m7, 2026-10-10: 20 of 80 findings gave a right or a value to the wrong
-      // party, every one shown as a pass; a party check was built and rejected on unseen cases). /break shows one.
+      // party; a party check was built and rejected on unseen cases). /break shows one.
       text: "Not checked by code: whether the passage supports the answer, including who holds the right or owes the duty",
       by: "model",
     });
