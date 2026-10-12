@@ -891,3 +891,32 @@ The first gate of that change failed two flows on HTTP 429: every browser flow c
 tipped the last two flows over. The limit is now a setting, `run_start_limit` (`WORKBENCH_RUN_START_LIMIT`, default
 20, which production keeps), and the browser flows' own API raises it to 1,000; no flow tests the limit, and the
 backend tests that do patch the limiter directly. A test checks that the limit is 20 unless the setting is given.
+
+**The m10 experience (2026-10-12).** A teardown of the live site, five competing working concepts, three independent
+reviews (product and domain, design and accessibility, a skeptical engineer) and two investigations led to a
+recommendation; Pavan approved six items and one wording fix. The frozen visual system, the landing, the run follower,
+review, export, status rules and the exporter are untouched. On /break: (1) a role key on load under the quote, "Who
+is who in this clause", lists the recorded definitions the pre-registered answer cites outside the quoted clause and
+boxes each party where the page's text search finds it, labelled as this page's search; who holds the right is the
+answer's reading and no released code checks it. The m9 entry set a role key aside because it would name an
+individual; the name it shows is already on the page, in the question and in the pre-registered answer, both from the
+public filing, so the key adds a definition, not a name. (2) The question is called what the record says it is, a
+planted false premise, with the pre-registered answer's first words; the first boundary row adds "Found means the
+words are there. It does not mean they support the answer." (3) The rejected party check is shown side by side, the
+cases it was built on beside the unseen ones, counted in questions caught in every session (4 of 5; 0 of 4) with the
+findings as a second, named count (8 of 12; 0 of 8), since a session can give one question more than one finding;
+each question opens the check's own verdict. (4) The hand-off to the workbench says it runs on one laptop GPU, takes
+half a minute or more per answer and is offline when the laptop is. The wording fix: the page said the released value
+rule "found nothing to lower" on the headline, which the record does not establish (the run was recorded under
+policy-v7, policy-v6 plus the rejected party check); it now says what `tests/test_break_record.py` establishes, that
+policy-v6 run again on the answer decides it as recorded. In the workbench: (5) a finding the model reported as not
+found still states only the product's sentence (the rule of 2026-10-02 stands), and the model's own sentence is kept
+on the card collapsed, and in the memo (HTML and DOCX) after a label, both naming it as the model's, not checked by
+code, and withheld because it reported the point as not found (`Finding.withheld_conclusion`). The drawer and the
+evidence pack already carried it. No status changes: of 23 recorded substantive "missing" sentences, 7 were right, 7
+incomplete and 9 wrong, and nothing in code tells them apart, so showing them as findings (option B) was rejected; the
+cause is prompt rule 8, which stays the owner's decision with goldens. (6) The card's support row names the class it
+leaves open: "Not checked by code: whether the passage supports the answer, including who holds the right or owes the
+duty". No new check; the party check stays rejected. Rejected concepts, kept with the research: a guided tour (it
+delays the point, and its dimmed text failed contrast), an X-ray page (a developer-tool template with invented stages),
+a second ledger beside the drawer, any toggle that hides the verdict and any choose-first step.
