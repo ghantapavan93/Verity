@@ -138,7 +138,7 @@ VM loses at most seven days of visitors' workspaces, which their first screen al
 | The API restarts mid-run | The run left in flight is failed at start, never left running (`hostname: verity-api` keeps the owner's name stable) | yes |
 | The VM reboots | Docker starts the stack (`restart: unless-stopped`); the store is on the volume | partly: every container stopped and started, the store intact; a Docker daemon restart was not rehearsed |
 | The model endpoint is down or serves another build | The question fails with a sentence; health stays up; nothing is answered by another build | yes |
-| The VM is lost | Rebuild: a new droplet as above, the images from the build machine, `.env` from where the owner keeps it (the secret), the record from ivo-experiments; the store starts empty | partly: on the same machine with the images loaded, every volume removed, healthy again in 13 s and `acceptance.mjs` 82 of 82; a new droplet was not |
+| The VM is lost | Rebuild: a new droplet as above, the images from the build machine, `.env` from where the owner keeps it (the secret), the record from ivo-experiments; the store starts empty | partly: on the same machine with the images loaded, every volume removed, healthy again in 10 s and `acceptance.mjs` 82 of 82 (`rebuild-final.txt`); a new droplet was not |
 
 Keep the last two image archives on the build machine. `.env` is the only thing that cannot be rebuilt from the
 repository; a new secret ends every session, and the workspaces they held are deleted when their seven days end.
@@ -164,7 +164,7 @@ repository; a new secret ends every session, and the workspaces they held are de
 
 ## Rehearsed (local Docker, 2026-10-12)
 
-The final run used the images of `fe030a8` and this kit, under Docker Desktop with Caddy's internal CA at
+The final run used the images of `fe030a8` and this kit (the load and failure runs with the in-memory `/tmp` at its earlier 256 MiB bound; the rebuild and its acceptance on the committed kit), under Docker Desktop with Caddy's internal CA at
 `https://localhost:28443` (an isolated Compose project, volume and ports; the API and interface publish no ports), the
 API calling the workstation's Ollama over HTTP, the same build the cloud serves. Scripts and every output are in the
 `cloud/rehearsal2` folder on the workstation, not in the repository.
@@ -181,6 +181,8 @@ HSTS, `nosniff` and `frame-ancestors 'none'`, and no `Server`, `X-Powered-By` or
 Memory: nine visitors at once (contracts of 1.9–25 MB, three questions queued on the model, twenty extra event streams)
 peaked at 731 MiB for the three containers; four 25 MB uploads at once, the stress case, at 1.29 GiB (the API
 1.20 GiB, about 260 MiB for each large upload in progress), with 121 MiB of `/tmp` in use. No 500, no lock or pool error, no out-of-memory kill, in either.
+Upload times under load varied three- to twelvefold between runs on the shared workstation (the 25 MB file took 3.9 s
+in one, 46 s in another), so they are indicative; staging measures them on the droplet.
 
 Found by the rehearsal and its review, and fixed, each with a test or a probe: the kit ran invite-only (it now runs the
 public demo's settings); the image installed versions no gate had tested; a hung API would have stayed hung, and the

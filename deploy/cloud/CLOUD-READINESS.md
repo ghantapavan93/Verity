@@ -34,7 +34,7 @@ three-probe rule); the model behind Modal's proxy token; no backups (section 8).
 | Compose stack (Caddy, interface, API) for the public demo | implemented, rehearsed | local Docker, isolated project, images of `fe030a8` |
 | API image on the workstation's locked versions, with the backend suite inside it | passed | Linux, `fe030a8`: 1,274 passed, 22 skipped (Windows-only) |
 | Release gate (fresh clone: backend, faults, interface, browser flows, exporter) | **passed** | `fe030a8`: 1,295 + 1 skipped, 514 named, 17/17 faults, 209 unit, 31 flows |
-| `acceptance.mjs` (evidence and behaviour, two real questions) | passed | 82 of 82, three times, once after every volume was removed |
+| `acceptance.mjs` (evidence and behaviour, two real questions) | passed | 82 of 82 each time, including after every volume was removed on the committed kit |
 | Two visitors isolated; uploads, review, memos, SSE through Caddy, refresh mid-run, forged address, oversized and false uploads, cross-origin write | passed | 19 of 19 |
 | Failures: restart mid-run, model down, wrong build, frozen API, stop and start, pause switch | passed | 7 of 7; frozen API back in 145 s |
 | Retention on the VM: database, WAL, SQLite temporary files, originals, memos, `/tmp`, logs | passed | marker gone from every file and log after the purge; SQLite temporaries shown in `/tmp` |
@@ -66,7 +66,8 @@ event streams) peaked at 731 MiB; four 25 MB uploads at once peaked at 1.29 GiB,
 each large upload in progress, SQLite's temporary files now in memory among it). With Ubuntu and Docker (roughly 0.4 GB),
 that stress case would leave a 2 GB machine (1.9 GiB usable) almost nothing, and one more large upload would end in the
 kernel killing the API. 4 GB holds the stress case with about 2 GB to spare, and the second vCPU keeps pages and
-event streams responsive while uploads are read (on one vCPU the largest upload took 10.6 s against 3.9 s). The $12
+event streams responsive while uploads are read. Upload times under load varied three- to twelvefold between runs on the
+shared workstation (the 25 MB file from 3.9 s to 46 s), so they are indicative and S1 measures them on the droplet. The $12
 plan (2 GB / 1 vCPU) runs ordinary use, and would restart the API under a burst of large uploads; it is not recommended.
 Disk: images 1.8 GB (keep two releases: 3.6 GB), logs at most 90 MB, the store about 2.3 times the text visitors upload,
 all of it deleted after seven days; uploads stop on their own below 2 GiB free.
@@ -142,8 +143,8 @@ Modal does not document.
 Recovery, rehearsed: a container that exits restarts; an API that stops answering is killed after three failed probes
 and restarted by its policy (frozen in the rehearsal: back in 145 s); a run cut by a restart ends failed, never stuck;
 stopping and starting every container keeps the store; losing the VM is a rebuild from the runbook (rehearsed on the
-same machine with the images loaded: every volume removed, healthy again in 13 s, the store empty, `acceptance.mjs`
-82 of 82). Not rehearsed: a Docker daemon restart and a new droplet; on a new droplet add provisioning and copying, about
+same machine with the images loaded, on the committed kit: every volume removed, healthy again in 10 s, the store empty,
+`acceptance.mjs` 82 of 82). Not rehearsed: a Docker daemon restart and a new droplet; on a new droplet add provisioning and copying, about
 30 minutes by hand.
 
 ## 9. Acceptance gates and stop conditions
@@ -205,7 +206,9 @@ stack left running for 72 hours as the way back.
 1,295 passed, 1 skipped; named suites 514; ruff, mypy, import contracts; 17 of 17 planted trust faults caught; 209
 interface unit tests; production build; 31 browser flows; the evidence exporter unchanged.
 
-**Independent review (infrastructure, security, reliability; a fresh agent that could reject): APPROVE WITH FIXES.** No
+**Independent review (infrastructure, security, reliability; a fresh agent that could reject): APPROVE WITH FIXES on
+the first pass, APPROVE on `e1cf0ef` after the fixes** (its last three points, wording about a timing, the kit a run
+used and how far upload times are indicative, are corrected here). No
 security hole found: signed sessions, origin checks, per-address limits behind Caddy, non-root containers, secrets kept
 out of images and logs, and the no-backup design were each verified. Its blocker (this report was not committed) and its
 fixes are done: SQLite's temporary files moved to memory (`TMPDIR=/tmp`, shown by a probe); the README's claims narrowed
