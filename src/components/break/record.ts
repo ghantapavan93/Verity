@@ -266,10 +266,15 @@ export function definedParties(c: CaseRecord, citedSectionId: string): DefinedPa
 /** Where each phrase first occurs in the text, in text order, dropping any that overlap an earlier one. */
 export function firstOccurrences(text: string, phrases: { phrase: string; kind: number }[]): { start: number; end: number; kind: number }[] {
   const found = phrases
+    .filter(({ phrase }) => phrase.length > 0)
     .map(({ phrase, kind }) => ({ start: text.indexOf(phrase), end: text.indexOf(phrase) + phrase.length, kind }))
     .filter((r) => r.start >= 0)
-    .sort((a, b) => a.start - b.start);
-  return found.filter((r, i) => i === 0 || r.start >= found[i - 1].end);
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+  // Each box is kept only if it starts after the last box kept, not merely after the one before it: a dropped box
+  // must not let a later one overlap a kept one (Annotated would print the overlapping text twice).
+  const kept: typeof found = [];
+  for (const r of found) if (kept.length === 0 || r.start >= kept[kept.length - 1].end) kept.push(r);
+  return kept;
 }
 
 export function listed(names: string[]): string {

@@ -48,7 +48,15 @@ describe("the failure", () => {
     const parties = definedParties(headline, headline.sessions[0].finding.spans[0].sectionId);
     expect(parties.length).toBe(2);
     for (const p of parties) expect(key.textContent).toContain(p.definition);
-    expect(key.textContent).toContain("Boxes drawn by this page, by searching the text for each defined term.");
+    expect(key.textContent).toContain(
+      "Boxes drawn by this page with a text search: in the quote for each defined term, in the answer for the name it defines.",
+    );
+    // Every quotation in the key is verbatim from the record field the sentence before it names (review of e239ea5:
+    // the conditions were once introduced as the pre-registered answer's words, which they are not).
+    expect(key.textContent).toContain("The pre-registered conditions, written before the run:");
+    const quoted = Array.from(key.querySelectorAll("q"), (q) => q.textContent);
+    expect(quoted.length).toBeGreaterThan(parties.length);
+    for (const q of quoted) expect([...parties.map((p) => p.definition), ...headline.requiredConditions]).toContain(q);
     expect(key.textContent).toContain("no released code checks it");
     const exhibit = screen.getByRole("figure", { name: /the question, the answer and the quote/i });
     // The model's answer reads out verbatim: a box changes how it looks, not what it says.
@@ -77,7 +85,10 @@ describe("the failure", () => {
     expect(exhibit).toContain("Found means the words are there. It does not mean they support the answer.");
     expect(exhibit).toContain("run again on this answer by the page's tests, decides it as recorded");
     expect(exhibit).toContain(`recorded under ${String(headline.sessions[0].options.policy_version)}, policy-v6 plus the rejected party check`);
-    expect(document.body.textContent).not.toContain("here it found nothing to lower");
+    // The sentence names policy-v7 as policy-v6 plus the rejected check; that holds only while the recorded policy is
+    // the rejected fix's own.
+    for (const s of headline.sessions) expect(s.options.policy_version).toBe(record.rejectedFix.policy);
+    expect(document.body.textContent).not.toContain("found nothing to lower");
   });
 
   it("links the contract to its SEC filing", () => {
@@ -194,8 +205,8 @@ describe("the rejected fix", () => {
     renderPage();
     const built = fixScore(record.rejectedFix.rows, "diagnostic");
     const unseen = fixScore(record.rejectedFix.rows, "unseen");
-    expect(document.body.textContent).toContain(
-      `Built on: ${built.caughtEverySession} of ${built.questions} questions caught. Unseen: ${unseen.caughtEverySession} of ${unseen.questions}.`,
+    expect((document.body.textContent ?? "").replace(/\s+/g, " ")).toContain(
+      `Wrong-party questions caught in every session. Built on: ${built.caughtEverySession} of ${built.questions}. Unseen: ${unseen.caughtEverySession} of ${unseen.questions}.`,
     );
     expect(side("Cases it was built on")).toContain(`${built.caughtEverySession} of ${built.questions} wrong-party questions caught in every session`);
     expect(side("Cases it was built on")).toContain(`${built.caughtFindings} of ${built.findings} wrong-party findings caught across both sessions`);
@@ -209,7 +220,8 @@ describe("the rejected fix", () => {
   it("titles the section with the counts, not a claim that it worked", () => {
     renderPage();
     const heading = screen.getByRole("heading", { name: /A check that caught/ }).textContent ?? "";
-    expect(heading).toBe("A check that caught 4 of 5 cases it was built on, and missed every new one.");
+    // The unit is the wrong-party question, not the set: the check was built on more questions than these five.
+    expect(heading).toBe("A check that caught 4 of the 5 wrong-party questions it was built on, and missed every new one.");
   });
 
   it("counts the unseen score in questions, each asked in both sessions, not in findings", () => {
@@ -271,5 +283,15 @@ describe("your turn", () => {
     expect(warning).toMatch(/Do not upload confidential, privileged or personal documents/);
     expect(warning).toMatch(/does not detect sensitive content and does not refuse it/);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("says what the live workbench runs on before handing over, and that this page does not need it", () => {
+    renderPage();
+    const turn = (document.getElementById("your-turn")?.textContent ?? "").replace(/\s+/g, " ");
+    expect(turn).toContain("runs live on one laptop with one GPU");
+    expect(turn).toContain("when the laptop is off so is the workbench");
+    expect(turn).toContain("This page is a recording and works either way.");
+    // A run can retry on invalid output, so an answer is not promised as a single model call.
+    expect(turn).not.toMatch(/one model call/);
   });
 });

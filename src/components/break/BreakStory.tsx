@@ -124,12 +124,13 @@ function RoleKey({ parties, conditions }: { parties: DefinedParty[]; conditions:
       </ul>
       {conditions.length > 0 && (
         <p className={styles.roleReading}>
-          The pre-registered answer, written before the run: {conditions.map((c, i) => [i > 0 ? " · " : "", <q key={c}>{c}</q>])}
+          The pre-registered conditions, written before the run: {conditions.map((c, i) => [i > 0 ? " · " : "", <q key={c}>{c}</q>])}
           <Cite id="cases" />
         </p>
       )}
       <p className={styles.roleNote}>
-        Boxes drawn by this page, by searching the text for each defined term. Who holds the right is that answer&apos;s reading; no released code checks it.
+        Boxes drawn by this page with a text search: in the quote for each defined term, in the answer for the name it defines. Who holds the right is the
+        pre-registered reading; no released code checks it.
       </p>
     </div>
   );
@@ -777,7 +778,7 @@ function RejectedFix() {
     <Section
       id="fix"
       kicker="The rejected fix"
-      title={`A check that caught ${built.caughtEverySession} of ${built.questions} cases it was built on, and ${unseen.caughtAnySession === 0 ? "missed every new one" : `${unseen.caughtAnySession} of ${unseen.questions} new ones`}.`}
+      title={`A check that caught ${built.caughtEverySession} of the ${built.questions} wrong-party questions it was built on, and ${unseen.caughtAnySession === 0 ? "missed every new one" : `${unseen.caughtEverySession} of ${unseen.questions} new ones`}.`}
     >
       <p className={styles.body}>
         The idea: read the parties from the contract&apos;s opening clause, find who acts in the answer and who acts in the quote, and lower the pass when they
@@ -786,7 +787,8 @@ function RejectedFix() {
         <Cite id="labels" />.
       </p>
       <p className={styles.fixSummary}>
-        Built on: {built.caughtEverySession} of {built.questions} questions caught. Unseen: {unseen.caughtEverySession} of {unseen.questions}.
+        Wrong-party questions caught in every session. Built on: {built.caughtEverySession} of {built.questions}. Unseen: {unseen.caughtEverySession} of{" "}
+        {unseen.questions}.
       </p>
       <div className={styles.fixSides}>
         <FixSide
@@ -867,7 +869,11 @@ function RuleCard({
       </p>
       <div className={styles.ruleStatus}>
         <StatusChip status={s.finding.status} hasGuidance={false} source={s.finding.statusSource} />
-        {s.finding.statusReason ? <span>{s.finding.statusReason}</span> : <span>kept: the value rule found nothing to lower</span>}
+        {s.finding.statusReason ? (
+          <span>{s.finding.statusReason}</span>
+        ) : (
+          <span>kept: the released value rule, run again by the page&apos;s tests, lowers nothing</span>
+        )}
       </div>
       <span className={styles.label}>Its quotes · {s.finding.spans.length}</span>
       {s.finding.spans.map((sp) => (
@@ -913,7 +919,7 @@ function Counterexample() {
           s={alarm}
           explanation={
             alarm.finding.status === "pass"
-              ? "Its first sentence is the other session's, and here the model also quoted the fee clause, which states $1,500,000, so the rule found nothing to lower. The rule judges values only: this answer's added credit-bid sentence is garbled, as the adjudication notes."
+              ? "Its first sentence is the other session's, and here the model also quoted the fee clause, which states $1,500,000, so the released value rule, run again by the page's tests, lowers nothing. The rule judges values only: this answer's added credit-bid sentence is garbled, as the adjudication notes."
               : "The answer is right that Lilly's subsidiary does not pay. But its quotes never state the $1.5 million, so the rule cannot tell a true figure from a repeated premise."
           }
         >
@@ -941,8 +947,8 @@ function YourTurn() {
             did not. In Runs, each run downloads as an evidence pack: its record, its quotes and the hashes to check them.
           </p>
           <p className={styles.dim}>
-            The workbench runs live on one laptop with one GPU: each answer waits on one model call, usually half a minute or more, and when the laptop is off
-            so is the workbench. This page is a recording and works either way.
+            The workbench runs live on one laptop with one GPU: each answer waits on the model, usually half a minute or more, and when the laptop is off so is
+            the workbench. This page is a recording and works either way.
           </p>
           <Link href="/" className={styles.primaryLink}>
             Open the workbench

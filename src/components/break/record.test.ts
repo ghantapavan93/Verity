@@ -120,4 +120,39 @@ describe("firstOccurrences: where each phrase first appears, without overlaps", 
       ]),
     ).toEqual([{ start: 0, end: 28, kind: 0 }]);
   });
+
+  it("keeps no box overlapping a kept one, even past a dropped one (review of e239ea5)", () => {
+    expect(
+      firstOccurrences("abcdefgh", [
+        { phrase: "abcdefg", kind: 0 },
+        { phrase: "bc", kind: 1 },
+        { phrase: "de", kind: 2 },
+      ]),
+    ).toEqual([{ start: 0, end: 7, kind: 0 }]);
+    expect(firstOccurrences("Buyer", [{ phrase: "", kind: 0 }])).toEqual([]);
+  });
+
+  it("returns boxes in text order that never overlap and each hold their phrase, for any phrases", () => {
+    const text = "the Stockholders’ Representative notifies Buyer; Buyer (Axogen) pays the Representative";
+    const words = text.split(/\s+/);
+    let seed = 7;
+    const next = (n: number) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
+    for (let trial = 0; trial < 500; trial++) {
+      const phrases = Array.from({ length: 1 + next(5) }, (_, kind) => {
+        const from = next(words.length);
+        return {
+          phrase: words
+            .slice(from, from + 1 + next(3))
+            .join(" ")
+            .slice(0, 1 + next(40)),
+          kind,
+        };
+      });
+      const boxes = firstOccurrences(text, phrases);
+      boxes.forEach((b, i) => {
+        expect(text.slice(b.start, b.end)).toBe(phrases[b.kind].phrase);
+        if (i > 0) expect(b.start).toBeGreaterThanOrEqual(boxes[i - 1].end);
+      });
+    }
+  });
 });
