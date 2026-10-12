@@ -53,6 +53,9 @@ def xml_safe(text: str) -> str:
 
 # "Not found" is a statement about the sections the model was handed, never about the agreement (prompt rule 8).
 STATUS_LABELS = {"needs_review": "Needs review", "missing": "Not found in the sections read", "unresolved": "Unresolved"}
+# The model's own sentence behind a not-found finding, in the memo as on the card: labelled as the model's, after the
+# product's sentence, never as the finding (models.Finding.withheld_conclusion; m10, 2026-10-12).
+WITHHELD_NOTE = "(not checked by code; withheld from the finding because the model reported the point as not found in the sections it was given)"
 
 
 def status_label(status: str, with_guidance: bool, source: str = "computed_days") -> str:
@@ -187,6 +190,9 @@ def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str],
     for f in findings:
         parts.append(f"<h2>{escape(f.topic)} · {status_label(f.status, run.guidance is not None, f.status_source)}</h2>")
         parts.append(f"<p>{escape(f.shown_conclusion)}</p>")
+        if f.withheld_conclusion:
+            withheld = escape(f.withheld_conclusion)
+            parts.append(f"<p class='withheld'><strong>The model also wrote</strong> <small>{escape(WITHHELD_NOTE)}</small>: {withheld}</p>")
         for span in f.spans:
             source = by_span[id(span)]
             parts.append(
@@ -358,6 +364,11 @@ def memo_docx(
     for f in findings:
         document.add_heading(xml_safe(f"{f.topic} · {status_label(f.status, run.guidance is not None, f.status_source)}"), level=2)
         document.add_paragraph(xml_safe(f.shown_conclusion))
+        if f.withheld_conclusion:
+            withheld = document.add_paragraph()
+            withheld.add_run("The model also wrote ").bold = True
+            withheld.add_run(xml_safe(f"{WITHHELD_NOTE}: ")).italic = True
+            withheld.add_run(xml_safe(f.withheld_conclusion))
         for span in f.spans:
             source = by_span[id(span)]
             p = document.add_paragraph()

@@ -17,6 +17,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from docx import Document as DocxDocument
 from fastapi.testclient import TestClient
 
 from app.db import SessionLocal
@@ -86,7 +87,17 @@ def test_a_point_not_found_is_said_in_the_products_words_everywhere_and_in_the_m
 
     memo = client.post("/api/memos", json={"runId": run_id}).json()
     html = client.get(memo["htmlUrl"]).text
-    assert NOT_FOUND_CONCLUSION in html and "does not provide for an uptime commitment" not in html
+    # The memo states the product's sentence as the finding; the model's appears once, after a label that names it as
+    # the model's and says it was not checked (m10, 2026-10-12: as on the card).
+    assert html.index(NOT_FOUND_CONCLUSION) < html.index("<strong>The model also wrote</strong>") < html.index(ABSOLUTE)
+    assert html.count(ABSOLUTE) == 1 and "not checked by code" in html
+    paragraphs = DocxDocument(io.BytesIO(client.get(memo["docxUrl"]).content)).paragraphs
+    texts = [p.text for p in paragraphs]
+    assert NOT_FOUND_CONCLUSION in texts
+    withheld = next(p for p in paragraphs if ABSOLUTE in p.text)
+    assert texts.index(NOT_FOUND_CONCLUSION) < paragraphs.index(withheld)
+    assert withheld.runs[0].text == "The model also wrote " and withheld.runs[0].bold and withheld.runs[-1].text == ABSOLUTE
+    assert sum(ABSOLUTE in t for t in texts) == 1
     assert (
         "Sections read" in html and "chosen by retrieval for the question" in html and "Nothing in this memo is a statement about the other sections." in html
     )
@@ -109,8 +120,21 @@ def test_a_finding_the_model_did_find_keeps_its_own_conclusion(client: TestClien
         return payload
 
     answer_with(client, monkeypatch, found)
-    finding = ask(client, "Which law governs this agreement?")["findings"][0]
+    detail = ask(client, "Which law governs this agreement?")
+    finding = detail["findings"][0]
     assert finding["conclusion"] == finding["modelConclusion"] == "Delaware law governs."
+    html = client.get(client.post("/api/memos", json={"runId": detail["id"]}).json()["htmlUrl"]).text
+    assert "The model also wrote" not in html, "a finding the model found has no withheld sentence"
+
+
+def test_a_withheld_sentence_is_the_models_only_where_the_product_replaced_it() -> None:
+    def finding(status: str, conclusion: str) -> Finding:
+        return Finding(status=status, conclusion=conclusion)
+
+    assert finding("missing", ABSOLUTE).withheld_conclusion == ABSOLUTE
+    assert finding("missing", f"  {ABSOLUTE}\n").withheld_conclusion == ABSOLUTE
+    for status, conclusion in [("missing", NOT_FOUND_CONCLUSION), ("missing", "   "), ("pass", ABSOLUTE), ("needs_review", ABSOLUTE), ("unresolved", ABSOLUTE)]:
+        assert finding(status, conclusion).withheld_conclusion is None, (status, conclusion)
 
 
 def test_when_the_model_reports_nothing_to_quote_the_note_is_the_products_not_the_models(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

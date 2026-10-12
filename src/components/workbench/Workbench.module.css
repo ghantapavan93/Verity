@@ -887,6 +887,33 @@
   color: var(--text);
 }
 
+/* The model's own sentence behind a not-found finding: secondary, collapsed, and labelled as the model's (m10). */
+.withheld {
+  margin: -4px 0 12px;
+  padding: 8px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-m);
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.withheld summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+
+.withheldText {
+  margin: 8px 0 4px;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.withheldNote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
 .evidenceList {
   display: flex;
   flex-direction: column;

@@ -44,6 +44,19 @@ export function FindingCard({
         <StatusChip status={finding.status} hasGuidance={hasGuidance} source={finding.statusSource} />
       </header>
       <p className={styles.resultText}>{finding.conclusion}</p>
+      {/* Where the model reported the point as not found, the product says only that; the model's own sentence is
+          kept, collapsed and named as the model's, never as the finding (m10: of 23 such recorded sentences, 7 were
+          right, 7 incomplete and 9 wrong, and nothing in code tells them apart, so the status stays as it is). */}
+      {finding.status === "missing" && finding.modelConclusion && finding.modelConclusion !== finding.conclusion && (
+        <details className={styles.withheld}>
+          <summary>The model also wrote a sentence · withheld</summary>
+          <p className={styles.withheldText}>{finding.modelConclusion}</p>
+          <p className={styles.withheldNote}>
+            The model&apos;s words, not checked by code. Withheld from the answer because the model reported the point as not found in the sections it was
+            given.
+          </p>
+        </details>
+      )}
       {/* The passages come straight after the conclusion, whole (each is at most 150 characters), so the answer can be
           read against its source on the card itself (frontend review, 2026-10-09: the quote was below the fold in 99 of 99
           renders, behind the ledger). */}
