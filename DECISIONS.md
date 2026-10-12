@@ -945,7 +945,7 @@ copy of the public store holds visitors' contracts past the seven days the first
 before the earliest workspace in it ends, so the store is not backed up and the deployment is rebuilt instead (README,
 what the disk keeps). Upload spools live in memory (`/tmp` as tmpfs) and Caddy refuses a body over 26 MiB before the API
 reads it. The API image installs `backend/requirements.lock`, the workstation's versions, instead of a second pinned
-list that had drifted, and its `test` stage runs the backend suite on that image (Linux: 1,267 passed, 22 skipped,
+list that had drifted, and its `test` stage runs the backend suite on that image (Linux, at fe030a8: 1,274 passed, 22 skipped,
 the Windows-only ones). The release gate now installs the same lock: it had been testing the newest versions on the day
 (FastAPI 0.143 against the workstation's 0.141). A server that runs but stops answering is restarted (`liveness.py`,
 the workstation supervisor's rule of three probes); the rehearsal of that fix found its own first version choosing pid 1
@@ -965,3 +965,12 @@ f8a2f92), so no cloud interface image could be built: regenerated on Linux, and 
 dependency in the lock the way npm does. Not done: building the interface for a static /break (it would need its own
 links to the workbench and a second build target for a page the VM already serves without the API or the GPU). What
 still needs a paid test, and the gates that decide it: `deploy/cloud/CLOUD-READINESS.md`.
+The independent review of the cloud preparation (a fresh agent that could reject) approved it with fixes and found no
+security hole. Fixed: SQLite wrote its temporary files under `/var/tmp`, on the container's disk, where a purge's
+statement journal can hold a contract's words (`TMPDIR=/tmp` moves them into memory; a probe in the image shows both);
+Modal's request timeout is the API's 600 s, the only bound that holds once a long call is redirected; core dumps are off,
+capabilities dropped and privileges not escalatable in the API and interface containers; Ollama comes from its own image
+pinned by digest rather than an install script; the runbook's claims were narrowed to what the evidence shows, and the
+rehearsal was re-run on the final images with every output kept. Measuring four 25 MB uploads at once (1.29 GiB for the
+containers, the API 1.20 GiB) moved the recommended VM from 2 GB to 4 GB: without swap, which the privacy design rules
+out, a 2 GB machine had no margin for that burst.
