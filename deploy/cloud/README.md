@@ -52,12 +52,13 @@ apt-get update && apt-get -y install docker.io docker-compose-v2 unattended-upgr
 ufw default deny incoming && ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw enable
 # Docker publishes ports around ufw: never add a `ports:` entry to any service but Caddy.
 sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config && systemctl reload ssh
-fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab
 mkdir -p /opt/verity && chmod 700 /opt/verity
 ```
 
 Ubuntu's own `docker.io` and `docker-compose-v2`, not Docker's repository: one source, updated by unattended-upgrades.
-The swap file is a margin for `docker load` and spikes, not working memory (measured peak below).
+No swap file: an upload spooled in memory could be swapped to a disk no retention pass reaches, and the measured peak
+(573 MiB for the three containers, below) leaves the 2 GB machine about a gigabyte free. Check that the droplet image
+made none (`swapon --show` prints nothing).
 
 Then, from the build machine:
 
@@ -110,7 +111,7 @@ contract's words can reach on this VM is covered:
 | `workbench.db` rows | Deleted by the hourly retention pass once the workspace ends; `secure_delete` overwrites their pages | `tests/test_retention.py`; rehearsed (below) |
 | `workbench.db-wal` | Checkpointed and truncated by every pass | same |
 | Uploaded originals, memos | Unlinked after the commit; an hourly sweep removes any file no row names, abandoned memo drafts included | same, and `test_the_sweep_removes_a_memo_draft_a_killed_process_left` |
-| Upload spools | `/tmp` is in memory (`tmpfs`), never on disk | `compose.yml` |
+| Upload spools | `/tmp` is in memory (`tmpfs`), never on disk; the VM has no swap to page it out to | `compose.yml`; `swapon --show` |
 | Logs | Ids, stages and durations, never a contract's words; SQL errors without their values; rotated at 3 × 10 MB | `test_ordinary_logs_carry_ids…`, `test_an_error_the_store_raises…` |
 | Backups, snapshots, archives | **None.** No backup volume, no cron, DigitalOcean backups off, no snapshot of the volume | this file |
 
