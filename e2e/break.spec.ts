@@ -40,7 +40,13 @@ test("Break Verity tells one recorded failure, its record, the rejected fix and 
     await expect(page.getByLabel(`Section text: ${headline.sections[span.sectionId as keyof typeof headline.sections].heading}`).locator("mark")).toBeVisible();
 
     // Who is who in the quoted clause: the recorded definitions, beside the quote, on load.
-    await expect(page.getByRole("group", { name: "Who is who in this clause" })).toContainText("Axogen, Inc., a Minnesota corporation");
+    const key = page.getByRole("group", { name: "Who is who in this clause" });
+    await expect(key).toContainText("Axogen, Inc., a Minnesota corporation");
+    // The heading in quotation marks reads as the section's heading in the record, case included: innerText is the
+    // text as rendered, after any CSS text-transform.
+    const defining = headline.decisivePassages.find((p) => p.sectionId !== span.sectionId);
+    const heading = headline.sections[defining?.sectionId as keyof typeof headline.sections].heading;
+    await expect(key).toContainText(`“${heading}”`, { useInnerText: true });
 
     // The rejected fix, both sets side by side, and why it missed this page's headline.
     const unseen = page.getByRole("region", { name: "Unseen cases", exact: true });

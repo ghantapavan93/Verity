@@ -57,6 +57,18 @@ describe("the failure", () => {
     const quoted = Array.from(key.querySelectorAll("q"), (q) => q.textContent);
     expect(quoted.length).toBeGreaterThan(parties.length);
     for (const q of quoted) expect([...parties.map((p) => p.definition), ...headline.requiredConditions]).toContain(q);
+    // Source fidelity, case included: the heading the key puts in quotation marks is the section's heading as the
+    // record holds it from the filing, and the definition stands in that section's text (a re-cased "Agreement And
+    // Plan Of Merger" was once shown in quotation marks for "AGREEMENT AND PLAN OF MERGER").
+    const cited = headline.sessions[0].finding.spans[0].sectionId;
+    const defining = headline.decisivePassages.filter((p) => p.sectionId !== cited);
+    expect(defining.length).toBe(parties.length);
+    for (const p of defining) {
+      const section = headline.sections[p.sectionId as keyof typeof headline.sections];
+      expect(p.heading).toBe(section.heading);
+      expect(section.text).toContain(p.quote);
+      expect(key.textContent).toContain(`is defined in “${section.heading}”: ${p.quote}`);
+    }
     expect(key.textContent).toContain("no released code checks it");
     const exhibit = screen.getByRole("figure", { name: /the question, the answer and the quote/i });
     // The model's answer reads out verbatim: a box changes how it looks, not what it says.

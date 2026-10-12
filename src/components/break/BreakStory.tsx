@@ -117,7 +117,7 @@ function RoleKey({ parties, conditions }: { parties: DefinedParty[]; conditions:
           <li key={p.term}>
             <span className={i === 0 ? styles.swatchFirst : styles.swatchSecond} aria-hidden="true" />
             <span>
-              <strong>{p.term}</strong> is defined in “{p.heading.toLowerCase().replace(/(^|\s)\w/g, (c) => c.toUpperCase())}”: <q>{p.definition}</q>
+              <strong>{p.term}</strong> is defined in “{p.heading}”: <q>{p.definition}</q>
             </span>
           </li>
         ))}
