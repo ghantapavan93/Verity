@@ -1405,6 +1405,8 @@ export interface components {
              * @default []
              */
             valueChoices: components["schemas"]["ValueChoiceOut"][];
+            /** Withheldconclusion */
+            withheldConclusion?: string | null;
         };
         /** FindingRecord */
         FindingRecord: {

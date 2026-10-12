@@ -2083,6 +2083,17 @@
             },
             "title": "Valuechoices",
             "type": "array"
+          },
+          "withheldConclusion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Withheldconclusion"
           }
         },
         "required": [

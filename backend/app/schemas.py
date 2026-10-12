@@ -163,6 +163,9 @@ class FindingOut(ApiModel):
     conclusion: str
     # The model's own sentence, as recorded. Shown as the model's, never as the finding.
     model_conclusion: str = ""
+    # The model's sentence where the product shows its not-found sentence instead, or None (models.Finding
+    # .withheld_conclusion). The card and the memo show it only from here, labelled as the model's.
+    withheld_conclusion: str | None = None
     spans: list[SpanOut]
     guidance_reference: str | None
     observed: str | None

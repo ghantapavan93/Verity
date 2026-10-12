@@ -72,6 +72,7 @@ def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> Findi
         latest_review_id=latest_review_id(finding),
         conclusion=finding.shown_conclusion,
         model_conclusion=finding.conclusion,
+        withheld_conclusion=finding.withheld_conclusion,
         spans=[
             SpanOut(
                 section_id=s.section_id,

@@ -46,13 +46,14 @@ export function FindingCard({
       <p className={styles.resultText}>{finding.conclusion}</p>
       {/* Where the model reported the point as not found, the product says only that; the model's own sentence is
           kept, collapsed and named as the model's, never as the finding (m10: of 23 such recorded sentences, 7 were
-          right, 7 incomplete and 9 wrong, and nothing in code tells them apart, so the status stays as it is). */}
-      {finding.status === "missing" && finding.modelConclusion && finding.modelConclusion !== finding.conclusion && (
+          right, 7 incomplete and 9 wrong, and nothing in code tells them apart, so the status stays as it is). The API
+          decides when there is one (Finding.withheld_conclusion), for the card and the memo alike. */}
+      {finding.withheldConclusion && (
         <details className={styles.withheld}>
           <summary>The model also wrote a sentence · withheld</summary>
-          <p className={styles.withheldText}>{finding.modelConclusion}</p>
+          <p className={styles.withheldText}>{finding.withheldConclusion}</p>
           <p className={styles.withheldNote}>
-            The model&apos;s words, not checked by code. Withheld from the answer because the model reported the point as not found in the sections it was
+            The model&apos;s words, not checked by code. Withheld from the finding because the model reported the point as not found in the sections it was
             given.
           </p>
         </details>

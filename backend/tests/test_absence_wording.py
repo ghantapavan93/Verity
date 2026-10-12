@@ -77,6 +77,7 @@ def test_a_point_not_found_is_said_in_the_products_words_everywhere_and_in_the_m
     assert finding["status"] == "missing" and finding["evidenceKind"] == "coverage"
     assert finding["conclusion"] == NOT_FOUND_CONCLUSION == "The model did not find this in the sections it was given."
     assert finding["modelConclusion"] == ABSOLUTE, "the model's sentence is kept, and named as the model's"
+    assert finding["withheldConclusion"] == ABSOLUTE, "the API, not the card, says there is a withheld sentence"
 
     record = next(f for f in client.get("/api/findings").json() if f["runId"] == run_id)
     assert record["conclusion"] == NOT_FOUND_CONCLUSION
@@ -123,6 +124,7 @@ def test_a_finding_the_model_did_find_keeps_its_own_conclusion(client: TestClien
     detail = ask(client, "Which law governs this agreement?")
     finding = detail["findings"][0]
     assert finding["conclusion"] == finding["modelConclusion"] == "Delaware law governs."
+    assert finding["withheldConclusion"] is None
     html = client.get(client.post("/api/memos", json={"runId": detail["id"]}).json()["htmlUrl"]).text
     assert "The model also wrote" not in html, "a finding the model found has no withheld sentence"
 
@@ -133,7 +135,9 @@ def test_a_withheld_sentence_is_the_models_only_where_the_product_replaced_it() 
 
     assert finding("missing", ABSOLUTE).withheld_conclusion == ABSOLUTE
     assert finding("missing", f"  {ABSOLUTE}\n").withheld_conclusion == ABSOLUTE
-    for status, conclusion in [("missing", NOT_FOUND_CONCLUSION), ("missing", "   "), ("pass", ABSOLUTE), ("needs_review", ABSOLUTE), ("unresolved", ABSOLUTE)]:
+    cases = [("missing", NOT_FOUND_CONCLUSION), ("missing", f" {NOT_FOUND_CONCLUSION}\n"), ("missing", "   "), ("missing", "")]
+    cases += [("pass", ABSOLUTE), ("needs_review", ABSOLUTE), ("unresolved", ABSOLUTE)]
+    for status, conclusion in cases:
         assert finding(status, conclusion).withheld_conclusion is None, (status, conclusion)
 
 
