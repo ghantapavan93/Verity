@@ -920,3 +920,18 @@ leaves open: "Not checked by code: whether the passage supports the answer, incl
 duty". No new check; the party check stays rejected. Rejected concepts, kept with the research: a guided tour (it
 delays the point, and its dimmed text failed contrast), an X-ray page (a developer-tool template with invented stages),
 a second ledger beside the drawer, any toggle that hides the verdict and any choose-first step.
+The independent review of e239ea5 approved it with fixes, each made with a test. The role key introduced the
+pre-registered conditions as "the pre-registered answer", whose words they are not; it now names them, and a test
+checks that every quotation in the key is verbatim from the field it is introduced as. The rejected fix's title and
+summary read "4 of 5 cases it was built on", as if the check had been built on five questions; they now count
+wrong-party questions, in every session, in both places. The box note now says which search drew which box (the
+defined term in the quote, the name it defines in the answer). The card and the memo decided the withheld sentence
+apart, the card from the raw fields and the memo from `Finding.withheld_conclusion`, and could disagree on a sentence
+of whitespace or the product's own sentence with a trailing newline; the API now sends `withheld_conclusion` and the
+card renders only that. `firstOccurrences` compared each box with the one before it even when that one had been
+dropped, so a third phrase could overlap a kept box and print its text twice; it now compares with the last box kept,
+under a property test of 500 random phrase sets. The counterexample's two "found nothing to lower" sentences now say
+what the tests establish, as the headline's does, and the hand-off no longer promises one model call per answer (a run
+retries on invalid output). Kept as they are: the sentence "Found means the words are there…" sits in the exhibit's
+check rows, which a first visitor sees without opening a tab; and memos written before this change keep their old
+form, since a memo is generated once per run and review state.
