@@ -15,6 +15,9 @@ from .base import ContextOverflow, Generation, ProviderError, failed_call
 
 log = logging.getLogger(__name__)
 
+# How long health waits for the endpoint's list of models: a probe, which a running server answers at once.
+HEALTH_PROBE_TIMEOUT_S = 5.0
+
 
 def _overflow_message(body: str, limit: int) -> str:
     """What the server said, as a sentence a person can act on. The token count is the server's own."""
@@ -47,8 +50,8 @@ class OllamaProvider:
         made with those and not with whatever the process's settings have since become."""
         return OllamaProvider(model=str(options.get("model") or self.model), base_url=self.base_url, timeout_s=self.timeout_s, decoding=options)
 
-    def _tags(self) -> list[dict[str, Any]]:
-        response = httpx.get(f"{self.base_url}/api/tags", timeout=5.0, headers=settings.ollama_headers)
+    def _tags(self, timeout: float) -> list[dict[str, Any]]:
+        response = httpx.get(f"{self.base_url}/api/tags", timeout=timeout, headers=settings.ollama_headers, follow_redirects=True)
         response.raise_for_status()
         models: list[dict[str, Any]] = response.json().get("models", [])
         return models
@@ -66,7 +69,7 @@ class OllamaProvider:
 
     def healthy(self) -> tuple[bool, str]:
         try:
-            models = self._tags()
+            models = self._tags(HEALTH_PROBE_TIMEOUT_S)
         except (httpx.HTTPError, ValueError) as error:
             # The endpoint's address stays in the server log; /api/health is public and never names it.
             log.warning("model endpoint %s not reachable: %s", self.base_url, type(error).__name__)
@@ -85,7 +88,9 @@ class OllamaProvider:
         if not settings.model_digest:
             return
         try:
-            problem = self._build_problem(self._tags())
+            # The answer's own budget, not health's: a serverless endpoint that has scaled to zero answers this first
+            # request only once a container has started, a minute or more on Modal (cloud readiness review, 2026-10-12).
+            problem = self._build_problem(self._tags(self.timeout_s))
         except (httpx.HTTPError, ValueError) as error:
             raise ProviderError(f"the model endpoint could not confirm its build ({type(error).__name__})") from error
         if problem:
@@ -110,7 +115,10 @@ class OllamaProvider:
         self._check_build()
         started = time.perf_counter()
         try:
-            response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout_s, headers=settings.ollama_headers)
+            # Modal answers a request still running after 150 s with a 303 to a URL that waits for the result; following
+            # it is how that platform's documented contract is kept (cloud readiness review, 2026-10-12). A server on the
+            # same machine never redirects.
+            response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout_s, headers=settings.ollama_headers, follow_redirects=True)
             if response.status_code == 400 and "exceed" in response.text and "context" in response.text:
                 raise ContextOverflow(_overflow_message(response.text, int(self.options()["num_ctx"])))
             response.raise_for_status()

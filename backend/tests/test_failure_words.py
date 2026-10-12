@@ -28,13 +28,13 @@ RAW = "[WinError 10061] No connection could be made because the target machine a
 
 
 def _fail_with(error: Exception) -> Callable[..., httpx.Response]:
-    def post(url: str, json: dict[str, Any], timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
+    def post(url: str, json: dict[str, Any], timeout: float, headers: dict[str, str] | None = None, follow_redirects: bool = False) -> httpx.Response:
         raise error
 
     return post
 
 
-def _tags(url: str, timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
+def _tags(url: str, timeout: float, headers: dict[str, str] | None = None, follow_redirects: bool = False) -> httpx.Response:
     return httpx.Response(200, json=tags(PINNED), request=httpx.Request("GET", url))
 
 

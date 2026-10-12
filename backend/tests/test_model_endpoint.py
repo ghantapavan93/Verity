@@ -6,6 +6,10 @@ never publishes where the model lives.
 
 from __future__ import annotations
 
+import http.server
+import json as json_module
+import threading
+import time
 from typing import Any
 
 import httpx
@@ -13,6 +17,7 @@ import pytest
 
 from app import config
 from app.config import json_headers
+from app.providers import ollama as ollama_module
 from app.providers.base import ProviderError
 from app.providers.ollama import OllamaProvider
 from app.retrieval import hybrid
@@ -33,13 +38,13 @@ class Endpoint:
         self.digest, self.reachable = digest, reachable
         self.calls: list[tuple[str, dict[str, str]]] = []
 
-    def get(self, url: str, timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
+    def get(self, url: str, timeout: float, headers: dict[str, str] | None = None, follow_redirects: bool = False) -> httpx.Response:
         self.calls.append((url, dict(headers or {})))
         if not self.reachable:
             raise httpx.ConnectError("connection refused", request=httpx.Request("GET", url))
         return httpx.Response(200, json=tags(self.digest), request=httpx.Request("GET", url))
 
-    def post(self, url: str, json: dict[str, Any], timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
+    def post(self, url: str, json: dict[str, Any], timeout: float, headers: dict[str, str] | None = None, follow_redirects: bool = False) -> httpx.Response:
         self.calls.append((url, dict(headers or {})))
         if url.endswith("/api/embed"):
             return httpx.Response(200, json={"embeddings": [[0.0, 1.0] for _ in json["input"]]}, request=httpx.Request("POST", url))
@@ -104,6 +109,67 @@ def test_controls_the_pinned_build_answers_and_no_pin_checks_nothing(endpoint: E
     endpoint.calls.clear()
     OllamaProvider().generate_json("system", "user", {"type": "object"})
     assert [url.rsplit("/", 1)[1] for url, _ in endpoint.calls] == ["chat"]
+
+
+class ServerlessEndpoint(http.server.ThreadingHTTPServer):
+    """A model endpoint as Modal serves one, on a real socket: the list of models arrives only after a cold start, and an
+    answer still running at the platform's request limit is a 303 to a URL that waits for the result."""
+
+    cold_start_s = 0.6
+    seen: list[tuple[str, str, str | None]]
+
+
+class ServerlessHandler(http.server.BaseHTTPRequestHandler):
+    server: ServerlessEndpoint
+
+    def _send(self, status: int, body: dict[str, Any] | None = None, location: str | None = None) -> None:
+        payload = json_module.dumps(body or {}).encode()
+        self.send_response(status)
+        if location:
+            self.send_header("Location", location)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def do_GET(self) -> None:
+        self.server.seen.append(("GET", self.path, self.headers.get("Modal-Key")))
+        if self.path == "/api/tags":
+            time.sleep(self.server.cold_start_s)
+            self._send(200, tags(PINNED))
+        else:
+            self._send(200, CHAT)
+
+    def do_POST(self) -> None:
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        self.server.seen.append(("POST", self.path, self.headers.get("Modal-Key")))
+        self._send(303, location="/result/abc")
+
+    def log_message(self, format: str, *args: object) -> None:
+        pass
+
+
+def test_a_cold_serverless_endpoint_answers_through_its_start_and_its_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Modal starts a container on the first request after it scaled to zero (a minute or more) and answers a request
+    still running after 150 s with a 303 to a URL that waits for the result. The build check before an answer waited
+    5 s and the answer did not follow a redirect: the first question after the GPU slept failed, and so did any answer
+    longer than 150 s (cloud readiness review, 2026-10-12)."""
+    server = ServerlessEndpoint(("127.0.0.1", 0), ServerlessHandler)
+    server.seen = []
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        monkeypatch.setattr(config.settings, "model_digest", PINNED)
+        monkeypatch.setattr(config.settings, "ollama_headers", HEADERS)
+        monkeypatch.setattr(ollama_module, "HEALTH_PROBE_TIMEOUT_S", 0.2)
+        provider = OllamaProvider(base_url=f"http://127.0.0.1:{server.server_address[1]}", timeout_s=10)
+        ok, _ = provider.healthy()
+        assert not ok, "control: health is a probe and does not wait out a cold start"
+        assert provider.generate_json("system", "user", {"type": "object"}).text == '{"findings": []}'
+        assert ("POST", "/api/chat", "key-for-tests") in server.seen
+        assert ("GET", "/result/abc", "key-for-tests") in server.seen, "the redirect is followed with the credentials"
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 @pytest.mark.parametrize("raw", ['["Modal-Key", "x"]', "{not json", '{"Modal-Key": 7}'])
