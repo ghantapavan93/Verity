@@ -94,7 +94,7 @@ function WorkbenchSurface() {
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
 
   const runs = useRunFollower();
-  const { run, show: showRun, setRunError, stop: stopRun, ask: startRun } = runs;
+  const { run, show: showRun, refresh: refreshRun, claim: claimRun, setRunError, stop: stopRun, ask: startRun } = runs;
   const guidance = useGuidance();
   const { guidance: guidanceRecord, setGuidance, setDraft: setGuidanceDraft, open: guidanceOpen, setOpen: setGuidanceOpen } = guidance;
   const memo = useMemoAction();
@@ -290,6 +290,8 @@ function WorkbenchSurface() {
   const openRun = useCallback(
     async (runId: string, findingId: string | null = null, show = true) => {
       setViewError(null);
+      // Opening waits on three fetches; a question asked or another run opened meanwhile is newer and keeps the screen.
+      const current = claimRun();
       try {
         const detail = await getRunDetail(runId);
         const [loadedDoc, loadedRun, loadedGuidance] = await Promise.all([
@@ -297,6 +299,7 @@ function WorkbenchSurface() {
           getRun(runId),
           detail.guidanceId ? getGuidance(detail.guidanceId) : Promise.resolve(null),
         ]);
+        if (!current()) return;
         stopRun();
         setDoc(loadedDoc);
         setIsSample(false);
@@ -311,10 +314,10 @@ function WorkbenchSurface() {
         setStage("workspace");
         if (show) setView("assistant");
       } catch (error) {
-        setViewError(errorMessage(error));
+        if (current()) setViewError(errorMessage(error));
       }
     },
-    [doc, stopRun, showRun, setGuidance, setGuidanceDraft, resetMemo, setRunError],
+    [doc, claimRun, stopRun, showRun, setGuidance, setGuidanceDraft, resetMemo, setRunError],
   );
 
   useUrlState({ view, doc, stage, run, findingId: evidence?.id ?? null, openRun, openDocument, navigate, goHome });
@@ -325,14 +328,11 @@ function WorkbenchSurface() {
   const reviewHead = run?.reviewHead ?? "";
   useEffect(() => {
     if (view !== "assistant" || !finishedRunId) return;
-    let cancelled = false;
+    // refreshRun applies the record only while this run is still the one on screen.
     getRun(finishedRunId)
-      .then((fresh) => !cancelled && fresh.reviewHead !== reviewHead && showRun(fresh))
+      .then((fresh) => fresh.reviewHead !== reviewHead && refreshRun(fresh))
       .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [view, finishedRunId, reviewHead, showRun]);
+  }, [view, finishedRunId, reviewHead, refreshRun]);
 
   // Spoken to screen readers through the live region; derived, never stored.
   const announcement = useMemo(() => {
@@ -390,17 +390,19 @@ function WorkbenchSurface() {
       // `undefined`: the decision was refused because the finding was reviewed since; only the fetch below shows the state.
       if (review !== undefined) {
         const update = (f: FindingView) => (f.id === findingId ? { ...f, review, latestReviewId: latestReviewId ?? f.latestReviewId } : f);
-        showRun({ ...run, findings: run.findings.map(update) });
+        refreshRun({ ...run, findings: run.findings.map(update) });
         setEvidence((open) => (open ? update(open) : open));
       }
+      // Both updates go through refreshRun: a review's answer, or the record read after it, can arrive after the person
+      // has asked the next question, and must not put the reviewed run back on screen (m9 smoke, 2026-10-11).
       getRun(run.id)
         .then((fresh) => {
-          showRun(fresh);
+          refreshRun(fresh);
           setEvidence((open) => (open ? (fresh.findings.find((f) => f.id === open.id) ?? open) : open));
         })
         .catch(() => undefined);
     },
-    [run, showRun],
+    [run, refreshRun],
   );
 
   // Focus returns to the control that opened the sheet after the sheet is gone: the panel under the sheet is inert

@@ -190,3 +190,65 @@ describe("useRunFollower", () => {
     expect(result.current.stageDetails).toEqual({});
   });
 });
+
+describe("records that arrive after the person moved on (m9 smoke, 2026-10-11)", () => {
+  beforeEach(() => {
+    api.createRun.mockReset();
+    api.followRun.mockReset();
+  });
+
+  it("a refresh replaces the finished run it names", () => {
+    const { result } = renderHook(() => useRunFollower());
+    act(() => result.current.show(runView({ stage: "complete" })));
+    act(() => result.current.refresh(runView({ stage: "complete", reviewHead: "review-3" })));
+    expect(result.current.run?.reviewHead).toBe("review-3");
+  });
+
+  it("a refresh of the reviewed run, landing after the next question, neither shows it nor stops the new one", async () => {
+    // The race the live smoke test reproduced: confirm a finding, close the drawer, ask at once; the record re-read
+    // after the review came back last and put the reviewed run back on screen, and the new run was never followed.
+    const stopNew = vi.fn();
+    api.followRun.mockReturnValue(stopNew);
+    api.createRun.mockResolvedValue(runView({ id: "run2", stage: "reading", question: "What law governs this agreement?" }));
+    const { result } = renderHook(() => useRunFollower());
+    act(() => result.current.show(runView({ id: "run1", stage: "complete" })));
+    await act(() => result.current.ask("doc1", null, "What law governs this agreement?"));
+
+    act(() => result.current.refresh(runView({ id: "run1", stage: "complete", reviewHead: "review-1" })));
+
+    expect(result.current.state.phase).toBe("following");
+    expect(result.current.run?.id).toBe("run2");
+    expect(stopNew).not.toHaveBeenCalled();
+    act(() => callbacks().onStage("checking", "against the question"));
+    expect(result.current.run?.stage).toBe("checking");
+  });
+
+  it("a refresh of a run still in flight changes nothing: its stream owns it", () => {
+    api.followRun.mockReturnValue(vi.fn());
+    const { result } = renderHook(() => useRunFollower());
+    act(() => result.current.show(runView({ stage: "checking" })));
+    act(() => result.current.refresh(runView({ stage: "complete" })));
+    expect(result.current.state.phase).toBe("following");
+    expect(result.current.run?.stage).toBe("checking");
+  });
+
+  it("a claim stays the newest intent until a question is asked, a run is shown, or another claim is made", async () => {
+    api.followRun.mockReturnValue(vi.fn());
+    api.createRun.mockResolvedValue(runView({ id: "run2", stage: "reading" }));
+    const { result } = renderHook(() => useRunFollower());
+
+    const opening = result.current.claim();
+    expect(opening()).toBe(true);
+    await act(() => result.current.ask("doc1", null, "What law governs this agreement?"));
+    expect(opening()).toBe(false);
+
+    const second = result.current.claim();
+    act(() => result.current.show(runView({ id: "run3", stage: "complete" })));
+    expect(second()).toBe(false);
+
+    const earlier = result.current.claim();
+    const later = result.current.claim();
+    expect(earlier()).toBe(false);
+    expect(later()).toBe(true);
+  });
+});

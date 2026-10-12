@@ -139,6 +139,47 @@ test("a reload restores the run from the URL", async ({ page }) => {
   await expect(page.locator("section[data-section]").first()).toBeVisible();
 });
 
+test("a question asked right after a review keeps its own answer on screen", async ({ page }) => {
+  // The live smoke test of 2026-10-11 confirmed a finding, closed the drawer and asked at once: the new run finished on
+  // the server, but the record re-read after the review arrived last and put the reviewed run back on screen. Here
+  // that re-read is held back two seconds, as a slow network would, so the order is the same on every run.
+  await page.addInitScript(() => window.localStorage.setItem("workbench.reviewer", "Playwright"));
+  await openSample(page);
+  await ask(page, LIABILITY);
+  await expect(page.getByText(/Found in the document text at /)).toBeVisible();
+  const reviewed = new URL(page.url()).searchParams.get("run");
+  expect(reviewed).toBeTruthy();
+
+  let held = 0;
+  await page.route(`**/api/runs/${reviewed}`, async (route) => {
+    held++;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "Inspect evidence" }).first().click();
+  const drawer = page.locator('[aria-label="Evidence"]');
+  await expect(drawer).toBeVisible();
+  // One review, whichever the finding offers: the flows share one data directory, so an earlier flow may have confirmed
+  // it already, and clearing it is a review too, re-read the same way.
+  const decision = drawer.getByRole("button", { name: /^(Confirm|Clear the decision)$/ }).first();
+  await decision.scrollIntoViewIfNeeded();
+  const decided = page.waitForResponse((r) => r.url().includes("/api/findings/") && r.request().method() === "POST");
+  await decision.click();
+  expect((await decided).ok()).toBe(true);
+  await page.getByRole("button", { name: "Close evidence" }).click();
+
+  const reRead = page.waitForResponse((r) => r.url().endsWith(`/api/runs/${reviewed}`), { timeout: 15000 });
+  await ask(page, MFN);
+  await reRead; // the held record of the reviewed run has now been applied, or refused
+  await page.waitForTimeout(500);
+
+  expect(held).toBeGreaterThan(0);
+  await expect(page).not.toHaveURL(new RegExp(`[?&]run=${reviewed}(&|$)`));
+  await expect(page.getByText(MFN, { exact: true })).toBeVisible();
+  await expect(page.getByText(LIABILITY, { exact: true })).toHaveCount(0);
+});
+
 test("Findings and Runs show the record, and the evidence pack downloads", async ({ page }) => {
   await openSample(page);
   await ask(page, LIABILITY);

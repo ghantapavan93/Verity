@@ -31,6 +31,7 @@ type Action =
   | { type: "stream_error"; runId: string; error: string }
   | { type: "error"; error: string | null }
   | { type: "show"; run: RunView }
+  | { type: "refresh"; run: RunView }
   | { type: "clear" };
 
 const IDLE: FollowerState = { phase: "idle", error: null };
@@ -67,6 +68,10 @@ function reduce(state: FollowerState, action: Action): FollowerState {
       return TERMINAL.includes(action.run.stage)
         ? { phase: "finished", run: action.run, details: {}, error: null }
         : { phase: "following", run: action.run, stage: action.run.stage, details: {}, error: null };
+    case "refresh":
+      // A newer copy of the finished run on screen, and only that: a refresh of any other run, or of one still in
+      // flight, is a record from before the person moved on (m9 smoke, 2026-10-11) and changes nothing.
+      return state.phase === "finished" && state.run.id === action.run.id ? { ...state, run: action.run } : state;
     case "clear":
       return IDLE;
   }
@@ -80,6 +85,15 @@ function reduce(state: FollowerState, action: Action): FollowerState {
 export function useRunFollower() {
   const [state, dispatch] = useReducer(reduce, IDLE);
   const stopFollowing = useRef<(() => void) | null>(null);
+  // Each question asked and each run shown is a newer intent. A caller that must wait before it can show a run
+  // claims one first and shows nothing if another came after it: the newest intent owns the screen.
+  const intent = useRef(0);
+
+  /** Marks a newer intent and returns whether it is still the newest; check it after every await, before showing. */
+  const claim = useCallback(() => {
+    const mine = ++intent.current;
+    return () => intent.current === mine;
+  }, []);
 
   useEffect(() => () => stopFollowing.current?.(), []);
 
@@ -104,6 +118,7 @@ export function useRunFollower() {
   /** True when the API accepted the question; false when it refused it (the caller keeps the text). */
   const ask = useCallback(
     async (documentId: string, guidanceId: string | null, question: string): Promise<boolean> => {
+      intent.current++;
       stop();
       dispatch({ type: "start", question, hasGuidance: guidanceId !== null });
       try {
@@ -122,6 +137,7 @@ export function useRunFollower() {
   /** A run loaded from the record: shown as it is, and followed when it is still in flight. */
   const show = useCallback(
     (run: RunView | null) => {
+      intent.current++;
       stop();
       if (run === null) dispatch({ type: "clear" });
       else {
@@ -140,6 +156,9 @@ export function useRunFollower() {
     }
   }, [state, attach]);
 
+  /** A newer copy of the finished run on screen; ignored when the screen has moved to another run since. */
+  const refresh = useCallback((run: RunView) => dispatch({ type: "refresh", run }), []);
+
   const setRunError = useCallback((error: string | null) => dispatch({ type: "error", error }), []);
 
   const run = useMemo<RunView | null>(() => {
@@ -157,7 +176,7 @@ export function useRunFollower() {
   const pending = state.phase === "starting" || state.phase === "not_started" ? { question: state.question, hasGuidance: state.hasGuidance } : null;
   const stageDetails: StageDetails = "details" in state ? state.details : {};
 
-  return { state, run, pending, runError: state.error, stageDetails, ask, show, stop, resume, setRunError };
+  return { state, run, pending, runError: state.error, stageDetails, ask, show, refresh, claim, stop, resume, setRunError };
 }
 
 export type RunController = ReturnType<typeof useRunFollower>;
