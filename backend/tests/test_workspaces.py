@@ -6,12 +6,16 @@ own invite subject and sent on every request, so the two never share a cookie ja
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from app import config
+from app import db as db_module
 from app.api import access
 from app.api.access import OPEN_WORKSPACE, SESSION_COOKIE, mint, workspace_for
 from app.application.create_memo import create_memo as create_memo_for_run
@@ -196,6 +200,18 @@ def test_with_the_gate_off_everything_is_one_open_workspace(client: TestClient) 
         stored = session.get(Run, run["id"])
         assert stored is not None and stored.workspace_id == access.OPEN_WORKSPACE
     assert client.get(f"/api/runs/{run['id']}").json()["shared"] is False
+
+
+def test_an_error_the_store_raises_never_carries_the_words_it_was_given(tmp_path: Path) -> None:
+    """A run that fails is logged with its exception (runs/service.py), and by default an error SQLAlchemy raises
+    prints the statement's bound values: a section's text or a quote would reach the log, which no retention pass
+    reaches (cloud readiness review, 2026-10-12)."""
+    marker = "a visitor's clause that must never reach a log"
+    engine = db_module.make_engine(f"sqlite:///{(tmp_path / 'errors.db').as_posix()}")
+    with engine.connect() as connection, pytest.raises(DBAPIError) as raised:
+        connection.execute(text("INSERT INTO no_such_table (body) VALUES (:body)"), {"body": marker})
+    assert "INSERT INTO no_such_table" in str(raised.value), "control: the statement itself is still named"
+    assert marker not in str(raised.value)
 
 
 def test_ordinary_logs_carry_ids_and_stages_never_the_words_or_the_tokens(two: tuple[Reviewer, Reviewer, TestClient], caplog: pytest.LogCaptureFixture) -> None:

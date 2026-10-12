@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
-from sqlalchemy.pool import ConnectionPoolEntry
+from sqlalchemy.pool import ConnectionPoolEntry, NullPool
 from sqlalchemy.schema import CreateIndex
 
 from .config import settings
@@ -21,9 +21,20 @@ class Base(DeclarativeBase):
 
 def make_engine(url: str | None = None) -> Engine:
     target = url or settings.sqlite_url
-    connect_args = {"check_same_thread": False} if target.startswith("sqlite") else {}
-    engine = create_engine(target, connect_args=connect_args, future=True)
-    if target.startswith("sqlite"):
+    sqlite = target.startswith("sqlite")
+    # A writer waits up to 30 s for another's transaction instead of failing at Python's default 5 s: ingesting a
+    # 28,000-section contract holds the write lock for seconds (cloud rehearsal, 2026-10-12: three uploads beside it
+    # failed with "database is locked").
+    connect_args: dict[str, object] = {"check_same_thread": False, "timeout": 30} if sqlite else {}
+    # A SQLite connection is a file handle, opened for each session rather than drawn from a fixed pool: a run holds its
+    # session for its whole life, the wait for the one model included, and questions asked together held the default
+    # pool's 15 connections, so every other request waited 30 s for one and failed (the same rehearsal).
+    pooling: dict[str, object] = {"poolclass": NullPool} if sqlite else {}
+    # An error SQLAlchemy raises prints the statement's bound values, a contract's sections and quotes among them, and a
+    # failed run is logged with its exception (runs/service.py): the values stay out of the message (cloud readiness
+    # review, 2026-10-12).
+    engine = create_engine(target, connect_args=connect_args, future=True, hide_parameters=True, **pooling)
+    if sqlite:
 
         @event.listens_for(engine, "connect")
         def _pragmas(dbapi_connection: DBAPIConnection, _record: ConnectionPoolEntry) -> None:
