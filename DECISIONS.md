@@ -935,3 +935,33 @@ what the tests establish, as the headline's does, and the hand-off no longer pro
 retries on invalid output). Kept as they are: the sentence "Found means the words are there…" sits in the exhibit's
 check rows, which a first visitor sees without opening a tab; and memos written before this change keep their old
 form, since a memo is generated once per run and review state.
+
+**Cloud readiness (2026-10-12).** Pavan asked for a payment-ready deployment on one DigitalOcean VM and a Modal GPU,
+built from the existing `deploy/cloud/` kit without changing the architecture or the workstation's release (001b6a0).
+The kit was written before the public demo and ran invite-only: it now carries the demo's settings (anonymous sessions
+signed with the gate's secret, the 200-a-day ceiling, retrieval and prompt pinned as on the workstation) and drops the
+proof run, which a public store can never hold. Its nightly backups and the droplet's weekly backups are removed: a
+copy of the public store holds visitors' contracts past the seven days the first screen promises unless it is deleted
+before the earliest workspace in it ends, so the store is not backed up and the deployment is rebuilt instead (README,
+what the disk keeps). Upload spools live in memory (`/tmp` as tmpfs) and Caddy refuses a body over 26 MiB before the API
+reads it. The API image installs `backend/requirements.lock`, the workstation's versions, instead of a second pinned
+list that had drifted, and its `test` stage runs the backend suite on that image (Linux: 1,267 passed, 22 skipped,
+the Windows-only ones). The release gate now installs the same lock: it had been testing the newest versions on the day
+(FastAPI 0.143 against the workstation's 0.141). A server that runs but stops answering is restarted (`liveness.py`,
+the workstation supervisor's rule of three probes); the rehearsal of that fix found its own first version choosing pid 1
+(docker-init), which no signal from inside the container can end. The /state record is mounted read-only. Modal: Ollama
+pinned to the workstation's 0.40.3, one request at a time, two cores and 8 GiB; checked against Modal SDK 1.6.1, not
+deployed. Two failures a cold, serverless model would have caused are fixed in `providers/ollama.py`, each with a test
+on a real socket: the build check before an answer waited 5 s, less than a container's start, so the first question
+after the GPU slept would have failed; and Modal answers a request still running at 150 s with a 303 to a URL that
+waits for the result, which the client did not follow. Found by a load rehearsal (nine visitors, contracts up to 25 MB):
+a run holds its session for its whole life, the wait for the one model included, so questions asked together held the
+default pool's 15 connections and every other request waited 30 s for one, a run failing among them; and a large
+ingest held the write lock past Python's 5 s busy wait, so uploads beside it failed. SQLite now opens a connection per
+session (`NullPool`) and waits 30 s for a lock; the same burst then completed with no error. Also fixed: a memo draft a
+killed process left under `memos/pending` was never swept; a SQL error could carry a contract's words into the log
+(`hide_parameters`); and `package-lock.json` had again lost the two packages a Linux `npm ci` needs (as before
+f8a2f92), so no cloud interface image could be built: regenerated on Linux, and a backend test now resolves every
+dependency in the lock the way npm does. Not done: building the interface for a static /break (it would need its own
+links to the workbench and a second build target for a page the VM already serves without the API or the GPU). What
+still needs a paid test, and the gates that decide it: `deploy/cloud/CLOUD-READINESS.md`.
