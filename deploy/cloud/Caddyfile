@@ -11,6 +11,11 @@
 	{$VERITY_TLS}
 
 	handle /api/* {
+		# The API refuses a file over 25 MB, but only after the body has arrived; a larger body is refused here instead,
+		# before it is received (application/ingest_document.py MAX_UPLOAD_BYTES, plus the form's own bytes).
+		request_body {
+			max_size 26MiB
+		}
 		reverse_proxy api:8000 {
 			# The API keys its request limits by Cf-Connecting-Ip (api/access.client_address). There is no Cloudflare in
 			# front of this server, so a client could send its own and choose its bucket: it is set here, from the address

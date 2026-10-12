@@ -3,7 +3,8 @@
 name: verity
 
 # Every container's log rotates (json-file, 10 MB, three files): unrotated logs fill the disk, and a full disk makes
-# health false and every upload fail.
+# health false and every upload fail. The logs carry ids and stages, never a contract's words
+# (backend/tests/test_workspaces.py, ordinary logs).
 x-logging: &logging
   driver: json-file
   options:
@@ -15,16 +16,25 @@ services:
     build:
       context: ../..
       dockerfile: deploy/cloud/Dockerfile.api
+      target: runtime
     image: verity-api:${VERITY_TAG:-local}
     # A stable name across restarts and redeploys: a stage row records the host, pid and start time of the process
     # running it, so runs the previous container left in flight are recovered at once (app/runs/owner.py).
     hostname: verity-api
+    # The server is not pid 1, so the health check can end a server that stops answering (liveness.py).
+    init: true
     env_file: .env
     environment:
       WORKBENCH_DATA_DIR: /data
+      WORKBENCH_CONTRACT_STATE: /app/record/contract-state.json
     volumes:
       - verity-data:/data
-      - verity-backups:/backups
+      # The frozen research record /state shows, read-only (README: the record). Absent, /state says it is unavailable.
+      - ./contract-state.json:/app/record/contract-state.json:ro
+    # Uploads over 1 MB are spooled to the temporary directory while they are read; in memory, a visitor's file never
+    # reaches a disk that no retention pass covers.
+    tmpfs:
+      - /tmp:size=256m,mode=1777
     restart: unless-stopped
     logging: *logging
     extra_hosts:
@@ -36,7 +46,6 @@ services:
       context: ../..
       dockerfile: deploy/cloud/Dockerfile.web
       args:
-        NEXT_PUBLIC_PROOF_RUN: ${VERITY_PROOF_RUN:-}
         NEXT_PUBLIC_BUILD_SHA: ${VERITY_BUILD_SHA:-}
     image: verity-web:${VERITY_TAG:-local}
     restart: unless-stopped
@@ -63,8 +72,9 @@ services:
       - api
       - web
 
+# No volume for backups: a copy of the public store holds visitors' contracts past the deletion the first screen
+# promises (README: backups and retention).
 volumes:
   verity-data:
-  verity-backups:
   caddy-data:
   caddy-config:

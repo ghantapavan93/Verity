@@ -1,7 +1,7 @@
 # The API: FastAPI on one uvicorn worker. One process on purpose: SQLite, runs executed as in-process background tasks,
 # the run event bus and the request limiters all assume a single process (deploy/cloud/README.md).
 # Pinned by digest: a rebuild runs on the base the rehearsal ran on, not whatever the tag points to that day.
-FROM python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
+FROM python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -9,25 +9,43 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app/backend
 
-# The versions the test suite last passed with, not whatever is newest on the day the image is built.
-COPY deploy/cloud/requirements.runtime.txt deploy/cloud/constraints.txt /tmp/
-RUN pip install --no-cache-dir -r /tmp/requirements.runtime.txt -c /tmp/constraints.txt
+# The lock the workstation's API runs (backend/requirements.lock, README), not a second list kept here: one set of
+# versions on both hosts. `docker build --target test` runs the backend suite on exactly this environment.
+COPY backend/requirements.lock /tmp/requirements.lock
+RUN pip install --no-cache-dir -r /tmp/requirements.lock
 
 COPY backend/app ./app
 COPY backend/scripts ./scripts
 # The bundled sample the golden set names (app/goldens/set.json) and the first screen offers.
 COPY public/samples /app/public/samples
+# Restarts a server that is alive but no longer answers (deploy/supervise.ps1 does the same on the workstation).
+COPY deploy/cloud/liveness.py /usr/local/bin/verity-liveness
 
 RUN useradd --system --uid 10001 --home-dir /nonexistent verity \
-    && mkdir -p /data /backups \
-    && chown verity:verity /data /backups
+    && mkdir -p /data \
+    && chown verity:verity /data
 USER verity
 
-VOLUME ["/data", "/backups"]
+VOLUME ["/data"]
 EXPOSE 8000
 
-# Liveness only: health answers 200 while saying whether the model and the store are usable.
-HEALTHCHECK --interval=30s --timeout=6s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).status == 200 else 1)"
+# Three failed probes in a row (about ninety seconds) end the server; compose's restart policy starts a new one, and
+# the runs it left in flight are failed at start (app/runs/owner.py). Needs `init: true` (compose.yml): the server is
+# then not pid 1, which no signal from inside the container can end.
+HEALTHCHECK --interval=30s --timeout=8s --start-period=30s --retries=3 CMD ["python", "/usr/local/bin/verity-liveness"]
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-server-header"]
+# The asyncio loop the test suite exercises; the lock installs no uvloop.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--loop", "asyncio", "--no-server-header"]
+
+
+# The backend suite on the runtime image's own Python and packages (not built by compose, which targets runtime):
+#   docker build -f deploy/cloud/Dockerfile.api --target test .
+FROM runtime AS test
+USER root
+# git: the evidence exporter's tests make a repository of their own.
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+COPY backend/requirements-dev.txt /tmp/requirements-dev.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.lock -r /tmp/requirements-dev.txt
+# The suite reads files beside the backend (the /break record, the sample, the deploy scripts it checks).
+COPY . /app
+RUN python -m pytest -q -p no:cacheprovider -rf

@@ -1,122 +1,179 @@
 # Verity in the cloud: one VM, a serverless GPU, a static evidence page
 
-This replaces nothing in `deploy/` (the workstation and tunnel setup); it is the laptop-independent layout. Nothing here
-has been deployed. Every step that creates a resource, spends money, changes DNS or changes who can enter is the owner's
-to take.
+This replaces nothing in `deploy/` (the workstation and tunnel setup); it is the laptop-independent layout of the same
+public demo `deploy/README.md` describes: anyone may enter, each browser in a workspace of its own, deleted with
+everything in it seven days after the first visit. Nothing here has been deployed. Every step that creates a resource,
+spends money, changes DNS or changes who can enter is the owner's to take. What is ready, what was rehearsed and what
+still needs a paid test: `CLOUD-READINESS.md`.
 
 ## Layout
 
 | Piece | Where | Why this and not more |
 |---|---|---|
-| Public evidence (`/state`) | Static files on Cloudflare Pages (`backend/scripts/export_state.py --build`) | No server, store or model; open to anyone; survives every outage below |
-| Live workbench | One Linux VM (DigitalOcean Basic 2 GB, $12/month) running `compose.yml`: Caddy, the interface, the API | SQLite needs a local disk and one process; one VM is the simplest thing that gives both, with no cold start and documented SSE behaviour |
-| Model | Ollama on a Modal L4, scale to zero (`modal_ollama.py`) | The only way found to serve the exact reference build (qwen3:8b, Ollama digest 500a1f067a9f, Q4_K_M); no managed provider serves those weights |
-| Storage | SQLite (WAL) and the original uploads on the VM's disk, in the `verity-data` volume | Measured traffic is an invited demo; nothing here needs a database server |
+| Live workbench, /break, /state | One Linux VM (DigitalOcean Basic, 2 GB, 1 vCPU, $12/month) running `compose.yml`: Caddy, the interface, the API | SQLite needs a local disk and one process; one VM is the simplest thing that gives both, with no cold start for the pages and documented SSE behaviour |
+| Model | Ollama 0.40.3 on a Modal L4, scale to zero (`modal_ollama.py`) | The only way found to serve the exact reference build (qwen3:8b, Ollama digest 500a1f067a9f, Q4_K_M); no managed provider serves those weights |
+| Storage | SQLite (WAL) and the original uploads on the VM's disk, in the `verity-data` volume; no backups (below) | Measured traffic is a demo; the store holds nothing older than seven days by design |
+| Optional mirror of /state | Static files on Cloudflare Pages (`backend/scripts/export_state.py --build`) | No server, store or model; survives the VM being down |
+
+The engineering boundaries do not move: the same images run the same code as the workstation's public API, with the
+same settings (`env.example` names each one); one uvicorn worker; the model proposes, deterministic code verifies every
+quote, and every answer is preceded by a check that the endpoint serves the pinned build.
 
 Rejected: Kubernetes, Postgres, Redis, queues; Vercel in front (a 300 s function limit breaks a streamed run); Railway
 (5-minute idle, 15-minute cap); a CPU-only model (650–1,000 s a run, over the 600 s timeout); renting an always-on GPU
-($117–$580/month for a few runs a day).
+($117–$580/month for a few runs a day); Cloudflare's proxy in front of the VM (below).
 
-## Owner approvals, in order
+## Build, and gate the image
 
-1. A Modal account, a workspace budget (hard cap, suggested $50/month) and `modal deploy deploy/cloud/modal_ollama.py`.
-   Then the equivalence check below, before anyone is told the cloud answers like the workstation.
-2. A DigitalOcean droplet (Ubuntu LTS, 2 GB), weekly backups on (+20%), SSH keys only.
-3. DNS: an A record for the workbench (e.g. `verity.pavankg.dev`) to the droplet, grey cloud (DNS only: Caddy does TLS,
-   and Cloudflare's proxy cuts an origin response at 125 s); a Pages custom domain for the evidence page.
-4. Who may enter: `WORKBENCH_ACCESS_REQUIRED=1` (in `env.example`; it refuses to start open) and the invites you send.
-5. The proof run the first screen shows: record one on this deployment, or restore the curated store (a production data
-   migration). Until one exists, build with `VERITY_PROOF_RUN` unset: the first screen then shows the reader's own latest
-   run, without the proof run's story.
-6. The words for `WORKBENCH_MODEL_HOST` (shown wherever the interface says where a contract's text goes), the daily
-   ceiling `WORKBENCH_MAX_RUNS_PER_DAY`, budget alerts in Modal, and a weekly copy of `/backups` off the machine.
+Build on a machine with room for `next build` (it can run a 2 GB VM out of memory) and carry the images over; nothing
+goes to a public registry. From the repository root, at the commit to deploy:
+
+```bash
+docker build -f deploy/cloud/Dockerfile.api --target test .       # the backend suite inside the API image: must pass
+cd deploy/cloud
+VERITY_SITE=x VERITY_BUILD_SHA=$(git rev-parse HEAD) docker compose build
+docker save verity-api:local verity-web:local | gzip > verity-images-$(git rev-parse --short HEAD).tar.gz
+```
+
+The API image installs `backend/requirements.lock`, the versions the workstation runs and the release gate tests, and
+the `test` stage runs the whole backend suite on that image's own Python and packages (Linux). The web build refuses a
+bundle that names a loopback API.
+
+The record /state shows is the lab's frozen file (`experiments/contract-lineage/results/contract-state.json` in
+ivo-experiments, sha256 `cff26179f199d6d58768df968fbf4af5fda3e446e6fbe04844bf73c057290f1d`); it is copied beside
+`compose.yml` and mounted read-only. Check the hash before copying it: the API's loader refuses any other file.
 
 ## The droplet
 
+Ubuntu 24.04 LTS, SSH keys only, **backups off**. As root, once:
+
 ```bash
-# as root, once
 apt-get update && apt-get -y install docker.io docker-compose-v2 unattended-upgrades
 ufw default deny incoming && ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw enable
 # Docker publishes ports around ufw: never add a `ports:` entry to any service but Caddy.
 sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config && systemctl reload ssh
+fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab
+mkdir -p /opt/verity && chmod 700 /opt/verity
 ```
 
-Build the images on a machine with room for `next build` (it can run a 2 GB droplet out of memory) and carry them over;
-nothing goes to a public registry:
+Ubuntu's own `docker.io` and `docker-compose-v2`, not Docker's repository: one source, updated by unattended-upgrades.
+The swap file is a margin for `docker load` and spikes, not working memory (measured peak below).
+
+Then, from the build machine:
 
 ```bash
-cd deploy/cloud
-VERITY_SITE=verity.pavankg.dev VERITY_BUILD_SHA=$(git rev-parse HEAD) VERITY_PROOF_RUN=<id or empty> docker compose build
-docker save verity-api:local verity-web:local | gzip > verity-images.tar.gz
-scp verity-images.tar.gz compose.yml Caddyfile env.example root@<droplet>:/opt/verity/
-# on the droplet
-cd /opt/verity && gunzip -c verity-images.tar.gz | docker load
-cp env.example .env && chmod 600 .env    # fill in; make the secret with the line in env.example
-# first boot: Let's Encrypt staging until the name resolves and 80/443 answer, then production
-VERITY_SITE=verity.pavankg.dev VERITY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory docker compose up -d
-VERITY_SITE=verity.pavankg.dev docker compose up -d --force-recreate caddy
+scp verity-images-<sha>.tar.gz compose.yml Caddyfile env.example contract-state.json root@<droplet>:/opt/verity/
 ```
+
+and on the droplet:
+
+```bash
+cd /opt/verity && sha256sum contract-state.json          # cff26179f199…; anything else: stop
+gunzip -c verity-images-<sha>.tar.gz | docker load
+cp env.example .env && chmod 600 .env                     # fill in; make the secret with the line in env.example
+# First boot: Let's Encrypt staging until the name resolves and 80/443 answer, then production.
+VERITY_SITE=<host> VERITY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory docker compose up -d
+VERITY_SITE=<host> docker compose up -d --force-recreate caddy
+```
+
+`VERITY_SITE` is the hostname alone (`verity-staging.example.com`); `.env` holds `https://` and the same name in
+`WORKBENCH_APP_URL` and `WORKBENCH_CORS_ORIGINS`: sessions and every write are refused from any other origin.
+
+## DNS, TLS and sessions
+
+An A record for the hostname to the droplet, **DNS only** (grey cloud). Caddy obtains and renews the certificate. Not
+Cloudflare's proxy: the API's per-address limits read `Cf-Connecting-Ip`, which Caddy sets from the address it saw; behind
+the proxy that is Cloudflare's edge, and every visitor would share one bucket. The proxy also cuts an origin response at
+125 s, and a streamed run can be longer.
+
+A browser that arrives without a session is given one (`POST /api/access/visit`): a `__Host-` cookie, Secure, HttpOnly,
+SameSite=Strict, signed with `WORKBENCH_ACCESS_SECRET`, naming a workspace no other browser can read. The VM's store
+starts empty: nothing is migrated from the workstation, whose visitors start again here, and whose own store keeps
+nothing past its seven days.
 
 ## Environment
 
-`env.example` is the schema. The essentials: `WORKBENCH_ACCESS_REQUIRED=1` with a secret of 32+ characters;
-`WORKBENCH_APP_URL` and `WORKBENCH_CORS_ORIGINS` set to the one https origin; `WORKBENCH_OLLAMA_URL`,
-`WORKBENCH_OLLAMA_HEADERS` (the Modal proxy token, as JSON) and `WORKBENCH_MODEL_DIGEST=500a1f067a9f`. The interface is
-built with no API address: it calls its own origin, and Caddy sends `/api` to the API.
+`env.example` is the schema: the workstation's public settings (anonymous sessions on, the gate required, 200 questions
+a day for everyone, BM25 with six sections, answer-v2), plus what the cloud adds: the model URL, its proxy token as
+`WORKBENCH_OLLAMA_HEADERS`, the pinned digest, the host label, and health that never wakes the GPU.
 
-## Spend boundaries
+The owner's switch: `docker compose exec api touch /data/public.paused` refuses new uploads and questions at once with a
+plain sentence; `rm` it to resume. No restart.
 
-- GPU: one container at most, released 60 s after the last request, under the Modal workspace budget (a hard cap).
-  Estimated $25–50/month at 50 runs a day; less at demo traffic.
-- Runs: invite-only; 20 run starts per 10 minutes per reader; `WORKBENCH_MAX_RUNS_PER_DAY` new questions a day for
-  everyone together (the owner's number); one model call at a time per API; 25 MB per upload; 600 s per model call.
-- Health never wakes the GPU: a visitor who has not entered never makes it ask the model, and with
-  `WORKBENCH_HEALTH_PROBES_MODEL=0` no one does; every answer still checks the pinned build first.
-- VM: $12/month plus $2.40 backups. Pages: free. Total at demo traffic: about $15–65/month, bounded by the GPU budget.
+## What the disk keeps, and for how long
 
-## Backups and restore
+The first screen promises that what a visitor adds is deleted seven days after the first visit. Every place a
+contract's words can reach on this VM is covered:
 
-The backup is the rollback: a code rollback cannot undo what a newer reader wrote.
+| Where | What happens | How it is known |
+|---|---|---|
+| `workbench.db` rows | Deleted by the hourly retention pass once the workspace ends; `secure_delete` overwrites their pages | `tests/test_retention.py`; rehearsed (below) |
+| `workbench.db-wal` | Checkpointed and truncated by every pass | same |
+| Uploaded originals, memos | Unlinked after the commit; an hourly sweep removes any file no row names, abandoned memo drafts included | same, and `test_the_sweep_removes_a_memo_draft_a_killed_process_left` |
+| Upload spools | `/tmp` is in memory (`tmpfs`), never on disk | `compose.yml` |
+| Logs | Ids, stages and durations, never a contract's words; SQL errors without their values; rotated at 3 × 10 MB | `test_ordinary_logs_carry_ids…`, `test_an_error_the_store_raises…` |
+| Backups, snapshots, archives | **None.** No backup volume, no cron, DigitalOcean backups off, no snapshot of the volume | this file |
 
-```bash
-# nightly, on the droplet (crontab -e)
-15 3 * * * cd /opt/verity && docker compose exec -T api python scripts/backup.py create --data-dir /data --out /backups/$(date +\%Y\%m\%d) >> /var/log/verity-backup.log 2>&1
-# restore into a fresh volume, then point the API at it
-docker run --rm -v verity_verity-backups:/backups -v verity_restored:/restore -u root verity-api:local \
-  python scripts/backup.py restore /backups/<date> --to /restore/data
-```
+A backup of the public store would hold visitors' contracts past the promise unless it were deleted before the
+earliest workspace it holds ends, which can be minutes after it is taken. The store holds nothing older than seven days
+by design, so it is not backed up: what must survive the VM is the deployment, and that is rebuilt (below). Losing the
+VM loses at most seven days of visitors' workspaces, which their first screen already says will go.
 
-Rehearse a restore once a month: restore the latest backup into a fresh volume (above) and compare its runs with the
-live store's. Nightly backups sit on the droplet's own disk; the droplet's weekly backup is what survives losing the droplet, so the
-gap is up to a week. Copying `/backups` off the machine (R2 or B2, about free at this size) closes it and needs an account.
+## Recovery
+
+| Failure | What brings it back | Rehearsed |
+|---|---|---|
+| A container exits | `restart: unless-stopped` | yes |
+| The API runs but stops answering | `liveness.py`: after its first minute, three failed probes in a row (about ninety seconds) kill the server, and the container restarts | yes: frozen, back in 144 s |
+| The API restarts mid-run | The run left in flight is failed at start, never left running (`hostname: verity-api` keeps the owner's name stable) | yes |
+| The VM reboots | Docker starts the stack; the store is on the volume | yes (stop and start of every container) |
+| The model endpoint is down or serves another build | The question fails with a sentence; health stays up; nothing is answered by another build | yes |
+| The VM is lost | Rebuild: a new droplet as above, the images from the build machine, `.env` from where the owner keeps it (the secret), the record from ivo-experiments; the store starts empty | yes (volumes removed, rebuilt, acceptance run) |
+
+Keep the last two image archives on the build machine. `.env` is the only thing that cannot be rebuilt from the
+repository; a new secret ends every session, and the workspaces they held are deleted when their seven days end.
 
 ## Rollback
 
-1. `docker compose down` (the volumes stay).
-2. Restore the last backup taken before the change (above) if the change wrote anything an older build cannot read.
-3. `docker load` the previous images (keep the last `verity-images.tar.gz`) and `docker compose up -d`.
-The evidence page rolls back by redeploying the previous `out-state/` from Pages' history.
+1. `docker compose down` (the volume stays).
+2. `docker load` the previous release's images and `docker compose up -d`.
+3. When the release being undone changed the schema (the delivery preflight's "schema owners changed"), the older build
+   may not read the store: start it on an empty one (`docker volume rm verity_verity-data` first), which ends every
+   visitor's workspace at once, or fix forward. Additive changes (`ensure_columns`) read the same store both ways.
 
-## Rehearsed (local Docker, 2026-10-09)
+## Spend boundaries
 
-The stack ran under Docker Desktop with Caddy's internal CA at `https://localhost:8443` (the API and interface publish
-no ports) and the API calling the workstation's Ollama over HTTP, the same build the cloud would serve. Results are in
-a rehearsal folder on the workstation, not in the repository. Passed: the gate and the first-party session cookie; upload and a
-real streamed run (66 s, cited passages verified); every request to the page's own origin; two readers isolated by list
-and by id; two readers at once; a forged `Cf-Connecting-Ip` ignored; unknown ids; a stale session; the API restarting
-mid-run (the run ends failed, never complete); history surviving restarts; the interface restarting; the model endpoint
-down; another model build behind the tag (refused before any answer); a read-only store (health false, upload refused);
-a backup taken in the deployment restored into a fresh volume with the same runs and findings; a refresh mid-run
-reattaching to the same run, with one result on screen; health never asking an unreachable model for a visitor who has
-not entered (0.00 s) or with probes off, and asking it (5 s, false) when on; the interface naming the hosted model and
-what is sent to it. Found by the rehearsal and fixed: interrupted runs of a restarted container stayed in progress
-forever (pid 1 under one hostname), and the lock file could not be installed on Linux.
+- GPU: one L4 container at most, released 60 s after the last request, under the Modal workspace budget (a hard cap).
+  About $0.96 an hour while up (GPU, two cores, 8 GiB); a question costs $0.02–0.07 depending on whether the GPU is
+  already warm. Estimates, not measurements: the first paid test measures them (`CLOUD-READINESS.md`).
+- Questions: 200 a day for everyone together, 30 per workspace a day, 30 an hour per network address; one model call at
+  a time; 600 s per model call. Uploads: 25 MB each (Caddy refuses a larger body before the API reads it), 10 per
+  workspace, 300 a day for everyone.
+- Health never wakes the GPU (`WORKBENCH_HEALTH_PROBES_MODEL=0`); every answer still checks the pinned build first.
+- VM: $12/month. Pages: free. DNS: the existing Cloudflare zone.
 
-Not rehearsed: the Modal endpoint itself, public DNS and Let's Encrypt, a remote phone on the real hostname.
+## Rehearsed (local Docker, 2026-10-12)
 
-## Before calling the cloud model equivalent
+The stack ran under Docker Desktop with Caddy's internal CA at `https://localhost:18443` (an isolated Compose project,
+volume and ports; the API and interface publish no ports), the API calling the workstation's Ollama over HTTP, the same
+build the cloud serves. Scripts and results are in a rehearsal folder on the workstation, not in the repository.
 
-Pre-registered, before the first GPU run: the 44 goldens (the workstation's answer-v2 baseline is 37/44, 0 flips across
-two recordings), the 15 false-premise controls (v2: 3/7 negatives, 6/8 positives), exact-source proof on the CUAD pair,
-and wall-clock latency. "Identical" only with 0 golden flips; otherwise the flips are reported, run by run. The same
-weights on an L4 can still decode differently from the workstation's GPU.
+Passed: `acceptance.mjs`, 81 of 81 (two questions on the real model); two unrelated visitors isolated by list, by id, by
+run, by event stream and by memo; uploads, a review, HTML and .docx memos; events streamed through Caddy as the run
+proceeded; a refresh mid-run reattached to the same run; a forged `Cf-Connecting-Ip` did not escape the per-address
+limit; a 28 MB body refused with 413 before the API; a file whose bytes are not its type refused; a write from another
+origin refused; every failure in the recovery table above; the owner's pause switch; and the retention pass: after a
+visitor's workspace ended, the marker word in their contract was in no file under `/data` or `/tmp` and in no
+container's log. Under load (nine visitors at once, contracts of 1.9–25 MB, three questions queued on the model, twenty
+extra event streams): every upload and question completed, no 500, peak memory 457 MiB for the three containers; with
+the three held to one vCPU and 1.8 GB between them, 573 MiB, still no error.
+
+Found by the rehearsal and fixed, each with a test: the kit ran invite-only (it now runs the public demo's settings);
+the image installed versions no gate had tested; a hung API would have stayed hung; the first question after the GPU
+scaled to zero would have failed its 5 s build check, and an answer past Modal's 150 s request limit would have failed
+on the redirect; the lock file had again lost two packages a Linux install needs; questions asked together exhausted
+the database connection pool and every other request waited 30 s; a memo draft could outlive a killed process; a SQL
+error could carry a contract's words into the log.
+
+Not rehearsed: the Modal endpoint itself, public DNS and Let's Encrypt, a phone on the real hostname. `CLOUD-READINESS.md`
+names the paid acceptance test for each.
