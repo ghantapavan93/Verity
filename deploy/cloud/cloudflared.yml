@@ -1,0 +1,14 @@
+# Ingress for the Cloudflare Tunnel of a host that runs this compose stack with the `tunnel` profile: the workstation's
+# deploy/cloudflared.yml, with the containers' addresses. Requests under /api go to the API, everything else to the
+# interface; one origin, so the session cookie stays first-party. No hostname in the rules: the tunnel serves whichever
+# name a DNS record routes to it (`cloudflared tunnel route dns <tunnel> <name>`), and only one origin may serve a name.
+# The tunnel's id is given on the command line (compose.yml, VERITY_TUNNEL_ID); its credentials are tunnel.json beside
+# this file, which is never in the repository.
+
+credentials-file: /etc/cloudflared/tunnel.json
+no-autoupdate: true
+
+ingress:
+  - path: ^/api(/.*)?$
+    service: http://api:8000
+  - service: http://web:3000

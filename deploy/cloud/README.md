@@ -13,7 +13,7 @@ still needs a paid test: `CLOUD-READINESS.md`.
 | Live workbench, /break, /state | One Linux VM (DigitalOcean Basic, 4 GB, 2 vCPU, $24/month) running `compose.yml`: Caddy, the interface, the API | SQLite needs a local disk and one process; one VM is the simplest thing that gives both, with no cold start for the pages and documented SSE behaviour |
 | Model | Ollama 0.40.3 on a Modal L4, scale to zero (`modal_ollama.py`) | The only way found to serve the exact reference build (qwen3:8b, Ollama digest 500a1f067a9f, Q4_K_M); no managed provider serves those weights |
 | Storage | SQLite (WAL) and the original uploads on the VM's disk, in the `verity-data` volume; no backups (below) | Measured traffic is a demo; the store holds nothing older than seven days by design |
-| Optional mirror of /state | Static files on Cloudflare Pages (`backend/scripts/export_state.py --build`) | No server, store or model; survives the VM being down |
+| Optional mirror of /state and /break | Static files on Cloudflare Pages (`backend/scripts/export_state.py --build --workbench-url <live workbench>`) | No server, store or model; survives the VM being down |
 
 The engineering boundaries do not move: the same images run the same code as the workstation's public API, with the
 same settings (`env.example` names each one); one uvicorn worker; the model proposes, deterministic code verifies every
@@ -22,6 +22,9 @@ quote, and every answer is preceded by a check that the endpoint serves the pinn
 Rejected: Kubernetes, Postgres, Redis, queues; Vercel in front (a 300 s function limit breaks a streamed run); Railway
 (5-minute idle, 15-minute cap); a CPU-only model (650–1,000 s a run, over the 600 s timeout); renting an always-on GPU
 ($117–$580/month for a few runs a day); Cloudflare's proxy in front of the VM (below).
+
+A host with no public address to serve from (Oracle Always Free, an ARM VM) runs the same stack with a Cloudflare Tunnel
+as its edge in place of Caddy, as the workstation does: `ORACLE.md`.
 
 ## Build, and gate the image
 
