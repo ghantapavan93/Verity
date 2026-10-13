@@ -42,3 +42,21 @@ def test_a_memo_page_runs_nothing_and_loads_nothing(client: TestClient) -> None:
     assert page.status_code == 200 and "<style>" in page.text
     assert "default-src 'none'" in policy and "style-src 'unsafe-inline'" in policy and "frame-ancestors 'none'" in policy
     assert "script-src" not in policy, "nothing may run: default-src 'none' already says so"
+
+
+def test_every_response_carries_the_browsers_protections_whatever_edge_is_in_front(client: TestClient) -> None:
+    """A Cloudflare Tunnel adds none of these (the live site, 2026-10-13), so the API sends them itself; a route with a
+    policy of its own (the memo) keeps it, and nothing names the server's software."""
+    from app.api.memos import MEMO_POLICY
+    from app.main import SECURITY_HEADERS
+
+    result = upload_and_ask(client, "What notice period applies to termination for convenience?")
+    run_id = result["run_id"]
+    memo = client.post("/api/memos", json={"runId": run_id}).json()
+    for path in ("/api/health", "/api/documents", f"/api/runs/{run_id}", "/api/runs/0000000000000000", f"/api/memos/{memo['id']}/html"):
+        response = client.get(path)
+        for name, value in SECURITY_HEADERS.items():
+            expected = MEMO_POLICY if (name == "Content-Security-Policy" and path.endswith("/html")) else value
+            assert response.headers.get(name) == expected, (path, name, response.headers.get(name))
+        assert "x-powered-by" not in response.headers
+    assert "frame-ancestors 'none'" in MEMO_POLICY  # the memo's own policy forbids framing too

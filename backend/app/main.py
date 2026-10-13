@@ -59,6 +59,15 @@ async def _retain_hourly() -> None:
         await asyncio.sleep(3600)
 
 
+# The same set as deploy/cloud/Caddyfile and next.config.ts, so the policy does not depend on the edge.
+SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy": "frame-ancestors 'none'",
+}
+
+
 def create_app(provider: ModelProvider | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -110,6 +119,11 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         # cache on the way may keep it. A route that sets its own policy keeps it.
         if request.url.path.startswith("/api") and "cache-control" not in response.headers:
             response.headers["Cache-Control"] = "no-store"
+        # The browser's protections, on every response whatever edge is in front: Caddy set them (deploy/cloud/Caddyfile),
+        # but a Cloudflare Tunnel, the workstation's edge, sets none (observed on the live site, 2026-10-13). A route with
+        # a policy of its own keeps it (the memo's).
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
         if request.url.path != "/api/health":
             log.info(
                 "request_id=%s method=%s path=%s status=%d duration_ms=%.0f", request_id, request.method, request.url.path, response.status_code, duration_ms
