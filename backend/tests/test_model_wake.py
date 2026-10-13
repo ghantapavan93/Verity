@@ -243,3 +243,14 @@ def test_nothing_is_woken_while_questions_are_paused_or_after_the_days_questions
 
 def test_control_the_process_shares_one_waker() -> None:
     assert model_api.waker is wake_model.waker
+
+
+def test_a_reader_who_has_asked_all_of_todays_questions_wakes_nothing(route: tuple[TestClient, ModelWaker, Wakes], monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _, wakes = route
+    visitor, _ = arrive(client)
+    monkeypatch.setattr(config.settings, "anonymous_max_runs_per_day", 0)
+    assert visitor.post("/api/model/wake").json() == {"state": "limit"}
+    monkeypatch.setattr(config.settings, "anonymous_max_runs_per_day", 5)  # control: with questions left it wakes
+    assert visitor.post("/api/model/wake").json() == {"state": "waking"}
+    settle(model_api.waker)
+    assert wakes.count == 1

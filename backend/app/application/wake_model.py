@@ -1,6 +1,7 @@
 """Waking the model before the question. A hosted model that sleeps when idle takes minutes to wake (Modal, measured
-2026-10-13: the server up in 67 s, the first token at 168 s); a reader who opens a contract and then reads and types
-gives it that time, so opening a contract asks for a wake-up and the question finds the model awake.
+2026-10-13: the server up in 67 s, the first token at 168 s; 95 s on a later cold start); a reader who adds a contract
+and then reads and types gives it that time, so adding a contract, or starting a question, asks for a wake-up and the
+question finds the model awake. Opening a contract from a link or a recorded run only looks and asks for nothing.
 
 A wake-up costs a cold start and the endpoint's idle minutes whether or not a question follows, so it is bounded: none
 while one is under way, none while the model is answering or answered recently (settings.model_awake_s), and at most

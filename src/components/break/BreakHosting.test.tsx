@@ -29,7 +29,7 @@ describe("where the live workbench runs, as the build says", () => {
   it("a cloud build names a cloud server and a GPU that starts when asked, never a laptop", async () => {
     await renderBuiltWith({ NEXT_PUBLIC_HOSTING: "cloud" });
     expect(handOff()).toContain("one small cloud server");
-    expect(handOff()).toContain("a GPU that sleeps between readers: opening a contract wakes it, which takes two to three minutes");
+    expect(handOff()).toContain("a GPU that sleeps between readers: adding a contract or starting a question wakes it");
     expect(handOff()).toContain("This page is a recording and works either way.");
     expect(handOff()).not.toMatch(/laptop/);
   });

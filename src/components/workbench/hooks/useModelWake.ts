@@ -8,12 +8,14 @@ import { wakeModel } from "@/lib/api";
 export const WAKE_EVERY_MS = 4 * 60 * 1000;
 
 /**
- * A hosted model sleeps when idle and takes minutes to wake. Opening a contract, and starting a question after a pause,
- * ask the API to wake it (backend application/wake_model.py), so the question finds it awake. The API bounds what that
- * spends; this page asks at most once in WAKE_EVERY_MS, never for a model on the server itself, and a refusal or a
- * failure changes nothing on the page.
+ * A hosted model sleeps when idle and takes one and a half to three minutes to wake. Waking it costs GPU time whether
+ * or not a question follows, so it is asked for only when the reader does something that leads to a question: adds a
+ * contract (`added` counts those), or starts typing one (`typing`). Opening a contract from a link, a reload, Back, or a
+ * recorded run only looks, and wakes nothing (2026-10-13: before, any opened contract woke the model). The API bounds
+ * what is spent (backend application/wake_model.py); this page asks at most once in WAKE_EVERY_MS, never for a model on
+ * the server itself, and a refusal or a failure changes nothing on the page.
  */
-export function useModelWake(hosted: boolean, docId: string | null, typing: boolean): void {
+export function useModelWake(hosted: boolean, added: number, typing: boolean): void {
   const lastWake = useRef<number | null>(null);
   const request = useCallback(() => {
     if (!hosted) return;
@@ -23,6 +25,6 @@ export function useModelWake(hosted: boolean, docId: string | null, typing: bool
     wakeModel().catch(() => undefined);
   }, [hosted]);
   useEffect(() => {
-    if (docId) request();
-  }, [docId, typing, request]);
+    if (added > 0 || typing) request();
+  }, [added, typing, request]);
 }

@@ -50,7 +50,7 @@ class Settings(BaseModel):
     # Whether /api/health asks the model endpoint. Off where the endpoint bills by the second and starts cold: every
     # answer still checks the model first (providers.ollama._check_build), and health reports the store and the gate.
     health_probes_model: bool = os.environ.get("WORKBENCH_HEALTH_PROBES_MODEL", "1").strip().lower() not in ("0", "false", "no")
-    # Whether opening a contract wakes the model ahead of the question (application/wake_model.py): for an endpoint that
+    # Whether adding a contract or starting a question wakes the model ahead of it (application/wake_model.py): for an endpoint that
     # sleeps when idle and takes minutes to wake (Modal, measured 2026-10-13: 168 s to the first token). Off where the
     # model runs on the server itself and never sleeps.
     model_wakeup: bool = os.environ.get("WORKBENCH_MODEL_WAKEUP", "").strip().lower() in ("1", "true", "yes")

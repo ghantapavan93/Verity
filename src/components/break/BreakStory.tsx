@@ -954,7 +954,7 @@ function YourTurn() {
           </p>
           <p className={styles.dim}>
             {CLOUD
-              ? "The workbench runs live on one small cloud server, and the model on a GPU that sleeps between readers: opening a contract wakes it, which takes two to three minutes, and once it is awake most answers take under half a minute. This page is a recording and works either way."
+              ? "The workbench runs live on one small cloud server, and the model on a GPU that sleeps between readers: adding a contract or starting a question wakes it, which can take one and a half to three minutes, and once it is awake most answers take under half a minute. This page is a recording and works either way."
               : "The workbench runs live on one laptop with one GPU: each answer waits on the model, usually half a minute or more, and when the laptop is off so is the workbench. This page is a recording and works either way."}
           </p>
           <Link href={WORKBENCH} className={styles.primaryLink}>

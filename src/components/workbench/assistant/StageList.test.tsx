@@ -12,10 +12,10 @@ afterEach(cleanup);
 const note = () => screen.getByText(/the stages above are the API/i).textContent ?? "";
 
 describe("what the wait for the model can hold", () => {
-  it("a hosted model that sleeps: waking it adds two to three minutes to the first answer", () => {
+  it("a hosted model that sleeps: waking it adds one and a half to three minutes to the first answer", () => {
     render(<StageList current="checking" details={{}} checkingLabel="Checking" reduceMotion modelPlace="Modal (US)" modelSleeps />);
     expect(note()).toContain("The model runs on Modal (US).");
-    expect(note()).toContain("waking it adds two to three minutes to the first answer");
+    expect(note()).toContain("waking it adds one and a half to three minutes to the first answer");
     expect(note()).not.toContain("under two minutes");
   });
 

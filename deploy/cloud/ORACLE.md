@@ -68,7 +68,8 @@ credits; its usage limit, set at the credits, stops the endpoint before anything
 questions start at 15 (env.example) and rise only after the measured cost of a question, cold starts included, says the
 month's limit holds.
 
-A reader who opens a contract wakes the model ahead of the question (WORKBENCH_MODEL_WAKEUP): a cold start of about
+A reader who adds a contract or starts a question wakes the model ahead of it (WORKBENCH_MODEL_WAKEUP; opening one from a
+link or a recorded run wakes nothing): a cold start of about
 three minutes and five idle minutes after the last answer, about $0.12 a visit at the L4's $0.96 an hour, answered or
 not, and at most WORKBENCH_MODEL_WAKEUPS_PER_DAY (10) a day, about $1.20. Every further question in the same visit is
 a few seconds of GPU. A month of the worst case, every wake-up and every one of the 15 questions on its own cold start,

@@ -114,8 +114,10 @@ function WorkbenchSurface() {
 
   const sectionsById = useMemo(() => new Map((doc?.sections ?? []).map((s) => [s.id, s])), [doc]);
 
-  // A hosted model sleeps when idle: opening a contract, or starting a question after a pause, wakes it (hooks/useModelWake).
-  useModelWake(apiHealth?.modelLocation === "hosted", doc?.id ?? null, composerText.trim().length > 0);
+  // A hosted model sleeps when idle: adding a contract, or starting a question, wakes it (hooks/useModelWake). Opening
+  // one from a link, a reload or a recorded run only looks, and wakes nothing.
+  const [contractsAdded, setContractsAdded] = useState(0);
+  useModelWake(apiHealth?.modelLocation === "hosted", contractsAdded, composerText.trim().length > 0);
 
   // ---- health ----------------------------------------------------------------------------
 
@@ -172,6 +174,7 @@ function WorkbenchSurface() {
       try {
         const uploaded = await uploadDocument(file);
         setDoc(uploaded);
+        setContractsAdded((n) => n + 1);
         setIsSample(sample);
         showRun(null); // the previous run's follower and drawer do not outlive its document
         resetMemo();

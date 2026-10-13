@@ -71,8 +71,8 @@ export function StageList({
         <p className={styles.stageNote}>
           {modelPlace ? `The model runs on ${modelPlace}. ` : ""}
           {modelSleeps
-            ? // Measured on Modal, 2026-10-13: 168 s from asleep to the first token; awake, a run's p95 was 14.5 s.
-              "It sleeps when no one has asked for a few minutes, and waking it adds two to three minutes to the first answer; awake, most answers take under half a minute. The stages above are the API's own."
+            ? // Measured on Modal, 2026-10-13: 95-168 s from asleep to the first token; awake, a run's p95 was 14.5 s.
+              "It sleeps when no one has asked for a few minutes, and waking it adds one and a half to three minutes to the first answer; awake, most answers take under half a minute. The stages above are the API's own."
             : "Most answers take under two minutes; the stages above are the API's own."}
         </p>
       )}
