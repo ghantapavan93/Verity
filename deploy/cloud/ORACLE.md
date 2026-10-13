@@ -73,8 +73,9 @@ read, since no Caddy stands in front.
   `VERITY_TAG=<previous short sha>` in `.env`, then `docker compose up -d`. Seconds; the store stays. (A schema change
   in between: README.md, Rollback.) If that release's images were removed, build them in a clean directory, never by
   unpacking over `/opt/verity` (tar removes nothing, so the newer release's files would stay in the build): unpack its
-  archive into `/opt/verity-<previous sha>`, copy `.env`, `tunnel.json` and `contract-state.json` into its
-  `deploy/cloud`, set its `VERITY_TAG` there, and run only `docker compose build` there; then switch the tag in
+  archive into `/opt/verity-<previous sha>`, copy `.env` (only; the tunnel credential is not needed to build) into its
+  `deploy/cloud`, set its `VERITY_TAG` there, and run only the build there,
+  `BUILDX_NO_DEFAULT_ATTESTATIONS=1 VERITY_BUILD_SHA=<previous sha> docker compose build`; then switch the tag in
   `/opt/verity/deploy/cloud/.env` and `docker compose up -d` as above.
 - **Moving a live name here (cutover):** first point this stack at the name: in `.env` set
   `WORKBENCH_APP_URL=https://<name>` and `WORKBENCH_CORS_ORIGINS=https://<name>`, then `docker compose up -d`. Only
