@@ -273,3 +273,70 @@ describe("AccessGate: a public demo", () => {
     expect(await screen.findByText("the workbench")).toBeTruthy();
   });
 });
+
+describe("two tabs opened at once on a first visit", () => {
+  const DEMO_OUT = { required: true, entered: false, subject: null, anonymous: true, retentionDays: 7 };
+  const DEMO_IN = { required: true, entered: true, subject: null, anonymous: true, retentionDays: 7 };
+  const realLocks = Object.getOwnPropertyDescriptor(navigator, "locks");
+
+  // The browser's Web Locks API, as Chrome, Firefox and Safari implement it: one holder of a name at a time, in order.
+  function installLocks() {
+    let tail: Promise<unknown> = Promise.resolve();
+    const locks = {
+      request: (_name: string, callback: () => Promise<unknown>) => {
+        const run = tail.then(callback, callback);
+        tail = run.catch(() => undefined);
+        return run;
+      },
+    };
+    Object.defineProperty(navigator, "locks", { value: locks, configurable: true });
+  }
+
+  beforeEach(() => {
+    api.getAccess.mockReset();
+    api.health.mockReset();
+    api.visit.mockReset();
+    api.health.mockRejectedValue(new Error("no answer"));
+    api.getAccess.mockResolvedValue(DEMO_OUT);
+  });
+  afterEach(() => {
+    cleanup();
+    if (realLocks) Object.defineProperty(navigator, "locks", realLocks);
+    else delete (navigator as { locks?: unknown }).locks;
+  });
+
+  it("the second tab asks for a session only after the first has its answer, so both share one workspace", async () => {
+    installLocks();
+    let answerFirst: (value: typeof DEMO_IN) => void = () => undefined;
+    api.visit.mockImplementationOnce(() => new Promise((resolve) => (answerFirst = resolve))).mockResolvedValue(DEMO_IN);
+    render(
+      <>
+        <AccessGate>
+          <p>tab one</p>
+        </AccessGate>
+        <AccessGate>
+          <p>tab two</p>
+        </AccessGate>
+      </>,
+    );
+    await act(async () => undefined);
+    // Both tabs found no session; only one may be asking. (Before 2026-10-13 both asked here, with no cookie.)
+    expect(api.visit).toHaveBeenCalledTimes(1);
+    await act(async () => answerFirst(DEMO_IN));
+    expect(api.visit).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("tab one")).toBeTruthy();
+    expect(await screen.findByText("tab two")).toBeTruthy();
+  });
+
+  it("control: a browser without the Web Locks API still opens the workbench", async () => {
+    delete (navigator as { locks?: unknown }).locks;
+    api.visit.mockResolvedValue(DEMO_IN);
+    render(
+      <AccessGate>
+        <p>the workbench</p>
+      </AccessGate>,
+    );
+    expect(await screen.findByText("the workbench")).toBeTruthy();
+    expect(api.visit).toHaveBeenCalledTimes(1);
+  });
+});

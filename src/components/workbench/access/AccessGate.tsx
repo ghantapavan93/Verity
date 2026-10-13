@@ -38,6 +38,19 @@ function takeInviteFromAddress(): string | null {
   return decodeURIComponent(found[1]);
 }
 
+/**
+ * Ask for a session one tab at a time. Two tabs opened at once each asked with no cookie, so the server made two
+ * sessions and the browser kept whichever cookie arrived last: a contract added in the first tab before the second's
+ * answer arrived then belonged to a workspace neither tab could read (reproduced on staging with a slow second tab,
+ * 2026-10-13). Under the lock the second tab asks after the first has its cookie, and the server answers a request that
+ * carries a working session with that same session (backend api/access.py visit), so both tabs share one workspace.
+ * A browser without the Web Locks API asks at once, as before.
+ */
+async function visitOneTabAtATime(): Promise<AccessView> {
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+  return locks ? await locks.request("verity-first-visit", () => visit()) : visit();
+}
+
 export function AccessGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<State>("checking");
   const [invite, setInvite] = useState("");
@@ -50,7 +63,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
 
   const startVisit = useCallback(async (): Promise<State> => {
     try {
-      const visited = await visit();
+      const visited = await visitOneTabAtATime();
       setDemo({ retentionDays: visited.retentionDays ?? 7 });
       setProblem(null);
       return "open";

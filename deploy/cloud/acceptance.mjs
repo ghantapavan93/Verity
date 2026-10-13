@@ -19,7 +19,7 @@
 //   ledger must credit support to the model and the quote to code exactly when a quote was verified.
 // Exit 0: every check OK. Exit 1: a check failed. Exit 2: nothing failed, but a behaviour was not exercised.
 // Session cookies stay in memory; screenshots and the log go to OUT (default: verity-acceptance in the temp directory).
-import { chromium } from "@playwright/test";
+import { chromium, request as httpRequest } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -464,6 +464,56 @@ if (SHA) {
 }
 note("workbench: no page errors, no 5xx", problems.length === 0, problems.join(" ; "));
 await context.close();
+
+// Two tabs of one browser opened at the same moment on a first visit. Both ask for a session before either answer has
+// arrived (observed naturally, 166 ms apart); the second tab is on a slow network: its request reaches the server at once,
+// as the tab sent it, and the answer reaches the tab 6 s later. Meanwhile the reader adds the sample in the first tab.
+// Before 2026-10-13 the second answer's cookie replaced the first, and that contract was in no workspace either tab read.
+{
+  const twoTabs = await browser.newContext({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: INSECURE_TLS });
+  const access = await (await twoTabs.request.get(`${API}/api/access`)).json();
+  if (!access.anonymous) {
+    note("two tabs at once on a first visit share one workspace", null, "this deployment hands out no anonymous sessions");
+  } else {
+    const direct = await httpRequest.newContext({ ignoreHTTPSErrors: INSECURE_TLS }); // its own, empty cookie jar
+    const first = await twoTabs.newPage();
+    const second = await twoTabs.newPage();
+    let secondAsked = null;
+    await second.route("**/api/access/visit", async (route) => {
+      const sent = await route.request().allHeaders();
+      secondAsked = { carriedSession: /verity_session/.test(sent.cookie ?? "") };
+      const answer = await direct.post(route.request().url(), { headers: { Origin: BASE, ...(sent.cookie ? { Cookie: sent.cookie } : {}) } });
+      const body = await answer.text();
+      const cookies = answer
+        .headersArray()
+        .filter((h) => h.name.toLowerCase() === "set-cookie")
+        .map((h) => h.value);
+      secondAsked.newSession = cookies.length > 0;
+      await new Promise((r) => setTimeout(r, 6000));
+      // Playwright takes several cookies in one set-cookie value, one per line.
+      const setCookie = cookies.length ? { "set-cookie": cookies.join(String.fromCharCode(10)) } : {};
+      await route.fulfill({ status: answer.status(), headers: { "content-type": "application/json", ...setCookie }, body });
+    });
+    await Promise.all([first.goto(BASE), second.goto(BASE)]);
+    await first.getByRole("button", { name: "try a sample agreement" }).click();
+    await first.waitForURL(/[?&]document=/, { timeout: 120000 });
+    const added = new URL(first.url()).searchParams.get("document");
+    await first.waitForTimeout(8000);
+    const listed = async (page) => {
+      const r = await page.request.get(`${API}/api/documents`);
+      return r.ok() ? (await r.json()).map((d) => d.id) : [`HTTP ${r.status()}`];
+    };
+    const inFirst = await listed(first);
+    const inSecond = await listed(second);
+    note(
+      "two tabs at once on a first visit share one workspace: the contract added in one is listed in both",
+      inFirst.includes(added) && inSecond.includes(added),
+      `second tab ${JSON.stringify(secondAsked)}; listed in first ${inFirst.length}, in second ${inSecond.length}`,
+    );
+    await direct.dispose();
+  }
+  await twoTabs.close();
+}
 await browser.close();
 
 writeFileSync(`${OUT}/accept-log.json`, JSON.stringify({ base: BASE, sha: SHA, record: ref, at: new Date().toISOString(), log }, null, 1));
