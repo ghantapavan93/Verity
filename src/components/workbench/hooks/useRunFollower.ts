@@ -118,7 +118,10 @@ export function useRunFollower() {
     [stop],
   );
 
-  /** True when the API accepted the question; false when it refused it (the caller keeps the text). */
+  /**
+   * False when the API refused the question and it is still on screen (the caller puts the words back); true
+   * otherwise, including when the reader moved on before the answer: nothing of it is on screen to restore.
+   */
   const ask = useCallback(
     async (documentId: string, guidanceId: string | null, question: string): Promise<boolean> => {
       ++intent.current;
@@ -135,6 +138,9 @@ export function useRunFollower() {
         if (!TERMINAL.includes(created.stage)) attach(created.id);
         return true;
       } catch (error) {
+        // A refusal for a question the reader has left is not put over what is on screen now, nor its words into
+        // that contract's composer (review: a late 502 marked the newer question failed, offered to send twice).
+        if (screen.current !== owner) return true;
         dispatch({ type: "not_started", error: errorMessage(error) });
         return false;
       }

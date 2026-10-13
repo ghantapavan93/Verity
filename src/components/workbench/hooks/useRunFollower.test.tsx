@@ -350,4 +350,24 @@ describe("the screen's owner, not its phase (re-review probes, 2026-10-13)", () 
     });
     expect(result.current.run).toBeNull();
   });
+
+  it("an older question refused after the reader asked another, still waiting, leaves the newer one as it is", async () => {
+    let refuseA: (error: Error) => void = () => undefined;
+    api.createRun
+      .mockImplementationOnce(() => new Promise<RunView>((_, reject) => (refuseA = reject)))
+      .mockImplementationOnce(() => new Promise<RunView>(() => undefined));
+    const { result } = renderHook(() => useRunFollower());
+    let acceptedA: boolean | undefined;
+    act(() => {
+      void result.current.ask("docA", null, "What notice is needed?").then((ok) => (acceptedA = ok));
+    });
+    act(() => result.current.show(null)); // contract B opened
+    act(() => {
+      void result.current.ask("docB", null, "Which law governs?");
+    });
+    await act(async () => refuseA(new Error("502 Bad Gateway")));
+    expect(result.current.runError).toBeNull();
+    expect(result.current.pending?.question).toBe("Which law governs?");
+    expect(acceptedA).toBe(true); // nothing to put back into contract B's composer
+  });
 });

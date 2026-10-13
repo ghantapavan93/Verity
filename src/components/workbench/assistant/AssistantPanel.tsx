@@ -99,6 +99,7 @@ export function AssistantPanel({
   const liveStage: RunStage | null = pending && !runError ? "reading" : run && run.stage in STAGE_LABELS ? run.stage : null;
   const stageLabel = liveStage ? STAGE_LABELS[liveStage as keyof typeof STAGE_LABELS] : null;
   const question = run?.question ?? pending?.question ?? "";
+  const runMemo = run ? memo.memoFor(run.id) : null;
   const checkingLabel = guidance.guidance ? "Checking against guidance" : "Checking the contract";
 
   // The evidence sheet covers this panel: what it covers cannot be reached by Tab or a screen reader while it is open
@@ -207,10 +208,10 @@ export function AssistantPanel({
                   ))}
                   {run.withheld.length > 0 && <WithheldList findings={run.withheld} sectionsById={sectionsById} onEvidence={onOpenEvidence} />}
                   <div className={styles.memoRow}>
-                    {memo.memo && memo.memo.runId === run.id ? (
+                    {runMemo ? (
                       <>
                         <span className={styles.memoDone}>
-                          {memo.memo.reviewHead === run.reviewHead ? (
+                          {runMemo.reviewHead === run.reviewHead ? (
                             <>
                               <IconCheck /> Review memo ready
                             </>
@@ -218,13 +219,13 @@ export function AssistantPanel({
                             "Review memo predates a later review"
                           )}
                         </span>
-                        <a className={styles.actionLink} href={absolute(memo.memo.htmlUrl)} target="_blank" rel="noreferrer">
+                        <a className={styles.actionLink} href={absolute(runMemo.htmlUrl)} target="_blank" rel="noreferrer">
                           Open
                         </a>
-                        <a className={styles.actionLink} href={absolute(memo.memo.docxUrl)}>
+                        <a className={styles.actionLink} href={absolute(runMemo.docxUrl)}>
                           Download .docx
                         </a>
-                        {memo.memo.reviewHead !== run.reviewHead && (
+                        {runMemo.reviewHead !== run.reviewHead && (
                           <button type="button" className={styles.memoButton} onClick={() => void memo.generate(run)} disabled={memo.busy}>
                             {memo.busy ? "Writing the memo" : "Write a new memo"}
                           </button>
