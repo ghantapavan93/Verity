@@ -11,8 +11,11 @@ COPY . .
 ARG NEXT_PUBLIC_PROOF_RUN=""
 # The commit this build is made from, shown on the Runs surface.
 ARG NEXT_PUBLIC_BUILD_SHA=""
+# Where the live workbench runs, as /break tells its readers: a cloud server, never the workstation's laptop.
+ARG NEXT_PUBLIC_HOSTING="cloud"
 ENV NEXT_PUBLIC_PROOF_RUN=$NEXT_PUBLIC_PROOF_RUN \
-    NEXT_PUBLIC_BUILD_SHA=$NEXT_PUBLIC_BUILD_SHA
+    NEXT_PUBLIC_BUILD_SHA=$NEXT_PUBLIC_BUILD_SHA \
+    NEXT_PUBLIC_HOSTING=$NEXT_PUBLIC_HOSTING
 RUN npm run build \
     && if grep -rqs "127.0.0.1:8000" .next/static; then echo "the bundle names a loopback API" >&2; exit 1; fi
 

@@ -11,8 +11,9 @@ export const metadata: Metadata = {
 };
 
 export default function BreakPage() {
-  // The static /state artifact (NEXT_PUBLIC_EXPORT=state) is the frozen research alone; this page belongs to the workbench.
-  if (process.env.NEXT_PUBLIC_EXPORT === "state") notFound();
+  // The static mirror (NEXT_PUBLIC_EXPORT=state) carries this page too: it needs no API, store or model, so it stays
+  // readable when the live workbench is down. It is published only with the address of the workbench it links to.
+  if (process.env.NEXT_PUBLIC_EXPORT === "state" && !process.env.NEXT_PUBLIC_WORKBENCH_URL) notFound();
   // Trimmed here, on the server: the browser receives what the page renders, not the whole record.
   return <BreakStory record={forPage(raw as unknown as BreakRecord)} />;
 }

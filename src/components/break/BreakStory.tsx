@@ -43,6 +43,12 @@ function useRecord(): PageRecord {
   return record;
 }
 const REPO = "https://github.com/ghantapavan93/Verity";
+// Where the live workbench runs, fixed when the interface is built: the cloud images set NEXT_PUBLIC_HOSTING=cloud
+// (deploy/cloud/Dockerfile.web); the workstation's build leaves it unset. The page says only what is true of its host.
+const CLOUD = process.env.NEXT_PUBLIC_HOSTING === "cloud";
+// The static mirror (NEXT_PUBLIC_EXPORT=state, backend/scripts/export_state.py) has no workbench of its own: it links
+// to the live one by its full address. Everywhere else the workbench is this site's own root.
+const WORKBENCH = process.env.NEXT_PUBLIC_EXPORT === "state" ? process.env.NEXT_PUBLIC_WORKBENCH_URL || "/" : "/";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** "10 Oct 2026, 11:55 UTC": the same on the server and in every browser. */
@@ -947,10 +953,11 @@ function YourTurn() {
             did not. In Runs, each run downloads as an evidence pack: its record, its quotes and the hashes to check them.
           </p>
           <p className={styles.dim}>
-            The workbench runs live on one laptop with one GPU: each answer waits on the model, usually half a minute or more, and when the laptop is off so is
-            the workbench. This page is a recording and works either way.
+            {CLOUD
+              ? "The workbench runs live on one small cloud server, and the model on a GPU that starts when a question arrives: the first answer after a quiet spell can take a minute or two, and each answer usually half a minute or more. This page is a recording and works either way."
+              : "The workbench runs live on one laptop with one GPU: each answer waits on the model, usually half a minute or more, and when the laptop is off so is the workbench. This page is a recording and works either way."}
           </p>
-          <Link href="/" className={styles.primaryLink}>
+          <Link href={WORKBENCH} className={styles.primaryLink}>
             Open the workbench
           </Link>
         </div>
@@ -1103,7 +1110,7 @@ export function BreakStory({ record }: { record: PageRecord }) {
             ))}
           </nav>
           <nav aria-label="Elsewhere" className={styles.navOut}>
-            <Link href="/" className={styles.navLink}>
+            <Link href={WORKBENCH} className={styles.navLink}>
               Workbench
             </Link>
             <a href="/state" className={styles.navLink}>

@@ -65,3 +65,45 @@ def test_the_published_file_is_what_the_api_answers_for_the_frozen_record(client
     tampered.write_bytes(FROZEN.read_bytes().replace(b'"portfolio"', b'"portfolio" ', 1))
     with pytest.raises(export_state.ExportError, match="not the frozen record"):
         export_state.export(tampered, built(tmp_path / "again"))
+
+
+def build_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, **options: str) -> dict[str, str]:
+    """The environment `next build` would run under for these options; nothing is built."""
+    seen: dict[str, str] = {}
+
+    def run(command: list[str], cwd: Path, env: dict[str, str], check: bool) -> None:
+        seen.update(env)
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "index.html").write_text("<!doctype html>", encoding="utf-8")
+
+    monkeypatch.setattr(export_state.shutil, "which", lambda name: "npm")
+    monkeypatch.setattr(export_state.subprocess, "run", run)
+    monkeypatch.setattr(export_state, "verity_commit", lambda: None)
+    export_state.build(tmp_path, **options)
+    return seen
+
+
+def test_the_mirror_carries_break_only_with_the_live_workbench_address(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # A value left in the shell must not decide what the artifact holds.
+    monkeypatch.setenv("NEXT_PUBLIC_WORKBENCH_URL", "https://left-over.example.com")
+    monkeypatch.setenv("NEXT_PUBLIC_HOSTING", "cloud")
+    alone = build_environment(monkeypatch, tmp_path / "alone")
+    assert alone["NEXT_PUBLIC_EXPORT"] == "state"
+    assert "NEXT_PUBLIC_WORKBENCH_URL" not in alone and "NEXT_PUBLIC_HOSTING" not in alone
+    linked = build_environment(monkeypatch, tmp_path / "linked", workbench_url="https://verity.example.com/", hosting="cloud")
+    assert linked["NEXT_PUBLIC_WORKBENCH_URL"] == "https://verity.example.com"
+    assert linked["NEXT_PUBLIC_HOSTING"] == "cloud"
+    laptop = build_environment(monkeypatch, tmp_path / "laptop", workbench_url="https://verity.example.com")
+    assert "NEXT_PUBLIC_HOSTING" not in laptop
+
+
+@pytest.mark.parametrize("url", ["http://verity.example.com", "verity.example.com", "https://verity.example.com/break", "https://verity.example.com/?x=1", "https://"])
+def test_a_workbench_address_is_an_https_origin_and_nothing_else(url: str) -> None:
+    with pytest.raises(export_state.ExportError, match="https origin"):
+        export_state.workbench_address(url)
+
+
+def test_control_a_workbench_address_needs_the_build(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as stopped:
+        export_state.main(["--workbench-url", "https://verity.example.com"])
+    assert stopped.value.code == 2 and "needs --build" in capsys.readouterr().err
