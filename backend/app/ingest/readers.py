@@ -15,6 +15,7 @@ import io
 import logging
 import re
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 from typing import cast
 
@@ -23,7 +24,7 @@ from docx.oxml.ns import qn
 from docx.oxml.text.paragraph import CT_P
 from docx.text.paragraph import Paragraph
 from lxml import etree
-from pypdf import PdfReader
+from pypdf import PageObject, PdfReader
 
 from .coverage import PartCoverage, Status, docx_coverage, pdf_coverage, txt_coverage
 from .invisible import remove_format_characters, visible_text
@@ -42,8 +43,17 @@ SUPPORTED = {
 SUFFIX_OF = {media_type: suffix for suffix, media_type in SUPPORTED.items()}
 
 
-MAX_DOCX_UNPACKED_BYTES = 256 * 1024 * 1024  # a 25 MB upload that unpacks past this is a bomb, not a contract
+# What reading a file may cost, whatever its bytes say about themselves. Each bound is several times the largest real
+# contract measured on 2026-10-13 (323 .docx: at most 6.4 MB unpacked and 204,093 XML elements; 171 PDFs: at most
+# 2.71 MB of page content) and far below what one reading may take of a 4 GB host. Before them an 84 KB .docx of six
+# million empty paragraphs (35 MB unpacked, under the old 256 MB bound) took 848 MB and 35 s to read, and a 41 KB PDF of
+# two pages that inflate to 20 MB each took 3.2 s, so a 25 MB upload of such pages read for about half an hour (gstack
+# /cso trial and its checks, 2026-10-13).
+MAX_DOCX_UNPACKED_BYTES = 64 * 1024 * 1024  # every part, media included: images do not compress, so a real file unpacks to about its size
+MAX_DOCX_XML_ELEMENTS = 1_000_000  # a parsed tree costs about 140 bytes of memory per element
 MAX_PDF_PAGES = 2000
+MAX_PDF_CONTENT_BYTES = 16 * 1024 * 1024  # the pages' drawing instructions once inflated: what text extraction walks
+_MB = 1024 * 1024
 
 
 class UnsupportedFile(ValueError):
@@ -340,19 +350,60 @@ class TooLargeToRead(UnsupportedFile):
     """Well-formed, but it would cost more memory or time than any contract needs; refused before parsing."""
 
 
-def _unpacked_size(data: bytes) -> int | None:
-    """The declared uncompressed size of a zip package; zipfile never reads a member past its declaration."""
+class _ElementCount:
+    """A parser target that keeps nothing: the elements a part would become, counted as the markup streams past. lxml
+    calls only the target methods that exist, so text, ends and comments cost no call into Python here; the stubs'
+    ParserTarget protocol lists all five, hence the cast where it is used."""
+
+    def __init__(self) -> None:
+        self.elements = 0
+
+    def start(self, _tag: str, _attrib: dict[str, str]) -> None:
+        self.elements += 1
+
+    def close(self) -> int:
+        return self.elements
+
+
+_MARKUP_CHUNK = 64 * 1024
+
+
+def _refuse_costly_package(data: bytes) -> None:
+    """Refuse, before any part becomes a tree, a package that would cost more to read than any contract needs. The
+    declared sizes bound what zipfile inflates (it never reads a member past its declaration); a streaming count that
+    builds nothing bounds the elements the markup parts would become, which is what a tree's memory follows. Every
+    member is counted, whatever its name or first bytes: python-docx parses a part by the content type the package
+    declares for it, not by its extension, and lxml reads markup in any encoding it declares (UTF-16 among them)."""
     try:
-        with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            return sum(info.file_size for info in archive.infolist())
+        archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile:
-        return None
+        return  # not a package at all: python-docx refuses it below, with the reason it always gave
+    with archive:
+        members = archive.infolist()
+        unpacked = sum(info.file_size for info in members)
+        if unpacked > MAX_DOCX_UNPACKED_BYTES:
+            raise TooLargeToRead(f"the .docx unpacks to {unpacked // _MB} MB; the limit is {MAX_DOCX_UNPACKED_BYTES // _MB} MB")
+        counted = _ElementCount()
+        for info in members:
+            parser = etree.XMLParser(target=cast("etree.ParserTarget", counted), resolve_entities=False, no_network=True, load_dtd=False, huge_tree=False)
+            try:
+                with archive.open(info) as member:
+                    while chunk := member.read(_MARKUP_CHUNK):
+                        parser.feed(chunk)
+                        if counted.elements > MAX_DOCX_XML_ELEMENTS:
+                            raise TooLargeToRead(f"the .docx holds over {MAX_DOCX_XML_ELEMENTS:,} XML elements; no contract needs that many")
+                parser.close()
+            except etree.XMLSyntaxError:
+                continue  # not markup (media), or malformed markup, which python-docx refuses below as it always did
+            except (zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError):
+                # A member that fails its own checks (a CRC, a compression method) is python-docx's to refuse if it reads
+                # it, as before: a 300 MB member declared as 1 byte and referred to by nothing is still accepted (g3b,
+                # depth pass). The count read no further than the declaration.
+                continue
 
 
 def read_docx(data: bytes) -> ReadResult:
-    unpacked = _unpacked_size(data)
-    if unpacked is not None and unpacked > MAX_DOCX_UNPACKED_BYTES:
-        raise TooLargeToRead(f"the .docx unpacks to {unpacked // (1024 * 1024)} MB; the limit is {MAX_DOCX_UNPACKED_BYTES // (1024 * 1024)} MB")
+    _refuse_costly_package(data)
     # A valid zip with a broken or hostile package inside fails in many shapes; `read` refuses every one of them.
     document = DocxDocument(io.BytesIO(data))
     body = document.element.body
@@ -469,7 +520,13 @@ def read_pdf(data: bytes) -> ReadResult:
     lines: list[str] = []
     textless = 0
     removed = 0
+    content = 0
     for page in pages:
+        # Each page's inflated drawing instructions are counted before its text is extracted, so no file reads for longer
+        # than MAX_PDF_CONTENT_BYTES of them takes; pypdf already bounds one page's streams, not the whole document's.
+        content += _page_content_bytes(page)
+        if content > MAX_PDF_CONTENT_BYTES:
+            raise TooLargeToRead(f"the PDF's pages hold over {MAX_PDF_CONTENT_BYTES // _MB} MB of drawing instructions; no contract needs that much")
         # Layout mode keeps blank lines between paragraphs, which is the only structure most PDFs carry.
         try:
             text = page.extract_text(extraction_mode="layout") or ""
@@ -484,6 +541,16 @@ def read_pdf(data: bytes) -> ReadResult:
     return ReadResult(
         coverage=pdf_coverage(page_count, textless), blocks=_blocks_from_lines(lines), pages=len(pages), title=_first_line(lines), format_characters=removed
     )
+
+
+def _page_content_bytes(page: PageObject) -> int:
+    """The size of a page's drawing instructions once inflated. A page whose contents cannot be read here is counted as
+    empty and left to the extractor, which read it before this count existed: the count refuses, it never breaks a file."""
+    try:
+        contents = page.get_contents()
+        return len(contents.get_data()) if contents is not None else 0
+    except Exception:  # noqa: BLE001 - see the docstring
+        return 0
 
 
 # ---------------------------------------------------------------------------- TXT

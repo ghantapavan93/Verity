@@ -974,3 +974,21 @@ pinned by digest rather than an install script; the runbook's claims were narrow
 rehearsal was re-run on the final images with every output kept. Measuring four 25 MB uploads at once (1.29 GiB for the
 containers, the API 1.20 GiB) moved the recommended VM from 2 GB to 4 GB: without swap, which the privacy design rules
 out, a 2 GB machine had no margin for that burst.
+
+**Reading cost and request bodies bounded (2026-10-13).** A trial of gstack's review and security checklists on the
+Hetzner candidate found two ways one anonymous request could take the 4 GB host's memory, both measured before anything
+changed. An 84 KB .docx of six million empty paragraphs (35 MB unpacked, under the 256 MB bound) took 848 MB and 35 s to
+read. FastAPI parses a JSON body before the access gate runs, so 40 MB to /api/runs with no session took the API to a
+2 GB peak and held the event loop for 19 s; Cloudflare passes 100 MB. The invariants: what reading an upload may cost
+is bounded by what a real contract needs, counted before anything costly is built; and no body is read past what its
+route needs, on the bytes received, before the gate. A .docx is now counted as it streams, every member whatever its
+name or encoding, and refused past 1,000,000 elements or 64 MB unpacked (the largest of 323 real contracts: 204,093
+elements, 6.4 MB). A PDF is refused past 16 MB of inflated page content (the largest of 171: 2.71 MB), which closes the
+sibling found while checking: pages that inflate to 20 MB each read for 1.6 s apiece. Every request is cut off at 26 MiB
+for an upload and 1 MiB otherwise, declared or chunked, which also closes the recorded residual of chunked uploads
+spooled in full. Uploads are read two at a time on threads of their own, so they neither multiply the cost nor hold the
+threads /api/health needs (45 slow uploads held all 40 and health waited 10.4 s, past the liveness probe's 5 s). The API
+container may use 2 GB of the host. Not changed: stored readings and the parser version (no accepted file reads
+differently). Left open: Form XObjects reused across a PDF's pages are extracted each time by the plain extractor
+(unmeasured); an over-limit upload sent straight to the API, with no edge in front, may see the connection reset
+instead of the 413 (through Cloudflare the 413 arrives, measured on staging).

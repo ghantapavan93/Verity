@@ -64,8 +64,9 @@ that does not exist, and builds the tree as it stands.
 `WORKBENCH_APP_URL` and `WORKBENCH_CORS_ORIGINS` hold `https://` and the tunnel's name. The API's per-address limits read
 `Cf-Connecting-Ip`, which Cloudflare's edge sets to the visitor's address (a client that sends its own is refused at the
 edge) and only cloudflared can reach the API to pass on; this is the workstation's arrangement. A run's stream sends a
-keep-alive every 15 s, inside the edge's 100-125 s. An upload that declares more than 25 MB is refused before its body is
-read, since no Caddy stands in front.
+keep-alive every 15 s, inside the edge's 100-125 s. Every request body is cut off where its route's need ends, declared
+or not, before its route or gate reads it (`api/body_limit.py`: 26 MiB for an upload, 1 MiB otherwise), since no Caddy
+stands in front.
 
 ## Rollback and moving the public name
 

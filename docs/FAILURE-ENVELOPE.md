@@ -7,7 +7,10 @@ and the test or record that holds it. "Open" means measured or reasoned about, n
 |---|---|---|---|
 | DOCX that is not a zip | 422 | 422 | `test_failure_matrix` malformed files |
 | Valid zip, broken or hostile package inside (member named `../../x`, garbage XML) | 422, nothing written anywhere | **before 2026-09-29: an `AttributeError` out of python-docx, a 500**; now 422, nothing written | `test_a_docx_member_named_to_escape_the_archive_is_never_written_anywhere` |
-| DOCX whose entries declare more than 256 MB unpacked | 413 before parsing | 413; zipfile never reads past a declared size, so the declaration is the bound | `test_a_docx_that_unpacks_far_beyond_its_size_is_refused_before_it_is_parsed` |
+| DOCX whose entries declare more than 64 MB unpacked (256 MB before 2026-10-13) | 413 before parsing | 413; zipfile never reads past a declared size, so the declaration is the bound | `test_a_docx_that_unpacks_far_beyond_its_size_is_refused_before_it_is_parsed`, `test_a_member_that_inflates_past_the_package_bound_is_refused_unread` |
+| DOCX whose markup would become over 1,000,000 elements, in any member, name or encoding | 413 before any part is parsed | **before 2026-10-13: an 84 KB file of six million empty paragraphs took 848 MB and 35 s**; now 413 in 0.3 s | `test_reading_cost.py` |
+| PDF whose pages inflate past 16 MB of drawing instructions | 413 before their text is read | **before 2026-10-13: about 1.6 s a page of 20 MB, half an hour for a 25 MB upload**; now 413 | `test_reading_cost.py` |
+| Request body past its route's need (26 MiB upload, 1 MiB otherwise), declared or chunked | 413 before the route, gate or parser reads it | **before 2026-10-13: a 40 MB JSON body with no session peaked the API at 2 GB**; now 413 in 0.02 s declared, 0.4 s chunked | `test_body_limit.py` |
 | DOCX with an external relationship (link, template) | read with no network call | read; sockets refused during the test and nothing tried one | `test_reading_a_docx_with_an_external_relationship_makes_no_network_call` |
 | Macro-enabled `.docm` | 422, unsupported type | 422 | `test_a_macro_enabled_document_is_not_a_supported_type` |
 | Encrypted PDF | 422 naming the reason | **before: "not a readable PDF"**; now "the PDF is encrypted" | `test_an_encrypted_pdf_is_refused_with_the_reason` |

@@ -67,7 +67,7 @@ def test_an_upload_declaring_more_than_the_limit_is_refused_unread_even_without_
     """FastAPI stores a whole form before any check runs: a 40 MB body with no session was written to disk and only then
     refused (security review, 2026-10-13). A declared size over the limit is refused before the body is read."""
     from app import config
-    from app.main import UPLOAD_REQUEST_LIMIT
+    from app.api.body_limit import UPLOAD_REQUEST_LIMIT
 
     monkeypatch.setattr(config.settings, "access_secret", "x" * 40)
     monkeypatch.setattr(config.settings, "access_required", True)

@@ -39,6 +39,10 @@ services:
     # once used 121 MiB of it (rehearsal, 2026-10-12); the bound costs memory only when used.
     tmpfs:
       - /tmp:size=512m,mode=1777
+    # What the API may take of the 4 GB host, the /tmp spool above included: past it the kernel ends this container,
+    # which restarts, instead of choosing among the host's processes. The bounds on reading (one reading peaked at
+    # 166 MB at the readers' limits, two at once) and on request bodies keep it far below (2026-10-13).
+    mem_limit: 2g
     # No core file: a crashing reader would write memory holding a contract to disk.
     ulimits:
       core: 0
