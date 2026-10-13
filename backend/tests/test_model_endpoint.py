@@ -202,3 +202,13 @@ def test_a_redirect_to_another_host_is_refused_and_the_credentials_never_go_ther
 def test_the_access_secret_is_never_in_a_printed_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config.settings, "access_secret", "secret-for-tests-" + "s" * 30)
     assert "secret-for-tests" not in repr(config.settings) and "secret-for-tests" not in str(config.settings)
+
+
+def test_health_reports_a_refused_redirect_as_not_ok_instead_of_failing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def get(url: str, timeout: float, headers: dict[str, str] | None = None, follow_redirects: bool = False) -> httpx.Response:
+        return httpx.Response(302, headers={"location": "https://elsewhere.example.invalid/"}, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", get)
+    monkeypatch.setattr(config.settings, "ollama_url", "https://model.example.invalid")
+    ok, detail = OllamaProvider().healthy()
+    assert ok is False and "not reachable" in detail

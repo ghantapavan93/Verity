@@ -84,11 +84,9 @@ function reduce(state: FollowerState, action: Action): FollowerState {
  */
 export function useRunFollower() {
   const [state, dispatch] = useReducer(reduce, IDLE);
-  // The phase on screen, read after an await: whether a question still waiting for its run has been replaced.
-  const phase = useRef(state.phase);
-  useEffect(() => {
-    phase.current = state.phase;
-  }, [state.phase]);
+  // Who owns the screen: changed, synchronously, only by what actually puts something there (a question asked, a run
+  // shown or cleared). A claim alone does not change it: an open that claims and then fails has put nothing on screen.
+  const screen = useRef(0);
   const stopFollowing = useRef<(() => void) | null>(null);
   // Each question asked and each run shown is a newer intent. A caller that must wait before it can show a run
   // claims one first and shows nothing if another came after it: the newest intent owns the screen.
@@ -123,15 +121,16 @@ export function useRunFollower() {
   /** True when the API accepted the question; false when it refused it (the caller keeps the text). */
   const ask = useCallback(
     async (documentId: string, guidanceId: string | null, question: string): Promise<boolean> => {
-      const mine = ++intent.current;
+      ++intent.current;
+      const owner = ++screen.current;
       stop();
       dispatch({ type: "start", question, hasGuidance: guidanceId !== null });
       try {
         const created = await createRun({ documentId, guidanceId, question });
-        // The reader opened another contract or run while this was being created, and it is on screen: the run is in
-        // the record (Runs) and is not put over it (2026-10-13: it landed on the other contract). When nothing replaced
-        // the waiting question (an open that failed), the run is shown as before, not left at "Reading" (review).
-        if (intent.current !== mine && phase.current !== "starting") return true;
+        // The reader opened another contract or run, or asked again, while this was being created: the run is in the
+        // record (Runs) and is not put over what is on screen now (2026-10-13: it landed on the other contract). When
+        // nothing replaced the waiting question (an open that claimed and failed), it is shown as before (reviews).
+        if (screen.current !== owner) return true;
         dispatch({ type: "created", run: created });
         if (!TERMINAL.includes(created.stage)) attach(created.id);
         return true;
@@ -147,6 +146,7 @@ export function useRunFollower() {
   const show = useCallback(
     (run: RunView | null) => {
       intent.current++;
+      screen.current++;
       stop();
       if (run === null) dispatch({ type: "clear" });
       else {

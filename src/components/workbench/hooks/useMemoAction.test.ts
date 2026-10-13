@@ -9,9 +9,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { MemoRecord } from "@/lib/api";
 import type { RunView } from "@/lib/types";
 
-let finish: (memo: MemoRecord) => void = () => undefined;
+const pending: ((memo: MemoRecord) => void)[] = [];
+const finish = (memo: MemoRecord) => pending.shift()?.(memo);
 vi.mock("@/lib/api", () => ({
-  createMemo: () => new Promise<MemoRecord>((resolve) => (finish = resolve)),
+  createMemo: () => new Promise<MemoRecord>((resolve) => pending.push(resolve)),
   errorMessage: (error: unknown) => String(error),
 }));
 
@@ -32,5 +33,22 @@ describe("a memo and the run it was written for", () => {
     await act(async () => finish(MEMO));
     expect(result.current.memo?.runId).toBe("runX");
     expect(result.current.busy).toBe(false);
+  });
+
+  it("an older memo answering after a newer one does not replace it", async () => {
+    const { result } = renderHook(() => useMemoAction());
+    const OTHER = { ...MEMO, id: "m2", runId: "runY" } as MemoRecord;
+    let resolveX: (memo: MemoRecord) => void = () => undefined;
+    act(() => {
+      void result.current.generate(RUN);
+    });
+    resolveX = pending.shift() as (memo: MemoRecord) => void;
+    act(() => result.current.reset()); // run Y comes on screen
+    act(() => {
+      void result.current.generate({ id: "runY", stage: "complete" } as RunView);
+    });
+    await act(async () => finish(OTHER)); // Y's memo first
+    await act(async () => resolveX(MEMO)); // then X's, late
+    expect(result.current.memo?.runId).toBe("runY");
   });
 });

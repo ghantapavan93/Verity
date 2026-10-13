@@ -2,7 +2,8 @@
 
 This replaces nothing in `deploy/` (the workstation and tunnel setup); it is the laptop-independent layout of the same
 public demo `deploy/README.md` describes: anyone may enter, each browser in a workspace of its own, deleted with
-everything in it seven days after the first visit. Nothing here has been deployed. Every step that creates a resource,
+everything in it seven days after the first visit. Deployed so far: staging only, on a Hetzner VM behind a tunnel
+(`ORACLE.md`, which also holds the cutover); the public name still reaches the workstation. Every step that creates a resource,
 spends money, changes DNS or changes who can enter is the owner's to take. What is ready, what was rehearsed and what
 still needs a paid test: `CLOUD-READINESS.md`.
 
@@ -13,7 +14,7 @@ still needs a paid test: `CLOUD-READINESS.md`.
 | Live workbench, /break, /state | One Linux VM (DigitalOcean Basic, 4 GB, 2 vCPU, $24/month) running `compose.yml`: Caddy, the interface, the API | SQLite needs a local disk and one process; one VM is the simplest thing that gives both, with no cold start for the pages and documented SSE behaviour |
 | Model | Ollama 0.40.3 on a Modal L4, scale to zero (`modal_ollama.py`) | The only way found to serve the exact reference build (qwen3:8b, Ollama digest 500a1f067a9f, Q4_K_M); no managed provider serves those weights |
 | Storage | SQLite (WAL) and the original uploads on the VM's disk, in the `verity-data` volume; no backups (below) | Measured traffic is a demo; the store holds nothing older than seven days by design |
-| Optional mirror of /state and /break | Static files on Cloudflare Pages (`backend/scripts/export_state.py --build --workbench-url <live workbench>`) | No server, store or model; survives the VM being down |
+| Optional mirror of /state and /break | Static files on Cloudflare Pages (`backend/scripts/export_state.py --build --workbench-url <live workbench> --hosting cloud`) | No server, store or model; survives the VM being down |
 
 The engineering boundaries do not move: the same images run the same code as the workstation's public API, with the
 same settings (`env.example` names each one); one uvicorn worker; the model proposes, deterministic code verifies every

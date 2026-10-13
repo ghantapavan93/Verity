@@ -110,7 +110,7 @@ class OllamaProvider:
     def healthy(self) -> tuple[bool, str]:
         try:
             models = self._tags(HEALTH_PROBE_TIMEOUT_S)
-        except (httpx.HTTPError, ValueError) as error:
+        except (httpx.HTTPError, ValueError, ProviderError) as error:  # ProviderError: a redirect refused (_send)
             # The endpoint's address stays in the server log; /api/health is public and never names it.
             log.warning("model endpoint %s not reachable: %s", self.base_url, type(error).__name__)
             return False, f"the model endpoint is not reachable ({type(error).__name__})"

@@ -50,12 +50,13 @@ cd deploy/cloud && cp ~/contract-state.json . && sha256sum contract-state.json  
 install -o 65532 -g 65532 -m 400 ~/<id>.json tunnel.json   # cloudflared runs as 65532; never in git or an image (.gitignore, .dockerignore)
 cp env.example .env && chmod 600 .env                      # once: COMPOSE_PROFILES=tunnel, VERITY_TUNNEL_ID=<id>, the secret as env.example says
 swapon --show                                              # nothing: no swap
-export VERITY_TAG=<short sha>                              # every build kept under its commit, for the way back
+sed -i '/^VERITY_TAG=/d' .env && echo VERITY_TAG=<short sha> >> .env   # in .env, not exported: a bare `up -d` later keeps it
 BUILDX_NO_DEFAULT_ATTESTATIONS=1 VERITY_BUILD_SHA=<sha> docker compose build && docker compose up -d
 docker builder prune -f --filter until=72h                 # build cache grows with every release on a 38 GB disk
 ```
 
-Keep the previous release's images (`docker image ls verity-*`); remove older ones with `docker image rm`.
+Each build is kept under its commit (`docker image ls verity-*`). Keep at least the previous release's images: the way
+back below needs them. Remove older ones with `docker image rm`.
 
 `WORKBENCH_APP_URL` and `WORKBENCH_CORS_ORIGINS` hold `https://` and the tunnel's name. The API's per-address limits read
 `Cf-Connecting-Ip`, which Cloudflare's edge sets to the visitor's address (a client that sends its own is refused at the
@@ -65,10 +66,16 @@ read, since no Caddy stands in front.
 
 ## Rollback and moving the public name
 
-- **Back to the previous release on this host:** `cd /opt/verity/deploy/cloud && VERITY_TAG=<previous short sha> docker
-  compose up -d`. Seconds; the store stays. (A schema change in between: README.md, Rollback.)
-- **Moving a live name here (cutover):** in Cloudflare DNS, edit the name's CNAME target from the old tunnel's
-  `<old id>.cfargotunnel.com` to `<this id>.cfargotunnel.com` (proxied). Visitors start fresh here: no store is moved.
+- **Back to the previous release on this host:** in `/opt/verity/deploy/cloud`, set `VERITY_TAG=<previous short sha>`
+  in `.env`, then `docker compose up -d`. Seconds; the store stays. (A schema change in between: README.md, Rollback.)
+  If that release's images were removed, rebuild them first: unpack its archive and build as above with its tag.
+- **Moving a live name here (cutover):** first point this stack at the name: in `.env` set `VERITY_SITE=<name>`,
+  `WORKBENCH_APP_URL=https://<name>` and `WORKBENCH_CORS_ORIGINS=https://<name>`, then `docker compose up -d` (the
+  interface and API recreate; the store stays). The tunnel's ingress names no host, so nothing else changes here. Then,
+  in Cloudflare DNS, edit the name's CNAME target from the old tunnel's `<old id>.cfargotunnel.com` to
+  `<this id>.cfargotunnel.com` (proxied); `cloudflared tunnel route dns --overwrite-dns <tunnel> <name>` does the same.
+  Visitors start fresh here: no store is moved. Between the `.env` change and the DNS edit, the staging name still
+  reaches this stack but its pages expect the new name; check through the new name once it moves.
 - **Moving it back (rollback):** edit the same record's target back to the old tunnel. Keep the old origin running, with
   its connector up, until the move back is no longer wanted.
 

@@ -340,4 +340,31 @@ describe("two tabs opened at once on a first visit", () => {
     expect(await screen.findByText("the workbench")).toBeTruthy();
     expect(api.visit).toHaveBeenCalledTimes(1);
   });
+
+  it("a lock that cannot be had in time (or is refused) falls back to asking at once", async () => {
+    Object.defineProperty(navigator, "locks", {
+      value: { request: () => Promise.reject(new DOMException("held too long", "TimeoutError")) },
+      configurable: true,
+    });
+    api.visit.mockResolvedValue(DEMO_IN);
+    render(
+      <AccessGate>
+        <p>the workbench</p>
+      </AccessGate>,
+    );
+    expect(await screen.findByText("the workbench")).toBeTruthy();
+    expect(api.visit).toHaveBeenCalledTimes(1);
+  });
+
+  it("a refusal from the server inside the lock is shown, not asked again", async () => {
+    installLocks();
+    api.visit.mockRejectedValue(new Error("Too many new visits from your network in the last hour."));
+    render(
+      <AccessGate>
+        <p>the workbench</p>
+      </AccessGate>,
+    );
+    expect(await screen.findByText(/Too many new visits/)).toBeTruthy();
+    expect(api.visit).toHaveBeenCalledTimes(1);
+  });
 });

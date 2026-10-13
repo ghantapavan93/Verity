@@ -14,14 +14,18 @@ export function useMemoAction() {
   // under that run (AssistantPanel), so one written for the same run reopened still appears (2026-10-13: a memo showed
   // under the run gone back to; the first fix dropped it even when its own run came back, review).
   const generation = useRef(0);
+  // Only the latest memo asked for is kept: an older one answering late does not replace a newer one (review).
+  const requested = useRef(0);
 
   const generate = useCallback(async (run: RunView | null) => {
     if (!run || run.stage !== "complete") return;
     const mine = generation.current;
+    const asked = ++requested.current;
     setBusy(true);
     setError(null);
     try {
-      setMemo(await createMemo(run.id));
+      const made = await createMemo(run.id);
+      if (requested.current === asked) setMemo(made);
     } catch (e) {
       if (generation.current === mine) setError(errorMessage(e));
     } finally {

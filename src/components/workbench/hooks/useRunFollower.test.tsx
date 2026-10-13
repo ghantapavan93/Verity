@@ -294,3 +294,60 @@ describe("a run created after the reader moved on", () => {
     expect(result.current.run?.id).toBe("runA");
   });
 });
+
+describe("the screen's owner, not its phase (re-review probes, 2026-10-13)", () => {
+  beforeEach(() => {
+    api.createRun.mockReset();
+    api.followRun.mockReset();
+  });
+
+  it("a run arriving after the reader opened another contract and asked there (refused) is not put on that contract", async () => {
+    let answerA: (run: RunView) => void = () => undefined;
+    api.createRun.mockImplementationOnce(() => new Promise<RunView>((r) => (answerA = r))).mockRejectedValueOnce(new Error("Too many runs"));
+    const { result } = renderHook(() => useRunFollower());
+    act(() => {
+      void result.current.ask("docA", null, "What notice is needed?");
+    });
+    act(() => result.current.show(null)); // contract B opened
+    await act(async () => {
+      await result.current.ask("docB", null, "Which law governs?"); // refused by the API
+    });
+    await act(async () => answerA(runView({ id: "runA", stage: "complete" })));
+    expect(result.current.run).toBeNull();
+  });
+
+  it("an older question's run arriving while a newer question waits is not put over it", async () => {
+    let answerA: (run: RunView) => void = () => undefined;
+    let answerB: (run: RunView) => void = () => undefined;
+    api.createRun
+      .mockImplementationOnce(() => new Promise<RunView>((r) => (answerA = r)))
+      .mockImplementationOnce(() => new Promise<RunView>((r) => (answerB = r)));
+    api.followRun.mockReturnValue(() => undefined);
+    const { result } = renderHook(() => useRunFollower());
+    act(() => {
+      void result.current.ask("docA", null, "What notice is needed?");
+    });
+    act(() => result.current.show(null)); // contract B opened
+    act(() => {
+      void result.current.ask("docB", null, "Which law governs?"); // still waiting for its run
+    });
+    await act(async () => answerA(runView({ id: "runA", stage: "complete" })));
+    expect(result.current.run).toBeNull();
+    await act(async () => answerB(runView({ id: "runB", stage: "complete" })));
+    expect(result.current.run?.id).toBe("runB");
+  });
+
+  it("a run arriving in the same moment another contract is opened is not shown", async () => {
+    let answerA: (run: RunView) => void = () => undefined;
+    api.createRun.mockImplementationOnce(() => new Promise<RunView>((r) => (answerA = r)));
+    const { result } = renderHook(() => useRunFollower());
+    act(() => {
+      void result.current.ask("docA", null, "What notice is needed?");
+    });
+    await act(async () => {
+      result.current.show(null);
+      answerA(runView({ id: "runA", stage: "complete" }));
+    });
+    expect(result.current.run).toBeNull();
+  });
+});
