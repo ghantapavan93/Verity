@@ -42,10 +42,28 @@ describe("waking a hosted model before the question", () => {
   });
 
   it("a question started after a pause wakes it again", () => {
-    const view = mount({ hosted: true, added: 1, typing: false });
+    const view = mount({ hosted: true, added: 0, typing: false });
+    view.rerender({ hosted: true, added: 1, typing: false });
     vi.advanceTimersByTime(WAKE_EVERY_MS + 1000);
     view.rerender({ hosted: true, added: 1, typing: true });
     expect(wakeModel).toHaveBeenCalledTimes(2);
+  });
+
+  it("health answering again after a blip is not an action and wakes nothing", () => {
+    const view = mount({ hosted: true, added: 0, typing: false });
+    view.rerender({ hosted: true, added: 1, typing: false });
+    vi.advanceTimersByTime(WAKE_EVERY_MS + 1000);
+    view.rerender({ hosted: false, added: 1, typing: false }); // health failed: the place is unknown
+    view.rerender({ hosted: true, added: 1, typing: false }); // and answered again
+    expect(wakeModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("a contract added before health answered is woken for once it does", () => {
+    const view = mount({ hosted: false, added: 0, typing: false });
+    view.rerender({ hosted: false, added: 1, typing: false });
+    expect(wakeModel).not.toHaveBeenCalled();
+    view.rerender({ hosted: true, added: 1, typing: false });
+    expect(wakeModel).toHaveBeenCalledTimes(1);
   });
 
   it("control: a model on the server itself is never woken", () => {
@@ -56,7 +74,8 @@ describe("waking a hosted model before the question", () => {
 
   it("a refused or failed wake-up changes nothing on the page", async () => {
     wakeModel.mockImplementationOnce(() => Promise.reject(new Error("429")));
-    mount({ hosted: true, added: 1, typing: false });
+    const view = mount({ hosted: true, added: 0, typing: false });
+    view.rerender({ hosted: true, added: 1, typing: false });
     await Promise.resolve();
     expect(wakeModel).toHaveBeenCalledTimes(1);
   });

@@ -93,11 +93,15 @@ def test_the_mirror_carries_break_only_with_the_live_workbench_address(monkeypat
     linked = build_environment(monkeypatch, tmp_path / "linked", workbench_url="https://verity.example.com/", hosting="cloud")
     assert linked["NEXT_PUBLIC_WORKBENCH_URL"] == "https://verity.example.com"
     assert linked["NEXT_PUBLIC_HOSTING"] == "cloud"
-    laptop = build_environment(monkeypatch, tmp_path / "laptop", workbench_url="https://verity.example.com")
+    laptop = build_environment(monkeypatch, tmp_path / "laptop", workbench_url="https://verity.example.com", hosting="workstation")
     assert "NEXT_PUBLIC_HOSTING" not in laptop
+    with pytest.raises(export_state.ExportError, match="say where it runs"):
+        build_environment(monkeypatch, tmp_path / "unsaid", workbench_url="https://verity.example.com")
 
 
-@pytest.mark.parametrize("url", ["http://verity.example.com", "verity.example.com", "https://verity.example.com/break", "https://verity.example.com/?x=1", "https://"])
+@pytest.mark.parametrize(
+    "url", ["http://verity.example.com", "verity.example.com", "https://verity.example.com/break", "https://verity.example.com/?x=1", "https://"]
+)
 def test_a_workbench_address_is_an_https_origin_and_nothing_else(url: str) -> None:
     with pytest.raises(export_state.ExportError, match="https origin"):
         export_state.workbench_address(url)
@@ -107,3 +111,9 @@ def test_control_a_workbench_address_needs_the_build(capsys: pytest.CaptureFixtu
     with pytest.raises(SystemExit) as stopped:
         export_state.main(["--workbench-url", "https://verity.example.com"])
     assert stopped.value.code == 2 and "needs --build" in capsys.readouterr().err
+
+
+def test_a_workbench_address_needs_to_say_where_the_workbench_runs(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as stopped:
+        export_state.main(["--build", "--workbench-url", "https://verity.example.com"])
+    assert stopped.value.code == 2 and "needs --hosting" in capsys.readouterr().err

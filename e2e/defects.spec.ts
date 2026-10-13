@@ -31,6 +31,7 @@ test("a decision made on Findings is the one the evidence drawer shows when Revi
   await page.getByRole("button", { name: "Inspect evidence" }).first().click();
   const drawer = page.locator('[aria-label="Evidence"]');
   await expect(drawer).toBeVisible();
+  await expect(drawer.getByText("Limitation of Liability")).toBeVisible();
   const shownId = param(page, "finding");
 
   // On Findings, change the decision on every finding of this run (Confirm, or Undo a decision an earlier flow made).

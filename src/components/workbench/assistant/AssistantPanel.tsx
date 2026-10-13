@@ -207,7 +207,7 @@ export function AssistantPanel({
                   ))}
                   {run.withheld.length > 0 && <WithheldList findings={run.withheld} sectionsById={sectionsById} onEvidence={onOpenEvidence} />}
                   <div className={styles.memoRow}>
-                    {memo.memo ? (
+                    {memo.memo && memo.memo.runId === run.id ? (
                       <>
                         <span className={styles.memoDone}>
                           {memo.memo.reviewHead === run.reviewHead ? (

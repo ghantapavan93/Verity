@@ -9,8 +9,10 @@ export function useMemoAction() {
   const [memo, setMemo] = useState<MemoRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Bumped by reset, which the workbench calls whenever another run comes on screen: a memo or an error that answers
-  // after that belongs to the run that was left, and is dropped (2026-10-13: it showed under the run gone back to).
+  // Bumped by reset, which the workbench calls whenever another run comes on screen: the busy state and an error that
+  // answer after that belong to a request the screen has left. The memo itself is kept with its run id and shown only
+  // under that run (AssistantPanel), so one written for the same run reopened still appears (2026-10-13: a memo showed
+  // under the run gone back to; the first fix dropped it even when its own run came back, review).
   const generation = useRef(0);
 
   const generate = useCallback(async (run: RunView | null) => {
@@ -19,8 +21,7 @@ export function useMemoAction() {
     setBusy(true);
     setError(null);
     try {
-      const made = await createMemo(run.id);
-      if (generation.current === mine) setMemo(made);
+      setMemo(await createMemo(run.id));
     } catch (e) {
       if (generation.current === mine) setError(errorMessage(e));
     } finally {

@@ -14,7 +14,7 @@ With --workbench-url the build also carries /break, the recorded failure, which 
 links lead to the live workbench at that address, and --hosting says where that workbench runs (/break tells its
 readers). Without it the artifact is /state alone, as before.
 
-    cd backend && .venv/Scripts/python scripts/export_state.py --build --workbench-url https://ivo.pavankg.dev
+    cd backend && .venv/Scripts/python scripts/export_state.py --build --workbench-url https://ivo.pavankg.dev --hosting workstation
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def workbench_address(url: str) -> str:
     return f"https://{parts.netloc}"
 
 
-def build(out: Path, workbench_url: str | None = None, hosting: str = "workstation") -> None:
+def build(out: Path, workbench_url: str | None = None, hosting: str | None = None) -> None:
     """`next build` in export mode; Next writes the static site into its distDir, ../out-state.
 
     With a workbench address the site carries /break as well (src/app/break/page.tsx), linking to that workbench."""
@@ -76,6 +76,8 @@ def build(out: Path, workbench_url: str | None = None, hosting: str = "workstati
     environment.pop("NEXT_PUBLIC_WORKBENCH_URL", None)
     environment.pop("NEXT_PUBLIC_HOSTING", None)
     if workbench_url is not None:
+        if hosting not in ("workstation", "cloud"):
+            raise ExportError("with a workbench address, say where it runs: --hosting workstation or --hosting cloud")
         environment["NEXT_PUBLIC_WORKBENCH_URL"] = workbench_address(workbench_url)
         if hosting == "cloud":
             environment["NEXT_PUBLIC_HOSTING"] = "cloud"
@@ -123,10 +125,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=ROOT / "out-state")
     parser.add_argument("--build", action="store_true", help="run the export build first")
     parser.add_argument("--workbench-url", help="with --build: also carry /break, linking to the live workbench here")
-    parser.add_argument("--hosting", choices=("workstation", "cloud"), default="workstation", help="where that workbench runs")
+    parser.add_argument("--hosting", choices=("workstation", "cloud"), help="with --workbench-url: where that workbench runs (required)")
     args = parser.parse_args(argv)
     if args.workbench_url is not None and not args.build:
         parser.error("--workbench-url changes what is built; it needs --build")
+    if args.workbench_url is not None and args.hosting is None:
+        parser.error("--workbench-url needs --hosting workstation or --hosting cloud: /break says where the workbench runs")
     try:
         if args.build:
             build(args.out, args.workbench_url, args.hosting)

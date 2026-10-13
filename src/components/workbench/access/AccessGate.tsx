@@ -48,8 +48,19 @@ function takeInviteFromAddress(): string | null {
  */
 async function visitOneTabAtATime(): Promise<AccessView> {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
-  return locks ? await locks.request("verity-first-visit", () => visit()) : visit();
+  if (!locks) return visit();
+  // A lock held too long by another tab, or refused (site storage blocked), falls back to asking at once (review).
+  const signal = typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(LOCK_WAIT_MS) : undefined;
+  try {
+    return await locks.request("verity-first-visit", { signal }, () => visit());
+  } catch (error) {
+    if (error instanceof DOMException && ["AbortError", "TimeoutError", "SecurityError", "InvalidStateError"].includes(error.name)) return visit();
+    throw error;
+  }
 }
+
+// How long a tab waits for another tab's first visit before asking itself.
+const LOCK_WAIT_MS = 15_000;
 
 export function AccessGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<State>("checking");

@@ -24,7 +24,17 @@ export function useModelWake(hosted: boolean, added: number, typing: boolean): v
     lastWake.current = now;
     wakeModel().catch(() => undefined);
   }, [hosted]);
+  // Only an action wakes it: a contract added, or a question started. A change of `hosted` alone (health answering
+  // again after a blip) is not one (review, 2026-10-13); an action made before health answered is served once it does.
+  const seen = useRef({ added, typing: false });
+  const pending = useRef(false);
   useEffect(() => {
-    if (added > 0 || typing) request();
-  }, [added, typing, request]);
+    const acted = added > seen.current.added || (typing && !seen.current.typing);
+    seen.current = { added, typing };
+    if (acted) pending.current = true;
+    if (pending.current && hosted) {
+      pending.current = false;
+      request();
+    }
+  }, [added, typing, hosted, request]);
 }

@@ -283,7 +283,8 @@ describe("two tabs opened at once on a first visit", () => {
   function installLocks() {
     let tail: Promise<unknown> = Promise.resolve();
     const locks = {
-      request: (_name: string, callback: () => Promise<unknown>) => {
+      request: (_name: string, options: unknown, maybeCallback?: () => Promise<unknown>) => {
+        const callback = (typeof options === "function" ? options : maybeCallback) as () => Promise<unknown>;
         const run = tail.then(callback, callback);
         tail = run.catch(() => undefined);
         return run;

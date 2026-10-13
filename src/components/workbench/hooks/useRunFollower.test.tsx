@@ -252,3 +252,45 @@ describe("records that arrive after the person moved on (m9 smoke, 2026-10-11)",
     expect(later()).toBe(true);
   });
 });
+
+describe("a run created after the reader moved on", () => {
+  beforeEach(() => {
+    api.createRun.mockReset();
+    api.followRun.mockReset();
+  });
+
+  function deferredRun() {
+    let resolve: (run: RunView) => void = () => undefined;
+    api.createRun.mockImplementationOnce(() => new Promise<RunView>((r) => (resolve = r)));
+    return (run: RunView) => resolve(run);
+  }
+
+  it("is not put over another contract or run the reader opened meanwhile", async () => {
+    const answer = deferredRun();
+    const { result } = renderHook(() => useRunFollower());
+    let accepted: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      accepted = result.current.ask("docA", null, "What notice is needed?");
+    });
+    act(() => result.current.show(null)); // another contract opened: nothing is on screen for it
+    await act(async () => answer(runView({ id: "runA", stage: "complete" })));
+    expect(await accepted).toBe(true);
+    expect(result.current.run).toBeNull();
+  });
+
+  it("is still shown when the reader's other action did not replace the waiting question", async () => {
+    const answer = deferredRun();
+    const { result } = renderHook(() => useRunFollower());
+    let accepted: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      accepted = result.current.ask("docA", null, "What notice is needed?");
+    });
+    // A recorded run's open claims the screen first, then fails before showing anything.
+    act(() => {
+      result.current.claim();
+    });
+    await act(async () => answer(runView({ id: "runA", stage: "complete" })));
+    expect(await accepted).toBe(true);
+    expect(result.current.run?.id).toBe("runA");
+  });
+});
