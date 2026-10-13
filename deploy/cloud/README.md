@@ -151,8 +151,9 @@ repository; a new secret ends every session, and the workspaces they held are de
 ## Rollback
 
 On a host that builds its own images (ORACLE.md) every build is tagged with its commit (`VERITY_TAG`), and the previous
-release's images are kept: `VERITY_TAG=<previous> docker compose up -d` is the way back, in seconds. On a host that
-loads archives:
+release's images are kept: set `VERITY_TAG=<previous>` in `.env` and run `docker compose up -d`, in seconds (ORACLE.md,
+Rollback). A tag given only on the command line lasts for that command: the next bare `up -d` returns to the one in
+`.env`. On a host that loads archives:
 
 1. `docker compose down` (the volume stays).
 2. `docker load` the previous release's images and `docker compose up -d`.
