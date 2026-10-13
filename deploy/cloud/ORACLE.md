@@ -1,22 +1,22 @@
-# Verity on Oracle Always Free: one ARM VM behind a Cloudflare Tunnel
+# Verity on one small VM behind a Cloudflare Tunnel (Hetzner CAX11, staging since 2026-10-13)
 
-The same compose stack as README.md, on a host with no inbound port: the edge is the `tunnel` profile (a cloudflared
-connector, as on the workstation) instead of Caddy. The model is the Modal endpoint of README.md (modal_ollama.py),
-unchanged. Everything README.md says about the store, retention, recovery and rollback holds here; this file says only
-what differs.
+The same compose stack as README.md, on a host with no inbound port for visitors: the edge is the `tunnel` profile (a
+cloudflared connector, as on the workstation) instead of Caddy. The model is the Modal endpoint of README.md
+(modal_ollama.py). Everything README.md says about the store, retention, recovery and spend holds here; this file says
+only what differs. The file keeps its first name: it was written for Oracle Always Free, which on 2026-10-13 had no A1
+capacity in any availability domain for any size (Oracle's Compute Capacity Report API), so the host is a Hetzner VM.
 
 ## The VM
 
-- Shape `VM.Standard.A1.Flex`, 2 OCPUs and 12 GB (the Always Free allowance since June 2026), Ubuntu 24.04 aarch64,
-  the default boot volume, no backup policy: a copy of the store holds visitors' contracts past the deletion the first
-  screen promises (README.md: what the disk keeps).
-- A public IPv4 address for SSH only. The security list keeps its single ingress rule, TCP 22, and that from the
-  owner's address alone; nothing serves on 80 or 443. Visitors reach the stack through the tunnel, which dials out.
-- An account with no payment method cannot be charged; an upgraded one bills anything beyond the allowance. Check the
-  shape says "Always Free-eligible" before Create.
-- Oracle may stop an Always Free VM that stays idle for seven days (CPU p95, network and memory all under 20%). Nothing
-  here generates load to prevent it. A stop keeps the boot volume; start the VM from the console and the stack comes
-  back by itself (`restart: unless-stopped`, Docker enabled at boot).
+- Hetzner Cloud CAX11: Arm64, 2 vCPU, 4 GB, 40 GB, Ubuntu 24.04, about $7 a month with its IPv4 address, billed by the
+  hour; the x86 CX23 was unavailable. No backups (a copy of the store holds visitors' contracts past the deletion the
+  first screen promises), no volumes, no swap.
+- A Hetzner Cloud Firewall on the server: inbound TCP 22 and ICMP only. Nothing serves on 80 or 443: visitors reach the
+  stack through the tunnel, which dials out. Outbound open (Cloudflare, Docker Hub, Modal, Ubuntu updates).
+- SSH by key only: `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `PermitRootLogin prohibit-password`
+  in `/etc/ssh/sshd_config.d/99-verity.conf`. `unattended-upgrades` on.
+- Measured on staging: 520-740 MB in use of 3.8 GB with the stack up; the full API suite (Dockerfile.api `test` stage)
+  passes natively on Arm64, the four timing-bound tests included.
 
 ## The tunnel
 
@@ -29,49 +29,57 @@ cloudflared tunnel route dns verity-oracle verity-staging.example.com
 ```
 
 `route dns` creates a CNAME to `<id>.cfargotunnel.com` and refuses a name that already has a record. Moving an existing
-name to this host is an edit of that record's target, made once the host has passed its acceptance; until then the
-name's current origin keeps it.
+name to this host is an edit of that record's target (below). The connector runs over HTTP/2 (compose.yml): over QUIC
+every connection of the staging host dropped together for three minutes and a request was answered 502.
 
 ## Build, on the VM
 
-Native arm64; the image is built where it runs, from the commit under test, which need not be pushed. From the build
-machine, the commit's tree, the frozen record and the tunnel's credentials:
+Native, from the commit under test, which need not be pushed. From the build machine:
 
 ```bash
 git archive --format=tar.gz -o verity-<sha>.tar.gz <sha>
-scp verity-<sha>.tar.gz contract-state.json ~/.cloudflared/<id>.json ubuntu@<vm>:~
+scp verity-<sha>.tar.gz contract-state.json ~/.cloudflared/<id>.json root@<vm>:~
 ```
 
-On the VM:
+On the VM (first time: `apt-get install -y docker.io docker-compose-v2`):
 
 ```bash
-sudo apt-get install -y docker.io docker-compose-v2 && sudo usermod -aG docker ubuntu   # then log in again
-sudo mkdir -p /opt/verity && sudo chown ubuntu: /opt/verity && tar -xzf ~/verity-<sha>.tar.gz -C /opt/verity
-cd /opt/verity && docker build --target test -f deploy/cloud/Dockerfile.api .   # the API suite on arm64; any failure stops here
-cd deploy/cloud && mv ~/contract-state.json ~/<id>.json .
-sha256sum contract-state.json                              # cff26179f199…; anything else: stop
-mv <id>.json tunnel.json && sudo chown 65532:65532 tunnel.json && sudo chmod 400 tunnel.json   # cloudflared runs as 65532
-cp env.example .env && chmod 600 .env                      # COMPOSE_PROFILES=tunnel, VERITY_TUNNEL_ID=<id>; the secret as env.example says
-swapon --show                                              # nothing: no swap (README.md: the droplet)
-BUILDX_NO_DEFAULT_ATTESTATIONS=1 VERITY_BUILD_SHA=<sha> docker compose build
-docker compose up -d
+mkdir -p /opt/verity && tar -xzf ~/verity-<sha>.tar.gz -C /opt/verity
+cd /opt/verity && docker build --target test -f deploy/cloud/Dockerfile.api .   # the API suite on this CPU; any failure stops here
+cd deploy/cloud && cp ~/contract-state.json . && sha256sum contract-state.json    # cff26179f199…; anything else: stop
+install -o 65532 -g 65532 -m 400 ~/<id>.json tunnel.json   # cloudflared runs as 65532; never in git or an image (.gitignore, .dockerignore)
+cp env.example .env && chmod 600 .env                      # once: COMPOSE_PROFILES=tunnel, VERITY_TUNNEL_ID=<id>, the secret as env.example says
+swapon --show                                              # nothing: no swap
+export VERITY_TAG=<short sha>                              # every build kept under its commit, for the way back
+BUILDX_NO_DEFAULT_ATTESTATIONS=1 VERITY_BUILD_SHA=<sha> docker compose build && docker compose up -d
+docker builder prune -f --filter until=72h                 # build cache grows with every release on a 38 GB disk
 ```
 
+Keep the previous release's images (`docker image ls verity-*`); remove older ones with `docker image rm`.
+
 `WORKBENCH_APP_URL` and `WORKBENCH_CORS_ORIGINS` hold `https://` and the tunnel's name. The API's per-address limits read
-`Cf-Connecting-Ip`, which Cloudflare's edge sets to the visitor's address and only cloudflared can reach the API to
-pass on; this is the workstation's arrangement. A run's stream sends a keep-alive every 15 s, inside the edge's 125 s.
+`Cf-Connecting-Ip`, which Cloudflare's edge sets to the visitor's address (a client that sends its own is refused at the
+edge) and only cloudflared can reach the API to pass on; this is the workstation's arrangement. A run's stream sends a
+keep-alive every 15 s, inside the edge's 100-125 s. An upload that declares more than 25 MB is refused before its body is
+read, since no Caddy stands in front.
+
+## Rollback and moving the public name
+
+- **Back to the previous release on this host:** `cd /opt/verity/deploy/cloud && VERITY_TAG=<previous short sha> docker
+  compose up -d`. Seconds; the store stays. (A schema change in between: README.md, Rollback.)
+- **Moving a live name here (cutover):** in Cloudflare DNS, edit the name's CNAME target from the old tunnel's
+  `<old id>.cfargotunnel.com` to `<this id>.cfargotunnel.com` (proxied). Visitors start fresh here: no store is moved.
+- **Moving it back (rollback):** edit the same record's target back to the old tunnel. Keep the old origin running, with
+  its connector up, until the move back is no longer wanted.
 
 ## Cost
 
-Oracle: nothing, within the allowance. Modal: billed per second while a GPU container runs, from the workspace's
-credits; its usage limit, set at the credits, stops the endpoint before anything is charged to a card. The day's new
-questions start at 15 (env.example) and rise only after the measured cost of a question, cold starts included, says the
-month's limit holds.
+The VM: about $7 a month. Modal: billed per second while a GPU container runs, from the workspace's credits; its usage
+limit, set at the credits, stops the endpoint before anything is charged to a card. Measured on staging: a cold start
+95-168 s, about $0.05 a question with wake-ups and idle tails, warm questions a few seconds of GPU.
 
 A reader who adds a contract or starts a question wakes the model ahead of it (WORKBENCH_MODEL_WAKEUP; opening one from a
-link or a recorded run wakes nothing): a cold start of about
-three minutes and five idle minutes after the last answer, about $0.12 a visit at the L4's $0.96 an hour, answered or
-not, and at most WORKBENCH_MODEL_WAKEUPS_PER_DAY (10) a day, about $1.20. Every further question in the same visit is
-a few seconds of GPU. A month of the worst case, every wake-up and every one of the 15 questions on its own cold start,
-is more than the $30 usage limit; the limit is then the stop: answers pause until the month renews, nothing is charged,
-and the pages, /break and /state keep working. Measured demo traffic is a small fraction of that.
+link or a recorded run wakes nothing): a cold start and five idle minutes after the last answer, about $0.12, answered or
+not, at most WORKBENCH_MODEL_WAKEUPS_PER_DAY (10) a day and three an hour per address. A month of the worst case, every
+wake-up and every one of the 15 questions on its own cold start, is more than the $30 usage limit; the limit is then the
+stop: answers pause until the month renews, nothing is charged, and the pages, /break and /state keep working.

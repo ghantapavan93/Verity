@@ -103,8 +103,9 @@ nothing past its seven days.
 
 ## Environment
 
-`env.example` is the schema: the workstation's public settings (anonymous sessions on, the gate required, 200 questions
-a day for everyone, BM25 with six sections, answer-v2), plus what the cloud adds: the site name, the model URL, its proxy
+`env.example` is the schema: the workstation's public settings (anonymous sessions on, the gate required, BM25 with
+six sections, answer-v2) with the cloud's own question bounds (15 a day for everyone, 5 per workspace), plus what the
+cloud adds: the site name, the model URL, its proxy
 token as `WORKBENCH_OLLAMA_HEADERS`, the pinned digest, the host label, and health that never wakes the GPU.
 
 The owner's switch: `docker compose exec api touch /data/public.paused` refuses new uploads and questions at once with a
@@ -148,6 +149,10 @@ repository; a new secret ends every session, and the workspaces they held are de
 
 ## Rollback
 
+On a host that builds its own images (ORACLE.md) every build is tagged with its commit (`VERITY_TAG`), and the previous
+release's images are kept: `VERITY_TAG=<previous> docker compose up -d` is the way back, in seconds. On a host that
+loads archives:
+
 1. `docker compose down` (the volume stays).
 2. `docker load` the previous release's images and `docker compose up -d`.
 3. When the release being undone changed the schema (the delivery preflight's "schema owners changed"), the older build
@@ -160,9 +165,10 @@ repository; a new secret ends every session, and the workspaces they held are de
   Adding a contract or starting a question wakes it (WORKBENCH_MODEL_WAKEUP), at most WORKBENCH_MODEL_WAKEUPS_PER_DAY times a UTC day.
   About $0.96 an hour while up (GPU, two cores, 8 GiB); a question costs $0.02–0.07 depending on whether the GPU is
   already warm. Estimates, not measurements: the first paid test measures them (`CLOUD-READINESS.md`).
-- Questions: 200 a day for everyone together, 30 per workspace a day, 30 an hour per network address; one model call at
-  a time; 600 s per model call, which Modal's per-request timeout also enforces once it redirects a long call. Uploads:
-  25 MB each (Caddy refuses a larger body before the API reads it), 10 per workspace, 300 a day for everyone.
+- Questions: 15 a day for everyone together and 5 per workspace (env.example; the workstation allows 200 and 30), 30 an
+  hour per network address; one model call at a time; 600 s per model call, which Modal's per-request timeout also
+  enforces once it redirects a long call. Uploads: 25 MB each (an upload declaring more is refused by the API before its
+  body is read, behind Caddy or a tunnel), 10 per workspace, 300 a day for everyone.
 - Health never wakes the GPU (`WORKBENCH_HEALTH_PROBES_MODEL=0`); every answer still checks the pinned build first.
 - VM: $24/month. Pages: free. DNS: the existing Cloudflare zone.
 
