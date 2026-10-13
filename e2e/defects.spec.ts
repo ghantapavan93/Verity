@@ -79,7 +79,7 @@ test("a memo that arrives after the reader went back to an earlier answer is not
 });
 
 test("a question whose run arrives after the reader opened another contract stays with its own contract", async ({ page }) => {
-  // Contract B, then the sample (A): Back from A returns to B.
+  // Contract B, then the sample (A); the question is asked on A, and B is opened from Documents while it is created.
   await page.goto("/");
   await page.locator('input[type="file"]').setInputFiles({
     name: "contract-b.txt",
@@ -98,7 +98,8 @@ test("a question whose run arrives after the reader opened another contract stay
     await route.continue();
   });
   await ask(page, LIABILITY);
-  await page.goBack();
+  await page.getByRole("button", { name: "Documents" }).click();
+  await page.getByRole("button").filter({ hasText: "contract-b" }).first().click();
   await expect(page).toHaveURL(new RegExp(`[?&]document=${b}(&|$)`));
   await page.waitForTimeout(5000); // the run made for the sample has been answered by now
   await expect(page).toHaveURL(new RegExp(`[?&]document=${b}(&|$)`));
