@@ -118,11 +118,14 @@ export function useRunFollower() {
   /** True when the API accepted the question; false when it refused it (the caller keeps the text). */
   const ask = useCallback(
     async (documentId: string, guidanceId: string | null, question: string): Promise<boolean> => {
-      intent.current++;
+      const mine = ++intent.current;
       stop();
       dispatch({ type: "start", question, hasGuidance: guidanceId !== null });
       try {
         const created = await createRun({ documentId, guidanceId, question });
+        // The reader opened another contract or run while this was being created: the run is in the record (Runs),
+        // and is not put on screen over what they opened (2026-10-13: it landed on the other contract).
+        if (intent.current !== mine) return true;
         dispatch({ type: "created", run: created });
         if (!TERMINAL.includes(created.stage)) attach(created.id);
         return true;

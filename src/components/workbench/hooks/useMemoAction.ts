@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { createMemo, errorMessage, type MemoRecord } from "@/lib/api";
 import type { RunView } from "@/lib/types";
 
@@ -9,23 +9,30 @@ export function useMemoAction() {
   const [memo, setMemo] = useState<MemoRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by reset, which the workbench calls whenever another run comes on screen: a memo or an error that answers
+  // after that belongs to the run that was left, and is dropped (2026-10-13: it showed under the run gone back to).
+  const generation = useRef(0);
 
   const generate = useCallback(async (run: RunView | null) => {
     if (!run || run.stage !== "complete") return;
+    const mine = generation.current;
     setBusy(true);
     setError(null);
     try {
-      setMemo(await createMemo(run.id));
+      const made = await createMemo(run.id);
+      if (generation.current === mine) setMemo(made);
     } catch (e) {
-      setError(errorMessage(e));
+      if (generation.current === mine) setError(errorMessage(e));
     } finally {
-      setBusy(false);
+      if (generation.current === mine) setBusy(false);
     }
   }, []);
 
   const reset = useCallback(() => {
+    generation.current++;
     setMemo(null);
     setError(null);
+    setBusy(false);
   }, []);
 
   return { memo, busy, error, generate, reset };

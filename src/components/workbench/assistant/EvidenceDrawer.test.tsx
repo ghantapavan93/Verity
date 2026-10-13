@@ -316,3 +316,23 @@ describe("EvidenceDrawer", () => {
     expect(api.reviewFinding).not.toHaveBeenCalled();
   });
 });
+
+describe("one drawer, another finding", () => {
+  afterEach(cleanup);
+
+  it("a decision form opened for one finding is not carried to the next one opened in the same drawer", () => {
+    api.getRunExplanation.mockResolvedValue(EXPLANATION_E5A20E22);
+    window.localStorage.removeItem("workbench.reviewer");
+    const first = finding(null);
+    const second = { ...finding(null), id: `${first.id}-other`, topic: "Another finding" } as FindingView;
+    const props = { run: RUN, guidanceText: null, sectionsById: new Map([["s0", SECTION]]), onJump: vi.fn(), onClose: vi.fn(), onReviewed: vi.fn(), closeRef: null, reduceMotion: true };
+    const view = render(<EvidenceDrawer finding={first} {...props} />);
+    const human = () => within(screen.getByLabelText("Evidence")).getByTestId("layer-human");
+    fireEvent.click(within(human()).getByRole("button", { name: "Dismiss" }));
+    expect(within(human()).getByLabelText("Your name, recorded with the decision")).toBeTruthy();
+    // The reader opens the other finding (the palette's "Inspect evidence", or another card) without closing the drawer.
+    view.rerender(<EvidenceDrawer finding={second} {...props} />);
+    expect(within(human()).queryByLabelText("Your name, recorded with the decision")).toBeNull();
+    expect(within(human()).getByRole("button", { name: "Dismiss" })).toBeTruthy();
+  });
+});

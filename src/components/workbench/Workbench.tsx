@@ -337,7 +337,13 @@ function WorkbenchSurface() {
     if (view !== "assistant" || !finishedRunId) return;
     // refreshRun applies the record only while this run is still the one on screen.
     getRun(finishedRunId)
-      .then((fresh) => fresh.reviewHead !== reviewHead && refreshRun(fresh))
+      .then((fresh) => {
+        if (fresh.reviewHead === reviewHead) return;
+        refreshRun(fresh);
+        // The drawer holds its own copy of the finding: a decision made on Findings shows there too, not the old
+        // state with buttons that the API would refuse (2026-10-13).
+        setEvidence((open) => (open && [...fresh.findings, ...fresh.withheld].find((f) => f.id === open.id)) || open);
+      })
       .catch(() => undefined);
   }, [view, finishedRunId, reviewHead, refreshRun]);
 

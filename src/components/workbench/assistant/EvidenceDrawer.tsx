@@ -77,7 +77,10 @@ export function EvidenceDrawer({
             </button>
           </header>
           <div className={styles.drawerBody}>
+            {/* Keyed by the finding: a decision half-made for one (the name form, an error, the proof toggle) is not
+                carried to the next finding opened in this drawer (2026-10-13). */}
             <EvidenceBody
+              key={finding.id}
               finding={finding}
               run={run}
               guidance={run ? (run.guidanceText ?? null) : guidanceText}
