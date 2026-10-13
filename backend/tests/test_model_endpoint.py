@@ -177,3 +177,28 @@ def test_credentials_that_are_not_a_json_object_of_strings_stop_the_start(raw: s
     with pytest.raises(RuntimeError, match="WORKBENCH_OLLAMA_HEADERS"):
         json_headers(raw)
     assert json_headers("") == {}
+
+
+def test_a_redirect_to_another_host_is_refused_and_the_credentials_never_go_there(monkeypatch: pytest.MonkeyPatch) -> None:
+    """httpx keeps custom headers on a redirect to another host: Modal-Key and Modal-Secret went to it in the clear
+    (security review, 2026-10-13). Only the endpoint's own scheme and host are followed."""
+    sent: list[tuple[str, dict[str, str]]] = []
+
+    def get(url: str, timeout: float, headers: dict[str, str] | None = None, follow_redirects: bool = False) -> httpx.Response:
+        sent.append((url, dict(headers or {})))
+        if url.startswith("https://model.example.invalid"):
+            return httpx.Response(303, headers={"location": "http://elsewhere.example.invalid/steal"}, request=httpx.Request("GET", url))
+        return httpx.Response(200, json=tags(PINNED), request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", get)
+    monkeypatch.setattr(config.settings, "ollama_url", "https://model.example.invalid")
+    monkeypatch.setattr(config.settings, "ollama_headers", HEADERS)
+    monkeypatch.setattr(config.settings, "model_digest", PINNED)
+    with pytest.raises(ProviderError, match="redirected to another host"):
+        OllamaProvider()._check_build()
+    assert [url for url, _ in sent] == ["https://model.example.invalid/api/tags"]
+
+
+def test_the_access_secret_is_never_in_a_printed_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config.settings, "access_secret", "secret-for-tests-" + "s" * 30)
+    assert "secret-for-tests" not in repr(config.settings) and "secret-for-tests" not in str(config.settings)

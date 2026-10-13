@@ -51,8 +51,9 @@ class ModelWaker:
         self._day: date | None = None
         self._spent = 0
 
-    def request(self) -> WakeState:
-        """Ask for the model to be woken; say what was done. Never waits for the model."""
+    def request(self, allow: Callable[[], bool] | None = None) -> WakeState:
+        """Ask for the model to be woken; say what was done. Never waits for the model. `allow` is asked only when a
+        wake-up would start, so a caller's own bound (one address's share) counts wake-ups, not requests."""
         if not settings.model_wakeup or settings.provider.lower() != "ollama":
             return "off"
         with self._lock:
@@ -65,6 +66,8 @@ class ModelWaker:
             if today != self._day:
                 self._day, self._spent = today, 0
             if self._spent >= settings.model_wakeups_per_day:
+                return "limit"
+            if allow is not None and not allow():
                 return "limit"
             self._spent += 1
             self._thread = threading.Thread(target=self._run, name="model-wake", daemon=True)

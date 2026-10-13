@@ -95,7 +95,7 @@ class Settings(BaseModel):
     # The gate (api/access.py). With a secret, every route but health and the gate itself needs a session that an
     # invite signed under this secret was exchanged for; without one the gate is off, as on a laptop and in the tests.
     # The deployment reads it from a file outside the repository (deploy/supervise.ps1); it is never a default.
-    access_secret: str = os.environ.get("WORKBENCH_ACCESS_SECRET", "").strip()
+    access_secret: str = Field(default=os.environ.get("WORKBENCH_ACCESS_SECRET", "").strip(), repr=False)
     access_session_days: int = int(os.environ.get("WORKBENCH_ACCESS_SESSION_DAYS", "7"))
     # Set in a deployment that must never run open: the application refuses to start if the secret is missing.
     access_required: bool = os.environ.get("WORKBENCH_ACCESS_REQUIRED", "").lower() in ("1", "true", "yes")

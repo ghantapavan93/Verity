@@ -24,6 +24,10 @@ _last_answer: float | None = None
 _clock = time.monotonic
 
 
+# Hops a request may take on the endpoint's own host (Modal's 303 to the waiting URL is one).
+MAX_REDIRECTS = 5
+
+
 def last_answer() -> float | None:
     return _last_answer
 
@@ -64,8 +68,30 @@ class OllamaProvider:
         made with those and not with whatever the process's settings have since become."""
         return OllamaProvider(model=str(options.get("model") or self.model), base_url=self.base_url, timeout_s=self.timeout_s, decoding=options)
 
+    def _send(self, method: str, url: str, timeout: float, payload: dict[str, Any] | None = None) -> httpx.Response:
+        """One request to the endpoint, following its redirects only on its own scheme and host: the credentials
+        (WORKBENCH_OLLAMA_HEADERS) go with every hop, and httpx keeps custom headers across hosts, so a redirect
+        elsewhere is refused rather than followed (security review, 2026-10-13). A 303 is followed with a GET, as
+        Modal's redirect to the URL that waits for a long answer requires."""
+        own = httpx.URL(self.base_url)
+        for _ in range(MAX_REDIRECTS + 1):
+            if method == "GET":
+                response = httpx.get(url, timeout=timeout, headers=settings.ollama_headers, follow_redirects=False)
+            else:
+                response = httpx.post(url, json=payload, timeout=timeout, headers=settings.ollama_headers, follow_redirects=False)
+            location = response.headers.get("location") if response.is_redirect else None
+            if location is None:
+                return response
+            target = response.url.join(location)
+            if (target.scheme, target.host, target.port) != (own.scheme, own.host, own.port):
+                raise ProviderError("the model endpoint redirected to another host; its credentials are not sent there")
+            if response.status_code == 303 or (response.status_code in (301, 302) and method == "POST"):
+                method, payload = "GET", None
+            url = str(target)
+        raise ProviderError("the model endpoint redirected too many times")
+
     def _tags(self, timeout: float) -> list[dict[str, Any]]:
-        response = httpx.get(f"{self.base_url}/api/tags", timeout=timeout, headers=settings.ollama_headers, follow_redirects=True)
+        response = self._send("GET", f"{self.base_url}/api/tags", timeout)
         response.raise_for_status()
         models: list[dict[str, Any]] = response.json().get("models", [])
         return models
@@ -117,7 +143,7 @@ class OllamaProvider:
         self._check_build()  # starts a sleeping endpoint, and confirms the pinned build as an answer would
         payload = {"model": self.model, "prompt": "ok", "stream": False, "think": False, "options": {**self.options(), "num_predict": 1}}
         try:
-            response = httpx.post(f"{self.base_url}/api/generate", json=payload, timeout=self.timeout_s, headers=settings.ollama_headers, follow_redirects=True)
+            response = self._send("POST", f"{self.base_url}/api/generate", self.timeout_s, payload)
             response.raise_for_status()
         except httpx.HTTPError as error:
             raise ProviderError(failed_call("The model could not be woken", error)) from error
@@ -145,7 +171,7 @@ class OllamaProvider:
             # Modal answers a request still running after 150 s with a 303 to a URL that waits for the result; following
             # it is how that platform's documented contract is kept (cloud readiness review, 2026-10-12). A server on the
             # same machine never redirects.
-            response = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout_s, headers=settings.ollama_headers, follow_redirects=True)
+            response = self._send("POST", f"{self.base_url}/api/chat", self.timeout_s, payload)
             if response.status_code == 400 and "exceed" in response.text and "context" in response.text:
                 raise ContextOverflow(_overflow_message(response.text, int(self.options()["num_ctx"])))
             response.raise_for_status()

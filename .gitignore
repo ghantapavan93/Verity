@@ -53,3 +53,5 @@ next-env.d.ts
 
 # A deployment's secrets (deploy/cloud/env.example is the template)
 /deploy/cloud/.env
+# The Cloudflare Tunnel's credentials, placed beside compose.yml on the host (deploy/cloud/ORACLE.md).
+/deploy/cloud/tunnel.json

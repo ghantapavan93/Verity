@@ -201,6 +201,7 @@ def test_a_wake_up_the_endpoint_refuses_is_an_error_and_not_an_answer(endpoint: 
 def route(public: TestClient, monkeypatch: pytest.MonkeyPatch, waking: tuple[ModelWaker, Wakes, Clock]) -> tuple[TestClient, ModelWaker, Wakes]:  # noqa: F811
     waker, wakes, _ = waking
     monkeypatch.setattr(model_api, "waker", waker)
+    model_api.address_wakes.reset()
     return public, waker, wakes
 
 
@@ -254,3 +255,20 @@ def test_a_reader_who_has_asked_all_of_todays_questions_wakes_nothing(route: tup
     assert visitor.post("/api/model/wake").json() == {"state": "waking"}
     settle(model_api.waker)
     assert wakes.count == 1
+
+
+def test_one_address_has_a_share_of_the_days_wake_ups_counted_only_when_one_starts(
+    route: tuple[TestClient, ModelWaker, Wakes], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, waker, wakes = route
+    monkeypatch.setattr(config.settings, "model_wakeups_per_day", 10)
+    visitor, _ = arrive(client)
+    # Asked while the model is still awake: nothing starts, nothing is counted against the address.
+    ollama_module._heard()
+    assert [visitor.post("/api/model/wake").json()["state"] for _ in range(5)] == ["awake"] * 5
+    monkeypatch.setattr(config.settings, "model_awake_s", 0)  # from here every request finds it asleep
+    states = []
+    for _ in range(5):
+        states.append(visitor.post("/api/model/wake").json()["state"])
+        settle(waker)
+    assert states == ["waking", "waking", "waking", "limit", "limit"] and wakes.count == 3

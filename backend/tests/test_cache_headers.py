@@ -5,6 +5,7 @@ Cache-Control at all.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.support import upload_and_ask
@@ -60,3 +61,21 @@ def test_every_response_carries_the_browsers_protections_whatever_edge_is_in_fro
             assert response.headers.get(name) == expected, (path, name, response.headers.get(name))
         assert "x-powered-by" not in response.headers
     assert "frame-ancestors 'none'" in MEMO_POLICY  # the memo's own policy forbids framing too
+
+
+def test_an_upload_declaring_more_than_the_limit_is_refused_unread_even_without_a_session(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """FastAPI stores a whole form before any check runs: a 40 MB body with no session was written to disk and only then
+    refused (security review, 2026-10-13). A declared size over the limit is refused before the body is read."""
+    from app import config
+    from app.main import UPLOAD_REQUEST_LIMIT
+
+    monkeypatch.setattr(config.settings, "access_secret", "x" * 40)
+    monkeypatch.setattr(config.settings, "access_required", True)
+    body = b"a" * (UPLOAD_REQUEST_LIMIT + 1)
+    refused = client.post("/api/documents", files={"file": ("big.txt", body, "text/plain")})
+    assert refused.status_code == 413 and refused.json() == {"detail": "file larger than 25 MB"}
+    assert refused.headers.get("x-content-type-options") == "nosniff"
+    stored = [p for p in config.settings.data_dir.rglob("*") if p.is_file() and p.stat().st_size >= UPLOAD_REQUEST_LIMIT]
+    assert stored == []
+    # Control: a small upload without a session reaches the gate and is refused there, not as too large.
+    assert client.post("/api/documents", files={"file": ("small.txt", b"AGREEMENT", "text/plain")}).status_code in (401, 403)

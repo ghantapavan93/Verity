@@ -19,6 +19,11 @@ from . import access
 
 router = APIRouter(prefix="/api/model", tags=["model"])
 
+# One address's share of the day's wake-ups: a script holding a session could otherwise spend all of them (security
+# review, 2026-10-13). Three an hour still wakes the model for a reader each time it has gone back to sleep.
+WAKES_PER_ADDRESS, WAKE_WINDOW_S = 3, 3600
+address_wakes = access.SlidingWindow(WAKES_PER_ADDRESS, WAKE_WINDOW_S)
+
 
 @router.post("/wake", response_model=ModelWakeOut)
 def wake(request: Request, session: DbSession = Depends(get_session)) -> ModelWakeOut:
@@ -35,4 +40,5 @@ def wake(request: Request, session: DbSession = Depends(get_session)) -> ModelWa
         asked = session.scalar(select(func.count(Run.id)).where(Run.workspace_id == workspace, Run.created_at >= access._day_start())) or 0
         if asked >= settings.anonymous_max_runs_per_day:
             return ModelWakeOut(state="limit")
-    return ModelWakeOut(state=waker.request())
+    address = access.client_address(request)
+    return ModelWakeOut(state=waker.request(allow=lambda: address_wakes.take(address) is None))

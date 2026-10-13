@@ -17,6 +17,7 @@ from sqlalchemy import text
 
 from . import db as db_module
 from .api import access, batches, documents, engineering, findings, guidance, health, memos, model, runs, trust
+from .application.ingest_document import MAX_UPLOAD_BYTES
 from .application.recover_runs import recover_interrupted_runs
 from .application.retention import purge_expired_workspaces, sweep_orphaned_files
 from .config import settings
@@ -58,6 +59,9 @@ async def _retain_hourly() -> None:
             log.exception("retention pass failed")
         await asyncio.sleep(3600)
 
+
+# The 25 MB file and room for its form, as Caddy's request_body max_size (deploy/cloud/Caddyfile, 26 MiB).
+UPLOAD_REQUEST_LIMIT = MAX_UPLOAD_BYTES + 1024 * 1024
 
 # The same set as deploy/cloud/Caddyfile and next.config.ts, so the policy does not depend on the edge.
 SECURITY_HEADERS = {
@@ -110,6 +114,13 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
     @app.middleware("http")
     async def request_log(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+        # FastAPI reads a whole form, to disk, before any dependency runs: a 40 MB body with no session was stored and
+        # only then refused (security review, 2026-10-13). Behind a tunnel nothing caps the body short of Cloudflare's
+        # 100 MB, so an upload that declares more than the 25 MB file and its form is refused here, unread. The size of a
+        # body sent without a declared length is still checked once read (ingest_document.refuse_if_too_large).
+        declared = request.headers.get("content-length", "")
+        if request.method == "POST" and request.url.path == "/api/documents" and declared.isdigit() and int(declared) > UPLOAD_REQUEST_LIMIT:
+            return JSONResponse({"detail": "file larger than 25 MB"}, status_code=413, headers={"Cache-Control": "no-store", **SECURITY_HEADERS})
         started = time.perf_counter()
         response = await call_next(request)
         # For a streamed response this is the time to first byte, not the life of the stream.
