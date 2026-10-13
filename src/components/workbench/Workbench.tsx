@@ -126,7 +126,13 @@ function WorkbenchSurface() {
   useEffect(() => {
     let cancelled = false;
     health()
-      .then((h) => !cancelled && setApiHealth(h))
+      .then((h) => {
+        if (cancelled) return;
+        setApiHealth(h);
+        // Known again once the API answers: one unanswered check hid where the model runs for the rest of the visit
+        // (2026-10-13).
+        setAccessKnown(true);
+      })
       .catch((error: unknown) => {
         if (cancelled) return;
         // The API could not be asked, so nothing is known about its door: the first screen claims neither open nor private.

@@ -68,10 +68,13 @@ test("a memo that arrives after the reader went back to an earlier answer is not
     await route.continue();
   });
   await page.getByRole("button", { name: "Generate review memo" }).click();
-  await page.goBack();
+  // While it is being written, the reader goes back to the first answer from Runs.
+  await page.getByRole("button", { name: "Runs" }).click();
+  await page.getByRole("button").filter({ hasText: LIABILITY }).first().click();
+  await page.getByRole("button", { name: "Open in workspace" }).click();
   await expect(page).toHaveURL(new RegExp(`[?&]run=${first}(&|$)`));
   await page.waitForTimeout(4000); // the memo for the later answer has arrived by now
-  await expect(page.getByText(LIABILITY, { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Inspect evidence" }).first()).toBeVisible();
   await expect(page.getByText(/Review memo (ready|predates a later review)/)).toHaveCount(0);
 });
 
@@ -100,7 +103,10 @@ test("a question whose run arrives after the reader opened another contract stay
   await page.waitForTimeout(5000); // the run made for the sample has been answered by now
   await expect(page).toHaveURL(new RegExp(`[?&]document=${b}(&|$)`));
   expect(param(page, "run")).toBeNull();
-  await expect(page.getByText(LIABILITY, { exact: true })).toHaveCount(0);
+  // Nothing of the sample's run on screen (the question itself is also one of the suggestion chips, so it is not looked for).
+  await expect(page.getByRole("list", { name: "Run progress" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Inspect evidence" })).toHaveCount(0);
+  await expect(page.getByText(FOUND)).toHaveCount(0);
 });
 
 test("a health check that fails once does not hide where the model runs for the rest of the visit", async ({ page }) => {
