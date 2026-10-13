@@ -2,6 +2,7 @@
 
 import type {
   AccessView,
+  ModelWake,
   BatchSummary,
   BatchView,
   CitationRecord,
@@ -123,6 +124,11 @@ export function getAccess(): Promise<AccessView> {
 /** A public demo: a browser with no session is handed one of its own, in a workspace no one else can read. */
 export function visit(): Promise<AccessView> {
   return request<AccessView>("/api/access/visit", { method: "POST" });
+}
+
+/** Ask the API to wake a hosted model that sleeps when idle, before the question (backend api/model.py). Never waits. */
+export function wakeModel(): Promise<ModelWake> {
+  return request<ModelWake>("/api/model/wake", { method: "POST" });
 }
 
 export function enterWithInvite(invite: string): Promise<AccessView> {

@@ -33,6 +33,7 @@ export function StageList({
   checkingLabel,
   reduceMotion,
   modelPlace = null,
+  modelSleeps = false,
 }: {
   current: RunStage;
   details: Partial<Record<RunStage, string>>;
@@ -40,6 +41,8 @@ export function StageList({
   reduceMotion: boolean;
   /** Where the model runs, as the API said (lib/modelPlace); null says nothing about it. */
   modelPlace?: string | null;
+  /** A hosted model that sleeps when idle (HealthOut.modelLocation "hosted"): the wait can include waking it. */
+  modelSleeps?: boolean;
 }) {
   const index = (STAGE_ORDER as readonly string[]).indexOf(current);
   const shown = index >= 0 ? STAGE_ORDER.slice(0, index + 1) : STAGE_ORDER;
@@ -66,7 +69,11 @@ export function StageList({
       </ol>
       {current === "checking" && (
         <p className={styles.stageNote}>
-          {modelPlace ? `The model runs on ${modelPlace}. ` : ""}Most answers take under two minutes; the stages above are the API&apos;s own.
+          {modelPlace ? `The model runs on ${modelPlace}. ` : ""}
+          {modelSleeps
+            ? // Measured on Modal, 2026-10-13: 168 s from asleep to the first token; awake, a run's p95 was 14.5 s.
+              "It sleeps when no one has asked for a few minutes, and waking it adds two to three minutes to the first answer; awake, most answers take under half a minute. The stages above are the API's own."
+            : "Most answers take under two minutes; the stages above are the API's own."}
         </p>
       )}
     </>

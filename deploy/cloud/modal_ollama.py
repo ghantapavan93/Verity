@@ -6,7 +6,7 @@ CLOUD-READINESS.md measures that before anyone is told the cloud answers like th
 
     modal deploy deploy/cloud/modal_ollama.py      # prints the endpoint URL for WORKBENCH_OLLAMA_URL
 
-Spend is bounded three ways: one container at most, released a minute after the last request, and the workspace budget
+Spend is bounded three ways: one container at most, released five minutes after the last request, and the workspace budget
 set in Modal's dashboard (a hard cap). Requests need a proxy-auth token (Modal-Key, Modal-Secret headers), which the API
 sends from WORKBENCH_OLLAMA_HEADERS. Decoding (temperature 0, seed 42, a 16,384-token window, no thinking, the JSON
 schema) is sent by the API with every request, as it is to the workstation's Ollama.
@@ -52,10 +52,13 @@ image = (
 app = modal.App("verity-ollama", image=image)
 
 
-# One L4 (24 GB) at most, scaled to zero a minute after the last request. `timeout` is per request and equals the API's
+# One L4 (24 GB) at most, scaled to zero five minutes after the last request: waking it takes about three (measured
+# 2026-10-13: the server up in 67 s, the first token at 168 s), so a reader's follow-up question, a few minutes after the
+# first, finds it awake, and the API's wake-up (WORKBENCH_MODEL_WAKEUP) leaves it alone for 240 s of those 300. Each idle
+# tail costs about $0.08 at the L4's $0.96 an hour. `timeout` is per request and equals the API's
 # 600 s per model call: once Modal redirects a long call, each hop restarts the client's own timeout, so this is the
 # bound that holds. Two cores and 8 GiB hold the server and the 5.2 GB of weights it maps.
-@app.function(gpu="L4", cpu=2.0, memory=8192, max_containers=1, scaledown_window=60, timeout=600)
+@app.function(gpu="L4", cpu=2.0, memory=8192, max_containers=1, scaledown_window=300, timeout=600)
 @modal.concurrent(max_inputs=8)  # the build check before an answer is not queued behind a long answer
 @modal.web_server(port=PORT, startup_timeout=180, requires_proxy_auth=True)
 def ollama() -> None:

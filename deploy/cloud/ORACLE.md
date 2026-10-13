@@ -67,3 +67,10 @@ Oracle: nothing, within the allowance. Modal: billed per second while a GPU cont
 credits; its usage limit, set at the credits, stops the endpoint before anything is charged to a card. The day's new
 questions start at 15 (env.example) and rise only after the measured cost of a question, cold starts included, says the
 month's limit holds.
+
+A reader who opens a contract wakes the model ahead of the question (WORKBENCH_MODEL_WAKEUP): a cold start of about
+three minutes and five idle minutes after the last answer, about $0.12 a visit at the L4's $0.96 an hour, answered or
+not, and at most WORKBENCH_MODEL_WAKEUPS_PER_DAY (10) a day, about $1.20. Every further question in the same visit is
+a few seconds of GPU. A month of the worst case, every wake-up and every one of the 15 questions on its own cold start,
+is more than the $30 usage limit; the limit is then the stop: answers pause until the month renews, nothing is charged,
+and the pages, /break and /state keep working. Measured demo traffic is a small fraction of that.

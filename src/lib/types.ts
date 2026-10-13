@@ -40,6 +40,7 @@ export type GoldenVerdict = GoldenRunView["verdict"];
 export type GuidanceRecord = Schemas["GuidanceOut"];
 export type MemoRecord = Schemas["MemoOut"];
 export type Health = Schemas["HealthOut"];
+export type ModelWake = Schemas["ModelWakeOut"];
 export type TrustManifestView = Schemas["TrustManifestOut"];
 export type TrustDiffView = Schemas["TrustDiffOut"];
 export type TrustFindingChange = Schemas["TrustFindingChangeOut"];

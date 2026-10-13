@@ -454,6 +454,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/model/wake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Wake */
+        post: operations["wake_api_model_wake_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs": {
         parameters: {
             query?: never;
@@ -1753,6 +1770,14 @@ export interface components {
             suggestedPosition: string | null;
             /** Topic */
             topic: string;
+        };
+        /** ModelWakeOut */
+        ModelWakeOut: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "off" | "awake" | "waking" | "limit";
         };
         /** ProposalEvidence */
         ProposalEvidence: {
@@ -3384,6 +3409,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    wake_api_model_wake_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelWakeOut"];
                 };
             };
         };

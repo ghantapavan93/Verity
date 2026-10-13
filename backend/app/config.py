@@ -50,6 +50,16 @@ class Settings(BaseModel):
     # Whether /api/health asks the model endpoint. Off where the endpoint bills by the second and starts cold: every
     # answer still checks the model first (providers.ollama._check_build), and health reports the store and the gate.
     health_probes_model: bool = os.environ.get("WORKBENCH_HEALTH_PROBES_MODEL", "1").strip().lower() not in ("0", "false", "no")
+    # Whether opening a contract wakes the model ahead of the question (application/wake_model.py): for an endpoint that
+    # sleeps when idle and takes minutes to wake (Modal, measured 2026-10-13: 168 s to the first token). Off where the
+    # model runs on the server itself and never sleeps.
+    model_wakeup: bool = os.environ.get("WORKBENCH_MODEL_WAKEUP", "").strip().lower() in ("1", "true", "yes")
+    # Wake-ups per UTC day, all readers together: each one costs a cold start and the endpoint's idle minutes, whether or
+    # not a question follows.
+    model_wakeups_per_day: int = int(os.environ.get("WORKBENCH_MODEL_WAKEUPS_PER_DAY", "10") or "0")
+    # Seconds after the model last answered or woke during which it is taken to be awake still. Below the endpoint's own
+    # idle window (deploy/cloud/modal_ollama.py, scaledown_window 300 s), so a model that has gone is never taken for awake.
+    model_awake_s: int = int(os.environ.get("WORKBENCH_MODEL_AWAKE_S", "240") or "0")
     # The same decoding settings that produced schema-valid output across 250 calls in A1-lite.
     temperature: float = 0.0
     seed: int = 42

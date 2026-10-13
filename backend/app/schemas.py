@@ -393,6 +393,12 @@ class HealthOut(ApiModel):
     model_host: str = ""
 
 
+class ModelWakeOut(ApiModel):
+    # What the request did (application/wake_model.py): off, this deployment does not wake its model; awake, it answered
+    # recently; waking, a wake-up is under way; limit, today's wake-ups or questions are spent.
+    state: Literal["off", "awake", "waking", "limit"]
+
+
 class InviteIn(ApiModel):
     # The invite token, or the whole link it arrived in.
     invite: str = Field(min_length=1, max_length=4096)

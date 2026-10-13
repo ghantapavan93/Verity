@@ -156,7 +156,8 @@ repository; a new secret ends every session, and the workspaces they held are de
 
 ## Spend boundaries
 
-- GPU: one L4 container at most, released 60 s after the last request, under the Modal workspace budget (a hard cap).
+- GPU: one L4 container at most, released 300 s after the last request, under the Modal workspace budget (a hard cap).
+  Opening a contract wakes it (WORKBENCH_MODEL_WAKEUP), at most WORKBENCH_MODEL_WAKEUPS_PER_DAY times a UTC day.
   About $0.96 an hour while up (GPU, two cores, 8 GiB); a question costs $0.02–0.07 depending on whether the GPU is
   already warm. Estimates, not measurements: the first paid test measures them (`CLOUD-READINESS.md`).
 - Questions: 200 a day for everyone together, 30 per workspace a day, 30 an hour per network address; one model call at

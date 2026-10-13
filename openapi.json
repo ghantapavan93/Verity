@@ -2997,6 +2997,25 @@
         "title": "ModelProposal",
         "type": "object"
       },
+      "ModelWakeOut": {
+        "properties": {
+          "state": {
+            "enum": [
+              "off",
+              "awake",
+              "waking",
+              "limit"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ModelWakeOut",
+        "type": "object"
+      },
       "ProposalEvidence": {
         "properties": {
           "citedLabel": {
@@ -6715,6 +6734,27 @@
         "summary": "Memo As Html",
         "tags": [
           "memos"
+        ]
+      }
+    },
+    "/api/model/wake": {
+      "post": {
+        "operationId": "wake_api_model_wake_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelWakeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Wake",
+        "tags": [
+          "model"
         ]
       }
     },

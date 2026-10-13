@@ -61,6 +61,7 @@ export function AssistantPanel({
   onCloseEvidence,
   onReviewed,
   modelPlace = null,
+  modelSleeps = false,
   drawerCloseRef,
   sectionsById,
   onJump,
@@ -82,6 +83,8 @@ export function AssistantPanel({
   onReviewed: (findingId: string, review: ReviewView | null | undefined, latestReviewId?: number) => void;
   /** Where the model runs, as the API said (lib/modelPlace); null says nothing about it. */
   modelPlace?: string | null;
+  /** A hosted model that sleeps when idle, so a run's wait may include waking it (StageList). */
+  modelSleeps?: boolean;
   drawerCloseRef: Ref<HTMLButtonElement>;
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
@@ -172,6 +175,7 @@ export function AssistantPanel({
                     checkingLabel={checkingLabel}
                     reduceMotion={reduceMotion}
                     modelPlace={modelPlace}
+                    modelSleeps={modelSleeps}
                   />
                 </motion.div>
               ) : run && run.stage === "complete" && run.findings.length > 0 ? (

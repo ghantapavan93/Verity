@@ -18,6 +18,20 @@ log = logging.getLogger(__name__)
 # How long health waits for the endpoint's list of models: a probe, which a running server answers at once.
 HEALTH_PROBE_TIMEOUT_S = 5.0
 
+# When this process last heard the model answer (time.monotonic), whether to a question or a wake-up; None until then.
+# Read by application/wake_model.py to leave a model that is still awake alone.
+_last_answer: float | None = None
+_clock = time.monotonic
+
+
+def last_answer() -> float | None:
+    return _last_answer
+
+
+def _heard() -> None:
+    global _last_answer
+    _last_answer = _clock()
+
 
 def _overflow_message(body: str, limit: int) -> str:
     """What the server said, as a sentence a person can act on. The token count is the server's own."""
@@ -96,6 +110,19 @@ class OllamaProvider:
         if problem:
             raise ProviderError(problem)
 
+    def wake(self) -> None:
+        """Load the model on the endpoint before a question arrives, with the decoding settings an answer uses: the
+        context window is part of what Ollama loads, so a model woken with any other would be loaded again by the first
+        answer. One token is asked for, so the first answer does not pay the GPU's own first-call cost either."""
+        self._check_build()  # starts a sleeping endpoint, and confirms the pinned build as an answer would
+        payload = {"model": self.model, "prompt": "ok", "stream": False, "think": False, "options": {**self.options(), "num_predict": 1}}
+        try:
+            response = httpx.post(f"{self.base_url}/api/generate", json=payload, timeout=self.timeout_s, headers=settings.ollama_headers, follow_redirects=True)
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise ProviderError(failed_call("The model could not be woken", error)) from error
+        _heard()
+
     def generate_json(self, system: str, user: str, schema: dict[str, Any]) -> Generation:
         payload = {
             "model": self.model,
@@ -129,6 +156,7 @@ class OllamaProvider:
         except ValueError as error:
             raise ProviderError("Ollama returned a non-JSON response") from error
         latency_ms = (time.perf_counter() - started) * 1000
+        _heard()
         content = (body.get("message") or {}).get("content", "")
         if not content:
             raise ProviderError("Ollama returned an empty message")

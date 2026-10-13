@@ -93,6 +93,11 @@ class AdmissionController:
                 waiter.set()  # the slot passes straight to the next in line; in_flight stays
 
     @property
+    def in_flight(self) -> int:
+        with self._lock:
+            return self._in_flight
+
+    @property
     def depth(self) -> int:
         with self._lock:
             return len(self._waiting["interactive"]) + len(self._waiting["batch"])

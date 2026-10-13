@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from . import db as db_module
-from .api import access, batches, documents, engineering, findings, guidance, health, memos, runs, trust
+from .api import access, batches, documents, engineering, findings, guidance, health, memos, model, runs, trust
 from .application.recover_runs import recover_interrupted_runs
 from .application.retention import purge_expired_workspaces, sweep_orphaned_files
 from .config import settings
@@ -123,7 +123,9 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
     app.include_router(engineering.public_router)
     gate = [Depends(access.require_access)]
     writes = [*gate, Depends(access.limit_public_writes)]
-    for router in (documents.router, engineering.router):
+    # model: waking the model spends, so it needs a session and the workbench's own origin, but it changes nothing a
+    # reader owns and does not count against their writes (api/model.py).
+    for router in (documents.router, engineering.router, model.router):
         app.include_router(router, dependencies=gate)
     for router in (guidance.router, findings.router, memos.router, trust.router):
         app.include_router(router, dependencies=writes)

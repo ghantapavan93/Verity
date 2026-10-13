@@ -21,6 +21,7 @@ import { useDocWidth } from "./hooks/useDocWidth";
 import { useDropZone } from "./hooks/useDropZone";
 import { DEFAULT_GUIDANCE, useGuidance } from "./hooks/useGuidance";
 import { useHighlightScroll } from "./hooks/useHighlightScroll";
+import { useModelWake } from "./hooks/useModelWake";
 import { useMemoAction } from "./hooks/useMemoAction";
 import { useRunFollower } from "./hooks/useRunFollower";
 import { useUrlState } from "./hooks/useUrlState";
@@ -112,6 +113,9 @@ function WorkbenchSurface() {
   const litTimer = useRef<number | null>(null);
 
   const sectionsById = useMemo(() => new Map((doc?.sections ?? []).map((s) => [s.id, s])), [doc]);
+
+  // A hosted model sleeps when idle: opening a contract, or starting a question after a pause, wakes it (hooks/useModelWake).
+  useModelWake(apiHealth?.modelLocation === "hosted", doc?.id ?? null, composerText.trim().length > 0);
 
   // ---- health ----------------------------------------------------------------------------
 
@@ -590,6 +594,7 @@ function WorkbenchSurface() {
                     <Divider docWidth={split.docWidth} setDocWidth={split.setDocWidth} onPointerDown={split.startDrag} />
                     <AssistantPanel
                       modelPlace={accessKnown ? (modelPlace(apiHealth)?.place ?? null) : null}
+                      modelSleeps={accessKnown && apiHealth?.modelLocation === "hosted"}
                       doc={doc}
                       runs={runs}
                       guidance={guidance}
