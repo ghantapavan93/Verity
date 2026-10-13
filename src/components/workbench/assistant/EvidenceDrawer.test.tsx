@@ -325,7 +325,16 @@ describe("one drawer, another finding", () => {
     window.localStorage.removeItem("workbench.reviewer");
     const first = finding(null);
     const second = { ...finding(null), id: `${first.id}-other`, topic: "Another finding" } as FindingView;
-    const props = { run: RUN, guidanceText: null, sectionsById: new Map([["s0", SECTION]]), onJump: vi.fn(), onClose: vi.fn(), onReviewed: vi.fn(), closeRef: null, reduceMotion: true };
+    const props = {
+      run: RUN,
+      guidanceText: null,
+      sectionsById: new Map([["s0", SECTION]]),
+      onJump: vi.fn(),
+      onClose: vi.fn(),
+      onReviewed: vi.fn(),
+      closeRef: null,
+      reduceMotion: true,
+    };
     const view = render(<EvidenceDrawer finding={first} {...props} />);
     const human = () => within(screen.getByLabelText("Evidence")).getByTestId("layer-human");
     fireEvent.click(within(human()).getByRole("button", { name: "Dismiss" }));
