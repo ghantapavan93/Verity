@@ -971,6 +971,37 @@ button.figureActive:hover {
   border-bottom: 0;
 }
 
+.concerns {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 0 10px 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--status-review-text);
+  background: color-mix(in srgb, var(--status-review-text) 7%, transparent);
+  border-radius: 2px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.concerns ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+
+.concernsLabel {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--status-review-text);
+}
+
 .reviewBar {
   display: flex;
   flex-wrap: wrap;

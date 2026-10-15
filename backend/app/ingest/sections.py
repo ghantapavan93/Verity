@@ -1,9 +1,11 @@
 """Turn a stream of blocks (headings and body text) into numbered sections.
 
 A section starts at every heading. Text before the first heading becomes the title block.
-Numbers come from the heading text when it starts with one ("12.4 Termination"); otherwise
-they are computed from heading levels, which matches Word's automatic numbering when the
-document numbers its headings top to bottom and is best effort otherwise.
+Numbers come from the heading text when it starts with one ("12.4 Termination"); otherwise, for a
+DOCX heading Word numbers itself, the number Word prints for it (reader v14, Block.word_number, worked
+out from the list's own counters by readers._Numbering). A heading that states no number and whose
+number the reader cannot say exactly is labelled by its heading alone: never a number the document does
+not show.
 
 Many templates (Common Paper among them) style the whole clause as a heading paragraph:
 "Access and Use.  During the Subscription Period …". Such a paragraph is split into a short
@@ -20,7 +22,6 @@ from itertools import pairwise
 # Nine digits per part: a "number" longer than that is not a clause number, and Python refuses to parse thousands of digits.
 HEADING_NUMBER = re.compile(r"^\s*(?:(?:Section|Clause|Article)\s+)?(\d{1,9}(?:\.\d{1,9})*)[.)]?\s+(.*\S)\s*$", re.IGNORECASE)
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
-LEAD_IN = re.compile(r"^(.{3,80}?[.:])\s+(?=\S)")
 # "Agreement" means …: a definition is labelled by its term and the whole sentence is its body.
 DEFINED_TERM = re.compile(r"^[“\"‘']([^”\"’']{1,60})[”\"’']\s+(?:means|has the meaning|shall mean|shall have the meaning|includes)", re.IGNORECASE)
 SENTENCE_MIN_WORDS = 6
@@ -130,26 +131,29 @@ _CLAUSE_OPENING = re.compile(
 OPENING_WINDOW = 200  # characters: a number, a title of at most eight words, its stop
 
 
-def stated_clause_numbers(texts: Sequence[str]) -> set[str]:
-    """Every number the texts open a clause with, as printed: what a reference may name although no section of this
-    reading carries it (a numbered paragraph inside a stored section, or a document read without numbering). A dotted
-    number ("12.3") is a clause number wherever it opens; a whole number only where it opens a titled clause ("6. WRF
+def clause_openings(text: str) -> list[tuple[str, int]]:
+    """(number, offset) of every clause the text opens, in order, the offset where the number is printed. A dotted
+    number ("12.3") opens a clause wherever it opens; a whole number only where it opens a titled clause ("6. WRF
     Patents."), because a numbered list restarts at 1 inside any clause (triage, 2026-10-09)."""
-    stated: set[str] = set()
-    for text in texts:
-        for match in _CLAUSE_OPENING.finditer(text):
-            index = next(i for i, group in enumerate(match.groups(), start=1) if group)
-            number = match.group(index)
-            if "." not in number:
-                # A clause title is read from at most OPENING_WINDOW characters: one line of thousands of openings cost
-                # a scan to its end per opening, quadratic (security audit, 2026-10-09).
-                start = match.start(index)
-                end = text.find("\n", start, start + OPENING_WINDOW)
-                line = text[start : end if end >= 0 else start + OPENING_WINDOW]
-                if inline_clause(line, int(number)) is None:
-                    continue
-            stated.add(number)
-    return stated
+    found: list[tuple[str, int]] = []
+    for match in _CLAUSE_OPENING.finditer(text):
+        index = next(i for i, group in enumerate(match.groups(), start=1) if group)
+        number, start = match.group(index), match.start(index)
+        if "." not in number:
+            # A clause title is read from at most OPENING_WINDOW characters: one line of thousands of openings cost
+            # a scan to its end per opening, quadratic (security audit, 2026-10-09).
+            end = text.find("\n", start, start + OPENING_WINDOW)
+            if inline_clause(text[start : end if end >= 0 else start + OPENING_WINDOW], int(number)) is None:
+                continue
+        found.append((number, start))
+    return found
+
+
+def stated_clause_numbers(texts: Sequence[str]) -> set[str]:
+    """Every number the texts open a clause with, as printed (`clause_openings`): what a reference may name although no
+    section of this reading carries it (a numbered paragraph inside a stored section, or a document read without
+    numbering)."""
+    return {number for text in texts for number, _ in clause_openings(text)}
 
 
 def follows(previous: str, number: str) -> bool:
@@ -231,9 +235,15 @@ class Block:
     kind: str  # "heading" | "text"
     text: str
     level: int = 0  # heading level, 1-based; 0 for text
-    # Whether the format numbers this heading without the number being in its text (Word's automatic numbering), so a
-    # number may be computed from levels. Plain text and PDF show every number they have; their headings say False.
+    # Whether the format numbers this heading without the number being in its text, so a number may be computed from
+    # levels. Plain text and PDF show every number they have; their headings say False. A DOCX heading says False from
+    # reader v14 and carries the number Word prints for it instead (`word_number`), or none.
     implicit_number: bool = True
+    # The clause number Word prints for this heading from its list (reader v14, readers._Numbering), when the reader
+    # could work it out exactly; None when Word prints none or the reader cannot say which.
+    word_number: str | None = None
+    # The page the block was printed on, counted from 0, in a format that has pages (PDF); None in one that does not.
+    page: int | None = None
 
 
 @dataclass
@@ -266,13 +276,17 @@ def split_lead_in(text: str) -> tuple[str, str]:
     term = DEFINED_TERM.match(text)
     if term:
         return term.group(1).strip(), text
-    match = LEAD_IN.match(text)
-    if match and len(text) - match.end() >= MIN_BODY_CHARS:
-        lead = match.group(1).rstrip(".:").strip()
+    match = _lead_in(text)
+    if match:
+        lead = match[0].rstrip(".:").strip()
         # A title is short. "The following sections will survive expiration or termination of the
         # Agreement:" is the first sentence of the clause, and every word of it must stay quotable.
-        if len(lead) <= MAX_LEAD_IN_CHARS and len(lead.split()) <= MAX_LEAD_IN_WORDS:
-            return lead, text[match.end() :].strip()
+        short = len(lead) <= MAX_LEAD_IN_CHARS and len(lead.split()) <= MAX_LEAD_IN_WORDS
+        # A line that wraps a clause ("Payment of Principal and Interest. The Borrower shall") carries little body on
+        # it, the rest being on the lines below: its title is still its title, not the clause's (reader v14).
+        wrapped = looks_like_sentence(text) and not _CLAUSE_VERB.search(lead)
+        if short and (len(text) - match[1] >= MIN_BODY_CHARS or wrapped):
+            return lead, text[match[1] :].strip()
     if len(text) <= MAX_HEADING_CHARS and not looks_like_sentence(text):
         return text.rstrip(".").strip(), ""
     # A sentence, or a long paragraph with no early break: a short label; all of it is body.
@@ -281,8 +295,73 @@ def split_lead_in(text: str) -> tuple[str, str]:
 
 
 def looks_like_sentence(text: str) -> bool:
-    """Several words ending in a stop: a numbered paragraph that is a clause, not a title."""
-    return len(text.split()) >= SENTENCE_MIN_WORDS and text.rstrip().endswith((".", ";", ":"))
+    """Several words ending in a stop, or a sentence end inside the line (reader v14): a numbered paragraph that is a
+    clause, not a title. A PDF line that wraps a clause ("11.2 This Lease may be amended only by a written amendment
+    signed by both parties. If an") was a heading until v14, so its label stopped mid-sentence and its first sentence
+    sat in no section text; so was a clause's first line that states an obligation or a permission ("8.1 Seller shall
+    indemnify Buyer against Losses arising from (a) any breach of Seller's"): a title does not say "shall"."""
+    words = text.split()
+    if len(words) < SENTENCE_MIN_WORDS or title_cased(text):
+        return False  # "Conduct of Business Prior to the Closing." is a title, its full stop aside
+    if text.rstrip().endswith((".", ";", ":")) or _CLAUSE_VERB.search(text):
+        return True
+    # A long line whose words mostly open in lower case is a wrapped clause, not a title ("4.2 Any Monthly Rent not paid
+    # within ten (10) days after its due date bears a late charge"): its operative words sat in the title, which is not
+    # quotable section text (retrieval study, 2026-10-14: 6 PDF cases).
+    if len(words) >= _LONG_LINE_WORDS and sum(1 for word in words if word[:1].islower()) * 2 > len(words):
+        return True
+    return any(match.group(1).casefold() not in _NOT_SENTENCE_ENDS for match in _INNER_SENTENCE_END.finditer(text))
+
+
+_LONG_LINE_WORDS = 10
+
+
+def title_cased(text: str) -> bool:
+    """Every word opens with a capital, a digit or a bracket, except the small words a title keeps in lower case: "Purchase
+    Price Adjustment.", "Conduct of Business Prior to the Closing." A single full stop may end it; none may sit inside."""
+    words = text.strip().rstrip(".").split()
+    if not words or len(words) > 12 or "." in text.strip().rstrip(".").replace("No.", "No"):
+        return False
+    return all(word[:1].isupper() or word[:1].isdigit() or word[:1] in "(&§-–" or word.casefold() in TITLE_SMALL_WORDS for word in words)
+
+
+# What a clause says and a title does not (reader v14): its operative verb, in lower case ("May 2026 Amendment" is a title).
+_CLAUSE_VERB = re.compile(r"\b(?:shall|must|may|will)\b")
+
+
+# A sentence end inside a line: a word of three or more lower-case letters, a full stop, a space and a capitalised
+# word ("parties. If"). Not after an abbreviation a heading carries ("Acme Corp. Master Agreement").
+_INNER_SENTENCE_END = re.compile(r"\b([A-Za-z]*[a-z]{3})\.\s+(?=[A-Z][a-z])")
+_NOT_SENTENCE_ENDS = frozenset({"corp", "inc", "ltd", "llc", "bros", "dept", "govt", "assn", "intl", "mfg", "etc", "approx", "incl"})
+
+
+# The lead-in title of a heading that carries its body: "Governing Law." in "Governing Law. This Agreement …". A full
+# stop that ends an abbreviation is not a title's end (reader v14): a reference word before a number ("AMENDMENT NO. 1
+# TO EQUIPMENT LEASE AGREEMENT" was cut to the title "AMENDMENT NO" with "1 TO …" as its body, and the model's citation
+# of that section was shown as "found in AMENDMENT NO.", the legal pilot's H1-Q1), or a name's abbreviation ("Acme Corp.
+# Master Services Agreement" was the title "Acme Corp").
+_LEAD_IN_END = re.compile(r"[.:](?=\s+\S)")
+_REFERENCE_WORD_BEFORE = re.compile(r"(?:^|\s)(no|nos|sec|secs|art|arts|para|paras|sch|sched|ex|exh|vol|pt|pts|ch|cl|ref|fig|app|appx|rev|ver)$", re.IGNORECASE)
+_NAME_ABBREVIATION_BEFORE = re.compile(r"(?:^|\s)(corp|inc|ltd|llc|co|bros|dept|govt|assn|intl|mfg|plc|pty|st)$", re.IGNORECASE)
+
+
+def _lead_in(text: str) -> tuple[str, int] | None:
+    """The first lead-in title of ``text``, three to eighty characters on its first line ending in a full stop or a
+    colon before more text: the title with its stop, and where the body starts. A full stop that ends a reference word
+    before a number ("NO. 1", "Sec. 5") or a name's abbreviation ("Corp.", "Inc.") is passed over (reader v14)."""
+    for end in _LEAD_IN_END.finditer(text):
+        title_end = end.end()
+        if "\n" in text[:title_end] or title_end > 81:
+            return None
+        if title_end < 4:
+            continue
+        rest = text[title_end:].lstrip()
+        if end.group(0) == "." and (
+            (_REFERENCE_WORD_BEFORE.search(text, 0, end.start()) and rest[:1].isdigit()) or _NAME_ABBREVIATION_BEFORE.search(text, 0, end.start())
+        ):
+            continue
+        return text[:title_end], len(text) - len(rest)
+    return None
 
 
 _DIGITS = re.compile(r"\d{1,9}")  # a page number; nine digits keeps int() from refusing a hostile heading
@@ -297,11 +376,14 @@ def _words(text: str) -> str:
 
 
 def running_lines(blocks: Sequence[Block], title: str = "") -> set[int]:
-    """The indexes of heading blocks that are a page's running header or footer ("1 – LEASE AGREEMENT" at the foot of
-    every page; holdout audit, 2026-10-09): a heading whose words, its page number aside, are "Page" or a heading the
-    document also prints unnumbered, at least MIN_RUNNING_PAGES times in a row with that number rising. A run that
-    restarts (an exhibit numbered from 1 again) counts on its own. Measured over 510 CUAD and 800 EDGAR texts and the
-    audit's lease: 87 of 54,901 heading lines in 7 documents, each a page footer or a contents line with its page number."""
+    """The indexes of heading blocks that are a page's running header or footer, read two ways: by its page number in
+    any format (below), and, in a format that has pages, by being printed on most of them (`page_furniture`).
+
+    By page number ("1 – LEASE AGREEMENT" at the foot of every page; holdout audit, 2026-10-09): a heading whose words,
+    its page number aside, are "Page" or a heading the document also prints unnumbered, at least MIN_RUNNING_PAGES times
+    in a row with that number rising. A run that restarts (an exhibit numbered from 1 again) counts on its own. Measured
+    over 510 CUAD and 800 EDGAR texts and the audit's lease: 87 of 54,901 heading lines in 7 documents, each a page
+    footer or a contents line with its page number."""
     headings = [(i, b.text.strip()) for i, b in enumerate(blocks) if b.kind == "heading" and b.text.strip()]
     plain = {_words(text) for _, text in headings if not _DIGITS.search(text)} | {_words(title)}
     by_words: dict[str, list[tuple[int, int]]] = {}
@@ -322,7 +404,53 @@ def running_lines(blocks: Sequence[Block], title: str = "") -> set[int]:
             run = [current]
         if len(run) >= MIN_RUNNING_PAGES:
             running.update(index for index, _ in run)
-    return running
+    return running | page_furniture(blocks)
+
+
+def _line(text: str) -> str:
+    return " ".join(text.casefold().split())
+
+
+def page_furniture(blocks: Sequence[Block]) -> set[int]:
+    """The indexes of heading blocks that are page furniture: a line printed the same, digits included, on at least
+    MIN_RUNNING_PAGES pages and on most of the pages that carry text. "ACME SERVICES AGREEMENT" at the top of every page,
+    "CONFIDENTIAL" or "DRAFT" stamped on each, a company name, a document number ("US-DOCS\\123456789.3") at the foot: the
+    line belongs to the page, not to the clause a page break falls in, and as a heading it cut §7 from its exception
+    (war room F-04, 2026-10-13). A line with a page number in it differs page to page and is read by `running_lines`.
+
+    Not furniture: a line that opens with a clause number (the document's numbering), a structural line ("EXHIBIT B" on
+    each page of the exhibit names a part, as `running_lines` holds), a line on fewer pages, and the line's first
+    printing when the document opens with it, on its first page before any other heading: that is the document's own
+    heading, printed once at its head and then repeated as the header ("HOSTING AGREEMENT" in CUAD's eGain agreement).
+    Only a format that says where each page begins has any: blocks without a page are left alone."""
+    printed_on: dict[str, set[int]] = {}
+    for block in blocks:
+        if block.page is not None and block.text.strip() and len(block.text) <= MAX_HEADING_CHARS:
+            printed_on.setdefault(_line(block.text), set()).add(block.page)
+    pages = {block.page for block in blocks if block.page is not None and block.text.strip()}
+    if len(pages) < MIN_RUNNING_PAGES:
+        return set()
+
+    def furniture(line: str) -> bool:
+        on = printed_on.get(line, set())
+        first_word = _words(line).split()[:1]
+        return len(on) >= MIN_RUNNING_PAGES and 2 * len(on) > len(pages) and not HEADING_NUMBER.match(line) and not set(first_word) & _STRUCTURAL
+
+    first_page = min(pages)
+    found: set[int] = set()
+    opening = True  # before the first heading that is not furniture
+    kept: set[str] = set()  # the lines kept there as the document's own headings, once each
+    for index, block in enumerate(blocks):
+        if block.kind != "heading" or block.page is None or not block.text.strip():
+            continue
+        line = _line(block.text)
+        if not furniture(line):
+            opening = False
+        elif opening and block.page == first_page and line not in kept:
+            kept.add(line)
+        else:
+            found.add(index)
+    return found
 
 
 def build_sections(blocks: list[Block], title: str = "") -> list[ParsedSection]:
@@ -332,6 +460,7 @@ def build_sections(blocks: list[Block], title: str = "") -> list[ParsedSection]:
     sections: list[ParsedSection] = []
     counters: list[int] = []
     parent_headings: dict[int, str] = {}
+    parent_numbers: dict[int, str] = {}
     current = ParsedSection(number="", heading=title)
     for block in blocks:
         text = block.text.strip()
@@ -346,6 +475,8 @@ def build_sections(blocks: list[Block], title: str = "") -> list[ParsedSection]:
             level = max(1, block.level or 1)
             if number:
                 counters = [int(p) for p in number.split(".") if p.isdigit()]
+            elif block.word_number:
+                number = block.word_number  # what Word prints, not a count of headings (reader v14)
             elif not block.implicit_number:
                 pass  # labelled by its heading alone; the numbering of the headings around it is untouched
             else:
@@ -355,10 +486,11 @@ def build_sections(blocks: list[Block], title: str = "") -> list[ParsedSection]:
                 counters[level - 1] += 1
                 number = ".".join(str(c) for c in counters)
                 computed = True
-            if heading.endswith("…") and level > 1 and parent_headings.get(level - 1):
+            if heading.endswith("…") and level > 1 and parent_headings.get(level - 1) and _within(parent_numbers.get(level - 1, ""), number):
                 # A list item styled as a heading ("if the other party fails to cure…"): label it by its parent.
                 heading = parent_headings[level - 1]
             parent_headings[level] = heading
+            parent_numbers[level] = number
             current = ParsedSection(number=number, heading=heading, number_computed=computed)
             if body:
                 current.paragraphs.append(body)
@@ -366,6 +498,17 @@ def build_sections(blocks: list[Block], title: str = "") -> list[ParsedSection]:
             current.paragraphs.append(text)
     _push(sections, current)
     return [s for s in sections if s.paragraphs or s.heading]
+
+
+def _within(parent: str, number: str) -> bool:
+    """Whether a section numbered ``parent`` holds one numbered ``number``, so that its title may label it (reader v14).
+    Both carry a number, and a dotted one sits in its parent's: "1.4" in "1", never in an unnumbered "SITE DEVELOPMENT
+    AND HOSTING AGREEMENT" that happens to be the last heading a level up, whose title it took. A list label without a
+    dot ("(a)") sits in the numbered heading above it. An unnumbered line keeps its own words: a signature block
+    ("E.PIPHANY, INC. HIGH SPEED NET SOLUTIONS, INC.") took the title "7" of the clause above it."""
+    if not parent or not number:
+        return False
+    return "." not in number or number.startswith((parent + ".", parent + "("))  # "5.3(a)" sits in "5.3"
 
 
 def _push(sections: list[ParsedSection], section: ParsedSection) -> None:
@@ -424,7 +567,10 @@ def looks_like_heading(line: str) -> bool:
     if not stripped or len(stripped) > 90:
         return False
     match = HEADING_NUMBER.match(stripped)
-    if match and not stripped.endswith((".", ";", ",", ":")):
+    # A title may end in a full stop ("Section 2.7 Purchase Price Adjustment."): until reader v14 such a line was body,
+    # and a whole Article became one unnumbered section (retrieval study, 2026-10-14: 33 of 51 headings of an EDGAR-shaped
+    # purchase agreement). A title-cased line is a title, full stop or not; a sentence is not title-cased.
+    if match and (not stripped.endswith((".", ";", ",", ":")) or (stripped.endswith(".") and title_cased(match.group(2)))):
         title = match.group(2)
         # A heading's title opens with a capital; a numbered line whose words open in lower case is a wrapped sentence
         # ("Section 19 of the Facility Lease, or modify …"), a figure ("3.50 to 1.00", "15 years") or a list item

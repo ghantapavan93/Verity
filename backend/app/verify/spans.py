@@ -27,18 +27,40 @@ independent review of 2026-09-29): "5 days" is not inside "fifteen (15) days" an
 inside "$11,500". A verbatim quote that drops a neighbouring word ("less than 30 days" for "not less
 than 30 days") is still found, and the highlight shows the word it dropped.
 
+Nor may it begin or end inside a number (verifier v8, after the war-room review of 2026-10-13, F-03): until
+then a comma or a point between digits was an edge, so "$1,500" was found exact in "$1,500,000", "$15" in
+"$15.50" and "Section 5" in "Section 5.2", and a sign, a currency or percent sign and the parentheses of an
+accounting negative could be cut off. What belongs to a number is read once, in verify/tokens.py.
+
+Nor may a sign be lost from an amount written with a magnitude letter (verifier v9, the legal evaluation's blocker B1,
+2026-10-14): "$5M" was read as a word, so "Adjustment Amount $5M" verified against "Adjustment Amount -$5M" and "$5M"
+was found word for word inside "-$5M". From v9 such an amount is a number like any other, and inside a number written
+with a sign or parentheses every edge splits it, a space included: "10K" is not found inside "-USD 10K".
+
 Offsets always index the ORIGINAL text, so the interface highlights the characters that matched.
+
+What is worked out about a text along the way (where its numbers are, a quote's words, letters and digits) is
+remembered for one verification pass only (`verification_pass`): a run's verification, a trust manifest, a trust diff,
+or a single `locate`. These were process-wide caches keyed by the texts themselves, so a visitor's contract and the
+quotes from it stayed in memory after the workspace holding them was deleted (release integration, 2026-10-13).
+Within a pass a text is still read once: without it, a quote that occurs thousands of times in a long section had its
+numbers found again at every occurrence.
 """
 
 from __future__ import annotations
 
-import functools
+import bisect
 import re
+from array import array
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
+from typing import cast
 
-from .tokens import Kind, locate_tokens, tokenize
+from .tokens import SIGN_OPENERS, VERSION, Kind, attaches, is_amount, joins_digits, locate_tokens, tokenize, written_numbers
 
-VERIFIER_VERSION = "v7"
+VERIFIER_VERSION = f"v{VERSION}"
 
 # A section number as the reader writes it: "12", "8.1.2". Anything else in front of a label is heading text.
 _SECTION_NUMBER = re.compile(r"\d+(?:\.\d+)*")
@@ -132,12 +154,95 @@ def _normalize_quote(quote: str) -> str:
 def bounded(text: str, start: int, end: int) -> bool:
     """A span is bounded when neither of its edges splits a run of letters and digits: "5 days" is not
     found inside "fifteen (15) days", "$1,500" is not found inside "$11,500", "able to terminate" is not
-    found inside "unable to terminate". An edge that sits on punctuation or a space is a boundary on
-    its own, so a verbatim quote ending in "(" stays exact when a letter follows; the start and the end
-    of the text are boundaries."""
-    if start > 0 and text[start - 1].isalnum() and text[start].isalnum():
+    found inside "unable to terminate"; nor a number with what is written against it (v8): "$1,500" is not
+    found inside "$1,500,000", "Section 5" inside "Section 5.2", "5%" inside "-5%", "$500" inside "($500)".
+    Any other edge that sits on punctuation or a space is a boundary on its own, so a verbatim quote ending
+    in "(" stays exact when a letter follows; the start and the end of the text are boundaries."""
+    return not (_splits(text, start) or _splits(text, end))
+
+
+def _splits(text: str, at: int) -> bool:
+    """Whether the edge before ``text[at]`` falls inside what a reader reads as one run: letters and digits, or a
+    number as it is written (verify/tokens.written_numbers). The characters are the ones the reader sees: those
+    normalisation deletes are skipped, so a zero-width space inside "1,500,000" or "unable" makes no edge (v8)."""
+    before, after = _seen(text, at, -1), _seen(text, at, 1)
+    if not before or not after:
+        return False  # the start and the end of the text
+    if (before[-1].isalnum() and after[0].isalnum()) or joins_digits(before, after):
+        return True
+    attached = attaches(before[-1], after[0])
+    starts, ends = _numbers(text)
+    last = bisect.bisect_left(starts, at) - 1  # the last number that starts before the edge
+    if last < 0 or ends[last] <= at:
         return False
-    return not (end < len(text) and text[end - 1].isalnum() and text[end].isalnum())
+    # Inside a number: at what is written against it, always (v8); anywhere else (a space, the full stop of "Rs."), only
+    # in a number written with a sign or parentheses, so a quote cannot drop "-USD " from "-USD 10K" (v9) while "500"
+    # still stands alone in "USD 500".
+    return attached or text[starts[last]] in SIGN_OPENERS
+
+
+def _seen(text: str, at: int, step: int) -> str:
+    """The two characters a reader sees before (step -1) or after (step 1) the edge before ``text[at]``, nearest at the
+    edge; fewer at the start or the end of the text."""
+    near = text[max(0, at - 2) : at] if step < 0 else text[at : at + 2]
+    if _INVISIBLE.isdisjoint(near):
+        return near
+    seen: list[str] = []
+    i = at - 1 if step < 0 else at
+    while 0 <= i < len(text) and len(seen) < 2:
+        if ord(text[i]) not in _DELETED:
+            seen.append(text[i])
+        i += step
+    return "".join(reversed(seen)) if step < 0 else "".join(seen)
+
+
+_pass: ContextVar[dict[tuple[str, str], object] | None] = ContextVar("verification_pass", default=None)
+
+
+@contextmanager
+def verification_pass() -> Iterator[None]:
+    """Remember what is worked out about each text until the pass ends, then let all of it go. A pass already open is
+    joined, so a run's verification remembers across its quotes and a single locate across its occurrences."""
+    if _pass.get() is not None:
+        yield
+        return
+    opened = _pass.set({})
+    try:
+        yield
+    finally:
+        _pass.reset(opened)
+
+
+def _remembered[T](kind: str, key: str, work: Callable[[str], T]) -> T:
+    memo = _pass.get()
+    if memo is None:
+        return work(key)
+    if (kind, key) not in memo:
+        memo[(kind, key)] = work(key)
+    return cast(T, memo[(kind, key)])
+
+
+def _numbers(text: str) -> tuple[array[int], array[int]]:
+    """Where each number of ``text`` starts and ends, in order, as the reader sees it: read once per text and pass, on the
+    first edge that needs it, with the characters normalisation deletes left out and the offsets mapped back."""
+    return _remembered("numbers", text, _read_numbers)
+
+
+def _read_numbers(text: str) -> tuple[array[int], array[int]]:
+    visible = text.translate(_DELETED)
+    starts, ends = array("q"), array("q")
+    if len(visible) == len(text):
+        for low, high in written_numbers(text):
+            starts.append(low)
+            ends.append(high)
+        return starts, ends
+    # A visible index v is the original v + the number of deleted characters before it: for the j-th deleted
+    # character, at original index d, every visible index from d - j on lies after it.
+    after_deleted = array("q", (i - j for j, i in enumerate(i for i, ch in enumerate(text) if ord(ch) in _DELETED)))
+    for low, high in written_numbers(visible):
+        starts.append(low + bisect.bisect_right(after_deleted, low))
+        ends.append(high - 1 + bisect.bisect_right(after_deleted, high - 1) + 1)
+    return starts, ends
 
 
 def _find_bounded(haystack: str, needle: str, index_map: list[int] | None, text: str) -> tuple[int, int, int] | None:
@@ -161,12 +266,17 @@ def _find_bounded(haystack: str, needle: str, index_map: list[int] | None, text:
 
 # Characters normalisation deletes, derived from the one map so the prefilter and the tiers never drift.
 _DELETED = {code: None for code, mapped in _QUOTE_MAP.items() if mapped in (None, "")}
+_INVISIBLE = frozenset(map(chr, _DELETED))
 
 
-@functools.lru_cache(maxsize=1024)
 def _quote_words(quote: str) -> tuple[str, ...]:
     """The quote's words, casefolded, longest first (the likeliest to be absent)."""
-    return tuple(sorted({t.canonical for t in tokenize(quote) if t.kind is Kind.WORD}, key=len, reverse=True))
+    return _remembered("words", quote, _read_quote_words)
+
+
+def _read_quote_words(quote: str) -> tuple[str, ...]:
+    # An amount word ("usd10k") is a number to the typed tier (v9), which may find it written apart ("USD 10K").
+    return tuple(sorted({t.canonical for t in tokenize(quote) if t.kind is Kind.WORD and not is_amount(quote, t)}, key=len, reverse=True))
 
 
 def _cannot_hold(quote: str, text: str) -> bool:
@@ -204,7 +314,7 @@ def _tiers(quote: str, text: str) -> Located | None:
     if found is not None:
         return Located(found[0], found[1], "casefold", found[2])
 
-    typed = locate_tokens(quote, text)
+    typed = locate_tokens(quote, text, _INVISIBLE)
     if typed is not None and bounded(text, typed.start, typed.end):
         return Located(typed.start, typed.end, "typed", typed.count)
     return None
@@ -233,13 +343,20 @@ def strip_label(quote: str, label: str) -> str | None:
     body_alnum, body_map = alnum_with_map(body)
     if not body_alnum.startswith(heading_alnum) or len(body_alnum) == len(heading_alnum):
         return None
-    # The first character of the quote that belongs to the text proper.
-    remainder = body[body_map[len(heading_alnum)] :].lstrip()
+    # The first character of the quote that belongs to the text proper: its first letter or digit, or, when that digit
+    # begins a number written with a sign, a currency sign or a parenthesis, that character (v8): "Fees: -5%" leaves
+    # "-5%", never "5%", which would cut the number's sign off and be refused.
+    begin, heading_end = body_map[len(heading_alnum)], body_map[len(heading_alnum) - 1]
+    begin = next((low for low, high in written_numbers(body) if heading_end < low < begin < high), begin)
+    remainder = body[begin:].lstrip()
     return remainder or None
 
 
-@functools.lru_cache(maxsize=1024)
 def _alnum(text: str) -> str:
+    return _remembered("alnum", text, _read_alnum)
+
+
+def _read_alnum(text: str) -> str:
     return alnum_with_map(text)[0]
 
 
@@ -256,6 +373,11 @@ def locate(quote: str, text: str, label: str | None = None) -> Located | None:
     """Find ``quote`` in ``text``; None when it is not there under the rules above."""
     if not quote or not quote.strip():
         return None
+    with verification_pass():
+        return _locate(quote, text, label)
+
+
+def _locate(quote: str, text: str, label: str | None) -> Located | None:
     found = _ladder(quote, text)
     if found is None and label and _may_carry_label(quote, label):
         stripped = strip_label(quote, label)

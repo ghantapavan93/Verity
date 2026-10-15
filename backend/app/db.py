@@ -8,11 +8,13 @@ from contextlib import contextmanager
 
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine.interfaces import DBAPIConnection
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import ConnectionPoolEntry, NullPool
 from sqlalchemy.schema import CreateIndex
 
 from .config import settings
+from .errors import Busy
 
 
 class Base(DeclarativeBase):
@@ -128,6 +130,36 @@ def ensure_immutability(target_engine: Engine) -> None:
     with target_engine.begin() as connection:
         for _name, statement in immutability_triggers():
             connection.exec_driver_sql(statement)
+
+
+@contextmanager
+def write_locked(session: Session) -> Iterator[None]:
+    """The session's next transaction, begun with SQLite's write lock (BEGIN IMMEDIATE) instead of at its first write: no
+    other writer, in this process or another, can write between what is read inside it and its commit, so a count read
+    here is still the count when the row it limits is committed. Commits on leaving; rolls back on any exception.
+
+    Other writers wait for the lock (the 30 s busy wait, make_engine); readers do not (WAL). A lock not had by then is
+    Busy, 503, with nothing written: it was an unhandled OperationalError, a 500 (war room W5 p6). Hold it briefly: read
+    and parse before it, never inside. It must begin the transaction: a write already made in this session was made
+    without the lock, so it is refused rather than silently included."""
+    connection = session.connection()
+    if connection.dialect.name != "sqlite":
+        raise NotImplementedError("write_locked takes SQLite's write lock; another database needs its own (a table or advisory lock)")
+    if getattr(connection.connection.driver_connection, "in_transaction", False):
+        raise RuntimeError("write_locked must begin the transaction; this session has an uncommitted write")
+    try:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+    except OperationalError as error:
+        session.rollback()
+        if "locked" not in str(error.orig):
+            raise
+        raise Busy("The store is busy with another change, so nothing was written. Try again in a moment.", retry_after=5) from error
+    try:
+        yield
+        session.commit()
+    except BaseException:
+        session.rollback()
+        raise
 
 
 @contextmanager

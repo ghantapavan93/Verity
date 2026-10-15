@@ -34,6 +34,7 @@ function finding(over: Partial<FindingView>): FindingView {
     review: null,
     latestReviewId: 0,
     spans: [{ sectionId: "s3", verified: true, method: "exact", quote: QUOTE, start: 0, end: QUOTE.length, citedSectionLabel: "sec_3", matchCount: 1 }],
+    relations: [], // the API always sends the list (runs.relations); empty when the contract's statements touch nothing
     ...over,
   } as unknown as FindingView;
 }
@@ -58,6 +59,18 @@ describe("a finding the model reported as not found", () => {
     expect(details.textContent).toContain("Withheld from the finding because the model reported the point as not found in the sections it was given.");
     fireEvent.click(summary);
     expect(details.open).toBe(true);
+  });
+
+  it("says beside the passages that a pass rests on a section the model was not shown", () => {
+    const unseen = "the sentence points at §9, which was not handed to the model";
+    renderCard(finding({ status: "pass", statusSource: "model_hint", statusReason: unseen, codeCompared: false, unseenReason: unseen }));
+    expect(screen.getByTestId("unseen-note").textContent).toContain(`Code found that ${unseen}. The answer may depend on it, and nothing checked that.`);
+    expect(document.body.textContent).not.toMatch(/Code compared/);
+  });
+
+  it("control: a finding with nothing unseen carries no such note", () => {
+    renderCard(finding({ status: "pass", statusSource: "model_hint", statusReason: null, codeCompared: false, unseenReason: null }));
+    expect(screen.queryByTestId("unseen-note")).toBeNull();
   });
 
   it("shows no withheld sentence when the API sends none, whatever the status and the model's sentence", () => {

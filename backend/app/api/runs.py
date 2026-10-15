@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session, object_session
+from sqlalchemy.orm import Session
 
 from ..application.clause_location import ClauseLocator
 from ..application.create_memo import review_head
@@ -20,13 +20,29 @@ from ..application.start_run import start_run
 from ..application.workspace import require_run, visible_runs
 from ..db import SessionLocal, get_session
 from ..document_names import run_document_name
-from ..models import Finding, Guidance, Run, iso
+from ..models import Finding, Run, iso
 from ..providers import make_provider
 from ..providers.base import ModelProvider
+from ..runs.account import account_of
 from ..runs.events import TERMINAL, bus
+from ..runs.relations import Passage, Relation, load
 from ..runs.service import execute_run
-from ..runs.values import unquoted_values, value_choices
-from ..schemas import CandidateOut, FindingOut, RunDetail, RunExplanation, RunIn, RunOut, RunSummary, SpanOut, StageOut, ValueChoiceOut
+from ..runs.status import basis
+from ..schemas import (
+    CandidateOut,
+    FindingOut,
+    PassageOut,
+    RelationNoteOut,
+    RelationOut,
+    RunDetail,
+    RunExplanation,
+    RunIn,
+    RunOut,
+    RunSummary,
+    SpanOut,
+    StageOut,
+    ValueChoiceOut,
+)
 from .access import current_workspace
 from .deps import get_provider
 
@@ -37,36 +53,36 @@ HEARTBEAT_SECONDS = 15
 # ----------------------------------------------------------------------------- mapping
 
 
-def _value_checks(finding: Finding, clause_numbers: frozenset[str] = frozenset()) -> tuple[list[str], list[ValueChoiceOut]]:
-    """What code can say about the values the shown answer states, read now from the record (runs.values): the values
-    no verified quote and no guidance states (the question is what was asked, not evidence: policy-v6 reads it the same
-    way); and each verified quote that offers several values of a kind the answer gives. Read now, they change no
-    status; a run decided under policy-v6 was lowered on the same reading. A point reported as not found states none."""
-    if finding.status == "missing":
-        return [], []
-    quotes = [span.quote for span in finding.spans if span.verified]
-    if not quotes:
-        return [], []
-    run = finding.run
-    session = object_session(finding)
-    guidance = session.get(Guidance, run.guidance_id) if session is not None and run.guidance_id else None
-    readers = [guidance.text if guidance else ""]
-    choices = [
-        ValueChoiceOut(kind=c.kind, answer=c.answer, values=c.values, more=c.more)
-        for c in value_choices(finding.shown_conclusion, quotes, [run.question], [guidance.text] if guidance else [])
-    ]
-    return unquoted_values(finding.shown_conclusion, quotes, readers, clause_numbers), choices
+def _passage_out(passage: Passage) -> PassageOut:
+    return PassageOut(section_id=passage.section_id, label=passage.label, start=passage.start, end=passage.end, text=passage.text)
+
+
+def relation_out(relation: Relation) -> RelationOut:
+    return RelationOut(
+        kind=relation.kind,
+        statement=_passage_out(relation.statement),
+        target=relation.target,
+        replaced=_passage_out(relation.replaced) if relation.replaced else None,
+        replacement=_passage_out(relation.replacement) if relation.replacement else None,
+        scope=relation.scope,
+        effective=relation.effective,
+        parts=list(relation.parts),
+    )
 
 
 def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> FindingOut:
     locator = locator or ClauseLocator(finding.run.document.sections)
-    unquoted, choices = _value_checks(finding, locator.clause_numbers if finding.status != "missing" else frozenset())
+    account = account_of(finding, locator.clause_numbers if finding.status != "missing" else frozenset())
+    recorded = load(finding.run.relations_json)
+    grounds = basis(finding.status_source, finding.status_reason)
     return FindingOut(
         id=finding.id,
         topic=finding.topic,
         status=finding.status,
         status_source=finding.status_source,
         status_reason=finding.status_reason,
+        code_compared=grounds.code_compared,
+        unseen_reason=grounds.unseen,
         evidence_kind="coverage" if finding.status == "missing" else "passage",
         review=review_out(finding.review),
         latest_review_id=latest_review_id(finding),
@@ -84,6 +100,7 @@ def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> Findi
                 match_count=s.match_count,
                 cited_section_label=s.cited_section_label,
                 clause_label=locator.label(s),
+                section_label=(f"§{s.section.number}" if s.section.number else s.section.heading) if s.verified and s.section is not None else "",
             )
             for s in finding.spans
         ],
@@ -91,8 +108,15 @@ def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> Findi
         observed=finding.observed,
         required=finding.required,
         suggested_position=finding.suggested_position,
-        unquoted_values=unquoted,
-        value_choices=choices,
+        unquoted_values=list(account.unquoted),
+        value_choices=[ValueChoiceOut(kind=c.kind, answer=c.answer, values=c.values, more=c.more) for c in account.choices],
+        decided_by=account.decided_by,
+        concerns=list(account.concerns),
+        flagged=account.flagged,
+        relations=[
+            RelationNoteOut(effect=note.effect, sentence=note.sentence, relation=relation_out(recorded.relations[note.relation]))
+            for note in recorded.notes.get(finding.ordinal, ())
+        ],
     )
 
 
@@ -120,6 +144,7 @@ def run_out(run: Run, locator: ClauseLocator | None = None) -> RunOut:
         sections_read=len(json.loads(run.candidates_json)) if run.candidates_json else None,
         retrieval_mode=run.retrieval_mode,
         sections_requested=json.loads(run.options_json or "{}").get("retrieval_k"),
+        relations=[relation_out(r) for r in load(run.relations_json).relations] if run.relations_json else None,
     )
 
 

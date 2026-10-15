@@ -34,9 +34,14 @@ class TooLarge(WorkbenchError):
 
 
 class Busy(WorkbenchError):
-    """The store is held by another write for longer than a request waits; nothing was written, and a retry may pass."""
+    """What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits;
+    nothing was written, and a retry may pass."""
 
     status_code = 503
+
+    def __init__(self, message: str, retry_after: int | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class Paused(WorkbenchError):

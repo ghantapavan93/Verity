@@ -12,6 +12,7 @@ from ..errors import InvalidInput
 from ..hashing import sha256_text
 from ..ingest.invisible import visible_text
 from ..models import Guidance
+from .quotas import admit, workspace_open
 from .workspace import is_public
 
 
@@ -34,10 +35,13 @@ def save_guidance(session: Session, text: str, source: str = "pasted", workspace
         # Found while tracing (2026-09-29): whitespace was stored as empty guidance and the status logic was told guidance existed.
         raise InvalidInput("guidance is empty once whitespace is removed; paste a rule, a note or an instruction, or ask without guidance")
     digest = sha256_text(text)
-    existing = stored_guidance(session, digest, workspace)
-    if existing is not None:
-        return SavedGuidance(existing, created=False)
-    guidance = Guidance(text=text, sha256=digest, source=source, workspace_id=workspace)
-    session.add(guidance)
-    session.commit()
-    return SavedGuidance(guidance, created=True)
+
+    def create() -> Guidance:
+        guidance = Guidance(text=text, sha256=digest, source=source, workspace_id=workspace)
+        session.add(guidance)
+        return guidance
+
+    # Written under the write lock, and into a public workspace only while it is open (quotas.workspace_open): guidance
+    # hangs from no run or document, so one saved while its workspace was purged would have outlived it.
+    guidance, created = admit(session, workspace_open(workspace), create, find=lambda: stored_guidance(session, digest, workspace))
+    return SavedGuidance(guidance, created=created)

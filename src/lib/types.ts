@@ -45,6 +45,9 @@ export type TrustManifestView = Schemas["TrustManifestOut"];
 export type TrustDiffView = Schemas["TrustDiffOut"];
 export type TrustFindingChange = Schemas["TrustFindingChangeOut"];
 export type DocumentVersionView = Schemas["DocumentVersionOut"];
+export type PassageView = Schemas["PassageOut"];
+export type RelationView = Schemas["RelationOut"];
+export type RelationNoteView = Schemas["RelationNoteOut"];
 
 export type RunStage = RunView["stage"];
 export type FindingStatus = FindingView["status"];
@@ -55,6 +58,25 @@ export type LocatedSpan = SpanView & { sectionId: string; verified: true };
 
 export function isLocated(span: SpanView): span is LocatedSpan {
   return span.verified && span.sectionId !== null;
+}
+
+/**
+ * A passage code located for a relation (an original clause, its replacement, a ranking), as the document pane marks
+ * one: the same jump and highlight as a quote. Located by code, not quoted by the model (runs.relations).
+ */
+export function passageSpan(passage: PassageView): LocatedSpan {
+  return {
+    sectionId: passage.sectionId,
+    start: passage.start,
+    end: passage.end,
+    quote: passage.text,
+    verified: true,
+    method: "located",
+    matchCount: 1,
+    citedSectionLabel: "",
+    clauseLabel: null,
+    sectionLabel: passage.label,
+  };
 }
 
 /**
@@ -77,6 +99,16 @@ export const STAGE_LABELS: Record<(typeof STAGE_ORDER)[number], string> = {
   verifying: "Verifying citations",
 };
 
+/**
+ * What the live region says while a run is in a stage. On a hosted model the first answer may wait for the model to wake,
+ * and the visible note beside the stages says so (StageList); the live region said only "Checking", and a screen reader
+ * then heard nothing for up to three minutes (war room UX-06, 2026-10-13).
+ */
+export function stageAnnouncement(stage: (typeof STAGE_ORDER)[number], modelSleeps: boolean): string {
+  const label = STAGE_LABELS[stage];
+  return stage === "checking" && modelSleeps ? `${label}. The model may be waking, which adds one and a half to three minutes to the first answer.` : label;
+}
+
 export const OUTCOME_LABELS: Record<RunStage, string> = {
   ...STAGE_LABELS,
   complete: "Complete",
@@ -95,8 +127,9 @@ export const REASON_TITLES: Record<RunReason, string> = {
 
 const STATUS_LABELS: Record<Exclude<FindingStatus, "pass">, string> = {
   needs_review: "Needs review",
-  // About the sections the model was handed, never about the agreement (prompt rule 8).
-  missing: "Not found in the sections read",
+  // About the sections the model was handed, never about the agreement (prompt rule 8); and the model's call: code never
+  // checks an absence (authority review, 2026-10-14).
+  missing: "Not found in the sections read (model's view)",
   unresolved: "Unresolved",
 };
 
@@ -124,7 +157,10 @@ export const STATUS_SOURCE_LABELS: Record<string, string> = {
   model_hint: "Status taken from the model's hint; code did not decide it",
   no_evidence: "No verified evidence, so no status was given",
   reference_check: "Lowered to needs review by code: the conclusion names a section this document does not have",
-  position_check: "Lowered to needs review by code: the evidence shown does not establish a value the answer states",
+  // A value no quote states, a stated position the quote does not carry, or periods code cannot put in order: one sentence
+  // for all three, with the recorded reason beside it. "a value the evidence does not establish" was shown for a calendar
+  // against Business Day comparison, which is none of that (authority review, 2026-10-14).
+  position_check: "Lowered to needs review by code: the evidence shown does not establish the model's answer",
   ambiguous_fact: "Lowered to needs review by code: the quote does not state one period (its words and digits disagree, or its periods differ)",
 };
 
@@ -161,7 +197,7 @@ export interface CodeAccount {
 const CODE_ACCOUNTS: Record<string, CodeAccount> = {
   computed_days: { role: "Code found a conflict", note: "the day counts conflict", sentence: STATUS_SOURCE_LABELS.computed_days },
   reference_check: { role: "Code lowered it", note: "names a section not in this document", sentence: STATUS_SOURCE_LABELS.reference_check },
-  position_check: { role: "Code lowered it", note: "a value the evidence does not establish", sentence: STATUS_SOURCE_LABELS.position_check },
+  position_check: { role: "Code lowered it", note: "the evidence does not establish the answer", sentence: STATUS_SOURCE_LABELS.position_check },
   ambiguous_fact: { role: "Code lowered it", note: "the quote states no one period", sentence: STATUS_SOURCE_LABELS.ambiguous_fact },
   confirmed_days: { role: "Code confirmed", note: "confirmed the model's call", sentence: STATUS_SOURCE_LABELS.confirmed_days },
   no_evidence: { role: "Code withheld", note: "no passage found", sentence: STATUS_SOURCE_LABELS.no_evidence },

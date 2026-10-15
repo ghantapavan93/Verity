@@ -8,18 +8,42 @@ Checks, in order:
   3. every span the workbench marked verified is found again: the characters at the stored
      offsets of the stored section text match the quoted passage under the same ladder the
      workbench used (exact, normalized, casefold, typed tokens; letters-and-digits on records made
-     before verifier v5; label stripping when the workbench recorded it). Since verifier v6 the workbench
-     compares words whole; the typed check here joins neighbouring words, as v5 did, so it holds for
-     records of both and is never stricter than what was recorded;
+     before verifier v5; label stripping when the workbench recorded it). For a run verified under v7 or
+     later the typed check reads tokens with the workbench's own pattern, copied into this file, and
+     compares words whole, as the workbench did; for an earlier record it joins neighbouring words, as v5
+     did, so it holds for records of v5 and v6 and is never stricter than what they recorded. A typed
+     match needs at least one word or number: punctuation alone is never found;
   4. spans the workbench marked unverified are listed, with nothing to check: the workbench
      withheld them;
   5. when the pack carries the rebuilt model input, its hash is the one the run recorded when it
      made the call, and every context slice (the part of a section the model was shown) hashes
-     to what run.json says and appears verbatim in the user message;
+     to what run.json says and appears verbatim in the user message. The pack carries it only
+     when it is the input of the recorded answer: an answer given in a later validation round
+     (to a corrected message, the first plus a note on why the first answer was rejected) has
+     an input the run did not keep, which is not reconstructable; this checker then says so and
+     prints no PASS for the model input;
   6. a located span that lies beyond the slice the model was shown is reported: the quote exists
      in the document, but the model never saw those characters (a NOTE, not a failure).
+For a run the workbench verified under verifier v8 or later (run.json options.verifier_version), check 3
+also holds what v8 holds: neither edge of a span splits a run of letters and digits or a number as it
+is written (its sign, parentheses, groups, currency and percent signs), and the typed check compares a
+number with its sign, its parentheses and its written precision ("$15.00" is not "$15"). How a number is
+written is the workbench's own definition, copied into this file when the pack was made; it needs
+Python 3.11 or later, and an older Python fails these spans rather than pass them unchecked. A run
+verified under an earlier verifier is checked as before, as its verifier recorded it.
+For a run verified under verifier v9 or later, an amount written with a magnitude letter ("$5M", "USD 10K",
+"2.5bn") and an amount in any currency (every Unicode currency sign, every ISO 4217 code in capitals,
+"US$500") are numbers too, read as a reader sees the text (an invisible mark parts no sign from its number):
+the typed check compares them with their sign, parentheses and currency, so "Adjustment Amount $5M" is not
+"Adjustment Amount -$5M"; no edge falls inside one; and inside a number written with a sign or parentheses
+no edge falls at a space either ("10K" is not inside "-USD 10K"). A v8 run is still checked as v8 read it.
+For a run verified under verifier v10 or later, a short label after a minus sign or inside an opening parenthesis
+("-Ksh 5M", "(RM5M)", "(Rp 5M)") is part of the number written after it, whatever currency it names, and a word
+holding digits inside such a number ("RM5M") is part of its value. A v9 run is still checked as v9 read it.
 This verifier establishes integrity between the original input, the canonical reading, the context
-given to the model and the stored spans. It does not, and cannot, say the conclusions are right.
+given to the model and the stored spans. It does not, and cannot, say the conclusions are right. The
+pack is not signed: it shows that its files agree with each other and with the hashes the run recorded,
+not that nobody changed them together.
 Exit code 0 when every check passes, 1 otherwise.
 """
 import decimal
@@ -31,6 +55,25 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 QUOTE_MAP = json.loads(__QUOTE_MAP__)
+DELETED = frozenset(ch for ch, mapped in QUOTE_MAP.items() if mapped == "")
+# The workbench's typed tokens since verifier v7, and v8's number as it is written, its signs and digit marks: copied
+# from the workbench (verify/tokens.py).
+TOKEN_V7 = re.compile(json.loads(__TOKEN__), re.IGNORECASE | re.VERBOSE)
+MINUS_SIGNS = frozenset(json.loads(__MINUS_SIGNS__))
+DIGIT_MARKS = frozenset(json.loads(__DIGIT_MARKS__))
+ATTACHED = frozenset(json.loads(__ATTACHED__))  # verifier v8's
+ATTACHED_V9 = frozenset(json.loads(__ATTACHED_V9__))  # v9's: every currency sign
+SIGN_OPENERS = frozenset(json.loads(__SIGN_OPENERS__))
+# v9's amount word: the token an amount's digits and magnitude letter make ("5m", "usd10k").
+AMOUNT_WORD = re.compile(json.loads(__AMOUNT_WORD__), re.IGNORECASE)
+# v10's value of a word holding digits inside a number ("RM5M"): its letters, digits and magnitude letter.
+LABELLED_WORD = re.compile(json.loads(__LABELLED_WORD__), re.IGNORECASE)
+try:
+    WRITTEN = re.compile(json.loads(__WRITTEN__), re.IGNORECASE | re.VERBOSE)  # verifier v8's number as written
+    WRITTEN_V9 = re.compile(json.loads(__WRITTEN_V9__), re.IGNORECASE | re.VERBOSE)  # v9's
+    WRITTEN_V10 = re.compile(json.loads(__WRITTEN_V10__), re.IGNORECASE | re.VERBOSE)  # and v10's
+except re.error:
+    WRITTEN = WRITTEN_V9 = WRITTEN_V10 = None  # before Python 3.11: no atomic groups or possessive quantifiers
 
 
 def sha256(path):
@@ -69,48 +112,190 @@ TOKEN = re.compile(
 )
 
 
-def number(text):
+def number(text, precise=False):
     compact = text.replace(" ", "")
     # A comma separates thousands only in thousands grouping: "1,5" and "15,00" are not 15 and 1500 (verifier v7).
     if "," in compact and not re.fullmatch(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?", compact):
         return compact
+    if precise:
+        # v8: the digits as written, so "15.00" is not "15" (verify/tokens.canonical_number).
+        cleaned = compact.replace(",", "")
+        try:
+            decimal.Decimal(cleaned)
+        except decimal.InvalidOperation:
+            return text
+        return cleaned
     try:
         return format(decimal.Decimal(compact.replace(",", "")).normalize(), "f")
     except decimal.InvalidOperation:
         return text
 
 
-def typed(text):
-    """The workbench's typed tokens (verify/tokens.py) in standard-library form: rigid tokens and runs of joined words."""
-    items = []
-    run = []
-    for match in TOKEN.finditer(text):
+NUMBER_KINDS = ("number", "currency", "percent", "section")
+
+
+def typed_tokens(text, version=0):
+    """The workbench's typed tokens (verify/tokens.py) in standard-library form, each [kind, canonical, start, end]. For
+    a run verified under v7 or later, its own pattern: no token ends inside a run of letters and digits, and a number
+    keeps its written precision. Under v8 a number also carries its sign and parentheses, and starts and ends where it
+    is written (verify/tokens.signed). For an earlier run, the pack's reading before v7."""
+    v7, v8 = version >= 7, version >= 8
+    tokens = []
+    for match in (TOKEN_V7 if v7 else TOKEN).finditer(text):
         kind = match.lastgroup
         surface = match.group(0)
+        if kind == "word":
+            canonical = surface.casefold()
+        elif kind == "number":
+            canonical = number(surface, v7)
+        elif kind == "currency":
+            symbol = re.match(r"(?:[$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)", surface, re.IGNORECASE).group(0)
+            canonical = symbol.upper() + number(surface[len(symbol):], v7)
+        elif kind == "percent":
+            canonical = number(re.match(r"[\d,]*(?:\.\d+)?", surface).group(0), v7) + "%"
+        elif kind == "section":
+            canonical = surface.lower()
+        else:
+            canonical = surface
+        tokens.append([kind, canonical, match.start(), match.end()])
+    if v8:
+        # v9 (verify/tokens.signed): an amount word is a number too, what stands before a number is compared without
+        # spaces or case, and a currency written as letters before it belongs to it.
+        v9, v10 = version >= 9, version >= 10
+
+        def amount(t):
+            if not v9 or t[0] != "word":
+                return False
+            if AMOUNT_WORD.fullmatch(text, t[2], t[3]) is not None:
+                return True
+            return v10 and any(c.isdigit() for c in text[t[2]:t[3]])  # v10: a word holding digits, inside a number
+
+        def value(t):
+            if not amount(t):
+                return t[1]
+            parts = AMOUNT_WORD.fullmatch(text, t[2], t[3])
+            if parts is not None:
+                return (parts.group("code") or "").upper() + parts.group("digits") + (parts.group("magnitude") or "").casefold()
+            parts = LABELLED_WORD.fullmatch(text, t[2], t[3])
+            if parts is None:
+                return t[1]
+            return parts.group(1).upper() + parts.group(2) + (parts.group(3) or "").casefold()
+
+        numbers = [i for i, t in enumerate(tokens) if t[0] in NUMBER_KINDS or amount(t)]
+        k = 0
+        # v9 reads where a number is written as a reader sees the text (characters normalisation deletes left out).
+        spans = written_numbers(text, version) if v9 else [m.span() for m in WRITTEN.finditer(text)]
+        for low, high in spans:
+            while k < len(numbers) and tokens[numbers[k]][3] <= low:
+                k += 1
+            inside = []
+            while k < len(numbers) and tokens[numbers[k]][2] < high:
+                inside.append(numbers[k])
+                k += 1
+            if not inside:
+                continue
+            first, last = tokens[inside[0]], tokens[inside[-1]]
+            before = "".join("-" if c in MINUS_SIGNS else c for c in text[low:first[2]])
+            after = text[last[3]:high]
+            head, tail = value(first), value(last)
+            if v9:
+                before = "".join(c for c in before if c not in DELETED and not c.isspace()).upper()
+                after = "".join(c for c in after if c not in DELETED)
+                j = inside[0] - 1
+                while j >= 0 and tokens[j][2] >= low:
+                    if tokens[j][0] == "word":
+                        tokens[j][0] = "punct"
+                    j -= 1
+            if len(inside) == 1:
+                first[1:] = [before + head + after, low, high]
+            else:
+                first[1:3] = [before + head, low]
+                last[1], last[3] = tail + after, high
+    return tokens
+
+
+def typed(text, version=0):
+    """What the typed check compares: the significant tokens, words whole for a run verified under v7 or later (as the
+    workbench compares them since v6); for an earlier run, runs of joined words, never stricter than v5 and v6."""
+    items = []
+    run = []
+    for kind, canonical, _, _ in typed_tokens(text, version):
         if kind == "punct":
             continue
-        if kind == "word":
-            run.append(surface.casefold())
+        if kind == "word" and version < 7:
+            run.append(canonical)
             continue
         if run:
             items.append(("word", "".join(run)))
             run = []
-        if kind == "number":
-            items.append(("number", number(surface)))
-        elif kind == "currency":
-            symbol = re.match(r"(?:[$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)", surface, re.IGNORECASE).group(0)
-            items.append(("currency", symbol.upper() + number(surface[len(symbol):])))
-        elif kind == "percent":
-            items.append(("percent", number(re.match(r"[\d,]*(?:\.\d+)?", surface).group(0)) + "%"))
-        else:
-            items.append(("section", surface.lower()))
+        items.append((kind, canonical))
     if run:
         items.append(("word", "".join(run)))
     return items
 
 
+def seen(text, at, step):
+    """The two characters a reader sees before (step -1) or after (step 1) the edge before text[at] (verify/spans._seen)."""
+    near = text[max(0, at - 2):at] if step < 0 else text[at:at + 2]
+    if DELETED.isdisjoint(near):
+        return near
+    found = []
+    i = at - 1 if step < 0 else at
+    while 0 <= i < len(text) and len(found) < 2:
+        if text[i] not in DELETED:
+            found.append(text[i])
+        i += step
+    return "".join(reversed(found)) if step < 0 else "".join(found)
 
-def same(found, quote, method):
+
+def written_numbers(text, version=8):
+    """Where each number of text lies as it is written, as the reader sees it (verify/spans._numbers)."""
+    shown = [i for i, ch in enumerate(text) if ch not in DELETED]
+    visible = "".join(text[i] for i in shown)
+    pattern = WRITTEN_V10 if version >= 10 else WRITTEN_V9 if version >= 9 else WRITTEN
+    return [(shown[m.start()], shown[m.end() - 1] + 1) for m in pattern.finditer(visible)]
+
+
+def splits(text, at, numbers, version=8):
+    """Whether the edge before text[at] falls inside a run of letters and digits or a number as written (verify/spans._splits)."""
+    before, after = seen(text, at, -1), seen(text, at, 1)
+    if not before or not after:
+        return False
+    b, a = before[-1:], after[:1]
+    if (b.isalnum() and a.isalnum()) or (b.isdigit() and a in DIGIT_MARKS and after[1:2].isdigit()) or (b in DIGIT_MARKS and before[-2:-1].isdigit() and a.isdigit()):
+        return True
+    attached = ATTACHED_V9 if version >= 9 else ATTACHED
+    if b in attached or a in attached:
+        return any(low < at < high for low, high in numbers)
+    if version < 9:
+        return False
+    # v9: anywhere inside a number written with a sign or parentheses ("-USD 10K", "-Rs. 5M").
+    return any(low < at < high and text[low] in SIGN_OPENERS for low, high in numbers)
+
+
+def edges_hold(text, start, end, version=8):
+    numbers = written_numbers(text, version)
+    return not splits(text, start, numbers, version) and not splits(text, end, numbers, version)
+
+
+def verifier_number(run):
+    found = re.fullmatch(r"v(\d+)", str((run.get("options") or {}).get("verifier_version") or ""))
+    return int(found.group(1)) if found else 0
+
+
+
+def typed_at(text, start, end, version):
+    """The significant tokens of the text the workbench searched, read in place as it read them, that make up
+    text[start:end]; None unless the span begins and ends at the edges of such tokens, as every span its typed tier
+    reports does (verify/tokens.locate_tokens). Read in place, not as a cut-out: a "$" after a digit is no currency
+    sign to the workbench, and a minus sign is read as the reader sees it."""
+    inside = [t for t in typed_tokens(text, version) if t[0] != "punct" and start <= t[2] and t[3] <= end]
+    if not inside or inside[0][2] != start or inside[-1][3] != end:
+        return None
+    return [(t[0], t[1]) for t in inside]
+
+
+def same(found, quote, method, version=0, where=None):
     base = method.split(":")[-1]
     if "unprefixed" in method:
         return bool(alnum(found)) and alnum(quote).endswith(alnum(found))
@@ -123,11 +308,15 @@ def same(found, quote, method):
     if base == "alnum":
         return alnum(found) == alnum(quote)
     if base == "typed":
-        return typed(found) == typed(quote)
+        # From v7 the span is read where it stands in the searched text (where = text, start, end), as the workbench read it.
+        items = typed_at(*where, version) if version >= 7 and where is not None else typed(found, version)
+        return bool(items) and items == typed(quote, version)
     return False
 
 
 def main():
+    # A section's number or heading the console cannot encode (cp1252 when piped on Windows) is escaped, never fatal.
+    sys.stdout.reconfigure(errors="backslashreplace")
     run = json.loads((HERE / "run.json").read_text(encoding="utf-8"))
     sections = {s["id"]: s for s in json.loads((HERE / "sections.json").read_text(encoding="utf-8"))}
     findings = json.loads((HERE / "findings.json").read_text(encoding="utf-8"))
@@ -153,6 +342,12 @@ def main():
     if run.get("guidance_file"):
         report(sha256(HERE / run["guidance_file"]) == run.get("guidance_sha256"), f"guidance: sha256 {str(run.get('guidance_sha256'))[:16]}...")
 
+    version = verifier_number(run)
+    v8 = version >= 8
+    # The run searched each section within its window (what the prompt carried); its edges are read the same way.
+    window = (run.get("verifier") or {}).get("window_chars") or run.get("prompt_window_chars")
+    if v8:
+        print(f"NOTE verified under {run['options']['verifier_version']}: spans are checked with its edges and its signed numbers")
     checked = withheld = 0
     for finding in findings:
         for span in finding["spans"]:
@@ -168,7 +363,13 @@ def main():
             found = section["text"][span["start"] : span["end"]]
             checked += 1
             where = f"section {section['number'] or section['heading']} characters {span['start']}-{span['end']} ({span['method']})"
-            report(same(found, span["quote"], span["method"]), f"{label}: {where}")
+            if v8 and WRITTEN is None:
+                report(False, f"{label}: {where}: a verifier v8 span needs Python 3.11 or later to be checked")
+                continue
+            searched = section["text"][:window] if window else section["text"]
+            in_place = (searched, span["start"], span["end"])
+            ok = same(found, span["quote"], span["method"], version, in_place) and (not v8 or edges_hold(searched, span["start"], span["end"], version))
+            report(ok, f"{label}: {where}")
     slices = {s["section_id"]: s for s in run.get("context_slices", [])}
     model_input = run.get("model_input") or {}
     if model_input.get("user_file") and model_input.get("system_file"):
@@ -195,6 +396,20 @@ def main():
             if span["verified"] and s is not None and span["end"] > s["end"]:
                 beyond += 1
                 print(f"NOTE finding {finding['ordinal'] + 1} span {span['ordinal'] + 1} lies beyond the {s['end']} characters of its section the model was shown")
+    # The contract's own replacement and precedence statements the run recorded: each end is where the record says it is.
+    # A PASS says the words are there; it says nothing about their legal effect.
+    if run.get("relations_file"):
+        relations = json.loads((HERE / run["relations_file"]).read_text(encoding="utf-8"))
+        for index, relation in enumerate(relations):
+            for end in ("statement", "replaced", "replacement"):
+                passage = relation.get(end)
+                if not passage:
+                    continue
+                section = sections.get(passage["section_id"])
+                ok = section is not None and section["text"][passage["start"] : passage["end"]] == passage["text"]
+                report(ok, f"relation {index + 1} ({relation['kind']}) {end}: {passage['label']} characters {passage['start']}-{passage['end']}")
+    elif "relations_file" in run:
+        print(f"NOTE {run.get('relations_note')}")
     print(f"\n{checked} located span(s) checked, {withheld} withheld, {beyond} beyond the model-seen slice, {failures} failure(s)")
     return 1 if failures else 0
 

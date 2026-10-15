@@ -61,7 +61,7 @@ def test_a_comma_after_a_number_is_punctuation_not_part_of_it() -> None:
 
 
 def test_the_version_names_the_new_rule() -> None:
-    assert spans.VERIFIER_VERSION == "v7"
+    assert spans.VERIFIER_VERSION == "v10"  # v8 to v10 keep this rule; v8 adds number edges and signs, v9 amounts, v10 labels
 
 
 _alnum = st.text(alphabet=st.sampled_from(list("ab9x0Z1,. $%-()")), min_size=0, max_size=40)

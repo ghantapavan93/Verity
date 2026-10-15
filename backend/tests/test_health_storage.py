@@ -19,16 +19,23 @@ def test_a_read_only_store_is_not_healthy_and_says_why(client: TestClient, monke
     real_access = os.access
     monkeypatch.setattr(os, "access", lambda path, mode: False if Path(path) == tmp_path else real_access(path, mode))
     body = client.get("/api/health").json()
-    assert body["ok"] is False and "read-only" in body["detail"]
+    assert body["ok"] is False and "read-only" in body["detail"] and body["fault"] == "store"
 
 
 def test_a_nearly_full_store_is_not_healthy_and_publishes_no_byte_count(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shutil, "disk_usage", lambda _path: Usage(10**12, 10**12 - 10**6, 10**6))
     body = client.get("/api/health").json()
-    assert body["ok"] is False and "nearly full" in body["detail"]
+    assert body["ok"] is False and "nearly full" in body["detail"] and body["fault"] == "store"
     assert not any(ch.isdigit() for ch in body["detail"]), "the public endpoint names no sizes"
 
 
 def test_control_a_writable_store_with_room_leaves_health_to_the_model(client: TestClient) -> None:
     body = client.get("/api/health").json()
-    assert body["ok"] is True and shutil.disk_usage(Path.cwd()).free > 0
+    assert body["ok"] is True and body["fault"] == "" and shutil.disk_usage(Path.cwd()).free > 0
+
+
+def test_a_model_that_does_not_answer_is_the_fault_named_and_the_store_is_not(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The interface tells a reader which part is failing: "the model is offline" only when it is the model (F-19)."""
+    monkeypatch.setattr(client.provider, "healthy", lambda: (False, "the model endpoint is not reachable (ConnectError)"))
+    body = client.get("/api/health").json()
+    assert body["ok"] is False and body["fault"] == "model"

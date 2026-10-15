@@ -31,7 +31,9 @@ Fixed decisions, not open for re-litigation in a session:
 - A prompt or retrieval change is judged by the golden set (`docs/GOLDENS.md`): run
   `backend/scripts/run_goldens.py` and keep the change only if the set moves in its favour.
 
-Checks before saying anything is done (CI runs the same):
+Checks before saying anything is done. `scripts/release-gate.sh` runs most of them from a fresh clone, but not
+`npm run format:check`, and mypy over `app` and the exporter only (the wide mypy below reported 16 errors, in three test
+files, on 2026-10-13); main has no CI workflow:
 
 ```
 cd backend && .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m ruff check . && .venv/Scripts/python -m mypy && .venv/Scripts/python -m pytest -q

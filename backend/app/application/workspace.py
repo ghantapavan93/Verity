@@ -51,13 +51,16 @@ def can_read_guidance(guidance: Guidance, workspace: str) -> bool:
     return guidance.workspace_id == workspace or (guidance.workspace_id is None and not is_public(workspace))
 
 
-def grant_document(session: Session, document: Document, workspace: str, name: str | None = None) -> bool:
-    """Let the workspace read the document, under the name it gave the file. True when the grant is new. A grant that
-    exists keeps its name: the model's input for that workspace's runs was built with it."""
-    if session.get(DocumentAccess, (workspace, document.id)) is not None:
-        return False
-    session.add(DocumentAccess(workspace_id=workspace, document_id=document.id, name=name))
-    return True
+def grant_document(session: Session, document: Document, workspace: str, name: str | None = None) -> DocumentAccess:
+    """Let the workspace read the document, under the name it gave the file: its grant, the one it held or a new one. A
+    grant that exists keeps its name: the model's input for that workspace's runs was built with it. A new grant counts
+    against the workspace's quotas, so it is written through quotas.admit (application/ingest_document.py)."""
+    held = session.get(DocumentAccess, (workspace, document.id))
+    if held is not None:
+        return held
+    grant = DocumentAccess(workspace_id=workspace, document_id=document.id, name=name)
+    session.add(grant)
+    return grant
 
 
 # ---------------------------------------------------------------------------- loaders that refuse like a miss

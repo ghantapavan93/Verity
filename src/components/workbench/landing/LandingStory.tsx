@@ -252,7 +252,7 @@ export function OneRun({
     },
     {
       n: "03",
-      title: "Code checks the quote, then the arithmetic",
+      title: "Code checks the quote, then what it can compare",
       text: `${found}${lead.statusReason ? ` Then: ${lead.statusReason}.` : ""} Status: ${status}.`,
       link: "See what code decided",
       finding: true,
@@ -306,8 +306,14 @@ function whereItGoes(place: { hosted: boolean; place: string } | null): { head: 
   const record = "The run keeps the hash of every input, and the evidence pack checks itself without this service.";
   return place.hosted
     ? {
-        head: "It sends the contract to its model and nowhere else.",
-        text: `The model runs on ${place.place}: the question, the guidance and the sections retrieval chose go there to be answered. ${record}`,
+        // Hosted, the contract has three handlers, and each is named: Cloudflare at the edge, the server that keeps it,
+        // and the model that answers. "To its model and nowhere else" left out the first two (war room F-06, 2026-10-13).
+        // What reaches the model is listed whole, as analysis/service.py build_user_message sends it: "only the sections
+        // a question needs" left out the file's name and the guidance, and the opening sections retrieval hands over
+        // when it ranks none (runs/service.py _retrieve; counter-review, 2026-10-13). The numbers are the deployed
+        // settings (WORKBENCH_RETRIEVAL_K, WORKBENCH_SECTION_WINDOW), pinned by backend/tests/test_docs_claims.py.
+        head: "It keeps the contract on its own server and sends its model the question and sections of the contract.",
+        text: `An upload reaches the Verity server through Cloudflare, which serves this site and so handles its traffic. With each question, the model on ${place.place} is sent the question, any guidance, the contract's file name and the sections retrieval ranked for the question, at most six and each cut at 6,000 characters; when it ranks none, the opening six go instead, which for a short contract is all of it. ${record}`,
       }
     : {
         head: "It sends the contract to no model provider.",
@@ -320,7 +326,7 @@ export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place
   const lines = [
     {
       head: "It does not read the whole agreement.",
-      text: "Up to six sections per question, chosen by retrieval, or the opening sections when retrieval ranks none; the rest of the contract is not read. Every answer says how many it was handed and how they were chosen, and the memo repeats it.",
+      text: "Up to six sections per question, chosen by retrieval, and up to two more the contract itself points to from them (a definition they use, an amendment, a clause they cite); or the opening sections when retrieval ranks none. The rest of the contract is not read. Every answer says how many it was handed and why, and the memo repeats it.",
     },
     {
       head: "It does not pass a clause on its own.",

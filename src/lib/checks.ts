@@ -11,7 +11,7 @@ import { codeAccount, decidedByCode, passageLabel, type FindingView, type Sectio
  */
 export type CheckBy = "code" | "model" | "person" | "nobody";
 
-export type CheckRow = { key: "quote" | "support" | "numbers" | "comparison" | "context" | "person"; label: string; text: string; by: CheckBy };
+export type CheckRow = { key: "quote" | "support" | "numbers" | "comparison" | "unseen" | "context" | "person"; label: string; text: string; by: CheckBy };
 
 function listed(items: string[]): string {
   return items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
@@ -94,10 +94,14 @@ export function checkLedger(
       text: finding.statusReason ? `${account.role}: ${finding.statusReason}` : account.sentence,
       by: "code",
     });
-  } else if (source === "model_hint" && finding.statusReason) {
+  } else if (source === "model_hint" && finding.statusReason && finding.codeCompared) {
     // Code compared the periods and left the model's status standing: policy v3 lowers, never confirms. The comparison
     // is code's and is said; the status is not (round 2 review: AD15 read "Nothing" while code had compared 120 with 90).
     rows.push({ key: "comparison", label: "Compared", text: `Code compared: ${finding.statusReason}. The status is still the model's view.`, by: "code" });
+  } else if (source === "model_hint" && finding.statusReason && !finding.unseenReason) {
+    // A reason that is not a comparison (the model reported the point as not found): "Code compared" over it was false
+    // (release integration, 2026-10-13). Whether code compared is the API's to say (FindingOut.code_compared).
+    rows.push({ key: "comparison", label: "Compared", text: `Nothing: ${finding.statusReason}`, by: "nobody" });
   } else if (source === "no_evidence") {
     rows.push({ key: "comparison", label: "Compared", text: "Nothing: no passage was found to compare", by: "nobody" });
   } else {
@@ -110,6 +114,12 @@ export function checkLedger(
         : "Nothing: no guidance was given to compare against; the status is the model's view",
       by: "nobody",
     });
+  }
+
+  // A quoted sentence that points at a section the model was not handed: its status was set without that text, and the
+  // card says so in a row of its own, whatever the status (policy-v8; release integration, 2026-10-13).
+  if (finding.unseenReason) {
+    rows.push({ key: "unseen", label: "Not shown", text: unseenNote(finding.unseenReason), by: "code" });
   }
 
   if (context) {
@@ -151,6 +161,11 @@ export function runOutcome(outcomes: Record<string, number> | undefined, hasGuid
  * passage, the model's; code says only that there was a choice. Evaluation workstream, 2026-10-09: a band table quoted
  * word for word held 5%, 10% and 25%, the answer chose 5% where the band gives 10%, and the card showed a plain answer.
  */
+/** Code's sentence on sections the quote's sentence points at that the model was not handed, as the memo words it. */
+export function unseenNote(unseenReason: string): string {
+  return `Code found that ${unseenReason}. The answer may depend on it, and nothing checked that.`;
+}
+
 export function valueNotes(finding: FindingView): string[] {
   if (finding.evidenceKind === "coverage") return [];
   return (finding.valueChoices ?? []).map((choice) => {

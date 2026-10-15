@@ -23,7 +23,12 @@ runner and the regression report are `backend/scripts/run_goldens.py`. The inter
    an entry in `DECISIONS.md` that says why the original expectation was wrong.
 4. **Code judges.** A verdict is computed from the run record: the run's stage and reason, each
    finding's status, and each evidence span's verified flag, method and section. No one reads a
-   run and decides it "looks right".
+   run and decides it "looks right". Nor does the judge: it never reads the answer's words, so a
+   run that cites the expected section with the expected status passes whatever its conclusion
+   says. A review probe (2026-10-13) passed g35 with the wrong number of days and g37 with its answer
+   inverted. A score here is a score of citations and statuses, not of answers; the
+   `numeric_precision` and `negation` categories cannot see a number or a polarity until their
+   goldens carry an expected value.
 5. **The comparison is between recorded runs.** Runs are immutable and fingerprinted on their
    inputs (document, guidance, question, prompt hash, model and decoding options), so the same
    golden under the same prompt and model is one run, reused. Re-running the set never

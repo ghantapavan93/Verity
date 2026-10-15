@@ -108,7 +108,9 @@ def test_custom_heading_styles_are_read_by_name_and_by_outline_level() -> None:
     document.save(buffer)
 
     parsed = ingest("special-terms.docx", buffer.getvalue())
-    assert [(s.number, s.heading) for s in parsed.sections] == [("1", "Special Term 1 - Definitions"), ("1.1", "Convictions"), ("1.2", "Locations")]
+    # Read as headings by name and by outline level; Word numbers none of them, so none is given a number (reader v13:
+    # until then each was given one computed from its level, a number the document never shows).
+    assert [(s.number, s.heading) for s in parsed.sections] == [("", "Special Term 1 - Definitions"), ("", "Convictions"), ("", "Locations")]
     assert parsed.sections[1].text == "means any previous or pending prosecutions, convictions or cautions."
 
 
@@ -120,11 +122,12 @@ def test_docx_without_revisions_reports_none() -> None:
 def test_docx_becomes_numbered_sections_with_tables_in_order() -> None:
     parsed = ingest("sample.docx", make_docx())
     assert parsed.media_type.endswith("wordprocessingml.document")
+    # python-docx's Heading styles carry no Word numbering: the document shows no numbers, and none is computed (v13).
     assert [(s.number, s.heading) for s in parsed.sections] == [
         ("", "Master Services Agreement"),
-        ("1", "Term"),
-        ("2", "Termination"),
-        ("2.1", "Termination for Convenience"),
+        ("", "Term"),
+        ("", "Termination"),
+        ("", "Termination for Convenience"),
     ]
     assert "fifteen (15) days’ written notice" in parsed.sections[3].text
     assert "Fee | USD 1,000" in parsed.sections[3].text

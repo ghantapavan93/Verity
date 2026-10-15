@@ -855,6 +855,8 @@ export interface components {
             heading: string;
             /** Label */
             label: string;
+            /** Linked */
+            linked?: string | null;
             /**
              * Number
              * @default
@@ -1121,6 +1123,8 @@ export interface components {
             heading: string;
             /** Label */
             label: string;
+            /** Linked */
+            linked?: string | null;
             /**
              * Number
              * @default
@@ -1367,14 +1371,35 @@ export interface components {
         };
         /** FindingOut */
         FindingOut: {
+            /**
+             * Codecompared
+             * @default false
+             */
+            codeCompared: boolean;
+            /**
+             * Concerns
+             * @default []
+             */
+            concerns: string[];
             /** Conclusion */
             conclusion: string;
+            /**
+             * Decidedby
+             * @default model
+             * @enum {string}
+             */
+            decidedBy: "code" | "model" | "withheld";
             /**
              * Evidencekind
              * @default passage
              * @enum {string}
              */
             evidenceKind: "passage" | "coverage";
+            /**
+             * Flagged
+             * @default false
+             */
+            flagged: boolean;
             /** Guidancereference */
             guidanceReference: string | null;
             /** Id */
@@ -1391,6 +1416,11 @@ export interface components {
             modelConclusion: string;
             /** Observed */
             observed: string | null;
+            /**
+             * Relations
+             * @default []
+             */
+            relations: components["schemas"]["RelationNoteOut"][];
             /** Required */
             required: string | null;
             review?: components["schemas"]["ReviewOut"] | null;
@@ -1417,6 +1447,8 @@ export interface components {
              * @default []
              */
             unquotedValues: string[];
+            /** Unseenreason */
+            unseenReason?: string | null;
             /**
              * Valuechoices
              * @default []
@@ -1432,10 +1464,21 @@ export interface components {
              * @default []
              */
             citations: string[];
+            /**
+             * Concerns
+             * @default []
+             */
+            concerns: string[];
             /** Conclusion */
             conclusion: string;
             /** Createdat */
             createdAt: string;
+            /**
+             * Decidedby
+             * @default model
+             * @enum {string}
+             */
+            decidedBy: "code" | "model" | "withheld";
             /** Documentid */
             documentId: string;
             /** Documentname */
@@ -1446,6 +1489,11 @@ export interface components {
              * @enum {string}
              */
             evidenceKind: "passage" | "coverage";
+            /**
+             * Flagged
+             * @default false
+             */
+            flagged: boolean;
             /**
              * Hasguidance
              * @default false
@@ -1701,6 +1749,12 @@ export interface components {
             access: "off" | "required" | "entered";
             /** Detail */
             detail: string;
+            /**
+             * Fault
+             * @default
+             * @enum {string}
+             */
+            fault: "" | "store" | "model";
             /** Model */
             model: string;
             /**
@@ -1779,6 +1833,22 @@ export interface components {
              */
             state: "off" | "awake" | "waking" | "limit";
         };
+        /**
+         * PassageOut
+         * @description Where a statement or a provision is: offsets into the stored text of its section, and that text.
+         */
+        PassageOut: {
+            /** End */
+            end: number;
+            /** Label */
+            label: string;
+            /** Sectionid */
+            sectionId: string;
+            /** Start */
+            start: number;
+            /** Text */
+            text: string;
+        };
         /** ProposalEvidence */
         ProposalEvidence: {
             /** Citedlabel */
@@ -1804,6 +1874,50 @@ export interface components {
             statusSource: string;
             /** Summary */
             summary: string;
+        };
+        /**
+         * RelationNoteOut
+         * @description What one recorded relation means for one finding: "replaced" (the answer quotes text replaced in full and neither
+         *     quotes the replacement nor states a value only it states, for a question about the agreement as it stands; code set
+         *     the status), "scoped", "precedence", "dated" (the question names a time) or "old_value" (the answer quotes the
+         *     replacement and states only the replaced values): a concern code cannot resolve; or "context" (nothing to resolve).
+         */
+        RelationNoteOut: {
+            /**
+             * Effect
+             * @enum {string}
+             */
+            effect: "replaced" | "scoped" | "precedence" | "dated" | "old_value" | "context";
+            relation: components["schemas"]["RelationOut"];
+            /** Sentence */
+            sentence: string;
+        };
+        /**
+         * RelationOut
+         * @description A statement the contract makes about its own provisions, located by code (runs.relations): that a provision is
+         *     replaced, with its own text and the new wording where found, and any stated limit; or that its parts rank for a
+         *     conflict. A fact about the text, not a ruling on its effect.
+         */
+        RelationOut: {
+            /** Effective */
+            effective?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "replaces" | "precedence";
+            /**
+             * Parts
+             * @default []
+             */
+            parts: string[];
+            replaced?: components["schemas"]["PassageOut"] | null;
+            replacement?: components["schemas"]["PassageOut"] | null;
+            /** Scope */
+            scope?: string | null;
+            statement: components["schemas"]["PassageOut"];
+            /** Target */
+            target?: string | null;
         };
         /** ReviewIn */
         ReviewIn: {
@@ -1900,6 +2014,8 @@ export interface components {
             rawOutput: string | null;
             /** Reason */
             reason?: ("insufficient_evidence" | "citations_unverified" | "invalid_output" | "provider_error" | "internal_error") | null;
+            /** Relations */
+            relations?: components["schemas"]["RelationOut"][] | null;
             /** Retrievalmode */
             retrievalMode?: ("lexical_match" | "hybrid_match" | "opening_fallback") | null;
             /**
@@ -2013,6 +2129,8 @@ export interface components {
             question: string;
             /** Reason */
             reason?: ("insufficient_evidence" | "citations_unverified" | "invalid_output" | "provider_error" | "internal_error") | null;
+            /** Relations */
+            relations?: components["schemas"]["RelationOut"][] | null;
             /** Retrievalmode */
             retrievalMode?: ("lexical_match" | "hybrid_match" | "opening_fallback") | null;
             /**
@@ -2152,6 +2270,11 @@ export interface components {
             quote: string;
             /** Sectionid */
             sectionId: string | null;
+            /**
+             * Sectionlabel
+             * @default
+             */
+            sectionLabel: string;
             /** Start */
             start: number;
             /** Verified */

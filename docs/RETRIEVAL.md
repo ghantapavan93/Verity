@@ -68,6 +68,9 @@ under it. It becomes the default only with no regression there. The embedding mo
 
 ## The goldens under both retrievers, 2026-09-29, reader v4, verifier v2, Qwen3 8B, answer-v2
 
+A golden passes on the run's stage, its statuses and the sections its verified quotes sit in; the judge never reads the
+answer's words (`docs/GOLDENS.md`, rule 4).
+
 | Retriever | Pass | Fails |
 |---|---|---|
 | BM25 | 37 of 44 | g08, g11, g12, g26, g35, g42, g44 |
@@ -150,7 +153,8 @@ covenant"; "uncapped liability" against "shall not be limited". The field's answ
 model-free form is a table: seven concept groups (`retrieval/aliases.py`, non-compete, non-solicit, uncapped and capped
 liability, termination for convenience, governing law, assignment, confidentiality), each phrase added once to the BM25
 query when the question names the concept, the table versioned by its hash and recorded on the run
-(`retrieval_aliases`). Off by default.
+(`retrieval_aliases`). Off by default when it was built; on by default since the measurement below
+(`config.py`, `WORKBENCH_RETRIEVAL_ALIASES`).
 
 `eval_retrieval.py` with `WORKBENCH_RETRIEVAL_ALIASES=1`:
 
@@ -172,3 +176,41 @@ whether the model then answers from it is the batch's question, not this table's
 seven failures, no gain and no regression, as the unchanged golden Recall@6 predicted. Under the rule, **the table is
 on by default** (`WORKBENCH_RETRIEVAL_ALIASES`), its hash on every run. What it earned is on the CUAD sets above, not
 on the goldens; a run with the table off keeps the fingerprint every earlier run has.
+
+## The sections a clause depends on: retrieval-v2 (2026-10-14, BM25, no model call)
+
+BM25 ranks sections by the question's words; the language that decides what a ranked clause means can share none of
+them: the definition of a term it uses ("Business Day", "Initial Term"), an amendment that replaces it ("Section 4.1 of
+the Lease is reduced to $7,980.00"), a clause it is subject to ("subject to Section 8.5"). A study of ten unfamiliar
+agreements (synthetic: SaaS, an amended lease, an asset purchase with a negative adjustment, employment, distribution,
+an NDA, a loan, a services agreement with a schedule, a 64-clause supply agreement, a licence whose definitions change
+its terms), each in TXT, styled DOCX, unstyled DOCX and PDF, with 49 hand-labelled questions (the controlling clause and
+every other passage a correct answer needs), found every needed passage handed in 121 of 147 question-format cases
+(TXT, styled DOCX, PDF); definitions in 28 of 42; and one PDF reading handed the superseded rent without the amendment.
+Study and scripts: outside the repository.
+
+**Rule** (`backend/app/runs/links.py`): after the ranking, follow one hop from the top three ranked sections (an
+amendment of them, a definition they use, a clause or schedule they cite, in that order of priority) and add at most two
+sections after the ranked ones, only while the handed text stays within k full windows, so the worst-case prompt does not
+grow. Every added section is recorded with why (`candidates_json` `linked`), and the memo and the answer's explanation
+say so.
+
+| Measure | Before (retrieval-v1) | retrieval-v2 |
+|---|---|---|
+| Study: every needed passage handed (147 question-format cases) | 121 | 137 |
+| Study: definitions handed | 28 of 42 | 42 of 42 |
+| Study: superseded text handed without its amendment | 1 | 0 |
+| Control (202 labelled cases: CUAD-30, SkillOpt-30, goldens), R@6 with links against without | 0.965 | 0.965 |
+| Mean section characters handed, control | 17,115 | 19,700 (+15%) |
+
+The links move no control case (none of the control spans sits in a definition or an amendment); they cost 15% more
+handed text there. BM25 at k = 8 would reach R@8 0.980 on the control for +21%, and 130 of 147 on the study: depth wins
+on controlling clauses, links on the passages a clause depends on. Swapping links in for ranks 5 and 6, a wider list of
+amending words, and light stemming were each measured and rejected (the study's report). Link-following takes 0.6 to
+1.5 s on the corpus's largest filings (2.7 to 4.5 MB, up to 7,165 sections), each document read once per call.
+
+The reader changes of the same day (headings in a DOCX that uses no heading style, title-cased titles that end in a full
+stop, ARTICLE lines joined to their titles, long wrapped clause lines as body) moved the control's BM25 R@6 from 0.970
+to 0.965: one SkillOpt contract that the earlier reading cut into four blocks, each of which carried every span, is now
+read into its clauses, and its cap on liability sits in §4.2, ranked seventh. The study's unstyled DOCX went from 0 of
+293 headings to 293 of 293, and its TXT and PDF readings from 260 to 275.

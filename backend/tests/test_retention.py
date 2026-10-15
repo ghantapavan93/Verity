@@ -17,6 +17,7 @@ from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -28,7 +29,7 @@ from app.application.start_run import start_run
 from app.db import SessionLocal
 from app.models import Document, DocumentAccess, Memo, Run, VisitorWorkspace, utcnow
 from tests.support import CONTRACT
-from tests.test_anonymous import Visitor, arrive, public  # noqa: F401  (the fixture)
+from tests.test_anonymous import Visitor, arrive
 from tests.test_workspaces import QUESTION, Reviewer, make_curated, work
 
 
@@ -48,7 +49,7 @@ def triggers() -> dict[str, str]:
         return {str(r[0]): str(r[1]) for r in connection.execute(text("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'"))}
 
 
-def test_an_ended_workspace_goes_with_everything_it_held(public: TestClient) -> None:  # noqa: F811
+def test_an_ended_workspace_goes_with_everything_it_held(public: TestClient) -> None:
     a, _ = arrive(public)
     ids = work(cast(Reviewer, a))
     with SessionLocal() as session:
@@ -75,7 +76,7 @@ def test_an_ended_workspace_goes_with_everything_it_held(public: TestClient) -> 
     assert again.get("/api/documents").json() == []
 
 
-def test_bytes_another_visitor_holds_stay_theirs(public: TestClient) -> None:  # noqa: F811
+def test_bytes_another_visitor_holds_stay_theirs(public: TestClient) -> None:
     a, _ = arrive(public)
     b, _ = arrive(public, address="198.51.100.8")
     document = a.post("/api/documents", files={"file": ("a-name.txt", CONTRACT.encode(), "text/plain")}).json()
@@ -92,7 +93,7 @@ def test_bytes_another_visitor_holds_stay_theirs(public: TestClient) -> None:  #
         assert (config.settings.data_dir / "documents" / f"{stored.sha256}.txt").is_file()
 
 
-def test_the_triggers_come_back_exactly_and_still_refuse(public: TestClient) -> None:  # noqa: F811
+def test_the_triggers_come_back_exactly_and_still_refuse(public: TestClient) -> None:
     a, _ = arrive(public)
     b, _ = arrive(public, address="198.51.100.8")
     work(cast(Reviewer, a))
@@ -106,7 +107,7 @@ def test_the_triggers_come_back_exactly_and_still_refuse(public: TestClient) -> 
         connection.execute(text("DELETE FROM runs WHERE id = :r"), {"r": kept["run"]})
 
 
-def test_a_purge_that_fails_part_way_leaves_the_triggers_and_the_rows(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: F811
+def test_a_purge_that_fails_part_way_leaves_the_triggers_and_the_rows(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """The drop, the deletes and the recreation are one transaction under the write lock: a failure after the triggers
     were dropped puts them back with everything else (python's sqlite3 does not begin a transaction before DDL)."""
     from app.application import retention
@@ -127,7 +128,7 @@ def test_a_purge_that_fails_part_way_leaves_the_triggers_and_the_rows(public: Te
         assert session.get(Run, ids["run"]) is not None and session.get(VisitorWorkspace, workspace) is not None
 
 
-def test_a_workspace_with_a_question_in_progress_waits(public: TestClient) -> None:  # noqa: F811
+def test_a_workspace_with_a_question_in_progress_waits(public: TestClient) -> None:
     a, _ = arrive(public)
     document = a.post("/api/documents", files={"file": ("a.txt", CONTRACT.encode(), "text/plain")}).json()
     workspace = workspace_for(a.subject)
@@ -141,7 +142,7 @@ def test_a_workspace_with_a_question_in_progress_waits(public: TestClient) -> No
         assert session.get(VisitorWorkspace, workspace) is not None and session.get(Document, document["id"]) is not None
 
 
-def test_the_owner_and_the_curated_record_are_never_candidates(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: F811
+def test_the_owner_and_the_curated_record_are_never_candidates(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     curated = make_curated(public)
     # An invited reader's record, made as an owner instance makes it (a public one refuses invited readers).
     monkeypatch.setattr(config.settings, "anonymous_sessions", False)
@@ -158,7 +159,7 @@ def test_the_owner_and_the_curated_record_are_never_candidates(public: TestClien
             assert session.get(Document, document_id) is not None, document_id
 
 
-def test_the_sweep_removes_only_old_files_no_row_names(public: TestClient) -> None:  # noqa: F811
+def test_the_sweep_removes_only_old_files_no_row_names(public: TestClient) -> None:
     a, _ = arrive(public)
     a.post("/api/documents", files={"file": ("a.txt", CONTRACT.encode(), "text/plain")})
     folder = config.settings.data_dir / "documents"
@@ -173,7 +174,7 @@ def test_the_sweep_removes_only_old_files_no_row_names(public: TestClient) -> No
     assert not orphan_old.exists() and orphan_young.exists() and named.exists()
 
 
-def test_the_sweep_removes_old_partial_writes_whatever_hash_they_carry(public: TestClient) -> None:  # noqa: F811
+def test_the_sweep_removes_old_partial_writes_whatever_hash_they_carry(public: TestClient) -> None:
     """A crash between writing an upload's partial file and renaming it leaves visitor bytes no row will ever name:
     past the grace no upload is still writing them, so they go too (an audit finding, 2026-10-09)."""
     a, _ = arrive(public)
@@ -195,7 +196,7 @@ def test_the_sweep_removes_old_partial_writes_whatever_hash_they_carry(public: T
     assert young.exists() and named.exists(), "control: a write in progress and a named file stay"
 
 
-def test_the_sweep_removes_a_memo_draft_a_killed_process_left(public: TestClient) -> None:  # noqa: F811
+def test_the_sweep_removes_a_memo_draft_a_killed_process_left(public: TestClient) -> None:
     """A memo's DOCX is written under memos/pending/<token>/ before it is moved beside the others; a process killed in
     between left the visitor's draft there for good, below the sweep's reach (cloud readiness review, 2026-10-12)."""
     pending = config.settings.data_dir / "memos" / "pending"
@@ -211,7 +212,25 @@ def test_the_sweep_removes_a_memo_draft_a_killed_process_left(public: TestClient
     assert (young / "memo-run.docx").exists(), "control: a memo being written stays"
 
 
-def test_the_corpus_tools_are_not_a_visitors(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: F811
+def test_the_sweep_removes_a_reading_file_a_killed_process_left(public: TestClient) -> None:
+    """A reading hands its file to its child in a folder of its store's own (ingest/bounded.py); a process killed in the
+    meantime left the contract in the system's temporary folder, which nothing empties on Windows (Codex review, round
+    3). The API's start points readings at the store's folder; the sweep removes what outlived a reading there."""
+    from app.ingest import bounded
+
+    folder = bounded.handoff_folder(config.settings.data_dir)
+    assert folder == bounded.HANDOFF_DIR, "the API's start points readings at its store's folder"
+    old, young = folder / f"{bounded.HANDOFF_PREFIX}old", folder / f"{bounded.HANDOFF_PREFIX}young"
+    for path in (old, young):
+        path.write_bytes(b"a visitor's contract")
+    hours_ago = time.time() - 2 * 3600
+    os.utime(old, (hours_ago, hours_ago))
+    assert sweep_orphaned_files(db_module.engine) == 1
+    assert not old.exists() and young.exists(), "control: a reading under way keeps its file"
+    young.unlink()
+
+
+def test_the_corpus_tools_are_not_a_visitors(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     visitor, _ = arrive(public)
     for path in ("/api/engineering/goldens", "/api/engineering/families", "/api/batches"):
         assert visitor.get(path).status_code == 404, path
@@ -220,7 +239,7 @@ def test_the_corpus_tools_are_not_a_visitors(public: TestClient, monkeypatch: py
     assert invited.get("/api/batches").status_code == 200, "control: an invited reader still has them"
 
 
-def test_a_public_run_never_touches_the_owner_store(public: TestClient) -> None:  # noqa: F811
+def test_a_public_run_never_touches_the_owner_store(public: TestClient) -> None:
     owner = config.BACKEND_DIR / "data"
     snapshot = {p: (p.stat().st_mtime_ns, p.stat().st_size) for p in owner.rglob("*") if p.is_file()} if owner.exists() else {}
     assert config.settings.data_dir != owner
@@ -233,7 +252,7 @@ def test_a_public_run_never_touches_the_owner_store(public: TestClient) -> None:
     assert after == snapshot
 
 
-def test_the_public_process_refuses_a_store_with_owner_records(public: TestClient) -> None:  # noqa: F811
+def test_the_public_process_refuses_a_store_with_owner_records(public: TestClient) -> None:
     """Pointing the public API at the owner's store (curated or invited records in it) stops it at start."""
     make_curated(public)
     from app.main import create_app
@@ -242,7 +261,7 @@ def test_the_public_process_refuses_a_store_with_owner_records(public: TestClien
         pass
 
 
-def test_an_ended_workspaces_text_does_not_survive_in_the_store_files(public: TestClient) -> None:  # noqa: F811
+def test_an_ended_workspaces_text_does_not_survive_in_the_store_files(public: TestClient) -> None:
     # Release trust review, 2026-10-11: SQLite leaves a deleted row's bytes in the database file's free pages, and in the
     # write-ahead log, until something overwrites them. The rows went; the contract's text could stay on disk
     # indefinitely, which is not what "deleted 7 days after your first visit" says.
@@ -268,7 +287,7 @@ def test_an_ended_workspaces_text_does_not_survive_in_the_store_files(public: Te
     assert [d["name"] for d in b.get("/api/documents").json()] == ["b.txt"]
 
 
-def test_a_checkpoint_a_reader_held_up_is_finished_by_the_next_hourly_pass(public: TestClient) -> None:  # noqa: F811
+def test_a_checkpoint_a_reader_held_up_is_finished_by_the_next_hourly_pass(public: TestClient) -> None:
     # Review of 8037873 (N4): a visitor reading while a purge ends leaves the ended text in the database file, because
     # the checkpoint cannot copy the zeroed pages over it. The next hourly pass must finish that even when no other
     # workspace has expired, or the text stays until one does.
@@ -293,9 +312,77 @@ def test_a_checkpoint_a_reader_held_up_is_finished_by_the_next_hourly_pass(publi
     finally:
         reader.close()
     with db_module.engine.connect() as connection:  # control: the pooled connection still waits for writers as before
-        assert connection.exec_driver_sql("PRAGMA busy_timeout").scalar() > 0
+        assert (connection.exec_driver_sql("PRAGMA busy_timeout").scalar() or 0) > 0
     quiet = purge_expired_workspaces(db_module.engine)
     assert quiet.workspaces == [] and quiet.checkpointed
     for path in (store, store.with_name(store.name + "-wal")):
         if path.exists():
             assert b"quokka-7f3a" not in path.read_bytes(), path.name
+
+
+def test_an_upload_read_while_its_workspace_was_purged_writes_nothing(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """War room W5 p6: an upload let in before retention purged its workspace wrote its grant, document and file after
+    the purge, into a workspace no longer listed, and no later purge would ever delete them. A public workspace now takes
+    a row only while it is open, counted under the write lock retention deletes under."""
+    import threading
+
+    from sqlalchemy import func, select
+
+    from app.application import ingest_document as ingest_module
+    from app.hashing import sha256_bytes
+    from app.ingest import ingest as read_contract
+
+    visitor, _ = arrive(public, address="198.51.100.120")
+    workspace = workspace_for(visitor.subject)
+    reading, purged = threading.Event(), threading.Event()
+
+    def held_reading(name: str, data: bytes, **_kwargs: object) -> object:
+        reading.set()
+        assert purged.wait(30)
+        return read_contract(name, data)
+
+    monkeypatch.setattr(ingest_module, "read_file", held_reading)
+    folder = config.settings.data_dir / "documents"
+    files_before = set(folder.iterdir()) if folder.exists() else set()
+    body = f"{CONTRACT}\nRead across a purge.".encode()
+    answer: dict[str, object] = {}
+    upload = threading.Thread(target=lambda: answer.update(r=visitor.post("/api/documents", files={"file": ("c.txt", body, "text/plain")})))
+    upload.start()
+    assert reading.wait(30), "the upload passed the gate and began reading"
+    assert purge_expired_workspaces(db_module.engine, now=utcnow() + timedelta(days=8)).workspaces == [workspace]
+    purged.set()
+    upload.join()
+    response = cast(Response, answer["r"])
+    assert response.status_code == 401 and "nothing was added" in response.json()["detail"]
+    with SessionLocal() as session:
+        assert session.scalar(select(func.count()).select_from(DocumentAccess).where(DocumentAccess.workspace_id == workspace)) == 0
+        assert session.scalar(select(func.count()).select_from(Document).where(Document.sha256 == sha256_bytes(body))) == 0
+    assert (set(folder.iterdir()) if folder.exists() else set()) == files_before
+
+
+def test_guidance_or_a_question_for_an_ended_workspace_writes_nothing(public: TestClient) -> None:
+    """The other rows a public workspace adds, asked for by a request let in before its end: refused where written."""
+    from sqlalchemy import func, select
+
+    from app.application.quotas import admit, run_quotas
+    from app.application.save_guidance import save_guidance
+    from app.errors import AccessRequired
+    from app.models import Guidance
+
+    visitor, _ = arrive(public, address="198.51.100.121")
+    workspace = end(visitor)
+    with SessionLocal() as session:
+        with pytest.raises(AccessRequired):
+            save_guidance(session, "Prefer a mutual cap on liability.", workspace=workspace)
+        with pytest.raises(AccessRequired):
+            admit(session, run_quotas(workspace), lambda: None)
+        assert session.scalar(select(func.count()).select_from(Guidance).where(Guidance.workspace_id == workspace)) == 0
+
+
+def test_control_an_open_workspace_still_saves_guidance(public: TestClient) -> None:
+    from app.application.save_guidance import save_guidance
+
+    visitor, _ = arrive(public, address="198.51.100.122")
+    workspace = workspace_for(visitor.subject)
+    with SessionLocal() as session:
+        assert save_guidance(session, "Prefer a mutual cap on liability.", workspace=workspace).created

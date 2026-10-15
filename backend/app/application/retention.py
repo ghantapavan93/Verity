@@ -26,6 +26,7 @@ from sqlalchemy import Connection, Engine, text
 
 from ..config import settings
 from ..db import immutability_triggers
+from ..ingest.bounded import HANDOFF_PREFIX, handoff_folder
 from ..ingest.readers import SUFFIX_OF
 from ..models import TERMINAL_STAGES, utcnow
 
@@ -152,8 +153,8 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None) -> Pur
 
 def sweep_orphaned_files(engine: Engine, now: datetime | None = None) -> int:
     """Files in the public store that no row names any more, older than SWEEP_GRACE: what a crash between a purge's
-    commit and its unlinks would leave, and an upload's partial file left by a crash before its rename (no row ever
-    names a partial, and none is still being written after the grace)."""
+    commit and its unlinks would leave, an upload's partial file left by a crash before its rename (no row ever names a
+    partial, and none is still being written after the grace), a memo's draft, and a reading's handed-over file."""
     cutoff = (now or utcnow()).timestamp() - SWEEP_GRACE.total_seconds()
     removed = 0
     with engine.connect() as connection:
@@ -173,6 +174,11 @@ def sweep_orphaned_files(engine: Engine, now: datetime | None = None) -> int:
         if folder.is_dir() and all(p.stat().st_mtime < cutoff for p in [folder, *drafts]):
             removed += sum(_unlink(p) for p in drafts)
             shutil.rmtree(folder, ignore_errors=True)
+    # A file handed to a reading's child (ingest/bounded.py) lives for the reading, at most seconds; one older than the
+    # grace was left by a process killed mid-reading. The API's start empties the folder too.
+    for path in handoff_folder(settings.data_dir).glob(f"{HANDOFF_PREFIX}*"):
+        if path.is_file() and path.stat().st_mtime < cutoff:
+            removed += _unlink(path)
     return removed
 
 

@@ -16,6 +16,7 @@ import styles from "./StateStory.module.css";
 import { errorMessage, getContractState } from "@/lib/api";
 import { shortHash } from "@/lib/format";
 import type { ContractStateView, StateArrivalView } from "@/lib/types";
+import { INDEPENDENCE } from "@/lib/independence";
 
 const grouped = new Intl.NumberFormat("en-US");
 const fmt = (n: number | null | undefined, digits = 0) =>
@@ -331,8 +332,8 @@ function Shell({ children, provenance }: { children: React.ReactNode; provenance
       <main id="main" className={styles.main}>
         {children}
       </main>
-      {provenance && (
-        <footer className={styles.footer}>
+      <footer className={styles.footer}>
+        {provenance && (
           <p>
             Recorded by the contract-state experiment{provenance.sourceCommit ? ` at commit ${shortHash(provenance.sourceCommit, 7)}` : ""}. Replayed here from{" "}
             <code>{provenance.source}</code>
@@ -349,8 +350,9 @@ function Shell({ children, provenance }: { children: React.ReactNode; provenance
                 : "."}{" "}
             Nothing on this page is live.
           </p>
-        </footer>
-      )}
+        )}
+        <p>{INDEPENDENCE}</p>
+      </footer>
     </div>
   );
 }

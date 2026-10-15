@@ -52,6 +52,7 @@ function finding(review: FindingView["review"]): FindingView {
     review,
     latestReviewId: review ? 7 : 0,
     spans: [{ sectionId: "s0", verified: true, method: "relocated:exact", quote: QUOTE, start: 4136, end: 4284, citedSectionLabel: "sec_4", matchCount: 1 }],
+    relations: [], // the API always sends the list (runs.relations); empty when the contract's statements touch nothing
   } as unknown as FindingView;
 }
 
@@ -204,6 +205,26 @@ describe("EvidenceDrawer", () => {
     expect(code.textContent).not.toContain("Code found");
     expect(within(code).getByText("Within guidance (model's view)")).toBeTruthy();
     expect(within(code).getByRole("heading", { name: "Guidance given" })).toBeTruthy();
+    await screen.findByText("Its hint");
+  });
+
+  it("says a pass rests on a section the model was not shown, and does not show its source as settled", async () => {
+    // Release integration, 2026-10-13: policy-v8 names the unseen section in the reason; the drawer showed it only as
+    // the status sentence, with the source cell in the pass colour.
+    const unseen = "the sentence points at §9, which was not handed to the model";
+    const hinted = {
+      ...finding(null),
+      status: "pass",
+      statusSource: "model_hint",
+      statusReason: unseen,
+      codeCompared: false,
+      unseenReason: unseen,
+    } as unknown as FindingView;
+    renderDrawer(hinted);
+    const drawer = screen.getByLabelText("Evidence");
+    expect(within(drawer).getByTestId("unseen-fact").textContent).toContain(`Code found that ${unseen}. The answer may depend on it`);
+    expect(drawer.textContent).toContain("they point at a section the model was not shown");
+    expect(within(drawer).getByTestId("layer-code").textContent).not.toContain("Code found a conflict");
     await screen.findByText("Its hint");
   });
 

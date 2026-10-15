@@ -28,11 +28,11 @@ front of the public. A visitor's workspace reads only its own records, never cur
 | Bound | Value | Where |
 |---|---|---|
 | A visitor's workspace and session | 7 days, then deleted with everything in it (`WORKBENCH_ANONYMOUS_RETENTION_DAYS`) | `application/retention.py`, hourly and at start |
-| Contracts per workspace | 10 (`WORKBENCH_ANONYMOUS_MAX_DOCUMENTS`) | `api/access.py admit_upload` |
-| Questions per workspace per UTC day | 30 (`WORKBENCH_ANONYMOUS_MAX_RUNS_PER_DAY`) | `api/access.py limit_run_starts` |
+| Contracts per workspace | 10 (`WORKBENCH_ANONYMOUS_MAX_DOCUMENTS`) | `application/quotas.py`, counted with the grant; `api/access.py admit_upload` refuses before reading |
+| Questions per workspace per UTC day | 30 (`WORKBENCH_ANONYMOUS_MAX_RUNS_PER_DAY`) | `application/quotas.py`, counted with the run |
 | New sessions, uploads, questions per network address | 20, 30, 30 an hour | `api/access.py`, keyed by the address Cloudflare saw |
-| Uploads, everyone, per UTC day | 300 (`WORKBENCH_ANONYMOUS_MAX_UPLOADS_PER_DAY`) | `api/access.py admit_upload` |
-| Questions, everyone, per UTC day | 200 (`WORKBENCH_MAX_RUNS_PER_DAY`, set by the supervisor) | `application/start_run.py` |
+| Uploads, everyone, per UTC day | 300 (`WORKBENCH_ANONYMOUS_MAX_UPLOADS_PER_DAY`) | `application/quotas.py`, counted with the grant; `api/access.py admit_upload` refuses before reading |
+| Questions, everyone, per UTC day | 200 (`WORKBENCH_MAX_RUNS_PER_DAY`, set by the supervisor) | `application/quotas.py`, counted with the run |
 | Upload size and type | 25 MB; PDF, DOCX, TXT, checked against the bytes; stored under its hash | `application/ingest_document.py` |
 | Model calls at once, model timeout | the admission bound; 600 s | `providers` |
 
@@ -64,8 +64,13 @@ same bytes exist; it says nothing about who added them or under what name.
 
 ## Before the public demo
 
-Since 2026-10-09 `https://ivo.pavankg.dev` is this workbench again, as before: the invite gate in front, the recorded
-research readable without an invite at `/state`. It is up only while this machine is on. The same research, as static
+This section describes the deployment as it stood before the public demo and is kept for the record. Wherever it or a
+later section has Cloudflare Access or an invite decide who enters, the public demo has replaced that: anyone enters,
+with an anonymous session and a workspace of their own, and no invite, sign-in or Access in front (an invite exchange
+is refused on the public API). The cloud kit runs the same way (`deploy/cloud/README.md`, `env.example`).
+
+On 2026-10-09, before the public demo opened, `https://ivo.pavankg.dev` was this workbench again, as before: the
+invite gate in front, the recorded research readable without an invite at `/state`. It is up only while this machine is on. The same research, as static
 files that need no server, stays on Cloudflare Pages at `https://verity-state.pages.dev`
 (`backend/scripts/export_state.py --build`). `https://verity.pavankg.dev`, where the workbench answered for a day,
 redirects here. The API is supervised with `WORKBENCH_ACCESS_REQUIRED=1`, so it does not start without the gate's
@@ -228,7 +233,9 @@ rules still return the existing run.
 With the gate off there is one workspace, `open`, and every record made through it is readable by whoever reaches
 the site. That is what an open deployment means.
 
-Retention: nothing is deleted. A reviewer's contract, guidance, question, run, review and memo stay in
+Retention (2026-10-13: superseded; since the public demo of 2026-10-09 each visitor's workspace is deleted with everything
+in it seven days after its first visit, by `application/retention.py`, hourly and at start; what follows is the invite
+period's statement, kept as it was). Retention: nothing is deleted. A reviewer's contract, guidance, question, run, review and memo stay in
 `backend/data` until the owner removes them, and the immutability triggers refuse a delete on a finished run from
 the application itself. No cleanup is built, because none has been earned by a measurement or asked for by a
 reviewer; the honest statement for a preview is this one. If a retention period is wanted, the shape is a
@@ -242,7 +249,10 @@ local model, two browsers entering by two invites: twenty-three checks, all pass
 
 ## What is deliberately not done here
 
-No nginx or Caddy, no second hostname, no rate limiting beyond what Access gives, no separate data
+(2026-10-13: Access is no longer in front, and the API limits visits, uploads and questions itself: per address per
+hour (`api/access.py`), and per workspace and for everyone per day (`application/quotas.py`); visits have no daily
+bound. The store is still the one the measurements were made in.) No nginx or Caddy, no second
+hostname, no rate limiting beyond what Access gives, no separate data
 directory for the public instance: the store the Ivo engineer opens is the store the measurements
 were made in, so Runs shows the real record.
 

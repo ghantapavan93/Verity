@@ -15,6 +15,7 @@ from ..analysis.schema import AnalysisOut
 from ..errors import NotFound
 from ..models import EvidenceSpan, Run, Section
 from ..runs.service import verify_evidence
+from ..verify.spans import verification_pass
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,7 @@ class Replay:
         return sum(1 for s in self.spans if s.change == "lost")
 
 
+@verification_pass()  # what is worked out about each text is kept for this pass only (verify/spans.py)
 def reverify_run(session: Session, run_id: str) -> Replay:
     run = session.get(Run, run_id)
     if run is None:

@@ -7,7 +7,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Health, RunSummary } from "@/lib/types";
 
-import { PublicDemo } from "../access/PublicDemo";
+import { AccessModeKnown, PublicDemo } from "../access/PublicDemo";
+import { INDEPENDENCE } from "@/lib/independence";
 import { Landing } from "./Landing";
 
 // The proof run's lead finding, as its record holds it: the story is told only from the record (m7 audit, 2026-10-10).
@@ -104,11 +105,16 @@ describe("Landing: the door", () => {
 describe("Landing: where the model runs", () => {
   const at = (location: Health["modelLocation"], host = ""): Health => ({ ...health("off"), modelLocation: location, modelHost: host }) as Health;
 
+  it("says in its footer that the project is independent and not affiliated with Ivo, whatever the door", () => {
+    renderLanding(null, false);
+    expect(document.body.textContent).toContain(INDEPENDENCE);
+  });
+
   it("names the hosted model and says what is sent to it", () => {
     renderLanding(at("hosted", "a Modal GPU in the US"), true);
     const text = document.body.textContent ?? "";
     expect(text).toContain("run on a Modal GPU in the US");
-    expect(text).toContain("are sent there to be answered");
+    expect(text).toContain("The question, any guidance, the contract's file name and the sections it reads are sent there to be answered.");
     expect(text).not.toMatch(/No contract is sent to a hosted model|does not send the contract anywhere|this machine/);
   });
 
@@ -117,6 +123,20 @@ describe("Landing: where the model runs", () => {
     const text = document.body.textContent ?? "";
     expect(text).toContain("run on the Verity server. No contract is sent to a hosted model.");
     expect(text).not.toContain("this machine");
+  });
+
+  it("hosted, names every handler of the contract: Cloudflare, the server and the model", () => {
+    // War room F-06, 2026-10-13: the hosted sentence said "to its model and nowhere else", leaving out the edge and the server.
+    renderLanding(at("hosted", "a Modal GPU in the US"), true);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("It keeps the contract on its own server and sends its model the question and sections of the contract.");
+    // Everything a question sends is listed, the file's name and the guidance included, and the opening sections when
+    // retrieval ranks none: "only the sections a question needs" said less than the model receives (counter-review).
+    expect(text).toContain("is sent the question, any guidance, the contract's file name and the sections retrieval ranked for the question");
+    expect(text).toContain("when it ranks none, the opening six go instead");
+    expect(text).not.toMatch(/only the sections/);
+    expect(text).toMatch(/reaches the Verity server through Cloudflare, which serves this site and so handles its traffic/);
+    expect(text).not.toContain("to its model and nowhere else");
   });
 
   it("names the path an upload takes, Cloudflare included, and claims no more", () => {
@@ -155,7 +175,7 @@ describe("Landing: the finished review it shows", () => {
 
   it("tells the four-step story only of the proof run it was written for, from its record", async () => {
     renderLanding({ ...health("off"), modelLocation: "server", modelHost: "" } as Health, true, run, true);
-    expect(await screen.findByText("Code checks the quote, then the arithmetic")).toBeTruthy();
+    expect(await screen.findByText("Code checks the quote, then what it can compare")).toBeTruthy();
     expect(document.body.textContent).toContain("in a different section from the one cited");
     expect(document.body.textContent).toContain("60 days' written notice");
   });
@@ -165,7 +185,7 @@ describe("Landing: the finished review it shows", () => {
     // says the quote was found in another section and the days were compared, true only of the proof run.
     renderLanding({ ...health("off"), modelLocation: "server", modelHost: "" } as Health, true, run, false);
     expect(document.body.textContent).toContain("Which law governs?");
-    expect(document.body.textContent).not.toContain("Code checks the quote, then the arithmetic");
+    expect(document.body.textContent).not.toContain("Code checks the quote, then what it can compare");
   });
 });
 
@@ -256,9 +276,89 @@ describe("Landing: when the workbench cannot be reached", () => {
     expect((screen.getByRole("button", { name: "try a sample agreement" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("a store that cannot take a write is not called a model outage, and says adding or asking may fail", () => {
+    renderLanding({ ok: false, provider: "ollama", model: "qwen3:8b", detail: "the store is read-only", access: "entered", fault: "store" } as Health, true);
+    expect(screen.getByText(/storage reports a problem \(the store is read-only\), so adding a contract or asking a question may fail/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/The model is offline/);
+  });
+
   it("control: a reachable workbench whose model is offline still reads documents", () => {
-    renderLanding({ ok: false, provider: "ollama", model: "qwen3:8b", detail: "Ollama not reachable", access: "entered" } as Health, true);
+    renderLanding({ ok: false, provider: "ollama", model: "qwen3:8b", detail: "Ollama not reachable", access: "entered", fault: "model" } as Health, true);
     expect(screen.getByText(/The model is offline/)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Add a contract" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe("Landing: how long a run is kept", () => {
+  it("in a public demo, says the runs go with the workspace after its days, never that every run is kept", () => {
+    // War room F-18, 2026-10-13: the footer said "Every run is kept" on a site that deletes every run after seven days.
+    render(
+      <PublicDemo.Provider value={{ retentionDays: 7 }}>
+        <Landing
+          stage="empty"
+          processingLabel=""
+          pendingName=""
+          composerText=""
+          setComposerText={vi.fn()}
+          onHome={vi.fn()}
+          onPickFile={vi.fn()}
+          onLoadSample={vi.fn()}
+          proof={null}
+          proofStory={false}
+          onOpenProof={vi.fn()}
+          uploadError={null}
+          apiHealth={health("off")}
+          accessKnown
+          recent={[]}
+          onOpenDocument={vi.fn()}
+          onAllDocuments={vi.fn()}
+          viewError={null}
+          reduceMotion
+        />
+      </PublicDemo.Provider>,
+    );
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("until this browser's workspace is deleted, 7 days after its first visit");
+    expect(text).not.toContain("Every run is kept: what the model saw");
+    expect(text).not.toMatch(/kept for 7 days/);
+  });
+
+  it("control: by invitation, every run is kept", () => {
+    renderLanding(health("entered"), true);
+    expect(document.body.textContent).toContain("Every run is kept: what the model saw");
+  });
+
+  it("claims no door when the API could not say which it is, though its health answered", () => {
+    // Counter-review, 2026-10-13: with /api/access failed once, a public demo's visitor read "Private preview",
+    // "readable through your invite and no other" and "Every run is kept".
+    render(
+      <AccessModeKnown.Provider value={false}>
+        <Landing
+          stage="empty"
+          processingLabel=""
+          pendingName=""
+          composerText=""
+          setComposerText={vi.fn()}
+          onHome={vi.fn()}
+          onPickFile={vi.fn()}
+          onLoadSample={vi.fn()}
+          proof={null}
+          proofStory={false}
+          onOpenProof={vi.fn()}
+          uploadError={null}
+          apiHealth={health("entered")}
+          accessKnown
+          recent={[]}
+          onOpenDocument={vi.fn()}
+          onAllDocuments={vi.fn()}
+          viewError={null}
+          reduceMotion
+        />
+      </AccessModeKnown.Provider>,
+    );
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/Private preview|Public demo|Open preview/);
+    expect(text).not.toContain("readable through your invite");
+    expect(text).not.toContain("Every run is kept");
   });
 });

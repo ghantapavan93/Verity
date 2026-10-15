@@ -71,13 +71,13 @@ class _Located:
     heading: str
 
 
-def _labels_by_section(run: Run) -> dict[str, tuple[str, str, str]]:
-    """section id → (label, number, heading) for every candidate the run handed to the model."""
+def _labels_by_section(run: Run) -> dict[str, tuple[str, str, str, str | None]]:
+    """section id → (label, number, heading, why it was linked) for every candidate the run handed to the model."""
     try:
         candidates = json.loads(run.candidates_json or "[]")
     except ValueError:
         return {}
-    return {c["section_id"]: (c["label"], c.get("number", ""), c.get("heading", "")) for c in candidates}
+    return {c["section_id"]: (c["label"], c.get("number", ""), c.get("heading", ""), c.get("linked")) for c in candidates}
 
 
 def _heading(number: str, heading: str) -> str:
@@ -204,7 +204,7 @@ def explain_run(session: Session, run_id: str) -> RunExplanation:
     lengths = {s.id: len(s.text) for s in run.document.sections}
 
     retrieval: list[ExplanationCandidate] = []
-    for rank, (section_id, (label, number, heading)) in enumerate(_labels_by_section(run).items(), start=1):
+    for rank, (section_id, (label, number, heading, linked)) in enumerate(_labels_by_section(run).items(), start=1):
         piece = slices.get(section_id)
         retrieval.append(
             ExplanationCandidate(
@@ -217,6 +217,7 @@ def explain_run(session: Session, run_id: str) -> RunExplanation:
                 slice_start=piece.start if piece else None,
                 slice_end=piece.end if piece else None,
                 truncated=piece.truncated if piece else None,
+                linked=linked,
             )
         )
     outside = sum(lengths.get(piece.section_id, 0) - (piece.end - piece.start) for piece in rebuilt.slices)
@@ -225,8 +226,10 @@ def explain_run(session: Session, run_id: str) -> RunExplanation:
     options = json.loads(run.options_json or "{}")
 
     reconstruction = ExplanationReconstruction(
-        reconstructable=rebuilt.matches,
-        problem=rebuilt.problem,
+        # "Exact input": the input of the answer recorded, or why it is not reconstructable (reconstruct_input.answered).
+        # `input_matches` below stays the hash check alone: the first message matches the recorded hash either way.
+        reconstructable=rebuilt.answered,
+        problem=rebuilt.answered_problem,
         recorded_input_sha256=rebuilt.recorded_input_sha256,
         rebuilt_input_sha256=rebuilt.input_sha256,
         window_chars=window_of(options),

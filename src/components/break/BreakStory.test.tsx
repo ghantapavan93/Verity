@@ -6,6 +6,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { INDEPENDENCE } from "@/lib/independence";
 import { STATUS_SOURCE_LABELS } from "@/lib/types";
 
 import { BreakStory, unseenSummary } from "./BreakStory";
@@ -305,5 +306,13 @@ describe("your turn", () => {
     expect(turn).toContain("This page is a recording and works either way.");
     // A run can retry on invalid output, so an answer is not promised as a single model call.
     expect(turn).not.toMatch(/one model call/);
+  });
+});
+
+describe("who made it", () => {
+  it("ends by saying the project is independent and not affiliated with Ivo", () => {
+    // War room F-08 / R8: no page said so, under a hostname that carries the company's name.
+    renderPage();
+    expect(document.body.textContent).toContain(INDEPENDENCE);
   });
 });

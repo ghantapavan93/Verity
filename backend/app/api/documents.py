@@ -1,29 +1,68 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import datetime
+from functools import partial
 
-from anyio import CapacityLimiter, to_thread
+from anyio import CapacityLimiter, Lock, current_time, fail_after, to_thread
 from fastapi import APIRouter, Depends, Request, Response, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..application.ingest_document import IngestedDocument, coverage_of, ingest_document, refuse_if_too_large
+from ..application.ingest_document import READINGS_BUSY, IngestedDocument, coverage_of, ingest_document, refuse_if_too_large
 from ..application.workspace import require_document, visible_documents, visible_runs
 from ..db import get_session
 from ..document_names import display_created, display_name
+from ..errors import Busy
+from ..ingest.bounded import READINGS_AT_ONCE
 from ..ingest.readers import SUFFIX_OF
 from ..models import Document, Finding, FindingReview, Run, Section, iso
 from ..schemas import CoverageReport, DocumentOut, DocumentSummary, SectionOut
-from .access import admit_upload, current_workspace
+from .access import admit_upload, client_network, current_workspace
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
-# How many uploads are read at once. One reading may cost up to a few hundred MB within the readers' bounds
-# (ingest/readers.py), so what reading may take of the host is this times that, however many arrive together. The
-# readings also take their threads from here, not from the pool every sync route shares: 45 slow uploads at once held
-# all 40 of that pool's threads and /api/health waited 10.4 s for one, past the liveness probe's 5 s (2026-10-13).
-READINGS_AT_ONCE = 2
+# An upload waits for its reading here, on the event loop: no thread, and no second copy of its bytes, which are taken
+# from the spool only once a reading may start. Waiting on threads, sixteen uploads held sixteen copies (counter-review
+# round 3), and before that 45 slow uploads held all 40 threads of the pool every sync route shares, so /api/health
+# waited 10.4 s, past the liveness probe's 5 s (2026-10-13). The READINGS_AT_ONCE that may read run on threads of their
+# own; a document read again for a revision check takes one of the same slots, inside ingest/bounded.py.
 readings = CapacityLimiter(READINGS_AT_ONCE)
+reading_threads = CapacityLimiter(READINGS_AT_ONCE)
+# One reading at a time from each network (access.client_network): its other upload waits behind it, so no one network
+# can hold every slot (two 5.6 KB PDFs held both for a minute and a third reader waited past Cloudflare's 100 s,
+# counter-review). Event loop only, so the dict needs no lock of its own.
+_reading_from: dict[str, Lock] = {}
+# The longest an upload waits for its network's turn and a reading slot (ingest/bounded.py) together; with a reading's
+# 30 s, an answer comes within 75 s of the body, inside Cloudflare's 100 s. Past it the upload is refused, 503 with
+# Retry-After, and nothing is kept: the waits were untimed, so readings held by others left a received upload waiting
+# past Cloudflare's timeout and holding its place at the door (war room W5, 2026-10-13).
+READING_WAIT_SECONDS = 45.0
+
+
+@asynccontextmanager
+async def reading_turn(network: str) -> AsyncIterator[float]:
+    """The network's turn, then a reading slot, both within READING_WAIT_SECONDS; yields what is left of that wait for
+    read_file, whose slot a reading again may hold. Busy, with nothing kept, when the wait runs out."""
+    due = current_time() + READING_WAIT_SECONDS
+    turn = _reading_from.setdefault(network, Lock())
+    try:
+        async with AsyncExitStack() as held:
+            try:
+                with fail_after(READING_WAIT_SECONDS):
+                    await turn.acquire()
+                    held.callback(turn.release)
+                    await readings.acquire()
+                    held.callback(readings.release)
+            except TimeoutError:
+                raise Busy(READINGS_BUSY, retry_after=30) from None
+            yield max(0.0, due - current_time())
+    finally:
+        # Only this network's own lock, and only once no one holds or waits for it: a lock that finished late popped the
+        # one a later upload had made, and the next upload from that network read beside it (war room W5 p8).
+        if _reading_from.get(network) is turn and not turn.locked() and turn.statistics().tasks_waiting == 0:
+            del _reading_from[network]
 
 
 def to_document_out(session: Session, document: Document, workspace: str) -> DocumentOut:
@@ -50,13 +89,13 @@ async def upload_document(
     admit_upload(request, session, workspace)  # the owner's pause; a public workspace's bounds
     refuse_if_too_large(file.size)  # the declared size, before a byte is read; the bytes are checked again once read
 
-    def read_and_ingest() -> IngestedDocument:
-        # The bytes are taken from the spooled upload only when a reading may start, so an upload waiting its turn holds
-        # no second copy of them.
-        return ingest_document(session, file.filename or "upload", file.file.read(), workspace)
+    def read_and_ingest(wait: float) -> IngestedDocument:
+        # The bytes are taken from the spooled upload only once a reading may start (reading_turn).
+        return ingest_document(session, file.filename or "upload", file.file.read(), workspace, reading_wait=wait)
 
     # Parsing is CPU work of up to seconds (docs/PARSER-COMPARISON.md: 44 s on a 1.25-million-character contract); it leaves the event loop.
-    ingested = await to_thread.run_sync(read_and_ingest, limiter=readings)
+    async with reading_turn(client_network(request)) as wait:
+        ingested = await to_thread.run_sync(partial(read_and_ingest, wait), limiter=reading_threads)
     if not ingested.created:
         response.status_code = status.HTTP_200_OK
     out = to_document_out(session, ingested.document, workspace)

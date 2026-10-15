@@ -3,6 +3,10 @@
 # Pinned by digest: a rebuild runs on the base the rehearsal ran on, not whatever the tag points to that day.
 FROM python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c AS runtime
 
+# The commit the image was built from, whole: `docker image inspect` shows which source a running container holds.
+ARG VERITY_BUILD_SHA=""
+LABEL org.opencontainers.image.revision=$VERITY_BUILD_SHA
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     WORKBENCH_DATA_DIR=/data

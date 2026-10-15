@@ -56,6 +56,11 @@
   color: var(--text);
 }
 
+/* The section kept in the bar on a phone (the media rule below). */
+.navKey {
+  color: var(--text);
+}
+
 .main {
   max-width: 1040px;
   margin: 0 auto;
@@ -170,6 +175,12 @@
 
 .cite a:hover {
   text-decoration: underline;
+}
+
+/* On paper the brass accent is 1.8:1, too faint for a one-character mark (war room F-43, 2026-10-13). */
+.exhibitQuote .cite a,
+.paper .cite a {
+  color: var(--doc-link);
 }
 
 /* ------------------------------------------------------------------------------------ 1. the failure */
@@ -1196,8 +1207,9 @@
 }
 
 @media (max-width: 640px) {
-  /* On a phone the page is read by scrolling; the way out (workbench, research) keeps the bar. */
-  .top .nav {
+  /* On a phone the page is read by scrolling; the way out (workbench, research) keeps the bar, and so does the one
+     section a reader looks for first, the rejected fix, six screens down (war room F-17 / R14, 2026-10-13). */
+  .top .nav .navLink:not(.navKey) {
     display: none;
   }
 

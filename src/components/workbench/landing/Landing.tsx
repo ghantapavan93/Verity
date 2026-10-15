@@ -11,7 +11,8 @@ import { getCitations, getRun, listDocuments, type Health } from "@/lib/api";
 import { plural } from "@/lib/format";
 import { modelPlace } from "@/lib/modelPlace";
 import { SOURCE, TopLinks } from "./TopLinks";
-import { PublicDemo } from "../access/PublicDemo";
+import { AccessModeKnown, PublicDemo } from "../access/PublicDemo";
+import { INDEPENDENCE } from "@/lib/independence";
 import { runOutcome } from "@/lib/checks";
 import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
@@ -24,7 +25,7 @@ const LAYERS = [
   { name: "Source checked", text: "Code looks for every quote in the document text. A quote it cannot find is withheld: never shown as evidence." },
   {
     name: "Code compared",
-    text: "Where the contract and your guidance both state a period, code compares the days. A conflict sends the finding to review. A pass stays the model's, with the numbers checked.",
+    text: "Where the contract and your guidance both state a period, code puts them on the calendar: days, weeks, months, and Business Days as the contract defines them. A shortfall sends the finding to review, and so does a pair code cannot put in order. A pass stays the model's proposal.",
   },
   { name: "Person reviewed", text: "A reviewer confirms or dismisses each finding. The decision is kept with the run, under their name." },
 ] as const;
@@ -113,8 +114,12 @@ export function Landing({
   // the first screen must say so rather than call it private. Until the API has said (or when it could not be asked),
   // the screen claims neither: it used to read "Private preview … readable through your invite and no other" for the
   // first seconds of an open site (QA review, 2026-10-08).
-  const openPreview = accessKnown && apiHealth?.access === "off";
-  const privatePreview = accessKnown && (apiHealth?.access === "required" || apiHealth?.access === "entered");
+  // The door itself is known only when /api/access answered too (AccessModeKnown): a public demo whose /api/access
+  // failed once read "Private preview" and "Every run is kept" (counter-review, 2026-10-13).
+  const modeKnown = useContext(AccessModeKnown);
+  const doorKnown = accessKnown && modeKnown;
+  const openPreview = doorKnown && apiHealth?.access === "off";
+  const privatePreview = doorKnown && (apiHealth?.access === "required" || apiHealth?.access === "entered");
   // A public demo: this browser's own workspace, deleted on schedule (access/AccessGate.tsx, backend retention).
   const demo = useContext(PublicDemo);
   // The API could not be asked at all: nothing that needs it is offered. A model that is offline is something else:
@@ -269,6 +274,14 @@ export function Landing({
                   The workbench is not reachable right now, so contracts cannot be added or asked about. The recorded research still opens; try again in a
                   minute.
                 </p>
+              ) : apiHealth && !apiHealth.ok && apiHealth.fault === "store" ? (
+                // The store reports a problem (read-only, or nearly full): adding may fail, and so may a question, whose run is
+                // recorded there, whatever the model's state. Said as a possibility, since a nearly full store still takes some
+                // writes (F-19, counter-review, 2026-10-13).
+                <p className={styles.error} role="status">
+                  The workbench&apos;s storage reports a problem ({apiHealth.detail}), so adding a contract or asking a question may fail until it is fixed. The
+                  recorded research still opens.
+                </p>
               ) : (
                 apiHealth &&
                 !apiHealth.ok && (
@@ -393,13 +406,25 @@ export function Landing({
           {apiHealth?.model && place ? (
             <>
               Model <code>{apiHealth.model}</code>, run on {place.place}.{" "}
-              {place.hosted ? "The question, the guidance and the sections it reads are sent there to be answered." : "No contract is sent to a hosted model."}
+              {place.hosted
+                ? "The question, any guidance, the contract's file name and the sections it reads are sent there to be answered."
+                : "No contract is sent to a hosted model."}
             </>
           ) : (
             "Every quoted passage is located in the document text, or withheld."
           )}
         </span>
-        <span>Every run is kept: what the model saw, what it said, what code checked.</span>
+        {/* A public demo deletes every run with its workspace, seven days after the browser's first visit, not seven days
+            after the run; "every run is kept" said otherwise (F-18, counter-review, 2026-10-13). Until the API has said
+            which door it is, the line claims neither. */}
+        {doorKnown && (
+          <span>
+            {demo
+              ? `Every run is kept, with what the model saw, what it said and what code checked, until this browser's workspace is deleted, ${demo.retentionDays} days after its first visit.`
+              : "Every run is kept: what the model saw, what it said, what code checked."}
+          </span>
+        )}
+        <span>{INDEPENDENCE}</span>
       </footer>
     </motion.section>
   );

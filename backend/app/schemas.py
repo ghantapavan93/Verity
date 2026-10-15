@@ -141,6 +141,45 @@ class SpanOut(ApiModel):
     # what a section's label can say: a clause written inline is body under the last standalone heading. Read from the
     # stored section text; null when the text names no clause before the passage (application.clause_location).
     clause_label: str | None = None
+    # The section the passage was found in, as a reader cites it ("§5.3(a)", or its heading when it has no number); empty
+    # for a quote that was not found. The cited label above is the model's handle, not a citation.
+    section_label: str = ""
+
+
+class PassageOut(ApiModel):
+    """Where a statement or a provision is: offsets into the stored text of its section, and that text."""
+
+    section_id: str
+    label: str
+    start: int
+    end: int
+    text: str
+
+
+class RelationOut(ApiModel):
+    """A statement the contract makes about its own provisions, located by code (runs.relations): that a provision is
+    replaced, with its own text and the new wording where found, and any stated limit; or that its parts rank for a
+    conflict. A fact about the text, not a ruling on its effect."""
+
+    kind: Literal["replaces", "precedence"]
+    statement: PassageOut
+    target: str | None = None
+    replaced: PassageOut | None = None
+    replacement: PassageOut | None = None
+    scope: str | None = None
+    effective: str | None = None
+    parts: list[str] = []
+
+
+class RelationNoteOut(ApiModel):
+    """What one recorded relation means for one finding: "replaced" (the answer quotes text replaced in full and neither
+    quotes the replacement nor states a value only it states, for a question about the agreement as it stands; code set
+    the status), "scoped", "precedence", "dated" (the question names a time) or "old_value" (the answer quotes the
+    replacement and states only the replaced values): a concern code cannot resolve; or "context" (nothing to resolve)."""
+
+    effect: Literal["replaced", "scoped", "precedence", "dated", "old_value", "context"]
+    sentence: str
+    relation: RelationOut
 
 
 class FindingOut(ApiModel):
@@ -151,6 +190,12 @@ class FindingOut(ApiModel):
     status_source: StatusSourceName | Literal[""] = ""
     # The policy evaluation's sentence when the status was computed ("the contract provides 15 calendar days; the guidance requires at least 30 calendar days").
     status_reason: str | None = None
+    # Whether code compared a period in a verified quote with one in the guidance (runs.status.basis): a status with a
+    # reason is not thereby a comparison, and "Code compared" is said only over one.
+    code_compared: bool = False
+    # Code's sentence naming the sections the quote's sentence points at that the model was not handed, as recorded, or
+    # None: the answer may rest on text the model never read (runs.status.basis).
+    unseen_reason: str | None = None
     # passage: the spans support the conclusion. coverage: the point was not found and the spans are
     # the closest provisions that were read, cited so a reader can see what was searched.
     evidence_kind: Literal["passage", "coverage"] = "passage"
@@ -179,6 +224,14 @@ class FindingOut(ApiModel):
     # band of percentages, a fee schedule, a set of periods), with the answer's (runs.values.value_choices). Which applies
     # is the model's reading; code says only that the passages offered several. It changes no status.
     value_choices: list[ValueChoiceOut] = []
+    # Who set the status ("code", "model", or "withheld" when no quote was found), every sentence code wrote against it or
+    # could not establish, and whether it is flagged: a status other than a pass, or a pass with a concern (runs.account).
+    decided_by: Literal["code", "model", "withheld"] = "model"
+    concerns: list[str] = []
+    flagged: bool = False
+    # What the contract's own replacement and precedence statements mean for this finding, as the run recorded them
+    # (runs.relations, policy-v11): the relation, both its ends where located, and code's sentence. Empty before v11.
+    relations: list[RelationNoteOut] = []
 
 
 class RunOut(ApiModel):
@@ -214,6 +267,9 @@ class RunOut(ApiModel):
     retrieval_mode: RetrievalModeName | None = None
     # How many sections the run asked the retriever for (its recorded retrieval_k); null when the run recorded none.
     sections_requested: int | None = None
+    # The contract's replacement and precedence statements this run recorded (runs.relations); null on a run recorded
+    # before policy-v11, which is shown as recorded and never re-derived.
+    relations: list[RelationOut] | None = None
 
 
 class RunSummary(ApiModel):
@@ -257,6 +313,10 @@ class FindingRecord(ApiModel):
     has_guidance: bool = False
     # Who decided the status: code from the day counts, or the model's hint (FindingOut.status_source).
     status_source: StatusSourceName | Literal[""] = "model_hint"
+    # What code raised about it (runs.account), so the list never offers a one-click confirmation over a concern it hides.
+    decided_by: Literal["code", "model", "withheld"] = "model"
+    concerns: list[str] = []
+    flagged: bool = False
     created_at: str
 
 
@@ -280,6 +340,8 @@ class CandidateOut(ApiModel):
     section_id: str
     number: str = ""
     heading: str = ""
+    # Why a section the contract points to was handed after the ranked ones (retrieval-v2, runs.links); None when ranked.
+    linked: str | None = None
 
 
 class RunDetail(RunOut):
@@ -391,6 +453,10 @@ class HealthOut(ApiModel):
     # text goes (config: a loopback model URL is the server). modelHost names a hosted one, when the deployment does.
     model_location: Literal["server", "hosted"] = "server"
     model_host: str = ""
+    # What is failing when ok is false: the store (it cannot take a write; nothing can be added) or the model (the
+    # store still reads and keeps contracts; only questions fail). Empty when ok. The interface said "the model is
+    # offline" for both (war room F-19, 2026-10-13).
+    fault: Literal["", "store", "model"] = ""
 
 
 class ModelWakeOut(ApiModel):
@@ -817,6 +883,8 @@ class ExplanationCandidate(ApiModel):
     """A section retrieval handed to the model, in rank order, with the ContextSlice of it the prompt carried."""
 
     rank: int
+    # Why the section was handed when the contract pointed to it from a ranked one (retrieval-v2); None when ranked.
+    linked: str | None = None
     label: str
     section_id: str
     number: str = ""

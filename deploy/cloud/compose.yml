@@ -17,13 +17,19 @@ services:
       context: ../..
       dockerfile: deploy/cloud/Dockerfile.api
       target: runtime
-    image: verity-api:${VERITY_TAG:-local}
+      args:
+        VERITY_BUILD_SHA: ${VERITY_BUILD_SHA:-}
+    # Required: a missing tag once fell back to `local`, a stale build kept on the host (war room F-16, 2026-10-13).
+    image: verity-api:${VERITY_TAG:?set VERITY_TAG in .env to the release to run (ORACLE.md, Build)}
+    pull_policy: never
     # A stable name across restarts and redeploys: a stage row records the host, pid and start time of the process
     # running it, so runs the previous container left in flight are recovered at once (app/runs/owner.py).
     hostname: verity-api
     # The server is not pid 1, so the health check can end a server that stops answering (liveness.py).
     init: true
-    env_file: .env
+    # The host's configuration lives outside the release's source (ORACLE.md, Releases): VERITY_SHARED names it, and
+    # a release directory is replaced whole, never edited. Unset, it is this folder, as on a single checkout.
+    env_file: ${VERITY_SHARED:-.}/.env
     environment:
       WORKBENCH_DATA_DIR: /data
       WORKBENCH_CONTRACT_STATE: /app/record/contract-state.json
@@ -33,16 +39,18 @@ services:
     volumes:
       - verity-data:/data
       # The frozen research record /state shows, read-only (README: the record). Absent, /state says it is unavailable.
-      - ./contract-state.json:/app/record/contract-state.json:ro
+      - ${VERITY_SHARED:-.}/contract-state.json:/app/record/contract-state.json:ro
     # Uploads over 1 MB are spooled to the temporary directory while they are read, and SQLite writes its temporary files
     # there (TMPDIR); in memory, a visitor's words never reach a disk that no retention pass covers. Four 25 MB uploads at
     # once used 121 MiB of it (rehearsal, 2026-10-12); the bound costs memory only when used.
     tmpfs:
       - /tmp:size=512m,mode=1777
-    # What the API may take of the 4 GB host, the /tmp spool above included: past it the kernel ends this container,
-    # which restarts, instead of choosing among the host's processes. The bounds on reading (one reading peaked at
-    # 166 MB at the readers' limits, two at once) and on request bodies keep it far below (2026-10-13).
-    mem_limit: 2g
+    # What the API may take of the 4 GB host, its reading processes and the /tmp spool above included. Past it the
+    # kernel kills a process inside this container, the largest, which is most likely a reading (refused as 413), never
+    # one of the host's. Two readings at once, each ended past 768 MB (app/ingest/bounded.py), the API (112 MB at start,
+    # a few hundred under work) with the two files being read, its fork server and a full spool (384 MiB, api/body_limit.py)
+    # come to about 2.2 to 2.3 GiB at worst: under it, with little to spare.
+    mem_limit: 2560m
     # No core file: a crashing reader would write memory holding a contract to disk.
     ulimits:
       core: 0
@@ -59,7 +67,9 @@ services:
       dockerfile: deploy/cloud/Dockerfile.web
       args:
         NEXT_PUBLIC_BUILD_SHA: ${VERITY_BUILD_SHA:-}
-    image: verity-web:${VERITY_TAG:-local}
+        VERITY_BUILD_SHA: ${VERITY_BUILD_SHA:-}
+    image: verity-web:${VERITY_TAG:?set VERITY_TAG in .env to the release to run (ORACLE.md, Build)}
+    pull_policy: never
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -104,7 +114,7 @@ services:
     volumes:
       - ./cloudflared.yml:/etc/cloudflared/config.yml:ro
       # The tunnel's credentials: whoever holds them can run a connector and receive the site's traffic.
-      - ./tunnel.json:/etc/cloudflared/tunnel.json:ro
+      - ${VERITY_SHARED:-.}/tunnel.json:/etc/cloudflared/tunnel.json:ro
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -118,6 +128,9 @@ services:
 # No volume for backups: a copy of the public store holds visitors' contracts past the deletion the first screen
 # promises (README: backups and retention).
 volumes:
+  # The store, named by the host's role and required: a staging store must never become a production one by being
+  # left in place (release integration, 2026-10-13). An existing store keeps its name in .env (ORACLE.md, Stores).
   verity-data:
+    name: ${VERITY_STORE:?set VERITY_STORE in .env to this host's store (ORACLE.md, Stores)}
   caddy-data:
   caddy-config:

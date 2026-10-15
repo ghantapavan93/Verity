@@ -25,7 +25,9 @@ vi.mock("@/lib/api", () => ({
   errorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }));
 
+import { useContext } from "react";
 import { AccessGate } from "./AccessGate";
+import { AccessModeKnown } from "./PublicDemo";
 
 const OUT = { required: true, entered: false, subject: null, anonymous: false };
 const IN = { required: true, entered: true, subject: "min-kyu", anonymous: false };
@@ -33,6 +35,10 @@ const OFF = { required: false, entered: true, subject: null, anonymous: false };
 
 function Inside() {
   return <p>the workbench</p>;
+}
+
+function Door() {
+  return <p>{useContext(AccessModeKnown) ? "door known" : "door unknown"}</p>;
 }
 
 describe("AccessGate", () => {
@@ -45,6 +51,27 @@ describe("AccessGate", () => {
     window.history.replaceState(null, "", "/");
   });
   afterEach(cleanup);
+
+  it("opens when the API cannot say which door it is, and says the door is unknown", async () => {
+    // Counter-review, 2026-10-13: a public demo whose /api/access failed once was then described as an invitation.
+    api.getAccess.mockRejectedValue(new Error("no answer"));
+    render(
+      <AccessGate>
+        <Door />
+      </AccessGate>,
+    );
+    expect(await screen.findByText("door unknown")).toBeTruthy();
+  });
+
+  it("control: a door the API names is known", async () => {
+    api.getAccess.mockResolvedValue(OFF);
+    render(
+      <AccessGate>
+        <Door />
+      </AccessGate>,
+    );
+    expect(await screen.findByText("door known")).toBeTruthy();
+  });
 
   it("lets the workbench mount when the API has no gate", async () => {
     api.getAccess.mockResolvedValue(OFF);

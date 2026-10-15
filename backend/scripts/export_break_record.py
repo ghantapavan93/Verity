@@ -105,8 +105,8 @@ def dump_store(run_ids: list[str]) -> dict[str, Any]:
             if detail.status_code != 200 or explanation.status_code != 200:
                 raise SystemExit(f"run {run_id}: detail {detail.status_code}, explanation {explanation.status_code}")
             rebuilt = reconstruct_input(session, run_id)
-            if not rebuilt.matches:
-                raise SystemExit(f"run {run_id}: the rebuilt input does not match the record ({rebuilt.problem})")
+            if not rebuilt.answered:  # published as the input of the answer shown: the hash alone is not that (F-14)
+                raise SystemExit(f"run {run_id}: the rebuilt input is not shown to be the recorded answer's ({rebuilt.answered_problem})")
             body = detail.json()
             wanted = {c["sectionId"] for c in body["candidates"]} | {s["sectionId"] for f in body["findings"] for s in f["spans"] if s["sectionId"]}
             sections = {

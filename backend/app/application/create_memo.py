@@ -17,6 +17,8 @@ from ..errors import Conflict, NotFound
 from ..hashing import sha256_text
 from ..memo.service import memo_docx, memo_html
 from ..models import Memo, Run
+from ..runs.account import account_of, notes_of
+from ..runs.status import basis
 from .clause_location import ClauseLocator
 
 
@@ -53,10 +55,18 @@ def create_memo(session: Session, run_id: str) -> CreatedMemo:
     if existing is not None:
         return CreatedMemo(existing, created=False)
     findings = [f for f in run.findings if f.status != "unresolved"]
+    # Proposals withheld because no quote of them was found: listed and flagged, never printed as findings (memo.service).
+    withheld = [f for f in run.findings if f.status == "unresolved"]
     titles = {s.id: (f"§{s.number} {s.heading}".strip() if s.number else s.heading) for s in run.document.sections}
     locator = ClauseLocator(run.document.sections)
     clauses = {span.id: label for f in findings for span in f.spans if (label := locator.label(span))}
-    html = memo_html(run, findings, titles, review_head=head, clauses=clauses)
+    unseen = {f.id: named for f in findings if (named := basis(f.status_source, f.status_reason).unseen)}
+    # What each finding's status rests on and what code raised about it, as the card reads it (runs.account).
+    accounts = {f.id: account_of(f, locator.clause_numbers if f.status != "missing" else frozenset()) for f in [*findings, *withheld]}
+    flagged = {finding_id: "; ".join(account.concerns) for finding_id, account in accounts.items() if account.flagged}
+    # What the contract's own statements mean for each finding without raising a concern (runs.relations): said once each.
+    related = {f.id: [n.sentence for n in notes_of(f) if n.effect == "context"] for f in findings}
+    html = memo_html(run, findings, titles, review_head=head, clauses=clauses, unseen=unseen, flagged=flagged, withheld=withheld, related=related)
     # The file is in place before the row exists, under a name no other request can have. The row used to be
     # committed first and the file moved after it: a process that died between the two left a memo whose DOCX was
     # never there, and every retry was handed that memo (fault injection, 2026-10-02). In this order the worst a
@@ -68,7 +78,9 @@ def create_memo(session: Session, run_id: str) -> CreatedMemo:
     pending_dir = memos_dir / "pending" / token
     pending_dir.mkdir(parents=True, exist_ok=True)
     try:
-        pending, digest = memo_docx(run, findings, titles, pending_dir, review_head=head, clauses=clauses)
+        pending, digest = memo_docx(
+            run, findings, titles, pending_dir, review_head=head, clauses=clauses, unseen=unseen, flagged=flagged, withheld=withheld, related=related
+        )
         path = memos_dir / f"memo-{run.id}-{head[:8]}-{token[:8]}.docx"
         pending.replace(path)
     finally:

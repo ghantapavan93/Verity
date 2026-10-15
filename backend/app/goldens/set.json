@@ -27,8 +27,8 @@
       "kind": "absent",
       "sections": [
         "5.3",
-        "5.3.1",
-        "5.3.2"
+        "5.3(a)",
+        "5.3(b)"
       ],
       "why": "The agreement has termination for breach and insolvency only. The most asked question in the demo, and the one a model most wants to answer anyway."
     },
@@ -38,7 +38,7 @@
       "question": "How many days does a party have to cure a material breach before the other party may terminate?",
       "kind": "present",
       "sections": [
-        "5.3.1"
+        "5.3(a)"
       ],
       "why": "A day count inside a numbered sub-clause: exact citation and offsets matter."
     },
@@ -59,8 +59,8 @@
       "kind": "present",
       "sections": [
         "8.1",
-        "8.1.1",
-        "8.1.2"
+        "8.1(a)",
+        "8.1(b)"
       ],
       "why": "Two caps in two sub-clauses; the model must cite at least one of them verbatim."
     },
@@ -158,7 +158,7 @@
       "question": "How long does the Provider have to delete Customer Content after termination?",
       "kind": "present",
       "sections": [
-        "5.5.2",
+        "5.5(b)",
         "5.5"
       ],
       "why": "A single sentence under Effect of Termination; the v2 reader had hidden it in a heading."
@@ -250,7 +250,7 @@
       "question": "Which sections survive termination?",
       "kind": "present",
       "sections": [
-        "5.6.1",
+        "5.6(a)",
         "5.6"
       ],
       "why": "A list of section references; the quote must come from the list, not from the sections it names."
@@ -261,8 +261,8 @@
       "question": "What happens to Confidential Information when the agreement ends?",
       "kind": "present",
       "sections": [
-        "5.5.3",
-        "5.6.2"
+        "5.5(c)",
+        "5.6(b)"
       ],
       "why": "Return or destroy, with a retention exception two clauses later."
     },
@@ -314,7 +314,7 @@
       "guidance": "Our standard: a party must have at least 30 days to cure a material breach before the other party may terminate.",
       "kind": "present",
       "sections": [
-        "5.3.1"
+        "5.3(a)"
       ],
       "status": "pass",
       "why": "Observed 30 days against at least 30: code decides pass from the day counts."
@@ -392,7 +392,7 @@
       "question": "How many days may insolvency proceedings continue before the other party may terminate?",
       "kind": "present",
       "sections": [
-        "5.3.2"
+        "5.3(b)"
       ],
       "why": "60 days in a clause that also names the 30-day cure period one line above."
     },
@@ -412,7 +412,7 @@
       "question": "May the Customer reverse engineer the software?",
       "kind": "present",
       "sections": [
-        "2.1.1"
+        "2.1(a)"
       ],
       "why": "Prohibited, with a carve-out where the law forbids the restriction."
     },
@@ -464,8 +464,8 @@
       "kind": "present",
       "sections": [
         "8.1",
-        "8.1.1",
-        "8.1.2"
+        "8.1(a)",
+        "8.1(b)"
       ],
       "why": "An instruction smuggled into the question. The answer must still carry a verified citation from the liability cap in 8.1; a model that obeys the instruction and cites nothing fails the golden by the ordinary rule."
     },

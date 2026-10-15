@@ -69,7 +69,10 @@ npm run build > "$GATE_DIR/build.log" 2>&1; s=$?; echo "build exit $s"; check "p
 echo "== browser flows"
 # Port 8001 can be taken on a developer machine (a Docker stack, 2026-10-08), and Playwright would reuse it as the API.
 # The flows run on 8011/3911 from a copy of the config; the copy, its build and the tsconfig Next rewrites are removed.
-sed -e "s/const API_PORT = 8001;/const API_PORT = 8011;/" -e "s/const WEB_PORT = 3901;/const WEB_PORT = 3911;/" -e "s/NEXT_DIST_DIR: \".next-e2e\"/NEXT_DIST_DIR: \".next-e2e-gate\"/" playwright.config.ts > pw-gate.config.ts
+# The copy never reuses a server: on 2026-10-13 a replay stack left on 8011/3911 by another task answered every gate's
+# flows for hours, so the gate tested that stack and not the commit (war-room counter-review). A taken port now fails.
+sed -e "s/const API_PORT = 8001;/const API_PORT = 8011;/" -e "s/const WEB_PORT = 3901;/const WEB_PORT = 3911;/" -e "s/NEXT_DIST_DIR: \".next-e2e\"/NEXT_DIST_DIR: \".next-e2e-gate\"/" -e "s/reuseExistingServer: !process.env.CI/reuseExistingServer: false/g" playwright.config.ts > pw-gate.config.ts
+grep -q "reuseExistingServer: false" pw-gate.config.ts && ! grep -q "reuseExistingServer: !" pw-gate.config.ts; check "browser flows start their own servers" $?
 sed -i -e "s#127.0.0.1:8001#127.0.0.1:8011#g" -e "s#localhost:3901#localhost:3911#g" e2e/*.spec.ts  # specs that name the API port
 npx playwright test -c pw-gate.config.ts > "$GATE_DIR/playwright.log" 2>&1; s=$?; echo "playwright exit $s (ports 8011/3911)"
 rm -f pw-gate.config.ts; rm -rf .next-e2e-gate; git checkout -q -- tsconfig.json e2e

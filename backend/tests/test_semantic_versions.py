@@ -34,7 +34,7 @@ APP = Path(__file__).resolve().parents[1] / "app"
 
 # What each version names: whole modules, or one function of a module that also does other things.
 BOUNDARIES: dict[str, tuple[str | tuple[str, str], ...]] = {
-    "policy_version": ("runs/status.py", "policy/durations.py", "policy/proof.py", "runs/values.py"),  # values: policy-v6 decides on them
+    "policy_version": ("runs/status.py", "policy/durations.py", "policy/proof.py", "runs/values.py", "runs/relations.py"),  # values: policy-v6; relations: v11
     "verifier_version": ("verify/spans.py", "verify/tokens.py", ("runs/service.py", "verify_evidence")),
     "retrieval_version": (
         "retrieval/lexical.py",
@@ -42,6 +42,7 @@ BOUNDARIES: dict[str, tuple[str | tuple[str, str], ...]] = {
         ("retrieval/aliases.py", "expand_query"),  # the table itself is versioned by its own hash, on every run
         ("retrieval/aliases.py", "_phrase_in"),
         ("runs/service.py", "_retrieve"),  # the opening-sections fallback
+        "runs/links.py",  # retrieval-v2: the sections the ranked ones depend on
     ),
 }
 
@@ -52,9 +53,41 @@ RECORDED: dict[str, str] = {
     "policy-v4": "b88a4017c8ebfd98",
     "policy-v5": "85ac4239ce9ffd27",
     "policy-v6": "f10ef3734b729ff5",  # 2026-10-10: a pass stating a value its evidence does not show is lowered (runs.values joins the boundary)
+    "policy-v7": "10f56e2f09548f97",  # 2026-10-10: the party check, not adopted (57e4dae); its runs (the /break headline) keep the name, never reused
+    # policy-v8, 2026-10-13: a pass names the sections its sentence points at that the model was not handed, compared or
+    # not; re-recorded the same day for runs.status.basis, which reads a decision and makes none.
+    "policy-v8": "5c39eda6f3101a65",
+    # policy-v9, 2026-10-14: periods code cannot compare (calendar against Business Days, months against days) send a
+    # pass the model proposed to review with that reason (the legal pilot's H4-Q5).
+    "policy-v9": "97bab10c1b008ab3",
+    # policy-v10, 2026-10-14: periods in units that do not convert compared as calendar-day ranges; Business Days and bare
+    # "days" as the contract's own words define them (policy.durations.calendar_days, business_week, day_convention).
+    # Amended before any release (first-visitor acceptance test, 2026-10-14): a definition that lists its weekdays is
+    # read, and code says what it could not read rather than that the contract has no definition. policy-v10 was never
+    # committed or deployed (the released line is policy-v6), so no stored run was decided under the earlier text.
+    "policy-v10": "8c22b18b5f0310e8",
+    # policy-v11, 2026-10-14 (the intent-first mission): the contract's replacement and precedence statements are located
+    # and recorded with the run (runs.relations); an answer to a question about the agreement as it stands, quoting text
+    # the contract replaced in full and not the replacement, is needs review set by code. A limit or a ranking is a concern
+    # only. Amended before release (owner-note review, 2026-10-14): a question naming a time is a concern, not read at the
+    # run's date; quoting the replacement with only the replaced values is a concern; a month start is read, not raised on.
+    # policy-v11 was never committed, so its fingerprint was replaced rather than bumped.
+    "policy-v11": "b3728ef49122b641",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
+    # v8, 2026-10-13: no span begins or ends inside a number; a number's sign is part of its value (F-03). Re-recorded the
+    # same day for the verification pass, which only scopes the memo (18,717 recorded spans replayed, none changed).
+    "v8": "e72813eba0872169",
+    # v9, 2026-10-14: an amount with a magnitude letter ("$5M", "USD 10K") or a currency in letters against "$" ("US$")
+    # is a number, with its sign; inside a signed number no edge falls at a space (legal evaluation B1).
+    "v9": "6753ff2523e274dc",
+    # v10, 2026-10-14: a short label after a minus sign or inside an opening parenthesis ("-Ksh 5M", "(RM5M)") is part of
+    # the number, so its sign is kept whatever currency it names (the pilot's B1 residual).
+    "v10": "d895b935b9c94210",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
+    # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
+    # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.
+    "retrieval-v2": "a1760f8ea511f569",
 }
 
 

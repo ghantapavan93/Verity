@@ -15,20 +15,21 @@ import io
 import logging
 import re
 import zipfile
-import zlib
 from dataclasses import dataclass, field
 from typing import cast
 
 from docx import Document as DocxDocument
+from docx.document import Document as WordDocument
 from docx.oxml.ns import qn
 from docx.oxml.text.paragraph import CT_P
+from docx.styles.style import ParagraphStyle
 from docx.text.paragraph import Paragraph
 from lxml import etree
-from pypdf import PageObject, PdfReader
+from pypdf import PdfReader
 
 from .coverage import PartCoverage, Status, docx_coverage, pdf_coverage, txt_coverage
 from .invisible import remove_format_characters, visible_text
-from .sections import HEADING_NUMBER, Block, continues_numbering, looks_like_heading
+from .sections import HEADING_NUMBER, MAX_TOP_STEP, Block, continues_numbering, looks_like_heading
 
 log = logging.getLogger(__name__)
 
@@ -43,17 +44,13 @@ SUPPORTED = {
 SUFFIX_OF = {media_type: suffix for suffix, media_type in SUPPORTED.items()}
 
 
-# What reading a file may cost, whatever its bytes say about themselves. Each bound is several times the largest real
-# contract measured on 2026-10-13 (323 .docx: at most 6.4 MB unpacked and 204,093 XML elements; 171 PDFs: at most
-# 2.71 MB of page content) and far below what one reading may take of a 4 GB host. Before them an 84 KB .docx of six
-# million empty paragraphs (35 MB unpacked, under the old 256 MB bound) took 848 MB and 35 s to read, and a 41 KB PDF of
-# two pages that inflate to 20 MB each took 3.2 s, so a 25 MB upload of such pages read for about half an hour (gstack
-# /cso trial and its checks, 2026-10-13).
-MAX_DOCX_UNPACKED_BYTES = 64 * 1024 * 1024  # every part, media included: images do not compress, so a real file unpacks to about its size
-MAX_DOCX_XML_ELEMENTS = 1_000_000  # a parsed tree costs about 140 bytes of memory per element
+# Refused before reading begins: a package that declares more than this unpacked. A declaration is not a bound on what
+# zipfile inflates (it inflates a chunk, then truncates), so this only spares reading what no real file declares; what
+# reading costs is bounded where it runs. Images do not compress, so a real file unpacks to about its own size; the
+# largest of 323 real contracts unpacks to 6.4 MB (2026-10-13; 256 MB before). What reading itself may cost is bounded
+# where it runs (ingest/bounded.py).
+MAX_DOCX_UNPACKED_BYTES = 64 * 1024 * 1024
 MAX_PDF_PAGES = 2000
-MAX_PDF_CONTENT_BYTES = 16 * 1024 * 1024  # the pages' drawing instructions once inflated: what text extraction walks
-_MB = 1024 * 1024
 
 
 class UnsupportedFile(ValueError):
@@ -165,6 +162,12 @@ _PROPERTIES = frozenset({qn(tag) for tag in ("w:pPr", "w:rPr", "w:sdtPr", "w:sdt
 _RUN_BREAKS = {qn("w:tab"): "\t", qn("w:ptab"): "\t", qn("w:br"): "\n", qn("w:cr"): "\n", qn("w:noBreakHyphen"): "-"}
 _REVISIONS_XPATH = ".//w:ins | .//w:del | .//w:moveFrom | .//w:moveTo"
 _DELETED_MARK = f"{qn('w:pPr')}/{qn('w:rPr')}/{qn('w:del')}"
+# Reader v14: a numbered paragraph inside a text box, or with a tracked change to its properties, leaves its list's
+# printed numbers to Word (`_Numbering.printed_numbers`).
+_TEXT_BOX = qn("w:txbxContent")
+_PARAGRAPH_PROPERTIES_CHANGE = f"{qn('w:pPr')}/{qn('w:pPrChange')}"
+_MARK_REMOVED = (_DELETED_MARK, f"{qn('w:pPr')}/{qn('w:rPr')}/{qn('w:moveFrom')}")
+_SECTION_BREAK = f"{qn('w:pPr')}/{qn('w:sectPr')}"
 _DELETED_ROW = f"{qn('w:trPr')}/{qn('w:del')}"
 _SDT = qn("w:sdt")
 _SDT_CONTENT = qn("w:sdtContent")
@@ -299,6 +302,17 @@ def accepted_text(element: etree._Element, walk: _Walk, paragraph_hides: bool | 
     return "".join(parts)
 
 
+def _set_apart(paragraph: Paragraph) -> bool:
+    """Whether a paragraph's text is set apart as a title: every run with text bold (its own setting, or its paragraph
+    style's when it has none), or every letter a capital."""
+    letters = [c for c in paragraph.text if c.isalpha()]
+    if letters and all(c.isupper() for c in letters):
+        return True
+    runs = [run for run in paragraph.runs if run.text.strip()]
+    style_bold = bool(paragraph.style is not None and paragraph.style.font.bold)
+    return bool(runs) and all(run.bold or (run.bold is None and style_bold) for run in runs)
+
+
 def _heading_level(paragraph: Paragraph) -> int:
     """1-based outline level from the style name (Heading 2, SchLevel1Heading, Title), the paragraph's own
     w:outlineLvl, or the outline level its style chain declares; 0 for body text."""
@@ -321,6 +335,316 @@ def _heading_level(paragraph: Paragraph) -> int:
         style = style.base_style
         depth += 1
     return 0
+
+
+# The words a heading may print before its number and still be a clause number (sections.HEADING_NUMBER reads the same
+# three): "Article 4" is clause 4; "Schedule 1" is not a clause, and its number is not one.
+_CLAUSE_WORDS = frozenset({"section", "clause", "article"})
+
+
+class _Numbering:
+    """The document's numbering definitions (w:numbering), read once: for each numbering instance (w:num), each level's
+    format and text as Word prints it, the instance's own level overrides applied and a list that is a link to a
+    numbering style followed one step. A reading of the definitions is never a reason to refuse the file: a package
+    without them, or with ones it cannot read, numbers nothing."""
+
+    def __init__(self, document: WordDocument) -> None:
+        self.levels: dict[str, dict[str, tuple[str, str]]] = {}
+        # Reader v14: each level's start value, and the levels whose counting this reader does not reproduce
+        # (w:lvlRestart, w:isLgl), per instance; and which list (w:abstractNum) each instance counts in.
+        self.starts: dict[str, dict[str, int]] = {}
+        self.unsupported: dict[str, set[str]] = {}
+        self.list_of: dict[str, str] = {}
+        # What each paragraph style's chain states (`_style_numbering`), worked out once per style for this reading.
+        self.by_style: dict[str | None, tuple[str | None, str | None]] = {}
+        try:
+            root = document.part.numbering_part.element
+            styles = document.styles.element
+        except Exception:  # noqa: BLE001 - no numbering part, or one python-docx cannot read: nothing is numbered
+            return
+        abstract: dict[str, dict[str, tuple[str, str]]] = {}
+        abstract_starts: dict[str, dict[str, int]] = {}
+        abstract_unsupported: dict[str, set[str]] = {}
+        linked: dict[str, str] = {}
+        for definition in root.iterfind(qn("w:abstractNum")):
+            key = definition.get(qn("w:abstractNumId")) or ""
+            abstract[key] = {(level.get(qn("w:ilvl")) or "0"): _level_of(level) for level in definition.iterfind(qn("w:lvl"))}
+            abstract_starts[key] = {(level.get(qn("w:ilvl")) or "0"): _start_of(level) for level in definition.iterfind(qn("w:lvl"))}
+            abstract_unsupported[key] = {(level.get(qn("w:ilvl")) or "0") for level in definition.iterfind(qn("w:lvl")) if _counting_unsupported(level)}
+            link = definition.find(qn("w:numStyleLink"))
+            if link is not None and link.get(qn("w:val")):
+                linked[key] = link.get(qn("w:val")) or ""
+        instances: dict[str, str] = {}
+        overrides: dict[str, list[etree._Element]] = {}
+        for instance in root.iterfind(qn("w:num")):  # one pass: each instance's list and its own level overrides
+            num_id = instance.get(qn("w:numId")) or ""
+            ref = instance.find(qn("w:abstractNumId"))
+            instances[num_id] = (ref.get(qn("w:val")) or "") if ref is not None else ""
+            overrides[num_id] = instance.findall(qn("w:lvlOverride"))
+        style_numbers = {
+            style.get(qn("w:styleId")) or "": numbering.get(qn("w:val")) or ""
+            for style in styles.iterfind(qn("w:style"))
+            for numbering in style.iterfind(f"{qn('w:pPr')}/{qn('w:numPr')}/{qn('w:numId')}")
+        }
+        for num_id, abstract_id in instances.items():
+            list_id = abstract_id
+            levels = abstract.get(abstract_id, {})
+            if not levels and abstract_id in linked:  # a list that is a link to a numbering style: that style's list
+                list_id = instances.get(style_numbers.get(linked[abstract_id], ""), "")
+                levels = abstract.get(list_id, {})
+            levels = dict(levels)
+            starts = dict(abstract_starts.get(list_id, {}))
+            unsupported = set(abstract_unsupported.get(list_id, set()))
+            for override in overrides[num_id]:
+                at = override.get(qn("w:ilvl")) or "0"
+                level = override.find(qn("w:lvl"))
+                if level is not None:
+                    levels[at] = _level_of(level)
+                    starts[at] = _start_of(level)
+                    if _counting_unsupported(level):
+                        unsupported.add(at)
+                restart = override.find(qn("w:startOverride"))
+                if restart is not None:
+                    starts[at] = _int_or(restart.get(qn("w:val")), starts.get(at, 1))
+            self.levels[num_id] = levels
+            self.starts[num_id] = starts
+            self.unsupported[num_id] = unsupported
+            self.list_of[num_id] = list_id
+
+    def shows_clause_number(self, num_id: str, level: str) -> bool:
+        """Whether Word prints a clause number for this level of this instance: the level exists, its format is neither
+        "none" nor a bullet, its text prints something, and neither it nor its list's first level prints words other
+        than Section, Clause or Article ("Schedule %1" numbers schedules, not clauses, and so do its sub-levels)."""
+        levels = self.levels.get(num_id)
+        if not levels or level not in levels:
+            return False
+        number_format, text = levels[level]
+        if number_format in ("none", "bullet") or not text.strip():
+            return False
+        for printed in (text, levels.get("0", ("", ""))[1]):
+            words = re.findall(r"[^\W\d_]+", re.sub(r"%\d", "", printed))
+            if any(word.casefold() not in _CLAUSE_WORDS for word in words):
+                return False
+        return True
+
+    def printed_numbers(self, document: WordDocument, body: etree._Element) -> dict[etree._Element, str | None]:
+        """The clause number Word prints for each paragraph it numbers (reader v14), from the list's own counters: every
+        numbered paragraph of the body in document order counts, tables included; a level starts at its start value (an
+        instance's override first), counts up, and restarts whenever a level above it counts. The number is the level's
+        text with each %N replaced by level N's count in its format ("%1.%2" is "4.2", "(%2)" is "(b)", "%1." with upper
+        roman is "IV"). Where the reader cannot say exactly what Word prints, the paragraph gets None, never a guess: two
+        instances of one list in use (whether the second continues the first or restarts is Word's own rule), a level
+        whose counting it does not reproduce, a format other than decimal, roman or letters, a count referred to before
+        it has started, a numbered paragraph in a text box or with a tracked change to its paragraph properties."""
+        events: list[tuple[etree._Element, str, str]] = []
+        doubtful: set[str] = set()
+        for element in body.iter(_PARAGRAPH):
+            found = _numbering_of(Paragraph(cast(CT_P, element), document), self.by_style)
+            if found is None or found[0] not in self.levels:
+                continue
+            counted = _counted_by_word(element)
+            if counted is False:
+                continue
+            events.append((element, *found))
+            if counted is None or next(element.iterancestors(_TEXT_BOX), None) is not None or element.find(_PARAGRAPH_PROPERTIES_CHANGE) is not None:
+                doubtful.add(found[0])
+        in_use: dict[str, set[str]] = {}
+        for _, num_id, _ in events:
+            in_use.setdefault(self.list_of.get(num_id, ""), set()).add(num_id)
+        counts: dict[str, dict[int, int]] = {}
+        printed: dict[etree._Element, str | None] = {}
+        for element, num_id, level in events:
+            if not level.isdigit():
+                printed[element] = None
+                continue
+            at = int(level)
+            count = counts.setdefault(num_id, {})
+            count[at] = count.get(at, self.starts[num_id].get(level, 1) - 1) + 1
+            for deeper in [k for k in count if k > at]:
+                del count[deeper]
+            exact = num_id not in doubtful and len(in_use.get(self.list_of.get(num_id, ""), set())) == 1 and level not in self.unsupported[num_id]
+            printed[element] = self._cited(num_id, at, count) if exact and self.shows_clause_number(num_id, level) else None
+        return printed
+
+    def _cited(self, num_id: str, at: int, count: dict[int, int]) -> str | None:
+        """The number a clause is cited by: what Word prints for it, and for a lettered or roman sub-item that prints only
+        its own counter ("(a)"), the number of the clause it sits in before it, as the document's own cross-references
+        cite it ("Section 8.1(a)" in Common Paper's agreement; reader v14 showed "§(a)" beside "§8.1"). Built only from
+        what Word prints at each level; a level whose text names its parents ("%1.%2") already carries them."""
+        own = self._render(num_id, str(at), count)
+        if own is None or at == 0 or not _SUB_ITEM.fullmatch(own):
+            return own
+        if any(int(level) - 1 != at for level in re.findall(r"%([1-9])", self.levels[num_id][str(at)][1])):
+            return own
+        if (at - 1) not in count or not self.shows_clause_number(num_id, str(at - 1)) or str(at - 1) in self.unsupported[num_id]:
+            return own
+        parent = self._cited(num_id, at - 1, count)
+        return f"{parent}{own}" if parent else own
+
+    def _render(self, num_id: str, level: str, count: dict[int, int]) -> str | None:
+        levels = self.levels[num_id]
+        text = levels[level][1]
+        parts: list[str] = []
+        position = 0
+        for marker in re.finditer(r"%([1-9])", text):
+            referred = int(marker.group(1)) - 1
+            value = count.get(referred)
+            shape = levels.get(str(referred), ("", ""))[0]
+            if value is None or str(referred) in self.unsupported[num_id]:
+                return None
+            shown = _format_count(value, shape)
+            if shown is None:
+                return None
+            parts += [text[position : marker.start()], shown]
+            position = marker.end()
+        parts.append(text[position:])
+        return _clause_number("".join(parts))
+
+
+def _counted_by_word(paragraph: etree._Element) -> bool | None:
+    """Whether Word counts this numbered paragraph in its list, as Word 16 itself reports (measured on built cases,
+    2026-10-14): not when its mark is a tracked deletion or move (the paragraph runs into the next one), nor when it
+    holds a section break and no character at all, not even an empty run's; it does count an empty paragraph without a
+    section break, a hidden one, and one whose text is all deleted. Common Paper's cover page ends in an empty numbered
+    Heading 1 holding the section break: Word prints "1. Service" after it, and counting it said "2". None for a
+    section break beside content other than text, tabs and breaks, whose counting was not measured."""
+    if any(paragraph.find(path) is not None for path in _MARK_REMOVED):
+        return False
+    if paragraph.find(_SECTION_BREAK) is None:
+        return True
+    contents = [child for run in paragraph.iter(_RUN) for child in run if child.tag != qn("w:rPr")]
+    if not contents:
+        return False
+    if all(child.tag in (qn("w:tab"), qn("w:br")) or (child.tag == _TEXT and child.text) for child in contents):
+        return True
+    return None
+
+
+def _level_of(level: etree._Element) -> tuple[str, str]:
+    """(numFmt, lvlText) of a w:lvl: Word's default format is decimal; a level with no text prints nothing."""
+    number_format = level.find(qn("w:numFmt"))
+    text = level.find(qn("w:lvlText"))
+    return (
+        (number_format.get(qn("w:val")) if number_format is not None else None) or "decimal",
+        (text.get(qn("w:val")) if text is not None else None) or "",
+    )
+
+
+def _start_of(level: etree._Element) -> int:
+    """A level's start value (w:start); Word's default is 1."""
+    start = level.find(qn("w:start"))
+    return _int_or(start.get(qn("w:val")) if start is not None else None, 1)
+
+
+def _int_or(value: str | None, default: int) -> int:
+    return int(value) if value is not None and value.strip().isdigit() else default
+
+
+def _counting_unsupported(level: etree._Element) -> bool:
+    """A level whose counting reader v14 does not reproduce: one that restarts on its own rule (w:lvlRestart) or prints
+    every level in legal decimal form (w:isLgl)."""
+    return level.find(qn("w:lvlRestart")) is not None or level.find(qn("w:isLgl")) is not None
+
+
+_ROMAN = ((1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"))
+
+
+def _format_count(value: int, shape: str) -> str | None:
+    """A count as Word prints it in the level's format, for the formats reader v14 reproduces; None for any other."""
+    if value < 1 and shape != "decimal":
+        return None
+    if shape == "decimal":
+        return str(value)
+    if shape == "decimalZero":
+        return f"{value:02d}"
+    if shape in ("upperRoman", "lowerRoman"):
+        roman = ""
+        for size, letters in _ROMAN:
+            while value >= size:
+                roman, value = roman + letters, value - size
+        return roman if shape == "upperRoman" else roman.lower()
+    if shape in ("upperLetter", "lowerLetter"):
+        letter = chr(ord("a") + (value - 1) % 26) * ((value - 1) // 26 + 1)  # Word's 27th is "aa", its 28th "bb"
+        return letter.upper() if shape == "upperLetter" else letter
+    return None
+
+
+# A sub-item's printed label: "(a)", "(iv)", "(2)".
+_SUB_ITEM = re.compile(r"\([0-9A-Za-z]{1,6}\)")
+
+
+def _clause_number(printed: str) -> str | None:
+    """The number a section is cited by, from what Word prints: the clause word and a closing full stop left off
+    ("Article 4" and "4." are §4), a lone closing parenthesis too ("4)"); None when nothing number-like is left."""
+    number = re.sub(r"^(?:section|clause|article)\s+", "", printed.strip(), flags=re.IGNORECASE).rstrip(".")
+    if number.endswith(")") and "(" not in number:
+        number = number[:-1]
+    number = number.strip()
+    return number if number and " " not in number and any(c.isalnum() for c in number) else None
+
+
+def _numbering_of(paragraph: Paragraph, by_style: dict[str | None, tuple[str | None, str | None]]) -> tuple[str, str] | None:
+    """(numbering instance, level) Word applies to the paragraph: its own w:numPr, completed from the first style of its
+    chain that has one (a w:numPr naming only a level takes its instance from the style); None when it has none or names
+    instance 0, Word's "no numbering". ``by_style`` keeps what each paragraph style's chain states, keyed by the style the
+    paragraph names (None for the default style), so a document of many headings walks each chain once."""
+    own_id, own_level = _numbering_fields(paragraph._p.pPr.find(qn("w:numPr")) if paragraph._p.pPr is not None else None)
+    style_id = paragraph._p.style
+    if style_id not in by_style:
+        by_style[style_id] = _style_numbering(paragraph.style)
+    style_num_id, style_level = by_style[style_id]
+    num_id = own_id if own_id is not None else style_num_id
+    level = own_level if own_level is not None else style_level
+    if not num_id or num_id == "0":
+        return None
+    return num_id, level or "0"
+
+
+def _numbering_fields(numbering: etree._Element | None) -> tuple[str | None, str | None]:
+    """(numId, ilvl) a w:numPr states, each None where it states none."""
+    if numbering is None:
+        return None, None
+    found_id, found_level = numbering.find(qn("w:numId")), numbering.find(qn("w:ilvl"))
+    num_id = found_id.get(qn("w:val")) if found_id is not None else None
+    level = found_level.get(qn("w:val")) if found_level is not None else None
+    return (num_id.strip() if num_id is not None else None), (level.strip() if level is not None else None)
+
+
+def _style_numbering(style: ParagraphStyle | None) -> tuple[str | None, str | None]:
+    """The first numId and the first ilvl stated along a paragraph style's chain: the style, then its bases."""
+    num_id: str | None = None
+    level: str | None = None
+    depth = 0
+    while style is not None and depth < _STYLE_DEPTH:
+        properties = style.element.find(qn("w:pPr"))
+        found_id, found_level = _numbering_fields(properties.find(qn("w:numPr")) if properties is not None else None)
+        num_id = num_id if num_id is not None else found_id
+        level = level if level is not None else found_level
+        style = style.base_style
+        depth += 1
+    return num_id, level
+
+
+def _uses_heading_styles(document: WordDocument, body: etree._Element) -> bool:
+    """Whether any paragraph is a heading by its style or its own outline level: read once per paragraph style in use, by
+    one paragraph of each. Asked of every paragraph, a body of six million empty paragraphs (a bounds fixture) took more
+    than five minutes; the styles in use are a handful."""
+    if body.find(f".//{_OUTLINE_LEVEL}") is not None:
+        return True
+    by_style: dict[str, etree._Element] = {}
+    for style in body.iterfind(f".//{_PARAGRAPH_STYLE}"):
+        properties = style.getparent()  # w:pStyle → w:pPr → w:p
+        paragraph = properties.getparent() if properties is not None else None
+        if paragraph is not None:
+            by_style.setdefault(style.get(qn("w:val")) or "", paragraph)
+    unstyled = next((p for p in body.iterfind(f".//{_PARAGRAPH}") if p.find(_PARAGRAPH_STYLE_PATH) is None), None)
+    examples = [*by_style.values(), *([unstyled] if unstyled is not None else [])]
+    return any(element.tag == _PARAGRAPH and _heading_level(Paragraph(cast(CT_P, element), document)) for element in examples)
+
+
+_OUTLINE_LEVEL = qn("w:outlineLvl")
+_PARAGRAPH_STYLE = qn("w:pStyle")
+_PARAGRAPH_STYLE_PATH = f"{qn('w:pPr')}/{qn('w:pStyle')}"
 
 
 def _outline_level(properties: etree._Element | None) -> int | None:
@@ -350,60 +674,19 @@ class TooLargeToRead(UnsupportedFile):
     """Well-formed, but it would cost more memory or time than any contract needs; refused before parsing."""
 
 
-class _ElementCount:
-    """A parser target that keeps nothing: the elements a part would become, counted as the markup streams past. lxml
-    calls only the target methods that exist, so text, ends and comments cost no call into Python here; the stubs'
-    ParserTarget protocol lists all five, hence the cast where it is used."""
-
-    def __init__(self) -> None:
-        self.elements = 0
-
-    def start(self, _tag: str, _attrib: dict[str, str]) -> None:
-        self.elements += 1
-
-    def close(self) -> int:
-        return self.elements
-
-
-_MARKUP_CHUNK = 64 * 1024
-
-
-def _refuse_costly_package(data: bytes) -> None:
-    """Refuse, before any part becomes a tree, a package that would cost more to read than any contract needs. The
-    declared sizes bound what zipfile inflates (it never reads a member past its declaration); a streaming count that
-    builds nothing bounds the elements the markup parts would become, which is what a tree's memory follows. Every
-    member is counted, whatever its name or first bytes: python-docx parses a part by the content type the package
-    declares for it, not by its extension, and lxml reads markup in any encoding it declares (UTF-16 among them)."""
+def _unpacked_size(data: bytes) -> int | None:
+    """The declared uncompressed size of a zip package; zipfile never reads a member past its declaration."""
     try:
-        archive = zipfile.ZipFile(io.BytesIO(data))
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            return sum(info.file_size for info in archive.infolist())
     except zipfile.BadZipFile:
-        return  # not a package at all: python-docx refuses it below, with the reason it always gave
-    with archive:
-        members = archive.infolist()
-        unpacked = sum(info.file_size for info in members)
-        if unpacked > MAX_DOCX_UNPACKED_BYTES:
-            raise TooLargeToRead(f"the .docx unpacks to {unpacked // _MB} MB; the limit is {MAX_DOCX_UNPACKED_BYTES // _MB} MB")
-        counted = _ElementCount()
-        for info in members:
-            parser = etree.XMLParser(target=cast("etree.ParserTarget", counted), resolve_entities=False, no_network=True, load_dtd=False, huge_tree=False)
-            try:
-                with archive.open(info) as member:
-                    while chunk := member.read(_MARKUP_CHUNK):
-                        parser.feed(chunk)
-                        if counted.elements > MAX_DOCX_XML_ELEMENTS:
-                            raise TooLargeToRead(f"the .docx holds over {MAX_DOCX_XML_ELEMENTS:,} XML elements; no contract needs that many")
-                parser.close()
-            except etree.XMLSyntaxError:
-                continue  # not markup (media), or malformed markup, which python-docx refuses below as it always did
-            except (zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError):
-                # A member that fails its own checks (a CRC, a compression method) is python-docx's to refuse if it reads
-                # it, as before: a 300 MB member declared as 1 byte and referred to by nothing is still accepted (g3b,
-                # depth pass). The count read no further than the declaration.
-                continue
+        return None
 
 
 def read_docx(data: bytes) -> ReadResult:
-    _refuse_costly_package(data)
+    unpacked = _unpacked_size(data)
+    if unpacked is not None and unpacked > MAX_DOCX_UNPACKED_BYTES:
+        raise TooLargeToRead(f"the .docx unpacks to {unpacked // (1024 * 1024)} MB; the limit is {MAX_DOCX_UNPACKED_BYTES // (1024 * 1024)} MB")
     # A valid zip with a broken or hostile package inside fails in many shapes; `read` refuses every one of them.
     document = DocxDocument(io.BytesIO(data))
     body = document.element.body
@@ -412,6 +695,14 @@ def read_docx(data: bytes) -> ReadResult:
     except (KeyError, AttributeError):  # a package without a styles part: nothing hides through a style
         styles_element = None
     walk = _Walk(styles=_Styles(styles_element))
+    numbering = _Numbering(document)
+    printed = numbering.printed_numbers(document, body)
+    # A DOCX whose headings carry no heading style (manual numbers, bold paragraphs, list numbering) had no heading at all:
+    # one block of text cut into parts with no clause numbers, so no citation could name a clause (retrieval study,
+    # 2026-10-14: 0 of 293 headings). Where no paragraph has a heading style or outline level, a paragraph is read as a
+    # plain text line is (sections.looks_like_heading), with the number Word prints for it when it has one.
+    styled = _uses_heading_styles(document, body)
+    last_number = 0  # the top-level number of the last such heading: a number that does not continue it is not a clause
     blocks: list[Block] = []
     title = ""
     # Text of paragraphs whose mark is deleted: once accepted, they run into the next paragraph.
@@ -419,14 +710,15 @@ def read_docx(data: bytes) -> ReadResult:
 
     removed = 0
 
-    def add(text: str, level: int = 0) -> None:
+    def add(text: str, level: int = 0, word_number: str | None = None) -> None:
         nonlocal title, removed
         text, count = remove_format_characters(text)
         removed += count
         if not text:
             return
         if level:
-            blocks.append(Block("heading", text, level))
+            # A heading carries the number Word prints for it, or none; no number is computed from levels (reader v14).
+            blocks.append(Block("heading", text, level, implicit_number=False, word_number=word_number))
             return
         if not title and not blocks:
             title = shorten_title(text)
@@ -467,10 +759,51 @@ def read_docx(data: bytes) -> ReadResult:
                 rows.append(" | ".join(cells))
         return rows
 
+    def _unstyled_heading_level(text: str, number: str | None, after_text: bool) -> int:
+        """The level of a paragraph read as a plain heading line in a document with no heading style, or 0: a numbered
+        title whose number continues the clause numbering, Word's list number before a title, or a short all-caps line
+        after the document's first line (that one is its title)."""
+        nonlocal last_number
+        line = f"{number} {text}" if number and number[:1].isdigit() else text
+        if not looks_like_heading(line):
+            return 0
+        numbered = HEADING_NUMBER.match(line)
+        if numbered is None:
+            return 1 if after_text else 0
+        if not continues_numbering(numbered.group(1), last_number):
+            return 0
+        last_number = int(numbered.group(1).split(".")[0])
+        return 1 if "." not in numbered.group(1) else 2
+
+    def _styled_top(text: str, number: str | None) -> int | None:
+        """The top-level clause number a styled heading states ("10" for "10. Liability" or Word's "10."), or None."""
+        line = f"{number} {text}" if number and number[:1].isdigit() else text
+        numbered = HEADING_NUMBER.match(line)
+        top = numbered.group(1).split(".", 1)[0] if numbered else ""
+        return int(top) if top.isdigit() else None
+
+    def _typed_heading_level(paragraph: Paragraph, text: str, number: str | None) -> int:
+        """In a document whose headings carry heading styles, a clause heading its author typed instead, or 0. The
+        first-visitor acceptance test (2026-10-14) uploaded a services agreement whose "11. Termination" was a bold
+        Normal paragraph between the styled "10 Liability" and "13 Notices": read as body, the termination clause sat
+        inside §10, and a quote from 11.2(b)(ii) was "found at §10 · Liability" on the card. A typed heading is a short
+        numbered title set apart (all bold, or in capitals) whose whole number is the next clause number after the last
+        heading, at most one clause written inline between. A numbered list item fails at least one of those."""
+        nonlocal last_number
+        line = f"{number} {text}" if number and number[:1].isdigit() else text
+        numbered = HEADING_NUMBER.match(line)
+        if numbered is None or not numbered.group(1).isdigit() or not looks_like_heading(line) or not _set_apart(paragraph):
+            return 0
+        top = int(numbered.group(1))
+        if not 0 < top - last_number <= MAX_TOP_STEP:
+            return 0
+        last_number = top
+        return 1
+
     def walk_container(container: etree._Element) -> None:
         """Paragraphs and tables in document order, entering block-level content controls (w:sdt), which wrap a
         heading, a clause or a whole table and were skipped before 2026-10-01 while coverage called them read."""
-        nonlocal carry
+        nonlocal carry, last_number
         for child in container.iterchildren():
             if child.tag == _PARAGRAPH:
                 text = accepted_text(child, walk)
@@ -480,7 +813,16 @@ def read_docx(data: bytes) -> ReadResult:
                 text = (carry + text).strip()
                 carry = ""
                 if text:
-                    add(text, _heading_level(Paragraph(cast(CT_P, child), document)))
+                    paragraph = Paragraph(cast(CT_P, child), document)
+                    level = _heading_level(paragraph)
+                    if level and styled:
+                        top = _styled_top(text, printed.get(child))
+                        last_number = top if top is not None else last_number
+                    elif styled:
+                        level = _typed_heading_level(paragraph, text, printed.get(child))
+                    else:
+                        level = _unstyled_heading_level(text, printed.get(child), bool(blocks))
+                    add(text, level, printed.get(child) if level > 0 else None)
             elif child.tag == _TABLE:
                 add(carry.strip())
                 carry = ""
@@ -518,15 +860,10 @@ def read_pdf(data: bytes) -> ReadResult:
         raise TooLargeToRead(f"the PDF has {page_count} pages; the limit is {MAX_PDF_PAGES}")
     pages = list(reader.pages)
     lines: list[str] = []
+    line_pages: list[int] = []  # the page each line was printed on: page furniture is a line printed on most of them
     textless = 0
     removed = 0
-    content = 0
-    for page in pages:
-        # Each page's inflated drawing instructions are counted before its text is extracted, so no file reads for longer
-        # than MAX_PDF_CONTENT_BYTES of them takes; pypdf already bounds one page's streams, not the whole document's.
-        content += _page_content_bytes(page)
-        if content > MAX_PDF_CONTENT_BYTES:
-            raise TooLargeToRead(f"the PDF's pages hold over {MAX_PDF_CONTENT_BYTES // _MB} MB of drawing instructions; no contract needs that much")
+    for number, page in enumerate(pages):
         # Layout mode keeps blank lines between paragraphs, which is the only structure most PDFs carry.
         try:
             text = page.extract_text(extraction_mode="layout") or ""
@@ -538,19 +875,14 @@ def read_pdf(data: bytes) -> ReadResult:
             textless += 1  # an image-only (scanned) page: the record says so instead of "unknown"
         lines.extend(re.sub(r"[ \t]{2,}", " ", line) for line in text.splitlines())
         lines.append("")
+        line_pages.extend([number] * (len(lines) - len(line_pages)))
     return ReadResult(
-        coverage=pdf_coverage(page_count, textless), blocks=_blocks_from_lines(lines), pages=len(pages), title=_first_line(lines), format_characters=removed
+        coverage=pdf_coverage(page_count, textless),
+        blocks=_blocks_from_lines(lines, line_pages),
+        pages=len(pages),
+        title=_first_line(lines),
+        format_characters=removed,
     )
-
-
-def _page_content_bytes(page: PageObject) -> int:
-    """The size of a page's drawing instructions once inflated. A page whose contents cannot be read here is counted as
-    empty and left to the extractor, which read it before this count existed: the count refuses, it never breaks a file."""
-    try:
-        contents = page.get_contents()
-        return len(contents.get_data()) if contents is not None else 0
-    except Exception:  # noqa: BLE001 - see the docstring
-        return 0
 
 
 # ---------------------------------------------------------------------------- TXT
@@ -605,23 +937,33 @@ def shorten_title(text: str) -> str:
     return text[: cut if cut > 0 else MAX_TITLE_CHARS].rstrip() + "…"
 
 
-def _blocks_from_lines(lines: list[str]) -> list[Block]:
-    """Paragraphs are separated by blank lines; short numbered or all-caps lines are headings."""
+# A line that names an Article, a Part or a Chapter and nothing else: "ARTICLE II", "Article 2", "PART IV".
+_PART_LINE = re.compile(r"^(?:ARTICLE|Article|PART|Part|CHAPTER|Chapter)\s+(?:[IVXLC]{1,7}|\d{1,3})\.?$")
+
+
+def _blocks_from_lines(lines: list[str], pages: list[int] | None = None) -> list[Block]:
+    """Paragraphs are separated by blank lines; short numbered or all-caps lines are headings. ``pages`` holds the page
+    each line was printed on, for a format that has pages (PDF, which ends each page with a blank line); every block
+    carries the page of its first line."""
     blocks: list[Block] = []
     paragraph: list[str] = []
+    paragraph_page: int | None = None
 
     def flush() -> None:
         if paragraph:
-            blocks.append(Block("text", " ".join(paragraph)))
+            blocks.append(Block("text", " ".join(paragraph), page=paragraph_page))
             paragraph.clear()
 
     seen_heading = False
     last_number = 0  # the top-level number of the last numbered heading: clause numbers count on from it
-    for raw in lines:
+    for index, raw in enumerate(lines):
         line = raw.strip()
+        page = pages[index] if pages is not None else None
         if not line:
             flush()
             continue
+        if not paragraph:
+            paragraph_page = page
         if looks_like_heading(line):
             numbered = HEADING_NUMBER.match(line)
             if numbered and not continues_numbering(numbered.group(1), last_number):
@@ -632,14 +974,19 @@ def _blocks_from_lines(lines: list[str]) -> list[Block]:
             flush()
             if not numbered and not seen_heading and not blocks:
                 # An all-caps first line is the title, not clause 1.
-                blocks.append(Block("text", line))
+                blocks.append(Block("text", line, page=page))
                 continue
             seen_heading = True
+            if not numbered and blocks and blocks[-1].kind == "heading" and _PART_LINE.match(blocks[-1].text) and not _PART_LINE.match(line):
+                # "ARTICLE II" on one line and "PURCHASE AND SALE" on the next are one heading: apart, the first was an
+                # empty section and the Article's clauses sat under a title with no number (retrieval study, 2026-10-14).
+                blocks[-1] = Block("heading", f"{blocks[-1].text} {line}", blocks[-1].level, implicit_number=False, page=blocks[-1].page)
+                continue
             if numbered:
                 last_number = int(numbered.group(1).split(".")[0])
             # A plain-text or PDF heading carries its number in its text or has none: no format numbers it implicitly,
             # so a number computed for it would be a number the document never shows (QA campaign, 2026-10-08).
-            blocks.append(Block("heading", line, 1 if "." not in line.split(" ", 1)[0].rstrip(".") else 2, implicit_number=False))
+            blocks.append(Block("heading", line, 1 if "." not in line.split(" ", 1)[0].rstrip(".") else 2, implicit_number=False, page=page))
             continue
         paragraph.append(line)
     flush()

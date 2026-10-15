@@ -113,7 +113,7 @@ a new session).
    key; create the droplet exactly as section 3 says, **backups unticked**; note its IPv4.
 3. Cloudflare: add the staging A record (section 7). Later, the production switch (section 10).
 4. Decide the wording of `WORKBENCH_MODEL_HOST` (shown wherever the interface says where a contract's text goes; suggested:
-   "Modal (US)") and whether to keep 200 questions a day.
+   "Modal"; modal_ollama.py pins no GPU region, so name none) and whether to keep 200 questions a day.
 5. Approve, in turn: S0 (model only), the staging deployment S1, the production switch S2, and later retiring the
    workstation's tunnel.
 
@@ -136,12 +136,15 @@ images (rebuilt from the commit; keep the last two archives), `compose.yml`, `Ca
 (from ivo-experiments, sha256 `cff26179…`), and `.env` (the password manager). Losing the VM loses at most seven days of
 visitors' workspaces, which their first screen already says will go. Where every copy of a contract's words can be, on
 the VM and at the model host, and what removes it, is the table in README ("What the disk keeps"); the rehearsal checked
-each place on the VM. On Modal: the question's sections, the question and any guidance are sent with each call; Ollama
+each place on the VM. On Modal: the question, any guidance, the contract's file name and the question's sections are sent
+with each call; Ollama
 does not log request bodies; a call still running at 150 s has its result held by Modal for a later fetch, for a time
 Modal does not document.
 
 Recovery, rehearsed: a container that exits restarts; an API that stops answering is killed after three failed probes
-and restarted by its policy (frozen in the rehearsal: back in 145 s); a run cut by a restart ends failed, never stuck;
+and restarted by its policy (frozen in the rehearsal: back in 145 s); a run cut by a restart ends failed (one created in
+the instant before the restart, before its first stage row, names no process: it stays `reading` until staleness fails
+it on a read 41 minutes later; war room F-25, not rehearsed);
 stopping and starting every container keeps the store; losing the VM is a rebuild from the runbook (rehearsed on the
 same machine with the images loaded, on the committed kit: every volume removed, healthy again in 10 s, the store empty,
 `acceptance.mjs` 82 of 82). Not rehearsed: a Docker daemon restart and a new droplet; on a new droplet add provisioning and copying, about
@@ -157,7 +160,8 @@ set:
    records answer-v2, its prompt hash, temperature 0, seed 42, window 16,384.
 2. Cold start: after 5 minutes idle, time the first build check and the first answer; then three answers warm.
 3. The 44 goldens (`backend/scripts/run_goldens.py --prompt answer-v2`): the workstation's answer-v2 passed 37 of 44 in
-   two recordings with the same seven failures (g08, g11, g12, g26, g30, g35, g42; docs/GOLDENS.md).
+   two recordings with the same seven failures (g08, g11, g12, g26, g30, g35, g42; docs/GOLDENS.md). The judge checks
+   each run's stage, statuses and cited sections, not the answer's words (docs/GOLDENS.md, rule 4).
 4. The 15 frozen false-premise controls (the CUAD pair and six held-out texts, frozen by hash; the workstation's
    answer-v2: 3 of 7 negatives, 6 of 8 positives), scored by the same code.
 5. The wrong-party record: the /break headline question and the nine wrong-party questions of the rejected fix, twice

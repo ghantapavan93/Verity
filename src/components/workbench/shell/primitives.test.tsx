@@ -16,7 +16,7 @@ describe("StatusChip", () => {
     const modelPass = screen.getByText("Model's answer");
     render(<StatusChip status="needs_review" hasGuidance={false} source="model_hint" />);
     render(<StatusChip status="missing" hasGuidance={false} source="model_hint" />);
-    const missing = screen.getByText("Not found in the sections read");
+    const missing = screen.getByText("Not found in the sections read (model's view)");
     // Until 2026-10-09 the two shared one chip: a reader could not tell "the model answered" from "the model found nothing".
     expect(missing.className).not.toBe(modelPass.className);
     expect(modelPass.className).not.toBe(screen.getByText("Needs review").className);

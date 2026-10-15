@@ -96,6 +96,8 @@ def test_whatever_is_located_has_the_quote_s_letters_and_digits(text: str, quote
 @given(text_with_spaced_quote(), st.sampled_from(["  ", "\n", " ", " \n "]))
 def test_extra_whitespace_inside_a_quote_is_forgiven_without_moving_the_span_off_the_text(pair: tuple[str, str], filler: str) -> None:
     text, quote = pair
+    start = text.index(f" {quote} ") + 1
+    assume(bounded(text, start, start + len(quote)))  # "-A 0 …" before a quote opening "0" is one signed number (verifier v10)
     loosened = quote.replace(" ", filler, 1)
     found = locate(loosened, text)
     assert found is not None
@@ -106,6 +108,10 @@ def test_extra_whitespace_inside_a_quote_is_forgiven_without_moving_the_span_off
 @given(text_with_numbered_quote(), st.integers(min_value=1, max_value=9))
 def test_a_changed_digit_is_never_matched_to_the_original_digit(triple: tuple[str, str, int], offset: int) -> None:
     text, quote, position = triple
+    start = text.index(f" {quote} ") + 1
+    # Verifier v10: a text drawn as "-A " before the quote makes "-A 0" one signed number, and a quote that drops its sign
+    # is refused on purpose, as the substring property above assumes.
+    assume(bounded(text, start, start + len(quote)))
     changed = str((int(quote[position]) + offset) % 10)
     altered = quote[:position] + changed + quote[position + 1 :]
     assert locate(quote, text) is not None, "the unaltered quote is in the text by construction"

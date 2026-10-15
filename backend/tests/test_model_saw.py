@@ -69,7 +69,10 @@ class Overflowing:
 
     def generate_json(self, system: str, user: str, schema: dict[str, Any]) -> Generation:
         self.calls += 1
-        raise ContextOverflow("The question, the guidance and the sections handed to the model come to 20,695 tokens; its context window holds 16,384.")
+        raise ContextOverflow(
+            "The prompt's instructions, the question, the guidance, the contract's file name and the sections handed to the model come to "
+            "20,695 tokens; its context window holds 16,384."
+        )
 
 
 def test_a_prompt_that_does_not_fit_is_not_sent_twice() -> None:

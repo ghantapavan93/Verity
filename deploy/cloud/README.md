@@ -35,8 +35,10 @@ goes to a public registry. From the repository root, at the commit to deploy:
 ```bash
 docker build -f deploy/cloud/Dockerfile.api --target test .       # the backend suite inside the API image: must pass
 cd deploy/cloud
-BUILDX_NO_DEFAULT_ATTESTATIONS=1 VERITY_SITE=x VERITY_BUILD_SHA=$(git rev-parse HEAD) docker compose build
-docker save verity-api:local verity-web:local | gzip > verity-images-$(git rev-parse --short HEAD).tar.gz
+export VERITY_TAG=$(git rev-parse --short HEAD)                   # the images are tagged with the commit they hold
+BUILDX_NO_DEFAULT_ATTESTATIONS=1 VERITY_SITE=x VERITY_STORE=unused VERITY_BUILD_SHA=$(git rev-parse HEAD) docker compose build   # a build opens no store
+docker save verity-api:$VERITY_TAG verity-web:$VERITY_TAG | gzip > verity-images-$VERITY_TAG.tar.gz
+unset VERITY_TAG
 ```
 
 The API image installs `backend/requirements.lock`, the versions the workstation runs and the release gate tests, and
@@ -80,7 +82,8 @@ and on the droplet:
 ```bash
 cd /opt/verity && sha256sum contract-state.json          # cff26179f199…; anything else: stop
 gunzip -c verity-images-<sha>.tar.gz | docker load
-cp env.example .env && chmod 600 .env                     # fill in, VERITY_SITE included; make the secret with the line in env.example
+cp env.example .env && chmod 600 .env                     # fill in, VERITY_SITE and VERITY_STORE included (ORACLE.md, Stores); make the secret with the line in env.example
+sed -i '/^VERITY_TAG=/d' .env && echo VERITY_TAG=<sha> >> .env   # the archive's tag; compose refuses to start without it
 # First boot: Let's Encrypt staging until the name resolves and 80/443 answer, then production.
 VERITY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory docker compose up -d
 docker compose up -d --force-recreate caddy
@@ -110,7 +113,9 @@ cloud adds: the site name, the model URL, its proxy
 token as `WORKBENCH_OLLAMA_HEADERS`, the pinned digest, the host label, and health that never wakes the GPU.
 
 The owner's switch: `docker compose exec api touch /data/public.paused` refuses new uploads and questions at once with a
-plain sentence; `rm` it to resume. No restart.
+plain sentence; `rm` it to resume. No restart. On a host laid out as ORACLE.md says, this and every other compose
+command here runs in `/opt/verity/current/deploy/cloud` with `--env-file /opt/verity/shared/.env`; without it compose
+stops at the missing `VERITY_STORE` and `VERITY_TAG` and does nothing.
 
 ## What the disk keeps, and for how long
 
@@ -127,7 +132,7 @@ contract's words can reach is covered:
 | Core dumps | Off for the API (`ulimits: core: 0`) | `compose.yml` |
 | Logs | Ids, stages and durations, never a contract's words; SQL errors without their values; rotated at 3 × 10 MB | `test_ordinary_logs_carry_ids…`, `test_an_error_the_store_raises…`; no marker in any log after the rehearsal |
 | Backups, snapshots, archives | **None.** No backup volume, no cron, DigitalOcean backups off, no snapshot of the volume | this file |
-| The model host (Modal) | Each question's sections, the question and any guidance are sent to the Modal endpoint. Ollama does not log request bodies. A call still running at 150 s is answered by a 303 and its result held by Modal for a later fetch, for a time Modal does not document; Modal's own retention is under its terms | this file; `WORKBENCH_MODEL_HOST` tells the reader where the text goes |
+| The model host (Modal) | Each question, any guidance, the contract's file name and the sections retrieval chose for the question (the opening ones when it ranks none) are sent to the Modal endpoint. Ollama does not log request bodies. A call still running at 150 s is answered by a 303 and its result held by Modal for a later fetch, for a time Modal does not document; Modal's own retention is under its terms | this file; `WORKBENCH_MODEL_HOST` tells the reader where the text goes |
 
 A backup of the public store would hold visitors' contracts past the promise unless it were deleted before the
 earliest workspace it holds ends, which can be minutes after it is taken. The store holds nothing older than seven days
@@ -140,7 +145,7 @@ VM loses at most seven days of visitors' workspaces, which their first screen al
 |---|---|---|
 | A container exits | `restart: unless-stopped` | yes |
 | The API runs but stops answering | `liveness.py`: after its first minute, three failed probes in a row (about ninety seconds) kill the server, and the container restarts | yes: frozen, back in 145 s, by the restart policy |
-| The API restarts mid-run | The run left in flight is failed at start, never left running (`hostname: verity-api` keeps the owner's name stable) | yes |
+| The API restarts mid-run | A run whose stage row names the stopped process is failed at start (`hostname: verity-api` keeps the owner's name stable). A run created in the instant before the restart, before its first stage row, names no process: it stays `reading`, and the same question is handed that run, until a read after the staleness bound (four 600 s model timeouts plus a minute, 41 minutes) fails it (war room F-25) | yes, for a run with a stage row; the run with none was reproduced by the war room, not rehearsed |
 | The VM reboots | Docker starts the stack (`restart: unless-stopped`); the store is on the volume | partly: every container stopped and started, the store intact; a Docker daemon restart was not rehearsed |
 | The model endpoint is down or serves another build | The question fails with a sentence; health stays up; nothing is answered by another build | yes |
 | The VM is lost | Rebuild: a new droplet as above, the images from the build machine, `.env` from where the owner keeps it (the secret), the record from ivo-experiments; the store starts empty | partly: on the same machine with the images loaded, every volume removed, healthy again in 10 s and `acceptance.mjs` 82 of 82 (`rebuild-final.txt`); a new droplet was not |
@@ -158,7 +163,7 @@ Rollback). A tag given only on the command line lasts for that command: the next
 1. `docker compose down` (the volume stays).
 2. `docker load` the previous release's images and `docker compose up -d`.
 3. When the release being undone changed the schema (the delivery preflight's "schema owners changed"), the older build
-   may not read the store: start it on an empty one (`docker volume rm verity_verity-data` first), which ends every
+   may not read the store: start it on an empty one (`docker volume rm` the store `VERITY_STORE` names, first), which ends every
    visitor's workspace at once, or fix forward. Additive changes (`ensure_columns`) read the same store both ways.
 
 ## Spend boundaries

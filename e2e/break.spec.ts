@@ -63,6 +63,37 @@ test("Break Verity tells one recorded failure, its record, the rejected fix and 
     await sessions.getByRole("button", { name: "Session 1" }).click();
     await expect(page.getByText("Kept: its quote states the figure")).toBeVisible();
 
+    // Every footnote mark is legible where it stands: axe skips one-character text, and on paper the brass mark read
+    // 1.76:1 (war room F-43). The ratio is computed against the nearest painted background.
+    const faint = await page.evaluate(() => {
+      const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).map(Number);
+      const lum = ([r, g, b]: number[]) =>
+        [r, g, b]
+          .map((v) => v / 255)
+          .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+          .reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+      const painted = (el: Element | null): number[] => {
+        for (let at = el; at; at = at.parentElement) {
+          const [r, g, b, a = 1] = rgb(getComputedStyle(at).backgroundColor);
+          if (a > 0.5) return [r, g, b];
+        }
+        return rgb(getComputedStyle(document.body).backgroundColor);
+      };
+      return [...document.querySelectorAll('sup a[aria-label^="Source"]')].flatMap((a) => {
+        const [fg, bg] = [lum(rgb(getComputedStyle(a).color)), lum(painted(a.parentElement))];
+        const ratio = (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+        return ratio < 4.5 ? [`${a.getAttribute("aria-label")}: ${ratio.toFixed(2)}:1`] : [];
+      });
+    });
+    expect(faint, `footnote marks under 4.5:1 at ${viewport.width}`).toEqual([]);
+
+    // The rejected fix is one tap from the top on a phone too: it sat six screens down with its link hidden (F-17, R14).
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const toFix = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Rejected fix" });
+    await expect(toFix).toBeInViewport();
+    await toFix.click();
+    await expect(page.locator("#fix")).toBeInViewport();
+
     await expect(page.getByRole("link", { name: "Open the workbench" })).toHaveAttribute("href", "/");
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
     expect(await serious(page)).toEqual([]);

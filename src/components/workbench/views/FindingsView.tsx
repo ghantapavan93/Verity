@@ -184,6 +184,18 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                       <span>{formatWhen(r.createdAt)}</span>
                     </div>
                   </button>
+                  {r.flagged && r.concerns.length > 0 && (
+                    // What code raised, or the model asked, said before anyone decides: until 2026-10-14 a finding could be
+                    // confirmed from this list without its concerns ever showing (authority review).
+                    <div className={styles.concerns} id={`concerns-${r.id}`}>
+                      <span className={styles.concernsLabel}>Flagged</span>
+                      <ul>
+                        {r.concerns.map((concern) => (
+                          <li key={concern}>{concern}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <div className={styles.reviewBar}>
                     {r.shared ? (
                       <>
@@ -250,6 +262,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
                           disabled={busyId === r.id}
                           onClick={() => void decide(r, "confirmed")}
                           aria-label={`Confirm: ${r.topic}`}
+                          aria-describedby={r.flagged && r.concerns.length > 0 ? `concerns-${r.id}` : undefined}
                         >
                           Confirm
                         </button>

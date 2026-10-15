@@ -60,13 +60,15 @@ def health(request: Request, provider: ModelProvider = Depends(get_provider)) ->
             access="required",
             model_location=location,
             model_host=host,
+            fault="store" if problem is not None else "",
         )
     if settings.health_probes_model:
         ok, detail = provider.healthy()
     else:
         ok, detail = True, f"{provider.model}: checked before every answer, not by health"
+    fault: Literal["", "store", "model"] = "" if ok else "model"
     if problem is not None:
-        ok, detail = False, problem
+        ok, detail, fault = False, problem, "store"
     return HealthOut(
         ok=ok,
         provider=provider.name,
@@ -75,4 +77,5 @@ def health(request: Request, provider: ModelProvider = Depends(get_provider)) ->
         access="entered" if access.enabled() else "off",
         model_location=location,
         model_host=host,
+        fault=fault,
     )

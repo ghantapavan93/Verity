@@ -125,8 +125,16 @@ def pass_blockers(quotes: Sequence[str], guidance: str, rule: GuidanceRule, depe
 
     # Read whole. A passage that points at a section the model never saw may be changed by it.
     if dependencies:
-        blockers.append(f"the quoted passage refers to {', '.join(dependencies)}, which the model was not handed")
+        blockers.append(unseen_reason(dependencies))
     return list(dict.fromkeys(blockers))
+
+
+def unseen_reason(dependencies: Sequence[str]) -> str:
+    """What a pass says when the sentences its quotes sit in point at sections the model was not handed
+    (`runs.status.unseen_references`, never empty here): one wording, whether or not code compared a period (policy-v8)."""
+    *rest, last = dependencies
+    named = f"{', '.join(rest)} and {last}" if rest else last
+    return f"the sentence points at {named}, which {'were' if rest else 'was'} not handed to the model"
 
 
 _BOUND = {Operator.MINIMUM: "floor", Operator.MAXIMUM: "ceiling", Operator.EXACT: "fixed period"}

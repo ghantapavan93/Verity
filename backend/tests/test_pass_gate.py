@@ -1,6 +1,8 @@
-"""A pass is a claim about meaning, and code can only compare periods. So a pass is the model's to propose and code's
-to confirm, from the source text alone (policy.proof); every case here was a pass computed by code before 2026-10-02
-(policy-v1) or would have been one. The other direction is code's own: a shortfall, 60 days against a floor of 90."""
+"""A pass is a claim about meaning, and code can only compare periods. So a pass is the model's: code reads the source
+text for reasons against it (policy.proof) and says what it found, and since policy-v3 the pass is recorded as the
+model's (`model_hint`) either way; `confirmed_days` is a record made under policy-v2 and is never written now. Every
+case here was a pass computed by code before 2026-10-02 (policy-v1) or would have been one. The other direction is
+code's own: a shortfall, 60 days against a floor of 90."""
 
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ from app import db as db_module
 from app.analysis.schema import StatusHint
 from app.models import FINDING_STATUSES, STATUS_SOURCES, STATUSES_BY_SOURCE
 from app.policy.durations import parse_rule
-from app.policy.proof import pass_blockers
+from app.policy.proof import pass_blockers, unseen_reason
 from app.providers.base import Generation
 from app.runs.status import Decision, Grounds, decide, enclosing_sentences, settle_together, unseen_references
 from tests.support import GUIDANCE
@@ -101,8 +103,9 @@ def test_the_models_doubt_is_not_overruled_by_arithmetic() -> None:
 
 def test_who_owns_each_direction_is_what_the_record_says() -> None:
     """Same verified quote, same guidance; only the model's hint changes. A pass disappears with the model's hint, so
-    it is recorded as the model's pass confirmed by code, never as code's decision. A shortfall does not move with the
-    hint, so it is recorded as code's decision."""
+    it is recorded as the model's (`model_hint`), with code's finding that the day counts are consistent in its reason,
+    never as code's decision or confirmation; `confirmed_days` is a record made before policy-v3. A shortfall does not
+    move with the hint, so it is recorded as code's decision."""
     by_hint = {hint: decided(CLEAN, hint=hint) for hint in get_args(StatusHint)}
     assert (by_hint["pass"].status, by_hint["pass"].source) == ("pass", "model_hint")
     assert "code found the day counts consistent" in (by_hint["pass"].reason or "")
@@ -122,7 +125,48 @@ def test_who_owns_each_direction_is_what_the_record_says() -> None:
 def test_a_passage_that_points_at_an_unseen_section_is_not_passed_by_code() -> None:
     decision = decided(CLEAN, dependencies=("§14.3", "Schedule B"))
     assert (decision.status, decision.source) == ("pass", "model_hint")
-    assert "refers to §14.3, Schedule B, which the model was not handed" in decision.reason
+    assert "the sentence points at §14.3 and Schedule B, which were not handed to the model" in decision.reason
+
+
+# A pass on each road `decide` has to one: no guidance; guidance with no period (nothing to compare); a period in the
+# guidance and none in the quote; a comparison that holds. War room F-04 (2026-10-13): only the last named the section the
+# model was not handed, so "Subject to Section 14.3, …" with no guidance passed with no reason at all.
+UNSEEN_QUOTE = "Subject to Section 14.3, either party may terminate this Agreement for convenience."
+ROADS: list[tuple[str | None, str]] = [
+    (None, UNSEEN_QUOTE),
+    ("Assignment requires the other party's consent.", UNSEEN_QUOTE),
+    (GUIDANCE_90, UNSEEN_QUOTE),
+    (GUIDANCE_90, CLEAN),
+]
+
+
+@pytest.mark.parametrize(("guidance", "quote"), ROADS)
+def test_a_pass_says_which_section_its_sentence_points_at_that_the_model_was_not_handed(guidance: str | None, quote: str) -> None:
+    decision = decide("pass", None, None, guidance is not None, True, quotes=[quote], guidance=guidance, topic=TOPIC, dependencies=["§14.3"], passages=[quote])
+    assert (decision.status, decision.source) == ("pass", "model_hint"), "the status is the model's either way; only the reason speaks"
+    assert "the sentence points at §14.3, which was not handed to the model" in decision.reason, decision
+
+
+def test_every_pass_names_every_unseen_section_and_nothing_else_changes() -> None:
+    """Property over every hint, every road and every set of unseen sections: a pass names each of them in its reason,
+    one wording for all; with none, and for any status but a pass, the decision is what it was before policy-v8."""
+    unseen_sets: list[tuple[str, ...]] = [(), ("§14.3",), ("§14.3", "Schedule B"), ("§2", "§7.1", "Exhibit A")]
+    for (guidance, quote), hint, unseen in itertools.product(ROADS, get_args(StatusHint), unseen_sets):
+        decision = decide(hint, None, None, guidance is not None, True, quotes=[quote], guidance=guidance, topic=TOPIC, dependencies=unseen, passages=[quote])
+        if decision.status == "pass" and unseen:
+            assert decision.source == "model_hint" and unseen_reason(unseen) in decision.reason, (guidance, hint, unseen, decision)
+            assert all(name in decision.reason for name in unseen)
+        without = decide(hint, None, None, guidance is not None, True, quotes=[quote], guidance=guidance, topic=TOPIC, passages=[quote])
+        assert (decision.status, decision.source) == (without.status, without.source), "naming what was unseen never changes a status"
+        if decision.status != "pass" or not unseen:
+            assert "was not handed to the model" not in (without.reason or "")
+    assert unseen_reason(["§2", "§7.1", "Exhibit A"]) == "the sentence points at §2, §7.1 and Exhibit A, which were not handed to the model"
+
+
+def test_a_pass_with_nothing_unseen_and_no_guidance_still_carries_no_reason() -> None:
+    """Control: the reason is about what was not handed over; a pass whose sentence points at nothing unseen is as before."""
+    assert decide("pass", None, None, False, True, quotes=[CLEAN], passages=[CLEAN]) == Decision("pass", "model_hint")
+    assert decide("needs_review", None, None, False, True, quotes=[UNSEEN_QUOTE], dependencies=["§14.3"]) == Decision("needs_review", "model_hint")
 
 
 def test_the_models_wording_cannot_earn_a_pass_and_cannot_change_one() -> None:
@@ -201,6 +245,11 @@ def test_a_reference_is_unseen_when_the_section_exists_and_was_not_handed() -> N
     # A section split into parts is seen only when every part was handed.
     assert unseen_references("under Section 7", SECTIONS, [*handed, ("7", "Fees (part 1)")]) == ["§7"]
     assert unseen_references("under Section 7", SECTIONS, [*handed, ("7", "Fees (part 1)"), ("7", "Fees (part 2)")]) == []
+    # The section numbered so is the one meant: another clause's part that ends in the number is not it (owner store,
+    # 2026-10-13: §5.1 was handed, §5.5.1 and §9.5.1 were not, and "Section 5.1" was called unseen).
+    nested = [("5.1", "Fees"), ("5.5.1", "Credits"), ("9.5.1", "Notices")]
+    assert unseen_references("as set out in Section 5.1", nested, [("5.1", "Fees")]) == []
+    assert unseen_references("as set out in Section 5.1", nested, [("5.5.1", "Credits")]) == ["§5.1"]
     # What this reading of the document does not have cannot be called unseen: another agreement's section, a schedule in another file.
     assert unseen_references("Section 99 of the DPA and Exhibit Q apply.", SECTIONS, handed) == []
     # Malformed references name nothing.
@@ -255,7 +304,7 @@ Where spend falls beneath the floor, the vendor has the right to end things earl
 QUOTE = "Customer may terminate this Agreement for convenience upon ninety (90) days’ written notice to Provider."
 
 
-def ask(client: TestClient, monkeypatch: pytest.MonkeyPatch, lead: str) -> dict[str, Any]:
+def ask(client: TestClient, monkeypatch: pytest.MonkeyPatch, lead: str, with_guidance: bool = True) -> dict[str, Any]:
     def answer(system: str, user: str, schema: dict[str, object]) -> Generation:
         label = next(line.split("]")[0][1:] for line in user.splitlines() if line.startswith("[sec_") and "Termination for Convenience" in line)
         payload = {
@@ -281,7 +330,7 @@ def ask(client: TestClient, monkeypatch: pytest.MonkeyPatch, lead: str) -> dict[
     monkeypatch.setattr(client.provider, "generate_json", answer)
     uploaded = client.post("/api/documents", files={"file": ("msa.txt", LONG_CONTRACT.format(lead=lead).encode("utf-8"), "text/plain")})
     assert uploaded.status_code == 201, uploaded.text
-    guidance_id = client.post("/api/guidance", json={"text": GUIDANCE}).json()["id"]
+    guidance_id = client.post("/api/guidance", json={"text": GUIDANCE}).json()["id"] if with_guidance else None
     started = client.post(
         "/api/runs",
         json={"documentId": uploaded.json()["id"], "guidanceId": guidance_id, "question": "How much notice must Customer give to terminate for convenience?"},
@@ -297,12 +346,30 @@ def test_through_the_run_a_clause_subject_to_an_unseen_section_is_the_models_vie
     assert (finding["status"], finding["statusSource"]) == ("pass", "model_hint"), finding
     assert "code found the day counts consistent" in finding["statusReason"]
 
-    dependent = ask(client, monkeypatch, lead="Subject to Section 8, ")
-    assert "8" not in [c["number"] for c in dependent["candidates"]], "section 8 shares no word with the question, so it was not handed over"
+    # Since retrieval-v2 (2026-10-14) a clause that names another brings it along (runs.links): §8 shares no word with
+    # the question and is handed after the ranked sections, so nothing the sentence points at is unseen.
+    linked = ask(client, monkeypatch, lead="Subject to Section 8, ")
+    assert "8" in [c["number"] for c in linked["candidates"]], "the clause names §8, so it is handed after the ranked sections"
+    assert "which was not handed to the model" not in linked["findings"][0]["statusReason"]
+    # At most two sections are linked: a clause subject to three leaves one unseen, and the pass says so.
+    dependent = ask(client, monkeypatch, lead="Subject to Sections 6, 7 and 8, ")
+    assert "8" not in [c["number"] for c in dependent["candidates"]], "two links at most: §8 was not handed over"
     finding = dependent["findings"][0]
     assert (finding["status"], finding["statusSource"]) == ("pass", "model_hint"), finding
-    assert "refers to §8, which the model was not handed" in finding["statusReason"]
+    assert "the sentence points at §8, which was not handed to the model" in finding["statusReason"]
     assert 'a condition or an exception ("subject to")' in finding["statusReason"], "the words outside the quote, in its sentence, were read too"
+
+
+def test_through_the_run_without_guidance_a_pass_says_what_it_did_not_see(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """War room F-04: with no guidance nothing is compared, and the pass carried no reason although its sentence was
+    "Subject to Section 8, …" and §8 was never handed over. The status stays the model's; the reason names §8."""
+    plain = ask(client, monkeypatch, lead="", with_guidance=False)["findings"][0]
+    assert (plain["status"], plain["statusSource"], plain["statusReason"]) == ("pass", "model_hint", None), "control: nothing unseen, nothing said"
+    dependent = ask(client, monkeypatch, lead="Subject to Sections 6, 7 and 8, ", with_guidance=False)
+    assert "8" not in [c["number"] for c in dependent["candidates"]]  # two links at most (retrieval-v2): §6 and §7, not §8
+    finding = dependent["findings"][0]
+    assert (finding["status"], finding["statusSource"]) == ("pass", "model_hint"), finding
+    assert finding["statusReason"] == "the sentence points at §8, which was not handed to the model"
 
 
 def test_what_the_quote_left_out_of_its_own_sentence_still_blocks_a_pass() -> None:

@@ -538,7 +538,10 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
               <StatusChip status={f.status} hasGuidance={run.hasGuidance} source={f.statusSource} />
             </div>
             <p className={styles.findingText}>{f.conclusion}</p>
-            <p className={styles.quiet}>{STATUS_SOURCE_LABELS[f.statusSource] ?? f.statusSource}</p>
+            <p className={styles.quiet}>
+              {STATUS_SOURCE_LABELS[f.statusSource] ?? f.statusSource}
+              {f.statusReason ? ` Recorded: ${f.statusReason}.` : ""}
+            </p>
             {f.spans.map((s, i) => (
               <div key={i} className={styles.span}>
                 <div className={styles.spanMeta}>

@@ -3,7 +3,8 @@
 import styles from "../Workbench.module.css";
 import { NARROW_QUERY } from "../shell/constants";
 import { StatusChip, Visible } from "../shell/primitives";
-import { checkLedger, valueNotes } from "@/lib/checks";
+import { RelationNotes } from "./RelationNotes";
+import { checkLedger, unseenNote, valueNotes } from "@/lib/checks";
 import { isLocated, passageLabel, type FindingView, type SectionView, type SpanView } from "@/lib/types";
 
 function excerpt(quote: string, max = 150): string {
@@ -94,6 +95,19 @@ export function FindingCard({
               {note}
             </p>
           ))}
+          {/* A passage whose sentence points at a section the model never read: said beside the passages, where the answer
+              is read against them (release integration, 2026-10-13). */}
+          {finding.unseenReason && (
+            <p className={styles.valueNote} data-testid="unseen-note">
+              <span className={styles.checkBy} aria-hidden="true">
+                code
+              </span>
+              <span className={styles.visuallyHidden}>Checked by code: </span>
+              {unseenNote(finding.unseenReason)}
+            </p>
+          )}
+          {/* The contract's own statements about the quoted clauses (runs.relations): both ends open the document. */}
+          <RelationNotes notes={finding.relations} onJump={onJump} onEvidence={onEvidence} />
         </div>
       )}
       {/* What was checked, by whom: one row per recorded fact (lib/checks). A located quote and a supported answer are

@@ -91,7 +91,7 @@
     <li><span class="what">What code found</span><span class="say">The quote is not in <span class="mono">sec_4</span>. It is in <span class="mono">sec_0</span>, characters 4136 to 4284, an exact match, occurring once, inside the slice of text the model was actually shown.<span class="label">SourceMatch</span>
       <div class="quote">"4.1 TERMINATION WITHOUT CAUSE. Either party may terminate this Agreement without cause upon sixty (60) days prior written notice to the other party."</div></span></li>
     <li><span class="what">What policy code established</span><span class="say">The contract provides 60 calendar days; the guidance requires at least 90 calendar days. Source <span class="mono">computed_days</span>. The model's hint was discarded.<span class="label">PolicyEvaluation</span></span></li>
-    <li><span class="what">What the model saw</span><span class="say">Six candidate sections in retrieval order; five cut at 5,000 characters; 4,375 characters of the contract never reached the model. The exact system and user messages rebuild from the record and hash to what the checking stage recorded: <span class="mono">f5991f589759</span>.</span></li>
+    <li><span class="what">What the model saw</span><span class="say">Six candidate sections in retrieval order; five cut at 5,000 characters; 4,375 characters of the contract never reached the model. The exact system and user messages rebuild from the record and hash to what the checking stage recorded: <span class="mono">f5991f589759</span>. They are this answer's input because it came from the model's first validation round; an answer given to a corrected retry is said to have an input that cannot be rebuilt.</span></li>
     <li><span class="what">Can it be checked without this service</span><span class="say">The evidence pack is a zip with the original bytes, the sections, every located span and a <span class="mono">verify.py</span> that needs nothing but Python. On this run: every check passed, zero failures.</span></li>
     <li><span class="what">Then</span><span class="say">Runs: the golden set under every prompt version, the CUAD-30 measurement, the batch, the families, and the three experiments that were killed before this product was built.</span></li>
   </ol>
@@ -110,12 +110,13 @@
   <h2>What the system is</h2>
   <p>
     Bytes are hashed and stored once. A reader turns the file into numbered sections and records what it did
-    with each of seventeen parts of a DOCX, so the paper can say what was not read. BM25 picks six sections.
+    with each of eighteen parts of a DOCX, so the paper can say what was not read. BM25 picks six sections.
     One schema-constrained call to Qwen3 8B through Ollama, at temperature 0, proposes up to five findings,
     each with quotes. Code then locates every quote in the stored text through a fixed ladder (exact,
     normalised, case-folded, typed tokens), bounded to the characters the model was shown; a finding whose
-    quotes are not found is withheld and shown as withheld. The status is computed from the duration in the
-    verified quote and the rule in the guidance when both parse, otherwise taken from the model's hint and
+    quotes are not found is withheld and shown as withheld. When the duration in the verified quote and the rule
+    in the guidance both parse, code compares them: a shortfall is code's to report, while a pass stays the
+    model's view, with code's note that the day counts are consistent. Otherwise the status is the model's hint,
     labelled so. The run is immutable once finished, and the database enforces it.
   </p>
   <p>
@@ -128,7 +129,7 @@
     <thead><tr><th>Question</th><th>Experiment</th><th>Measurement</th><th>Decision</th></tr></thead>
     <tbody>
       <tr><td>Does the answer path hold on labels that are not ours?</td><td>CUAD-30: 30 lawyer-annotated contracts, 7 clause questions, 210 runs, pre-registered floors</td><td><strong>citation precision 0.85, recall 0.67</strong> against floors 0.80 and 0.50; non-compete 0.20 and uncapped liability 0.60 named unfit</td><td>fit to draft a review of five categories; two named as not</td></tr>
-      <tr><td>Does a prompt or retrieval change help?</td><td>44 golden questions on one contract, judged by code, under every candidate</td><td>answer-v2 at k=6: <strong>37 of 44</strong>; answer-v3: 37 with one regression; k=10: 38 with two regressions and +57% latency; hybrid retrieval: 40 with one regression</td><td>none adopted; the rule asks about regressions, not totals</td></tr>
+      <tr><td>Does a prompt or retrieval change help?</td><td>44 golden questions on one contract, judged by code on each run's statuses and cited sections (not on the answer's words), under every candidate</td><td>answer-v2 at k=6: <strong>37 of 44</strong>; answer-v3: 37 with one regression; k=10: 38 with two regressions and +57% latency; hybrid retrieval: 40 with one regression</td><td>none adopted; the rule asks about regressions, not totals</td></tr>
       <tr><td>Does retrieval hand the model the right section?</td><td>Recall@6 against 164 expert-labelled CUAD cases and 38 goldens</td><td><strong>0.85 and 0.92</strong>; hybrid 0.95 and 0.97</td><td>BM25 stays until a change shows no golden regression</td></tr>
       <tr><td>Would a smaller model do?</td><td>qwen3:4b on 42 goldens, same parse and options</td><td>36 of 42 versus 34, four times faster, two regressions</td><td>routing policy stays empty</td></tr>
       <tr><td>Does a verifier change lose evidence?</td><td>replay of verification over every recorded span, no model call</td><td>v5 over <strong>1,299 spans: +10 verified, 0 lost</strong></td><td>typed-token tier adopted</td></tr>
@@ -143,6 +144,7 @@
 
   <h2>Checks</h2>
   <div class="note">
+    When this page was first written (2026-09-30; the README's Checks section has them as they stand):
     Backend 277 tests, Hypothesis properties of the verifier, a Schemathesis fuzz of every route, ruff, mypy strict,
     three import contracts; interface 13 unit tests, 20 Playwright flows against the real API with recorded model
     answers, tsc, eslint, prettier; types generated from the API's OpenAPI document; twenty-four hand mutants.

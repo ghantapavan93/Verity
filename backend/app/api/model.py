@@ -5,15 +5,12 @@ or from another origin, is refused before anything is woken."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
-from ..application.start_run import refuse_past_daily_budget
+from ..application.quotas import refuse_if_spent, run_quotas
 from ..application.wake_model import waker
-from ..config import settings
 from ..db import get_session
 from ..errors import TooManyRequests
-from ..models import Run
 from ..schemas import ModelWakeOut
 from . import access
 
@@ -27,18 +24,13 @@ address_wakes = access.SlidingWindow(WAKES_PER_ADDRESS, WAKE_WINDOW_S)
 
 @router.post("/wake", response_model=ModelWakeOut)
 def wake(request: Request, session: DbSession = Depends(get_session)) -> ModelWakeOut:
-    # Nothing to wake for: questions are paused, today's questions are spent, or this reader's are (api/access.py
-    # limit_run_starts would refuse their next question before any model call).
+    # Nothing to wake for: questions are paused, or today's questions are spent, everyone's or this reader's (the quotas
+    # a new run is admitted against would refuse their next question before any model call).
     if access.paused():
         return ModelWakeOut(state="off")
     try:
-        refuse_past_daily_budget(session)
+        refuse_if_spent(session, run_quotas(access.current_workspace(request)))
     except TooManyRequests:
         return ModelWakeOut(state="limit")
-    workspace = access.current_workspace(request)
-    if access.is_public_workspace(workspace):
-        asked = session.scalar(select(func.count(Run.id)).where(Run.workspace_id == workspace, Run.created_at >= access._day_start())) or 0
-        if asked >= settings.anonymous_max_runs_per_day:
-            return ModelWakeOut(state="limit")
     address = access.client_address(request)
     return ModelWakeOut(state=waker.request(allow=lambda: address_wakes.take(address) is None))

@@ -32,7 +32,7 @@ def test_the_pack_verifies_itself_and_a_tampered_pack_fails(client: TestClient, 
 
     record = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     assert record["run_id"] == result["run_id"] and record["document"]["sha256"] == result["document"]["sha256"]
-    assert record["verifier"]["ladder"] == ["exact", "normalized", "casefold", "typed"] and record["verifier"]["version"] == "v7"
+    assert record["verifier"]["ladder"] == ["exact", "normalized", "casefold", "typed"] and record["verifier"]["version"] == "v10"
 
     verified = run_verify(folder)
     assert verified.returncode == 0, verified.stdout + verified.stderr
@@ -136,7 +136,7 @@ def test_the_pack_carries_the_rebuilt_model_input_and_verify_py_checks_it(client
 def test_verify_py_rechecks_a_typed_span_and_refuses_a_changed_value(tmp_path: Path) -> None:
     """A typed span (verifier v5) is re-checked by the pack's own verifier without the workbench: same letters at word
     boundaries, same values; a changed value fails."""
-    from app.application.evidence_pack import QUOTE_MAP, VERIFY_PY
+    from app.application.evidence_pack import render_verify_py
 
     section_text = "The fee of “$1,500” per user is payable within thirty (30) days."
     sections = [{"id": "s1", "ordinal": 0, "number": "4.1", "heading": "Fees", "text": section_text}]
@@ -164,7 +164,7 @@ def test_verify_py_rechecks_a_typed_span_and_refuses_a_changed_value(tmp_path: P
             ),
             encoding="utf-8",
         )
-        (folder / "verify.py").write_text(VERIFY_PY.replace("__QUOTE_MAP__", json.dumps(json.dumps(QUOTE_MAP, ensure_ascii=True))), encoding="utf-8")
+        (folder / "verify.py").write_text(render_verify_py(), encoding="utf-8")
         return folder
 
     same_value = subprocess.run([sys.executable, "verify.py"], cwd=pack("fee of $1500 per user"), capture_output=True, text=True, check=False)

@@ -103,7 +103,10 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
               <tr key={c.label}>
                 <td>{c.rank}</td>
                 <td className={styles.whyMono}>{c.label}</td>
-                <td>{c.number ? `§${c.number} · ${c.heading}` : c.heading}</td>
+                <td>
+                  {c.number ? `§${c.number} · ${c.heading}` : c.heading}
+                  {c.linked && <div className={styles.verifiedTag}>Added because the contract points here: {c.linked}</div>}
+                </td>
                 <td>
                   {c.truncated === null
                     ? "not determined"

@@ -984,6 +984,37 @@
   color: var(--text-2);
 }
 
+/* The contract's own statements about the quoted clauses (RelationNotes): set off by a rule beside the passages, not a
+   panel of their own. A statement that asks for review takes the review tone; one that only informs stays quiet. */
+.relations {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.relation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 10px;
+  border-left: 2px solid var(--hairline);
+}
+
+.relation[data-effect="replaced"],
+.relation[data-effect="scoped"],
+.relation[data-effect="precedence"],
+.relation[data-effect="dated"],
+.relation[data-effect="old_value"] {
+  border-left-color: var(--status-review-border);
+}
+
+.relationsRun {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 12px;
+}
+
 .resultActions {
   display: flex;
   flex-wrap: wrap;

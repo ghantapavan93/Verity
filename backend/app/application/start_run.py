@@ -4,30 +4,29 @@ Identity of a run's inputs is the fingerprint: document, guidance, question, pro
 decoding and retrieval options, and the versions of the rules that decide the answer (runs.versions).
 A repeated request with the same fingerprint reuses the running or completed
 run instead of spending another model call; a failed run is not reused, so it can be retried.
-The database enforces the same rule with a unique index over non-failed runs, so two requests
-racing each other cannot both create one.
+The database enforces the same rule with a unique index over non-failed runs. A new run is written
+through quotas.admit: the lookup is made again under the store's write lock, with the day's quotas,
+so of two requests racing each other the second is handed the first's run, and no quota is passed.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import timedelta
 
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, load_prompt
 from ..config import settings
-from ..errors import NotFound, TooManyRequests
+from ..errors import NotFound
 from ..hashing import fingerprint
 from ..ingest.invisible import visible_text
-from ..models import Document, Guidance, Run, utcnow
+from ..models import Document, Guidance, Run
 from ..providers.base import ModelProvider
 from ..retrieval.aliases import ALIASES_SHA256
 from ..routing.router import ModelRouter, task_for
 from ..runs.versions import SEMANTIC_VERSIONS
+from .quotas import admit, run_quotas
 from .workspace import require_document, require_guidance
 
 FINGERPRINT_KIND = "run/v1"
@@ -112,12 +111,6 @@ def start_run(
     options = run_options(decision.model)
     key = compute_fingerprint(document.id, guidance.id if guidance else None, question, prompt.sha256, options, workspace)
 
-    existing = active_run(session, key)
-    if existing is not None:
-        return StartedRun(existing, created=False)
-    if workspace is not None:
-        refuse_past_daily_budget(session)
-
     run = Run(
         document_id=document.id,
         guidance_id=guidance.id if guidance else None,
@@ -135,35 +128,14 @@ def start_run(
         fingerprint=key,
         workspace_id=workspace,
     )
-    session.add(run)
-    try:
-        session.commit()
-    except IntegrityError:
-        # A concurrent request with the same inputs won; the unique index makes this exact.
-        session.rollback()
-        existing = active_run(session, key)
-        if existing is None:
-            raise
-        return StartedRun(existing, created=False)
-    return StartedRun(run, created=True)
 
+    def write() -> Run:
+        session.add(run)
+        return run
 
-def refuse_past_daily_budget(session: Session) -> None:
-    """The readers' new runs today (UTC), all workspaces together, against settings.max_runs_per_day. A question asked
-    before is handed its run before this is asked, and the project's own runs (no workspace) are not counted."""
-    limit = settings.max_runs_per_day
-    if limit <= 0:
-        return
-    now = utcnow()
-    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    started = session.query(func.count(Run.id)).filter(Run.workspace_id.isnot(None), Run.created_at >= midnight).scalar() or 0
-    if started >= limit:
-        wait = int((midnight + timedelta(days=1) - now).total_seconds()) + 1
-        raise TooManyRequests(
-            f"Today's run budget for this workbench is spent ({limit} new questions). Answers already given still open; "
-            "new questions can be asked again after midnight UTC.",
-            retry_after=wait,
-        )
+    # A question asked before is handed its run before any quota is counted: it creates nothing and calls no model.
+    written, created = admit(session, run_quotas(workspace), write, find=lambda: active_run(session, key))
+    return StartedRun(written, created=created)
 
 
 def active_run(session: Session, key: str) -> Run | None:

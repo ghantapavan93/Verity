@@ -6,8 +6,8 @@ says "shall not apply" or "nothing in this section limits", never "uncapped"; a 
 directly or indirectly, engage in". This table is the model-free form of query expansion: when a question names
 a concept by any of its phrases, the other phrases of that concept join the query. It is data, hand-written,
 versioned by its hash, and recorded on every run that used it (`retrieval_aliases` in the run's options), so a
-run's candidates stay reproducible after the table changes. Off by default until the measurement in
-docs/RETRIEVAL.md adopts it (`WORKBENCH_RETRIEVAL_ALIASES`).
+run's candidates stay reproducible after the table changes. Off by default when it was built; on by default since the
+measurement in docs/RETRIEVAL.md adopted it (`WORKBENCH_RETRIEVAL_ALIASES=0` turns it off).
 """
 
 from __future__ import annotations

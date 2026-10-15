@@ -981,14 +981,347 @@ changed. An 84 KB .docx of six million empty paragraphs (35 MB unpacked, under t
 read. FastAPI parses a JSON body before the access gate runs, so 40 MB to /api/runs with no session took the API to a
 2 GB peak and held the event loop for 19 s; Cloudflare passes 100 MB. The invariants: what reading an upload may cost
 is bounded by what a real contract needs, counted before anything costly is built; and no body is read past what its
-route needs, on the bytes received, before the gate. A .docx is now counted as it streams, every member whatever its
-name or encoding, and refused past 1,000,000 elements or 64 MB unpacked (the largest of 323 real contracts: 204,093
-elements, 6.4 MB). A PDF is refused past 16 MB of inflated page content (the largest of 171: 2.71 MB), which closes the
-sibling found while checking: pages that inflate to 20 MB each read for 1.6 s apiece. Every request is cut off at 26 MiB
+route needs, on the bytes received, before the gate. The reading bound was first written in terms of the bytes: an
+element count for .docx and a budget of inflated page content for PDF (7b12989). An independent review rejected it with
+measurements: comments, processing instructions and attributes, which the count did not see, still took 1.4 to 2 GB
+from a 125 to 529 KB upload; counting every member inflated a bzip2 member nothing reads (862 MB from 36 KB); and a
+1.6 KB PDF whose page positions text half a million times read for 20 s in layout mode, so bytes of content do not
+bound time. Each bound was one shape behind the next. So the bound moved to what reading costs, measured while it runs:
+every reading happens in a child process whose memory is sampled every 50 ms and which is ended past 768 MB or at
+30 s (`ingest/bounded.py`; fork server on Linux, spawn on Windows). Within the bounds a reading comes back exactly as
+the API's own process would read it (40 real files and 10 fixtures compared field by field), a reader's refusal as it
+was raised, and any other failure as a server error. A counter-review of that round approved it and found the rest:
+60 s let two hostile files hold both reading slots while a third reader waited past Cloudflare's 100 s, so the bound is
+30 s (the largest real reading measured is 9.2 s) and each network reads one file at a time; a document read again
+for a revision check went around the two slots, so the slots are now in the one function every reading goes through;
+a production switch could turn the bounds off, so only the test suite can. Of the static checks only the 64 MB
+declared unpacked size stays (the largest of 323 real contracts unpacks to 6.4 MB); a declaration does not bound what
+zipfile inflates, so it only spares reading what no real file declares. Every request is cut off at 26 MiB
 for an upload and 1 MiB otherwise, declared or chunked, which also closes the recorded residual of chunked uploads
 spooled in full. Uploads are read two at a time on threads of their own, so they neither multiply the cost nor hold the
 threads /api/health needs (45 slow uploads held all 40 and health waited 10.4 s, past the liveness probe's 5 s). The API
-container may use 2 GB of the host. Not changed: stored readings and the parser version (no accepted file reads
-differently). Left open: Form XObjects reused across a PDF's pages are extracted each time by the plain extractor
-(unmeasured); an over-limit upload sent straight to the API, with no edge in front, may see the connection reset
+container may use 2.5 GiB of the host (`mem_limit: 2560m`). Not changed: stored readings and the parser version (no accepted file reads
+differently). Left open: a file inside the bounds holds a reading slot for up to 30 s, so readers on two networks can still
+keep the slots busy; the reading's child inherits the API's environment and its answer is unpickled by the API, so
+it bounds resources, not trust; an over-limit upload sent straight to the API, with no edge in front, may see the
+connection reset
 instead of the 413 (through Cloudflare the 413 arrives, measured on staging).
+
+A third counter-review (war room wave 5) rejected the door and found every wait in it untimed. Six uploads whose bodies
+never finished closed the door for everyone; a per-network cap and a 30 s pause limit followed, but a body trickled at
+a byte every two seconds still held its place, received uploads waited for their reading as long as others' readings
+took, documents read again for a revision check waited for a slot on the threads every sync route shares (sixty at
+once, and health answered after 21.5 s), and on Windows a reading child that died at start left the parent blocked
+past every deadline. The invariant: every place an upload or a reading holds is held for a bounded time, and a wait
+past its bound answers "not now" (503, Retry-After) with nothing kept. So: a body must average 32 KiB a second of
+waiting for the client after its first 10 s; an upload waits at most 45 s for its network's turn and a reading slot
+together, on the event loop with no copy of its bytes, so an answer comes inside Cloudflare's 100 s; documents are read
+again one at a time, each once, off the request's thread, and a request waits 2 s for it; the child is handed its file
+by a path, in a folder of the store's own in the system's temporary folder, which the API empties at start and the
+retention sweep keeps clear (loose in that folder, a force-stopped API left a contract copy that nothing on Windows
+removes; Codex), and noticed when it ends. Its fourth round rejected a count of places itself: with sixteen places
+overall and two per IPv6 /64, eight /64s of one host held all sixteen by sending headers and reconnecting as each was
+ended (746 B/s; a visitor on a ninth network got in 0 of 18 times). The door now counts no places overall: each network
+(an IPv4 address or an IPv6 /64) has two uploads in flight, and all of them together hold at most 384 MiB of received
+body, so an upload that sends nothing holds nothing and holding the spool takes sending it. Found with it and fixed at
+its primitive: a request let in before retention purged its workspace wrote its grant, document and file afterwards,
+into a workspace no longer listed, kept forever; every row a public workspace adds (grants, runs, guidance) is now
+admitted under the write lock only while the workspace is open, the lock retention deletes under. A write lock not had
+within the store's 30 s wait is 503, not an unhandled error; a paused or nearly full demo refuses an upload on its
+headers. Still open: readers on two networks can keep both reading slots busy with files that read for 30 s, so others
+wait their 45 s and are told to try again (F-54, accepted); eight /64s of one /48 can hold about 352 to 380 MiB of the spool,
+kept full for about 3.7 Mbit/s of resent bodies, which refuses only uploads larger than what is left (a 2 KB and a
+20 MB upload still got in; counter-review round 4); a document read again waits 2 s, so its first view may say it could not be compared yet;
+the hourly windows count by full address, so one network can still take the day's shared questions (F-32, F-33, the
+owner's decision).
+
+**A pack claims an answer's input only when the record shows it (2026-10-13, F-14).** When the model's first answer
+failed validation, the run asked again with the first message plus a note quoting the error, and kept the second answer
+with neither the first answer nor that message. The evidence pack still packed the first message as "the exact messages
+the model was given", verify.py printed PASS for it, and the explanation called it the exact input. No byte was
+misstated (the first message is what the checking stage hashed); the claim was wider than the record. The invariant:
+every model output a run keeps is stored, or reconstructable, together with the exact input that produced it, and no
+surface claims more. Chosen: say so, not store more. `analyze` reports validation rounds apart from calls, the checking
+stage records them in a new nullable `run_stages.rounds`, and `reconstruct_input` decides once, for the pack, verify.py,
+the explanation and the two scripts, whether the rebuilt messages are the kept answer's input; when they are not, no
+model input is packed, verify.py prints a NOTE with the reason and no PASS, and the explanation's "Exact input" gives
+the reason while its input-hash check still matches. A row written before `rounds` is read from `attempt`: one call is
+one round, three or four calls or an invalid_output ending are two, and two calls otherwise are undetermined and said
+to be (at most 3 of 1,599 recorded checking stages had two calls or more). Not chosen: storing every round's messages
+and outputs, a larger change to the record for a case this rare. Unchanged: prompts, retrieval, model settings, the
+API's shape, every historical row.
+
+**Quotas counted with their write (2026-10-13).** The war room's F-13 / R10, confirmed by two reruns: every quota the
+store counts was check-then-insert. A public workspace's documents were counted before its upload was read and the grant
+written seconds later, so sixteen uploads at once from one visitor were all held against a cap of ten; the daily run
+ceiling was counted before the run's insert, and eight of ten starts released together got past a ceiling of three. In
+the cloud that ceiling is the spend stop for a paid GPU. The invariant: a quota is counted, and the row it limits is
+written, in one transaction no concurrent request can interleave. The class was every quota counted in SQL before a
+write: documents per public workspace, uploads per UTC day, questions per public workspace per day, new runs per day.
+One primitive now writes each of them (`application/quotas.py` `admit`, over `db.write_locked`, which begins the
+transaction with `BEGIN IMMEDIATE`): the lookup that hands back an existing row, the quota counts and the insert share
+the write lock; reading and parsing stay outside it. The counts that lived in `api/access.py` (`admit_upload`,
+`limit_run_starts`), `start_run.refuse_past_daily_budget` and `api/model.py` are one set of definitions; the early
+counts that spare a file's reading or a model's wake-up remain, as advice. Removed with them: the run-start race
+handler (`IntegrityError` → reuse), which the lookup under the lock replaces. One visible change: a question asked
+again in a workspace that has used its questions for the day is handed its run (200) instead of 429, as it already was
+at the global ceiling. The original file is now written after the quotas admit an upload, so a refused upload leaves no
+file. Measured: the reproductions held 6 of 2, 16 of 10 and 8 of 3; now exactly the cap over repeated trials, with no
+500 (`test_quota_admission.py`, `test_write_lock.py`). Not in the class: the per-address and per-reader windows and the
+wake-up budget, kept in this process's memory and checked and recorded under one lock (one API process; more workers
+would each keep their own).
+
+**Verifier v8: no span begins or ends inside a number, and a sign is never dropped (2026-10-13; approved by Pavan the same day, parentheses around every number kept).** The war
+room (F-03) found the verifier's own v3 rule broken at its edges: a comma or a point between two digits counted as an
+edge, and the exact tier runs first, so "$1,500" was found word for word in "$1,500,000", "$15" in "$15.50", "within
+30" in "within 30.5" and "Section 5" in "Section 5.2", and the memo printed "$1,500" as found. The typed tier dropped a
+minus sign and the parentheses of an accounting negative, so "an adjustment of 5%" verified against "-5%" and "a credit
+of $500" against "($500)". The invariant: a located span never begins or ends inside a number, and a number's sign is
+part of its value, at every tier. A number as it is written is read once (`tokens.written_numbers`): its tokens and the
+digit marks joining them, typeset ones included, its sign, its currency or percent sign, a section label's parts and
+the parentheses around it. `bounded` refuses an edge inside one, as the reader sees the text (a zero-width space makes
+no edge); the typed tier compares a number with its sign and parentheses (`tokens.signed`); `tokenize` is unchanged, so
+the values `runs.values` and `trust.facts` read do not move and the policy version stays. A space is still an edge.
+Parentheses around any number are kept, because accounting's "(30)" cannot be told from a restated one: a quote that
+drops them ("30 days" for "thirty (30) days") is withheld, where v7 highlighted "30) days". Replayed under v7 and v8,
+none of 2,853 recorded verified spans in 35 lab and QA stores changes (572 of them the lab's; some stores are copies); of 13,823 CUAD answer
+highlights in 510 contracts, 3 are withheld, each cut inside a section number ("Section 6." of "6.1"), and 2 one-character
+quotes move off a decimal point. Recorded runs keep the version they were verified under.
+
+**Page furniture is not a section, and a pass says what it did not see (2026-10-13; approved by Pavan the same day; war room F-04).** A PDF
+printing "ACME SERVICES AGREEMENT" at the top of every page made each printing a section: §7 ended "shall not exceed
+the fees paid in the", its tail "twelve (12) months … except for breach of Section 9" sat in a section of its own,
+BM25 handed over §7 and §9 but not the tail, and the pass said nothing, because only a pass whose periods code
+compared named a section the model was not handed. The v11 rule caught a running line only by a rising page number.
+Two invariants. Reader v12: in a format that says where each page begins (PDF), a line printed the same on most pages,
+three at least, is page furniture, text where it stands and never a heading (`sections.page_furniture`); the
+document's own heading printed once at its head stays a heading, and numbered, structural and minority lines are
+untouched. Policy-v8: a pass whose verified sentence points at a section the model was not handed says "the sentence
+points at §N, which was not handed to the model", one wording (`policy.proof.unseen_reason`), compared or not; the
+status does not move. `unseen_references` now takes the section numbered exactly so before one whose number only ends
+in it. Measured before the change, read-only. Readings: 41 unique PDFs, 195 DOCX and 6,075 plain texts from the QA,
+lab and EDGAR corpora read with both readers; 1 of 33 readable PDFs differs (CUAD's eGain hosting agreement, whose
+running header had also cut a termination right from "upon the other party's material breach"), every DOCX and plain
+text reads the same. Statuses: over 1,623 recorded passes in 12 local stores, 216 would carry the new reason (135 of
+856 in the owner's local store), all without guidance, none changes status; without the exact-number rule 5 more
+would have named a §5.1 that was handed. Not changed: retrieval, prompts, the model, recorded runs and stored
+readings (a document read by v11 keeps its reading; the same bytes uploaded again are read by v12). Left open: plain
+text has no page marks the reader reads, so EDGAR .txt furniture stays a heading (1,628 of 6,075 texts print some
+unnumbered heading line three or more times, furniture and real repeats mixed); furniture stays inside the clause
+text, so a quote that runs across a page break is withheld. The interface's "Compared" row prefixed this reason with
+"Code compared:" where nothing was compared; that is corrected in the release integration below.
+
+**Release integration: the war room's repairs, verifier v8 and reader v12 together (2026-10-13).** One candidate on
+8b7b8fb: the war room's repairs (R1, R5, R6, R9-R13 and their counter-review rounds), R3 and R4 as approved. Combining
+them showed five things none of them had covered, each fixed at its owner with a test run red on the code before it.
+What the verifier works out about a text (where its numbers are, a quote's words) was cached for the life of the
+process keyed by the text itself, so section texts and quotes of a deleted workspace stayed in memory; it now lives
+for one verification pass (`verify/spans.verification_pass`: a run's verification, a trust manifest, a trust diff, or
+one `locate`), still read once within it. A document read again for a revision check was kept by path until 32 newer
+ones displaced it; it is now dropped once ten minutes old, at the next reading or the next hourly retention pass,
+whichever comes first, and every retention pass drops all of them, a pass that fails midway included. The evidence pack's
+standalone verify.py never checked a span's edges, and its typed check dropped signs, parentheses and precision, so a
+v8 pack whose offsets were moved onto "$1,500" inside "$1,500,000" passed it while the workbench refuses it; for a run
+verified under v8 it now checks v8's edges and signed numbers, with v8's reading of a written number copied into the
+pack when it is made (Python 3.11 or later, or it fails those spans rather than pass them unchecked), and a run
+verified earlier is checked as before; the pack says it is not signed. The counter-review found its typed check
+still read text its own way: tokens that could end inside a run of letters and digits (as before v7), words joined
+(as before v6), a span cut out of its section rather than read in place, and a quote of punctuation alone accepted.
+So "$10M (in aggregate) per year", which the workbench verified, failed the pack, and 31 of 40,000 fuzzed tampered
+spans passed it. For a run verified under v7 or later the pack now reads tokens with the workbench's own pattern,
+copied in, in place in the searched text, words whole; 0 of 80,000 tampered typed spans pass, 0 of 60,000 genuine
+spans fail, and the 17,261 spans the recorded quotes locate in 52 stores pass under both v7 and v8. A v7 pack that
+dropped a number's precision ("$15" for "$15.00") passed before; v7 itself never verified it, and now the pack
+fails it too. A pass whose reason only names a section the
+model was not handed (policy-v8) was shown under "Code compared", and the memo and the pack carried no reason at
+all; `runs.status.basis` reads from the record whether code compared a period and what was not seen, and the card,
+the drawer, the memo and the pack say both; no status changed. The cloud runbook unpacked each release over the last
+one, kept `.env` and the tunnel credential inside the source tree and, at cutover, kept staging's store for the
+public name; releases are now immutable directories keyed by the full commit, configuration lives outside them, the
+store is named by the host's role and required, and each image carries its commit. Measured: replayed under v7 and
+the candidate, 18,717 recorded spans in 52 stores, none changed; one run's verification on hostile 6,000-character
+sections 0.33-0.54 s (v7 0.10-0.31 s); the trust layer's count over the largest real contract (7,174 sections)
+6.1-6.9 s, as under v7 (7.2-7.5 s), two quiet runs each, and over a crafted 200-section document 18 s (v7 10 s), the
+price of reading every occurrence where v7 stopped at a wrong first one. Left open: the trust manifest is computed on the request's thread from the
+pool every sync route shares, so a crafted document makes each of its views slow; 6814c50 on staging has no memory
+limit; the laptop's 001b6a0 prints a SQL error's bound values (it predates 4a8c24d), so it is not a safe fallback.
+v8's sign does not reach an amount written with a letter after its digits: "$5M" is found in "-$5M" and in
+"($5M)", as under v7, since a token never ends inside a run of letters and digits and "5M" is one; closing it is a
+verifier rule (v9), not taken in this release, and README says so beside the rule. The Modal function pins no GPU
+region: requests enter through Virginia and the GPU was observed in us-east, but it may run in any region Modal has,
+and the public wording now says that, not "in the US".
+
+## 2026-10-14: two evidence-integrity blockers closed (verifier v9, reader v13)
+
+The legal evaluation (outside the repository) found two code-labelled statements false,
+with scripted answers served through the candidate's own pipeline; Pavan ruled both release blockers, not accepted
+limitations. B1: verifier v8 verified the quote "Adjustment Amount $5M" against "Adjustment Amount -$5M" at the typed
+tier; the run stood as a pass, the card said "with the same words and numbers", the memo printed the quote as observed
+language and the evidence pack's verify.py agreed. An amount written with a magnitude letter was one word to the
+tokens ("5m"), so its minus sign, parentheses and currency were punctuation, and the edge rule did not see it as a
+number ("$5M" was found word for word inside "-$5M"). Verifier v9: such an amount, and an amount in a currency written
+as letters against a dollar sign ("US$500", whose sign v8 also dropped), is a number as it is written; `signed` joins
+its sign, parentheses, currency and magnitude to it and compares what stands before a number without spaces or case;
+inside a number written with a sign or parentheses every edge splits it, a space included ("10K" is not inside "-USD
+10K"; "500" still stands alone in an unsigned "USD 500"). `tokenize` is unchanged, so the values policy reads do not
+move, and policy-v8 stands. The evidence pack carries v8's pattern (unchanged to the character, pinned by its hash) and
+v9's, and checks each run under the version that verified it. B2: the DOCX reader gave every Word heading whose text
+states no number a number computed from heading levels, whether or not Word numbers it, so "SCHEDULE A" after "9.
+Governing Law" was §9.1, the governing-law clause's own number, on the card, in the memo and in the pack. Reader v13
+computes a number only for a heading Word prints a clause number for: a w:numPr on the paragraph or its style chain
+naming a list whose level (read through the numbering part, its overrides and one style link) is numbered, not a
+bullet, not empty, and not a lettered label other than Section, Clause or Article ("Schedule %1" on the level or on
+its list's first level); any other heading without a written number is labelled by its heading alone and leaves the
+count of the numbered headings around it untouched. Two tests that asserted computed numbers on python-docx headings Word does not number
+were asserting the defect and now assert none. An independent review approved the repair with three fixes, all taken: a
+currency outside the six codes first listed ("INR 5M", "₹5M", "Rs. 5M") still lost its sign, so v9 reads every
+Unicode currency sign, every ISO 4217 code, "Rs.", "RMB" and "kr", and capitals against a dollar sign; a zero-width or
+direction mark between the sign and the amount hid the sign, so signs and currencies are read as the reader sees the
+text; and a heading in a bullet list, an unnumbered list, a missing list or a "Schedule %1" list was still numbered,
+so the reader resolves the list level Word would print. A property test then found "Rs. 5M" cut at its full stop
+inside "-Rs. 5M", so inside a number written with a sign or parentheses every edge splits it, not only a space.
+A second review approved that round with two fixes and one more, all taken: a shortcut that skipped any edge with no
+digit in the next 16 characters changed verdicts ("-15" stood alone in "-15 percent" while the pack refused it, and
+the verdict depended on what followed the number), so it is gone and every edge is read against the numbers; the
+reader looked up each list instance's overrides by scanning every instance, with a query built from the instance's
+id, so 8,000 instances in a 56 KB upload read for 54 s, past the 30 s reading bound, and an id holding a quote refused
+the file: the numbering part is now read in one pass with no query (8,000 instances 0.08 s), and each style chain's
+numbering once per reading; and a currency code glued to digits with no magnitude letter ("INR500") still lost its
+sign, so it is an amount too.
+Measured: replayed under v8 and v9, 18,742 recorded spans in the 47 of 53 stores that hold any
+(17,285 verified), 3 changed, all three the evaluation's own scripted sign-drop probes; the corpus of 6,311 files
+re-read under v12 and v13: 116 DOCX changed, every change a number removed from a heading Word does not number (353
+numbers; 0 renumbered, 0 texts, headings or section counts changed; no PDF or plain text changed; the bundled sample,
+all of whose 120 headings Word numbers, reads the same). Cost: verification at the product's bounds 8-26% slower on
+hostile inputs (one run 0.24-0.54 s, v8 0.23-0.50 s; the trust layer's count of 3,000 quotes 6.8-16.1 s, v8 6.1-13.0 s),
+within 2% either way on the largest real contracts; memory unchanged. Reading the 195 corpus DOCX
+took 157.7 s, v12 159.2 s (the 35 that take over 0.2 s: median 0.99 times v12, at most 1.09); 8,000 numbering
+instances in a 56 KB file read in 0.08 s (v12 0.02 s).
+Left open: a currency abbreviation outside that set ("Ksh 5M", "RM5M", "Rp 5M") is read as a word, so its sign is not
+reached; "INR500" quoted as "INR 500" is refused at the typed tier (the safe side); Word's list rendering is not
+reproduced (a roman or lettered level still shows the decimal count, and a "Schedule %1" heading is labelled by its
+text, without Word's "Schedule 1"); on the conservative side, these headings Word numbers get no number: a level whose
+label is a word other than Section, Clause or Article ("Sec. %1", "Art. %1", "Paragraph %1", "Artikel %1"), the
+sub-levels of a "Part %1" list, a level an override redefines without text, and a heading style linked only from a
+list definition. The evaluation's frozen keys were not touched;
+the H2 and H4 documents that exposed the blockers are flagged in its records as having informed a deterministic fix.
+
+## 2026-10-14: after the legal pilot, five release defects repaired (verifier v10, reader v14, policy-v9, the memo)
+
+The six-task real-Qwen pilot (stage-a-pilot-1, outside the repository) and its readiness probes left five
+public-release defects, all reproduced: its records, grades and hashes are kept as they are, and its six questions are development-visible
+from now on, never again a fresh holdout. No prompt changed and no model was called. (1) Verifier v10: an amount in a currency v9 did not
+name kept no sign ("Ksh 5M" verified in "-Ksh 5M", "RM5M" in "(RM5M)", "Rp 5M" in "(Rp 5M)", the pack agreeing). A short label (one to
+four letters, an optional full stop and space) directly after a minus sign or inside an opening parenthesis is now part of the number,
+whatever it names, and a word holding digits inside such a number is part of its value; v9's pattern stays in the pack, to the
+character, for v9 runs (the pilot's among them). As v8 does for "(30)", a quote that drops the parentheses of "(No. 1)" is withheld.
+(2) Reader v14, DOCX: a heading's number was a count of headings by level, so a list starting at 3 read "1", a restarted list "3", a
+Heading 2 on a list's first level "0.1", a written "7" between list items pushed the next to "8". A heading now carries the number
+Word prints, from the list's own counters over every numbered paragraph in document order (tables included): start values, an
+instance's start override, deeper levels restarting, decimal, decimal-zero, roman and letters. Where the reader cannot say exactly
+(two instances of one list in use, w:lvlRestart, w:isLgl, a text box, a tracked change to the paragraph's properties, another format),
+the heading has no number: an omission, never a guess. A paragraph Word does not count is not counted: one whose mark
+is a tracked deletion or move, and an empty one holding a section break (Common Paper's cover page ends in one; Word
+prints "1. Service" after it, and the first v14 said "2" for all of its 121 numbered paragraphs, caught by the
+corpus check against Word 16 itself, before any release). (3) policy-v9: guidance in Business Days against a quote in calendar days came
+back incomparable and fell through to the model's hint, so "30 days, which meets the guidance" of 30 Business Days stood as within
+guidance with no reason, on real output (H4-Q5). Where both state a period code cannot compare, a pass the model proposed is now needs
+review (position_check) with the reason. One test asserted the old behaviour for a month against days and now asserts the new.
+(4) The memo headed that wrong answer "Issues requiring review (0). None. Every finding was within guidance or a plain answer." It now
+says "Flagged by automated checks (N)", gives each flag code's own reason ("Why flagged."), says with none that the findings are the
+model's answers and that code verified only their quotes, and says for each finding whether a person reviewed it. (5) Reader v14, all
+formats: "AMENDMENT NO. 1 TO EQUIPMENT LEASE AGREEMENT" was cut to the title "AMENDMENT NO" at the full stop of "NO.", so the model's
+citation of it was shown as "found in AMENDMENT NO."; and a PDF line wrapping a clause ("11.2 This Lease may be amended … both parties.
+If an", "8.1 Seller shall indemnify … breach of Seller's") was a title, its first sentence in no section text. A lead-in title no
+longer ends at an abbreviation (a reference word before a number, a name's "Corp."), and a heading line holding a sentence end or a
+lower-case "shall", "must", "may" or "will" is body under a short label. The model's omission of the month-twelve condition in H1-Q1
+is a model limitation, recorded and not acted on; the frozen key is unchanged. The corpus check also found that a clause
+line taken as body took its label from whatever heading stood a level up ("<PAGE>", the agreement's name): a parent's title
+now labels only a clause its number holds ("1.4" in "1"; an unnumbered line keeps its own words), and a wrapped line keeps
+its own short title ("Designation of Subsidiaries. The Parent Borrower" is titled "Designation of Subsidiaries"). Measured:
+see the repair report (REPAIR-REPORT.md, outside the repository) for the replays, the corpus and the gate.
+
+## 2026-10-14: the product mission (policy-v10, retrieval-v2, one account of each finding, a revision asked again)
+
+Three independent reviews (security, authority promotion, retrieval on ten unfamiliar agreements in four formats; reports
+outside the repository) and a walk of the product on the local model set the work.
+(1) policy-v10: periods in units that do not convert are put on the calendar (policy.durations.calendar_days): a month
+is 28 to 31 days, a year 365 or 366, N Business Days at least N + 2 × ⌊(N − 1) / 5⌋ where the contract's own definition
+makes a Business Day a weekday (business_week, read from the whole document, never assumed; checked against
+brute-force calendars). A shortfall on every calendar is code's; a pass on every calendar stays the model's with the
+counts consistent; overlapping ranges, or Business Days whose weekdays code cannot read, go to a person with the reason.
+A contract that says its bare "days" are Business Days is read so (day_convention). Replayed over 14,352 recorded
+findings: 6 change, each to a shortfall code computes, five of them the pilot's H4-Q5 clause. (2) One account of each
+finding (runs.account: who set the status, every concern code wrote, flagged or not) is read by the answer card, the
+findings list, the memo and the evidence pack: the memo had printed a pass code did not confirm under "No automated
+check flagged a finding" and the model's own words as "Legal guidance."; the list let a person confirm a finding
+without its concerns; the revision panel called a withheld finding "Still supported". (3) retrieval-v2 (runs.links):
+after the ranking, the sections the top three ranked ones depend on where the contract says which (a definition they
+use, an amendment of them, a clause they cite), at most two, within the same worst-case text: on the study's 147
+question-format cases every needed passage was handed in 121, now 137; the control set did not move. (4) The reader:
+a DOCX with no heading style had no heading at all (0 of 293), now read as plain lines are; a sub-item is cited as the
+document cites it ("5.3(a)", from Word's printed parent and label, checked against Word 16); title-cased titles that
+end in a full stop, ARTICLE lines and their titles, and long wrapped clause lines are read as such. (5) A visitor's
+questions in flight are bounded (two), and a caller's X-Request-ID is kept only when it is an id. (6) The revision
+panel offers a prepared revision of the sample (one change, said so) and asks the same question of a revision, the
+two recorded answers side by side. Not done, and said so: hidden (white or invisible) text is read like any other
+text, and per-address windows stay per full address (war room F-32).
+
+## 2026-10-14: the first-visitor acceptance test (three repairs, inside the unreleased candidate)
+
+A fresh visitor's journey, run in Chromium against the local stack and the local model, on three agreements written for
+the test by an independent agent after it began (a DOCX with imperfect heading styles, a PDF with an amendment, a TXT with
+a conflict and an instruction aimed at the model), each with an answer key the product never saw (outside the repository). The workflow held in every format and at 375 px; three statements were wrong, each
+closed as a class. (1) Reader v14: in a document that styles its headings, a clause heading typed instead ("11.
+Termination", bold Normal text) was body, so the termination clause sat inside §10 and a quote from it was "found at §10 ·
+Liability" under code's badge; a short numbered title set apart (bold or capitals) whose number is the next clause
+number is now a heading. None of the 191 corpus DOCX files reads differently. (2) policy-v10, amended before any
+release: a Business Day definition that lists its weekdays ("a Monday, Tuesday, Wednesday, Thursday or Friday"), names a
+run other than Monday to Friday, or lists exclusions across semicolons is read; where code reads none, it says what it
+could not read, not that the contract has no definition. Replayed over 2,344 stored documents in 56 local stores: only
+the acceptance agreement's reading changes. The version keeps its name, with its fingerprint replaced: it was never
+committed or deployed. (3) The memo lists a proposal code withheld, flagged with code's reason and the model's sentence
+as the model's, without its unfound quotes; it had left such proposals out and printed "No automated check flagged a
+finding" above the rest. Not changed, and said so in the report: a guidance sentence whose direction code cannot read
+("if the breach is not cured within 15 calendar days") leaves the model's pass as the model's; a page count is the
+file's own metadata; the model's semantic errors (a superseded clause, a subordinated schedule) are shown as its own.
+
+## 2026-10-14: policy-v11, the contract's own statements about its provisions (the intent-first mission)
+
+The first-visitor acceptance test showed the local model answering a renewal question from a clause an amendment had
+deleted and replaced, and a notice question from a schedule a precedence clause subordinated. Retrieval had handed it
+both passages; nothing in the product said how they related. Alternatives weighed: a prompt change (unmeasured, changes
+every recorded answer's input, and tells the visitor nothing); retrieval alone (it already handed the passages);
+a graph or agent architecture (scope and legal effect cannot be parsed reliably, and nothing smaller had been tried).
+Chosen: one small recorded representation (`runs.relations`). Two kinds of statement are located with both ends:
+replaces (deleted, replaced, superseded, amended and restated, with the new wording when quoted and any limit as
+written: a year, a party, a start not yet reached, one paragraph, one definition, some words) and precedence (the
+parts a conflict clause ranks). A start is resolved only from a written date or a term the contract defines by one, and
+compared with the run's date; otherwise it is a limit. They are recorded with the run, once, and never re-derived. One
+status follows (`check_replaced`, `position_check`): a question about the agreement as it stands (or one that does not
+say) answered from text replaced in full, without the replacement, is needs review set by code; the quote stays verified,
+and code never says which wording governs. A limited replacement and a ranking of the parts quoted are concerns; a
+question about the original agreement raises nothing. The prompt and retrieval are unchanged. Held by an oracle written
+before the code by an independent author from the product contract (34 agreements, 82 decisions, 10 families; its
+labels never edited): the first run matched 74, the misses were closed as classes (a value only the replacement states;
+"the following new clause 6.3:"; a paragraph named before its clause; parts named by a part noun, never a party), and it
+now matches 82 of 82. Reading the 457 stored documents found the partial-replacement class the oracle had not ("The
+definition of 'Applicable Margin' in Section 1.01 … is amended and restated"), now a limit. Not done, and said so: a
+change worded without a replacement verb ("For the second Contract Year only, the Minimum Purchase Commitment under clause
+6.1 is 10,946 Cases") records nothing; whether a precedence clause's conflict exists on the point is not decided.
+
+**Amended within policy-v11 before release (2026-10-14, an external review of the owner note).** Three defects, each red
+on the first v11 tree (8546f4b9). (1) The run's date stood for the time every question asked about: "What was the deadline
+in June 2025?" was read as asking about the agreement as it stands, and a quote of the replaced clause became needs review
+set by code. Invariant: only a question that names no time is read at the run's date; code does not place a time a question
+names against a replacement's start. A question naming a date, a month, a year after a word of time, a time relative to now
+or one of the contract's own periods is `dated`: a concern that names the time as written and the start, never the status
+(`relations.asked_time`, `perspective`). (2) A note said "the answer uses the replacement" when the answer only quoted it:
+an answer can quote the replacement and conclude from the replaced wording. Invariant: a note says only what code saw, what
+the answer quotes and the values it states. Quoting the replacement while stating only values of the replaced wording is
+now a concern (`old_value`), and no note says uses, relies or rests (a property test). (3) A start written as a month
+("with effect from March 2026") raised ValueError in the run's relation step, before the model was asked, so the run failed
+and failed again on retry; "September 18, 2025" was cut at its comma and never read. A start is now read from a day, or a
+month from its 1st, and anything else stays a limit (a Hypothesis test over written dates). The oracle still matches 82 of
+82, with labels it has none for counted as failures. v11 was never committed, so its fingerprint was replaced, not bumped.
+

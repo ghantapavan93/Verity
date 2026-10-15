@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from html import escape
@@ -52,10 +53,112 @@ def xml_safe(text: str) -> str:
 
 
 # "Not found" is a statement about the sections the model was handed, never about the agreement (prompt rule 8).
-STATUS_LABELS = {"needs_review": "Needs review", "missing": "Not found in the sections read", "unresolved": "Unresolved"}
+# "(model's view)": only the model decides that a point is absent; code never checks an absence (authority review, 2026-10-14).
+STATUS_LABELS = {"needs_review": "Needs review", "missing": "Not found in the sections read (model's view)", "unresolved": "Unresolved"}
+
+# What the memo says about its flags (2026-10-14, the legal pilot). Until then it headed the flagged findings "Issues
+# requiring review" and, with none, said "None. Every finding was within guidance or a plain answer.": on real output a
+# wrong answer that 30 days met a guidance of 30 Business Days carried exactly that line. A flag is what an automated
+# check raised, no more; an unflagged finding is the model's answer, not a cleared one; and no finding is a person's
+# decision unless a review is shown.
+FLAGS_HEAD = "Flagged by automated checks"
+NO_FLAGS = (
+    "No automated check flagged a finding. The findings below are the model's answers: code verified only that their "
+    "quoted passages appear in the document, not that the answers are right."
+)
+NOT_REVIEWED = "Not reviewed by a person."
+# The status sources under which code, not the model, set the status (application/explain_run DETERMINISTIC_SOURCES).
+DECIDED_BY_CODE = frozenset({"computed_days", "position_check", "ambiguous_fact", "reference_check"})
+
+
+def flags_of(findings: list[Finding], flagged: dict[str, str] | None) -> list[tuple[Finding, str]]:
+    """The flagged findings and why. The caller reads each finding's account (runs.account: a status other than a pass,
+    or a pass with anything code raised against it) and hands the memo, by finding id, why each flagged one is. Until
+    2026-10-14 only a needs-review or not-found finding counted, so a pass whose recorded reason said "code does not
+    confirm that as a pass" sat under "No automated check flagged a finding" (authority review). Without it (a caller
+    that has none), the status alone decides, as before."""
+    if flagged is None:
+        return [(f, flag_reason(f)) for f in findings if f.status in ("needs_review", "missing")]
+    return [(f, flagged[f.id]) for f in findings if f.id in flagged]
+
+
+# A proposal whose quotes were not found in the sections the model was handed is kept on the run as withheld, never as a
+# finding. Until the first-visitor acceptance test (2026-10-14) the memo left such proposals out altogether: on an amended
+# PDF, code withheld the model's renewal-window answer (it quoted the superseded clause and stated 210 and 150 days that
+# no verified quote held), and the memo printed "No automated check flagged a finding" above the one finding left. Each is
+# now listed as flagged with code's reason, and the model's sentence is printed as the model's. Its quotes are not
+# printed: every quote in a memo was found in the document.
+WITHHELD_HEAD = "Withheld from the findings"
+WITHHELD_LEDE = (
+    "The model proposed these, but no quote it gave for them was found in the sections handed to it, so they are not "
+    "findings. The model's sentence is printed so that the memo does not read as if it said nothing; it is not an answer, "
+    "and code checked none of it."
+)
+WITHHELD_REASON = "no quote of it was found in the sections handed to the model, so it is withheld"
+# A statement of the contract's own about a quoted provision that raises nothing (runs.relations "context"): a later
+# replacement the answer uses, or one a question about the original agreement need not. Concerns are under "Why flagged".
+RELATED_HEAD = "The contract on this provision (located by code)."
+
+
+def memo_flags(findings: list[Finding], withheld: Sequence[Finding], flagged: dict[str, str] | None) -> list[tuple[Finding, str]]:
+    """Every flag a memo lists: the findings' (`flags_of`), then each withheld proposal, with what code raised about it."""
+    return [*flags_of(findings, flagged), *((w, (flagged or {}).get(w.id) or WITHHELD_REASON) for w in withheld)]
+
+
+def flag_title(finding: Finding) -> str:
+    return f"{finding.topic} (withheld)" if finding.status == "unresolved" else finding.topic
+
+
+_QUOTE_MARKS = re.compile(r"[\"'“”‘’]")
+
+
+def _plain(text: str) -> str:
+    return " ".join(_QUOTE_MARKS.sub("", text).casefold().split())
+
+
+def in_guidance(reference: str, guidance: str | None) -> bool:
+    """Whether the model's reference to the guidance is the guidance's own words (spacing, case and quote marks aside)."""
+    return bool(guidance) and bool(_plain(reference)) and _plain(reference) in _plain(guidance or "")
+
+
+def guidance_line(finding: Finding, guidance: str | None) -> str:
+    """The model's reference to the guidance, said to be the model's, and whether code found it in the guidance: the memo
+    printed it as "Legal guidance.", and a sentence the guidance does not contain was printed as guidance (2026-10-14)."""
+    reference = finding.guidance_reference or ""
+    found = "found in the guidance" if in_guidance(reference, guidance) else "not found in the guidance: the model's words"
+    return f"{reference} ({found})"
+
+
+def model_reading(finding: Finding) -> str:
+    """The positions the model stated, as its words: 'observed 15 days · required at least 30 days'."""
+    return " · ".join(
+        part for part in (f"observed {finding.observed}" if finding.observed else "", f"required {finding.required}" if finding.required else "") if part
+    )
+
+
+def flag_reason(finding: Finding) -> str:
+    """Why a finding is flagged, in the words that decided it: code's own reason where code set the status, otherwise
+    whose call the status is. The reading before accounts (runs.account), for a caller that has none."""
+    if finding.status_source in DECIDED_BY_CODE and finding.status_reason:
+        return f"automated check: {finding.status_reason}"
+    if finding.status == "missing":
+        return "the model reported it not found in the sections it was handed"
+    if finding.status == "needs_review":
+        return "the model asked for review" + (f"; automated check: {finding.status_reason}" if finding.status_reason else "")
+    return ""
+
+
 # The model's own sentence behind a not-found finding, in the memo as on the card: labelled as the model's, after the
 # product's sentence, never as the finding (models.Finding.withheld_conclusion; m10, 2026-10-12).
 WITHHELD_NOTE = "(not checked by code; withheld from the finding because the model reported the point as not found in the sections it was given)"
+# A finding whose quoted sentence points at sections the model was not handed (runs.status.basis): the memo says so beside
+# the passages, as the card does, since its status was set without them (release integration, 2026-10-13). The caller
+# reads the status and hands the memo what it found, by finding id (`unseen`): the memo sits below the run's rules.
+UNSEEN_HEAD = "Not shown to the model."
+
+
+def unseen_note(unseen: str) -> str:
+    return f"Code found that {unseen}. The answer may depend on it, and nothing checked that."
 
 
 def status_label(status: str, with_guidance: bool, source: str = "computed_days") -> str:
@@ -111,7 +214,7 @@ def _review_line(finding: Finding) -> str:
 def _located(span: EvidenceSpan) -> str:
     if span.verified:
         return f"found in the document text · {span.method} · characters {span.start} to {span.end}"
-    return "not found in the document; withheld"
+    return "not found in the sections handed to the model; withheld"  # only those were searched, never the agreement
 
 
 def _evidence_head(finding: Finding) -> str:
@@ -121,13 +224,20 @@ def _evidence_head(finding: Finding) -> str:
 def reading_line(run: Run) -> str:
     """How much of the agreement the model was given, and whether those sections were chosen for the question. A memo
     leaves the workbench; until 2026-10-02 it said neither, and "not found" in it read as a search of the agreement."""
-    read = len(json.loads(run.candidates_json or "[]"))
+    candidates = json.loads(run.candidates_json or "[]")
+    read = len(candidates)
+    linked = sum(1 for c in candidates if c.get("linked"))
     total = len(run.document.sections)
     scope = "Nothing in this memo is a statement about the other sections."
     if run.retrieval_mode == "opening_fallback":
         return f"{read} of {total} sections: retrieval ranked no section for this question, so these are the opening sections, not ones chosen for it. {scope}"
     if run.retrieval_mode is None:  # a run recorded before the mode was a field: how its sections were chosen is not on the record
         return f"{read} of {total} sections. {scope}"
+    if linked:  # retrieval-v2: sections the contract points to from the ranked ones (a definition, an amendment, a clause cited)
+        return (
+            f"{read} of {total} sections: {read - linked} chosen by retrieval for the question, and {linked} the contract points to from "
+            f"them (a definition they use, an amendment of them, or a clause they cite). {scope}"
+        )
     return f"{read} of {total} sections, chosen by retrieval for the question. {scope}"
 
 
@@ -147,10 +257,23 @@ def _sources(findings: list[Finding], section_titles: dict[str, str], clauses: d
 # ----------------------------------------------------------------------------- HTML
 
 
-def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str], review_head: str = "", clauses: dict[str, str] | None = None) -> str:
+def memo_html(
+    run: Run,
+    findings: list[Finding],
+    section_titles: dict[str, str],
+    review_head: str = "",
+    clauses: dict[str, str] | None = None,
+    unseen: dict[str, str] | None = None,
+    flagged: dict[str, str] | None = None,
+    withheld: Sequence[Finding] = (),
+    related: dict[str, list[str]] | None = None,
+) -> str:
     now = datetime.now().astimezone()
     date = f"{now.day} {now.strftime('%B %Y')}"
-    issues = [f for f in findings if f.status in ("needs_review", "missing")]
+    flags = memo_flags(findings, withheld, flagged)
+    issues = [f for f, _ in flags]
+    why = {f.id: reason for f, reason in flags}
+    guidance_text = run.guidance.text if run.guidance else None
     sources = _sources(findings, section_titles, clauses)
     by_span = {id(s.span): s for s in sources}
     parts = [
@@ -181,36 +304,48 @@ def memo_html(run: Run, findings: list[Finding], section_titles: dict[str, str],
         f"<dl><dt>Agreement</dt><dd>{escape(run_document_name(run))}</dd><dt>Date</dt><dd>{date}</dd><dt>Question</dt><dd>{escape(run.question)}</dd>",
         f"<dt>Guidance</dt><dd>{escape(run.guidance.text) if run.guidance else 'none supplied'}</dd>"
         f"<dt>Sections read</dt><dd>{escape(reading_line(run))}</dd></dl>",
-        f"<h2>Issues requiring review ({len(issues)})</h2>",
+        f"<h2>{FLAGS_HEAD} ({len(issues)})</h2>",
     ]
     if issues:
-        parts.append("<ol>" + "".join(f"<li>{escape(f.topic)}</li>" for f in issues) + "</ol>")
+        items = "".join(f"<li>{escape(flag_title(f))}" + (f" — {escape(why[f.id])}" if why[f.id] else "") + "</li>" for f in issues)
+        parts.append(f"<ol>{items}</ol>")
     else:
-        parts.append("<p>None. Every finding was within guidance or a plain answer.</p>")
+        parts.append(f"<p>{escape(NO_FLAGS)}</p>")
     for f in findings:
         parts.append(f"<h2>{escape(f.topic)} · {status_label(f.status, run.guidance is not None, f.status_source)}</h2>")
         parts.append(f"<p>{escape(f.shown_conclusion)}</p>")
         if f.withheld_conclusion:
-            withheld = escape(f.withheld_conclusion)
-            parts.append(f"<p class='withheld'><strong>The model also wrote</strong> <small>{escape(WITHHELD_NOTE)}</small>: {withheld}</p>")
+            also = escape(f.withheld_conclusion)
+            parts.append(f"<p class='withheld'><strong>The model also wrote</strong> <small>{escape(WITHHELD_NOTE)}</small>: {also}</p>")
         for span in f.spans:
             source = by_span[id(span)]
             parts.append(
                 f"<p><strong>{_evidence_head(f)}</strong> <small>({escape(source.title)})</small> "
                 f"<a href='#src-{source.number}'>[{source.number}]</a></p><blockquote>{escape(span.quote)}</blockquote>"
             )
+        if unseen and f.id in unseen:
+            parts.append(f"<p class='unseen'><strong>{UNSEEN_HEAD}</strong> {escape(unseen_note(unseen[f.id]))}</p>")
         if f.guidance_reference:
-            parts.append(f"<p><strong>Legal guidance.</strong> {escape(f.guidance_reference)}</p>")
-        position = [
-            f"<strong>Observed</strong> {escape(f.observed)}" if f.observed else "",
-            f"<strong>Required</strong> {escape(f.required)}" if f.required else "",
-        ]
-        if any(position):
-            parts.append("<p>" + " · ".join(p for p in position if p) + "</p>")
+            parts.append(f"<p><strong>The model's reference to the guidance.</strong> {escape(guidance_line(f, guidance_text))}</p>")
+        if model_reading(f):
+            parts.append(f"<p><strong>The model's reading.</strong> {escape(model_reading(f))}</p>")
+        if why.get(f.id):
+            parts.append(f"<p><strong>Why flagged.</strong> {escape(why[f.id])}</p>")
+        for sentence in (related or {}).get(f.id, []):
+            parts.append(f"<p><strong>{RELATED_HEAD}</strong> {escape(sentence)}</p>")
         if _suggests(f):
             parts.append(f"<p><strong>Suggested position (the model's).</strong> {escape(f.suggested_position or '')}</p>")
         if f.review is not None:
             parts.append(f"<p><strong>Reviewed.</strong> {escape(_review_line(f))}</p>")
+        else:
+            parts.append(f"<p><strong>Person.</strong> {NOT_REVIEWED}</p>")
+    if withheld:
+        parts.append(f"<h2>{WITHHELD_HEAD} ({len(withheld)})</h2><p><small>{escape(WITHHELD_LEDE)}</small></p>")
+        for w in withheld:
+            parts.append(
+                f"<p class='withheld'><strong>{escape(w.topic)}.</strong> <small>The model wrote, withheld:</small> {escape(w.conclusion)}</p>"
+                f"<p><strong>Why withheld.</strong> {escape(why[w.id])}</p>"
+            )
     parts.append("<h2>Sources</h2><table><tr><th>#</th><th>Section</th><th>Located</th><th></th></tr>")
     for source in sources:
         parts.append(
@@ -326,7 +461,16 @@ def _properties(document: WordDocument, run: Run, verified: int, total: int, rev
 
 
 def memo_docx(
-    run: Run, findings: list[Finding], section_titles: dict[str, str], out_dir: Path, review_head: str = "", clauses: dict[str, str] | None = None
+    run: Run,
+    findings: list[Finding],
+    section_titles: dict[str, str],
+    out_dir: Path,
+    review_head: str = "",
+    clauses: dict[str, str] | None = None,
+    unseen: dict[str, str] | None = None,
+    flagged: dict[str, str] | None = None,
+    withheld: Sequence[Finding] = (),
+    related: dict[str, list[str]] | None = None,
 ) -> tuple[Path, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     document = DocxDocument()
@@ -353,22 +497,25 @@ def memo_docx(
         row[0].text = label
         row[1].text = xml_safe(value)
 
-    issues = [f for f in findings if f.status in ("needs_review", "missing")]
-    document.add_heading(f"Issues requiring review ({len(issues)})", level=2)
+    flags = memo_flags(findings, withheld, flagged)
+    issues = [f for f, _ in flags]
+    why = {f.id: reason for f, reason in flags}
+    guidance_text = run.guidance.text if run.guidance else None
+    document.add_heading(f"{FLAGS_HEAD} ({len(issues)})", level=2)
     if issues:
         for f in issues:
-            document.add_paragraph(xml_safe(f.topic), style="List Number")
+            document.add_paragraph(xml_safe(flag_title(f) + (f" — {why[f.id]}" if why[f.id] else "")), style="List Number")
     else:
-        document.add_paragraph("None. Every finding was within guidance or a plain answer.")
+        document.add_paragraph(NO_FLAGS)
 
     for f in findings:
         document.add_heading(xml_safe(f"{f.topic} · {status_label(f.status, run.guidance is not None, f.status_source)}"), level=2)
         document.add_paragraph(xml_safe(f.shown_conclusion))
         if f.withheld_conclusion:
-            withheld = document.add_paragraph()
-            withheld.add_run("The model also wrote ").bold = True
-            withheld.add_run(xml_safe(f"{WITHHELD_NOTE}: ")).italic = True
-            withheld.add_run(xml_safe(f.withheld_conclusion))
+            also = document.add_paragraph()
+            also.add_run("The model also wrote ").bold = True
+            also.add_run(xml_safe(f"{WITHHELD_NOTE}: ")).italic = True
+            also.add_run(xml_safe(f.withheld_conclusion))
         for span in f.spans:
             source = by_span[id(span)]
             p = document.add_paragraph()
@@ -377,26 +524,49 @@ def memo_docx(
             _internal_link(p, f"src_{source.number}", f"[{source.number}]")
             quote = document.add_paragraph(xml_safe(span.quote))
             quote.paragraph_format.left_indent = Pt(18)
+        if unseen and f.id in unseen:
+            p = document.add_paragraph()
+            p.add_run(f"{UNSEEN_HEAD} ").bold = True
+            p.add_run(xml_safe(unseen_note(unseen[f.id])))
         if f.guidance_reference:
             p = document.add_paragraph()
-            p.add_run("Legal guidance. ").bold = True
-            p.add_run(xml_safe(f.guidance_reference))
-        if f.observed or f.required:
+            p.add_run("The model's reference to the guidance. ").bold = True
+            p.add_run(xml_safe(guidance_line(f, guidance_text)))
+        if model_reading(f):
             p = document.add_paragraph()
-            if f.observed:
-                p.add_run("Observed ").bold = True
-                p.add_run(xml_safe(f"{f.observed}   "))
-            if f.required:
-                p.add_run("Required ").bold = True
-                p.add_run(xml_safe(f.required))
+            p.add_run("The model's reading. ").bold = True
+            p.add_run(xml_safe(model_reading(f)))
+        if why.get(f.id):
+            p = document.add_paragraph()
+            p.add_run("Why flagged. ").bold = True
+            p.add_run(xml_safe(why[f.id]))
+        for sentence in (related or {}).get(f.id, []):
+            p = document.add_paragraph()
+            p.add_run(f"{RELATED_HEAD} ").bold = True
+            p.add_run(xml_safe(sentence))
         if _suggests(f):
             p = document.add_paragraph()
             p.add_run("Suggested position (the model's). ").bold = True
             p.add_run(xml_safe(f.suggested_position or ""))
+        p = document.add_paragraph()
         if f.review is not None:
-            p = document.add_paragraph()
             p.add_run("Reviewed. ").bold = True
             p.add_run(xml_safe(_review_line(f)))
+        else:
+            p.add_run("Person. ").bold = True
+            p.add_run(NOT_REVIEWED)
+
+    if withheld:
+        document.add_heading(f"{WITHHELD_HEAD} ({len(withheld)})", level=2)
+        document.add_paragraph(WITHHELD_LEDE).runs[0].italic = True
+        for w in withheld:
+            p = document.add_paragraph()
+            p.add_run(xml_safe(f"{w.topic}. ")).bold = True
+            p.add_run("The model wrote, withheld: ").italic = True
+            p.add_run(xml_safe(w.conclusion))
+            p = document.add_paragraph()
+            p.add_run("Why withheld. ").bold = True
+            p.add_run(xml_safe(why[w.id]))
 
     document.add_heading("Sources", level=2)
     sources_table = document.add_table(rows=1, cols=4)

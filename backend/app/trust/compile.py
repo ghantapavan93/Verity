@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from ..verify.spans import locate
+from ..verify.spans import locate, verification_pass
 from .facts import facts_in
 from .model import (
     CONTEXT_CHARS,
@@ -200,6 +200,7 @@ def rules_obligation(prefix: str, stale_rules: Sequence[str], evidence: Sequence
     )  # fmt: skip
 
 
+@verification_pass()  # what is worked out about each text is kept for this pass only (verify/spans.py)
 def compile_manifest(
     *,
     run_id: str,

@@ -52,6 +52,8 @@
   --doc-lit-line: #b88c34;
   --doc-mark: rgba(216, 172, 82, 0.3);
   --doc-mark-line: #b0852c;
+  /* A link or a footnote mark on paper: the memo's link brass, 5.7:1 on --doc-bg, where --accent is 1.8:1 (war room F-43). */
+  --doc-link: #7a5a1c;
 
   --assistant-bg: var(--bg-raised);
   --assistant-border: var(--border);

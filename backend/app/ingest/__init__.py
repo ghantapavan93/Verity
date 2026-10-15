@@ -45,7 +45,24 @@ MAX_NAME = 255
 # where it stands, never a heading (sections.running_lines); a lease's rent clause had been cut at a page break into a
 # section of its own. Measured: 6 of 1,310 CUAD and EDGAR texts and the audit's lease read differently; the other
 # 1,321 readings compared are identical.
-PARSER_VERSION = "v11"
+# v12 (2026-10-13): PDF. A line printed the same on most pages, with no page number to rise ("ACME SERVICES AGREEMENT"
+# at the top of each, "CONFIDENTIAL", a company name, a document number), is page furniture: text where it stands, never
+# a heading (sections.page_furniture); a header had cut a liability cap from its exception at a page break (war room
+# F-04). Plain text and DOCX are read as in v11: they do not say where a page begins. Measured: 1 of 33 readable real
+# PDFs reads differently (CUAD's eGain hosting agreement); 190 DOCX and 6,073 plain texts read the same.
+# v13 (2026-10-14): DOCX. A heading is given a number computed from heading levels only when Word numbers it (a w:numPr
+# on the paragraph or its style chain); a heading Word does not number and whose text states none is labelled by its
+# heading alone, and leaves the count of the numbered headings around it untouched. An unnumbered "SCHEDULE A" after
+# "9. Governing Law" was "§9.1", the governing-law clause's own number, on the card, in the memo and in the evidence pack
+# (the legal evaluation's blocker B2). Plain text and PDF are read as in v12. Measured on the corpus: see DECISIONS.md.
+# v14 (2026-10-14): DOCX. A heading Word numbers carries the number Word prints for it, worked out from its list's own
+# counters (start values, an instance's override, deeper levels restarting; decimal, roman and letters), never a count of
+# headings: v13 called a list starting at 3 "1", a restarted list "3", a Heading 2 on a list's first level "0.1".
+# Where the reader cannot say exactly what Word prints (two instances of one list in use, a restart rule of its own, a
+# text box, a tracked change), the heading has no number. All formats: a heading's lead-in title never ends at a
+# reference word before a number ("AMENDMENT NO. 1 TO …" was "AMENDMENT NO"), and a heading line holding a sentence end
+# followed by more words is a wrapped clause, read as body under a short label. Measured on the corpus: DECISIONS.md.
+PARSER_VERSION = "v14"
 
 
 @dataclass

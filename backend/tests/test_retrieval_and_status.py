@@ -46,9 +46,11 @@ def test_status_is_computed_from_the_quote_and_the_guidance_never_from_the_model
     assert decide("pass", "60 days", "no more than 30 days", True, True, quotes=["sixty (60) days"], guidance="Cure within 30 days.").status == "needs_review"
     # The model's own numbers, with no quote to ground them, compute nothing: the hint stands and says so.
     assert decide("pass", "15 days", "at least 30 days", True, True) == Decision("pass", "model_hint")
-    assert decide("pass", "one month's notice", None, True, True, quotes=["one (1) month's notice"], guidance=guidance) == Decision("pass", "model_hint"), (
-        "a month is not thirty days: incomparable, so the hint"
-    )
+    # A month is not thirty days: it is 28 to 31, so against "at least 30" code cannot say. Until policy-v9 the model's
+    # pass then stood with no reason; now nothing checked it, so it goes to a person and says why (the legal pilot's
+    # H4-Q5: 30 days "met" 30 Business Days). Since policy-v10 the reason gives the month's range.
+    month = decide("pass", "one month's notice", None, True, True, quotes=["one (1) month's notice"], guidance=guidance)
+    assert (month.status, month.source) == ("needs_review", "position_check") and "28 to 31 calendar days" in month.reason
     ambiguous = decide("pass", "21 days", None, True, True, quotes=["twenty-one (30) days' notice"], guidance=guidance)
     assert (ambiguous.status, ambiguous.source) == ("needs_review", "ambiguous_fact")
 

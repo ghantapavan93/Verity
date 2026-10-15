@@ -13,6 +13,14 @@ from app.main import create_app
 from tests.support import FakeProvider
 
 
+@pytest.fixture(autouse=True)
+def read_in_this_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Files are read in the test's own process (ingest/bounded.py READ_IN_CHILD); test_reading_cost.py tests the child."""
+    from app.ingest import bounded
+
+    monkeypatch.setattr(bounded, "READ_IN_CHILD", False)
+
+
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     engine = db_module.make_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
@@ -33,3 +41,23 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
     with TestClient(app) as test_client:
         test_client.provider = provider
         yield test_client
+
+
+@pytest.fixture
+def public(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    from app import config
+    from tests.test_access import ORIGIN, SECRET
+
+    """The deployment's settings: the gate required, anonymous sessions on, https, one origin."""
+    monkeypatch.setattr(config.settings, "access_secret", SECRET)
+    monkeypatch.setattr(config.settings, "access_required", True)
+    monkeypatch.setattr(config.settings, "anonymous_sessions", True)
+    monkeypatch.setattr(config.settings, "app_url", ORIGIN)
+    monkeypatch.setattr(config.settings, "access_revoked", [])
+    access.visits.reset()
+    access.address_uploads.reset()
+    access.address_runs.reset()
+    access.workspace_writes.reset()
+    access.address_writes.reset()
+    client.base_url = ORIGIN
+    return client

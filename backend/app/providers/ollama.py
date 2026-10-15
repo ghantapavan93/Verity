@@ -42,7 +42,8 @@ def _overflow_message(body: str, limit: int) -> str:
     found = re.search(r"request \((\d+) tokens\)", body)
     size = f"{int(found.group(1)):,} tokens" if found else "more tokens than the model can hold"
     return (
-        f"The question, the guidance and the sections handed to the model come to {size}; its context window holds {limit:,}. "
+        f"The prompt's instructions, the question, the guidance, the contract's file name and the sections handed to the model come to "
+        f"{size}; its context window holds {limit:,}. "
         "The request was refused rather than answered from a cut prompt. Shorten the guidance or the question and ask again."
     )
 

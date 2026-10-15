@@ -19,7 +19,7 @@ from sqlalchemy import text
 from app import db as db_module
 from app.application import ingest_document as ingest_module
 from tests.support import CONTRACT
-from tests.test_anonymous import Visitor, arrive, public  # noqa: F401  (the fixture)
+from tests.test_anonymous import Visitor, arrive
 
 
 def _upload(name: str, visitor: Visitor, body: bytes, results: dict[str, tuple[int, str]]) -> None:
@@ -30,7 +30,7 @@ def _upload(name: str, visitor: Visitor, body: bytes, results: dict[str, tuple[i
         results[name] = (-1, repr(error))
 
 
-def test_two_visitors_racing_the_same_new_bytes_both_can_read_them(public: TestClient) -> None:  # noqa: F811
+def test_two_visitors_racing_the_same_new_bytes_both_can_read_them(public: TestClient) -> None:
     for round_ in range(12):
         a, _ = arrive(public, address=f"198.51.100.{round_}")
         b, _ = arrive(public, address=f"203.0.113.{round_}")
@@ -47,7 +47,7 @@ def test_two_visitors_racing_the_same_new_bytes_both_can_read_them(public: TestC
             assert visitor.get(f"/api/documents/{document_id}").status_code == 200, (round_, name, "told it worked, then refused")
 
 
-def test_a_failure_while_granting_leaves_no_ungranted_document(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: F811
+def test_a_failure_while_granting_leaves_no_ungranted_document(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """The grant is written in the document's transaction: if it fails, neither is kept."""
     a, _ = arrive(public)
 

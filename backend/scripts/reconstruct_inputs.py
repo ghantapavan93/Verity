@@ -34,6 +34,7 @@ def main() -> int:
     by_prompt: Counter[tuple[str, str]] = Counter()
     truncated = 0
     slices = 0
+    not_the_answers = 0  # the first message matches; the recorded answer came, or may have come, from a later round
     with SessionLocal() as session:
         run_ids = list(session.scalars(select(Run.id).where(Run.raw_output.is_not(None)).order_by(Run.created_at))) if args.all else args.run_ids
         if not run_ids:
@@ -51,6 +52,9 @@ def main() -> int:
                 print(f"{run_id} {result.prompt_version}: {verdict}")
                 if args.show and result.user:
                     print(result.user)
+            if result.matches and not result.answered:
+                not_the_answers += 1
+                print(f"{run_id} {result.prompt_version}: match, but not shown to be the recorded answer's input: {result.answer_problem}")
     print()
     for verdict, count in verdicts.most_common():
         print(f"{count:5d}  {verdict}")
@@ -58,6 +62,7 @@ def main() -> int:
     for (prompt_version, verdict), count in sorted(by_prompt.items()):
         print(f"{count:5d}  {prompt_version} {verdict}")
     print(f"\n{slices} context slices, {truncated} truncated to the prompt window")
+    print(f"{not_the_answers} matching input(s) not shown to be the recorded answer's: a later validation round, or rounds not recorded")
     # A run that recorded no hash cannot fail a comparison; anything else that is not a match is a failure.
     return 0 if verdicts and set(verdicts) <= {"match", NO_RECORDED_HASH} else 1
 

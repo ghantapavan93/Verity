@@ -13,7 +13,7 @@ import io
 import json
 import re
 import zipfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -25,7 +25,11 @@ from ..errors import NotFound
 from ..hashing import sha256_bytes
 from ..ingest import base_name
 from ..models import Run, iso, utcnow
+from ..runs.account import account_of
+from ..runs.relations import load
+from ..runs.status import basis
 from ..verify import spans as verifier
+from ..verify import tokens
 from .clause_location import ClauseLocator
 from .create_memo import review_head
 from .ingest_document import coverage_of, document_suffix, original_path
@@ -37,21 +41,69 @@ QUOTE_MAP = {chr(k): v for k, v in verifier._QUOTE_MAP.items()}  # the one norma
 # 'only app/hashing.py imports hashlib' stays enforceable by a grep over the code.
 VERIFY_PY = (Path(__file__).with_name("verify_template.txt")).read_text(encoding="utf-8")
 
+
+def render_verify_py() -> str:
+    """The checker as a pack carries it: the workbench's normalisation table, its typed-token pattern (v7 on), and the
+    reading of a written number of verifier v8, v9 and v10 (their patterns, v9's amount word, v10's labelled word, signs
+    and digit marks) copied in, so the two cannot read a text differently: a pack checks each run as its verifier read it.
+    Each is a JSON string literal inside a JSON string literal: valid Python, decoded by json.loads in the checker."""
+    embedded = {
+        "__QUOTE_MAP__": json.dumps(QUOTE_MAP, ensure_ascii=True),
+        "__TOKEN__": json.dumps(tokens._TOKEN.pattern, ensure_ascii=True),
+        "__WRITTEN__": json.dumps(tokens._WRITTEN_V8.pattern, ensure_ascii=True),
+        "__WRITTEN_V9__": json.dumps(tokens._WRITTEN_V9.pattern, ensure_ascii=True),
+        "__WRITTEN_V10__": json.dumps(tokens._WRITTEN.pattern, ensure_ascii=True),
+        "__LABELLED_WORD__": json.dumps(tokens._LABELLED_WORD.pattern, ensure_ascii=True),
+        "__AMOUNT_WORD__": json.dumps(tokens._AMOUNT_WORD.pattern, ensure_ascii=True),
+        "__MINUS_SIGNS__": json.dumps(sorted(tokens._MINUS_SIGNS), ensure_ascii=True),
+        "__DIGIT_MARKS__": json.dumps(sorted(tokens._DIGIT_MARKS), ensure_ascii=True),
+        "__ATTACHED__": json.dumps(sorted(tokens._ATTACHED_V8), ensure_ascii=True),
+        "__ATTACHED_V9__": json.dumps(sorted(tokens._ATTACHED), ensure_ascii=True),
+        "__SIGN_OPENERS__": json.dumps(sorted(tokens.SIGN_OPENERS), ensure_ascii=True),
+    }
+    text = VERIFY_PY
+    for name, value in embedded.items():
+        text = text.replace(name, json.dumps(value))
+    return text
+
+
 README_TXT = """Evidence pack for one Contract Workbench run.
 
   run.json        the run: question, stage, hashes of the document, sections, prompt and options, model
   sections.json   the canonical sections the run read, exactly as stored (offsets index into these texts)
   findings.json   every finding the model proposed with its status and every quoted span, located or withheld;
                   `conclusion` is the model's own sentence as recorded, `shown_conclusion` what the workbench shows
-                  (for a point the model reported as not found, only that it was not found in the sections given)
+                  (for a point the model reported as not found, only that it was not found in the sections given).
+                  Who said what, per finding:
+                    status, status_source, status_reason  the status and what set it; a status_source of model_hint
+                                    is the model's own call, any other is a check code ran
+                    decided_by      "code", "model", or "withheld" (no quote found in the sections handed over)
+                    concerns        every sentence code wrote against the status or could not establish
+                    flagged         a status other than a pass, or a pass with a concern
+                    model           the model's own words: its reading (observed, required), its reference to the
+                                    guidance, its suggested position; none of them checked by code
+                    review          a person's decision, when one was recorded; nothing else is a person's
+                    relations       what the contract's own replacement and precedence statements mean for it, in
+                                    code's words, by index into relations.json: "replaced" (quotes text the
+                                    contract replaced in full, not the replacement; code set the status); "scoped",
+                                    "precedence", "dated" (the question names a time) or "old_value" (quotes the
+                                    replacement, states only replaced values): a concern code cannot resolve; "context"
+  relations.json  the replacement and precedence statements the run located (policy-v11), each end with its offsets
+                  into sections.json; verify.py checks every one. A located statement is a fact about the text, not
+                  a ruling on its legal effect. Absent for a run recorded before policy-v11
   document/       the original uploaded bytes, when they were kept
-  model_input/    the exact system and user messages the model was given, rebuilt from the record (when the
-                  record still allows it); run.json carries the hash the run recorded when it made the call
+  model_input/    the exact system and user messages behind the answer this pack records, rebuilt from the
+                  record when it allows it (for a run without an answer, the messages of its first call); run.json
+                  carries the hash the run recorded when it made the call. When the first answer failed
+                  validation, the recorded answer was given those messages plus a note on why it was rejected,
+                  which the run did not keep: no model input is packed then, and run.json's model_input says why
   guidance.txt    the legal guidance the run was given, when any
   verify.py       a dependency-free check: python3 verify.py
 
 The pack asserts nothing a machine cannot re-check. Run verify.py; every PASS line is a claim you
-have now checked yourself.
+have now checked yourself. A PASS on a span says its quote was found where the run recorded it; it says
+nothing about whether the finding's answer is right. The pack is not signed: it shows that its files agree with each other and
+with the hashes the run recorded, not that nobody changed them together.
 """
 
 
@@ -82,6 +134,8 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
     sections = [{"id": s.id, "ordinal": s.ordinal, "number": s.number, "heading": s.heading, "text": s.text} for s in document.sections]
     sections_json = json.dumps(sections, ensure_ascii=False, indent=1)
     locator = ClauseLocator(document.sections)
+    accounts = {f.id: account_of(f, locator.clause_numbers if f.status != "missing" else frozenset()) for f in run.findings}
+    recorded = load(run.relations_json)
     findings = [
         {
             "id": f.id,
@@ -89,11 +143,29 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
             "topic": f.topic,
             "status": f.status,
             "status_source": f.status_source,
+            "status_reason": f.status_reason,
+            # What the status rests on (runs.status.basis): whether code compared a period, and the sections the quote's
+            # sentence points at that the model was not handed, as code recorded them.
+            "code_compared": basis(f.status_source, f.status_reason).code_compared,
+            "unseen_reason": basis(f.status_source, f.status_reason).unseen,
             "conclusion": f.conclusion,
             "shown_conclusion": f.shown_conclusion,
+            # Who set the status and what code raised about it, as the workbench and the memo read it (runs.account).
+            "decided_by": (account := accounts[f.id]).decided_by,
+            "flagged": account.flagged,
+            "concerns": list(account.concerns),
+            # The model's own words beside the finding: none of them is checked by code.
+            "model": {
+                "observed": f.observed,
+                "required": f.required,
+                "guidance_reference": f.guidance_reference,
+                "suggested_position": f.suggested_position,
+            },
             "review": (
                 {"verdict": f.review.verdict, "reviewer": f.review.reviewer, "note": f.review.note, "at": iso(f.review.created_at)} if f.review else None
             ),
+            # What the contract's replacement and precedence statements mean for it, as recorded (relations.json indices).
+            "relations": [{"relation": n.relation, "effect": n.effect, "sentence": n.sentence} for n in recorded.notes.get(f.ordinal, ())],
             "spans": [
                 {
                     "ordinal": s.ordinal,
@@ -116,13 +188,16 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
     original_bytes = original.read_bytes() if original.exists() else None
     rebuilt = reconstruct_input(session, run.id)
     options = json.loads(run.options_json or "{}")
+    # The input of the answer this pack's findings come from, or why it is not here (reconstruct_input.answered).
     model_input = {
         "input_sha256_recorded": rebuilt.recorded_input_sha256,
-        "reconstructable": rebuilt.matches,
-        "problem": rebuilt.problem,
-        "system_file": "model_input/system.txt" if rebuilt.matches else None,
-        "user_file": "model_input/user.txt" if rebuilt.matches else None,
+        "reconstructable": rebuilt.answered,
+        "problem": rebuilt.answered_problem,
+        "system_file": "model_input/system.txt" if rebuilt.answered else None,
+        "user_file": "model_input/user.txt" if rebuilt.answered else None,
         "prompt_window_chars": window_of(json.loads(run.options_json or "{}")),
+        "model_calls": rebuilt.calls,  # a transport retry included
+        "validation_rounds": rebuilt.rounds,  # null when the record cannot tell
     }
     context_slices = [
         {"label": s.label, "section_id": s.section_id, "rank": s.rank, "start": s.start, "end": s.end, "truncated": s.truncated, "sha256": s.content_sha256}
@@ -177,8 +252,11 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
             "window_chars": window_of(json.loads(run.options_json or "{}")),
         },
         "workbench_link": f"{settings.app_url}/?document={document.id}&run={run.id}",
+        # The contract's replacement and precedence statements the run recorded (runs.relations, policy-v11).
+        "relations_file": "relations.json" if run.relations_json else None,
+        "relations_note": None if run.relations_json else "the run was recorded before relations were (policy-v11); none are shown, none re-derived",
     }
-    verify_py = VERIFY_PY.replace("__QUOTE_MAP__", json.dumps(json.dumps(QUOTE_MAP, ensure_ascii=True)))
+    verify_py = render_verify_py()
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as pack:
@@ -186,10 +264,12 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         pack.writestr("run.json", json.dumps(record, ensure_ascii=False, indent=1))
         pack.writestr("sections.json", sections_json)
         pack.writestr("findings.json", json.dumps(findings, ensure_ascii=False, indent=1))
+        if run.relations_json:
+            pack.writestr("relations.json", json.dumps([asdict(r) for r in recorded.relations], ensure_ascii=False, indent=1))
         pack.writestr("verify.py", verify_py)
         if original_bytes is not None:
             pack.writestr(f"document/{pack_name(shown_file)}", original_bytes)
-        if rebuilt.matches and rebuilt.system is not None and rebuilt.user is not None:
+        if rebuilt.answered and rebuilt.system is not None and rebuilt.user is not None:
             pack.writestr("model_input/system.txt", rebuilt.system)
             pack.writestr("model_input/user.txt", rebuilt.user)
         if run.guidance:

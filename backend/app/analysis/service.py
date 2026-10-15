@@ -55,7 +55,11 @@ class AnalysisResult:
     proposal: AnalysisOut | None
     generation: Generation
     validation_error: str | None
-    attempts: int
+    attempts: int  # model calls made, a transport retry included
+    # Validation rounds: 1 when `generation` answered `user_message` itself; 2 when it answered the corrected message
+    # (that message plus the note on why the first answer was rejected), which no record keeps. Not `attempts`: a
+    # transport retry sends the same message again and is a second call in the same round.
+    rounds: int
 
 
 def load_prompt(version: str | None = None) -> PromptPackage:
@@ -104,10 +108,10 @@ def analyze(provider: ModelProvider, prompt: PromptPackage, user_message: str, m
         attempts += calls
         try:
             proposal = AnalysisOut.model_validate(json.loads(generation.text))
-            return AnalysisResult(proposal=proposal, generation=generation, validation_error=None, attempts=attempts)
+            return AnalysisResult(proposal=proposal, generation=generation, validation_error=None, attempts=attempts, rounds=rounds)
         except (json.JSONDecodeError, ValidationError) as error:
             last_error = str(error)[:800]
             message = f"{user_message}\n\nYour previous answer was not valid ({last_error}). Return JSON matching the schema exactly."
     if generation is None:
         raise ProviderError("no generation produced")
-    return AnalysisResult(proposal=None, generation=generation, validation_error=last_error, attempts=attempts)
+    return AnalysisResult(proposal=None, generation=generation, validation_error=last_error, attempts=attempts, rounds=rounds)

@@ -38,6 +38,7 @@ import { DocumentPane, type Highlight } from "./workspace/DocumentPane";
 import { errorMessage, getDocument, getGuidance, getRun, getRunDetail, health, listDocuments, listRuns, uploadDocument, type Health } from "@/lib/api";
 import {
   STAGE_LABELS,
+  stageAnnouncement,
   citationLabel,
   evidenceJump,
   isLocated,
@@ -138,7 +139,7 @@ function WorkbenchSurface() {
         // The API could not be asked, so nothing is known about its door: the first screen claims neither open nor private.
         setAccessKnown(false);
         // The model's whereabouts are unknown too; with accessKnown false nothing reads them (landing/Landing.tsx place).
-        setApiHealth({ ok: false, provider: "", model: "", detail: errorMessage(error), access: "off", modelLocation: "server", modelHost: "" });
+        setApiHealth({ ok: false, provider: "", model: "", detail: errorMessage(error), access: "off", modelLocation: "server", modelHost: "", fault: "" });
       });
     return () => {
       cancelled = true;
@@ -354,12 +355,13 @@ function WorkbenchSurface() {
   }, [view, finishedRunId, reviewHead, refreshRun]);
 
   // Spoken to screen readers through the live region; derived, never stored.
+  const modelSleeps = accessKnown && apiHealth?.modelLocation === "hosted";
   const announcement = useMemo(() => {
     if (!run) return "";
-    if (run.stage in STAGE_LABELS) return STAGE_LABELS[run.stage as keyof typeof STAGE_LABELS];
+    if (run.stage in STAGE_LABELS) return stageAnnouncement(run.stage as keyof typeof STAGE_LABELS, modelSleeps);
     if (run.stage === "complete") return `${run.findings.length} finding${run.findings.length === 1 ? "" : "s"} ready`;
     return outcomeTitle(run);
-  }, [run]);
+  }, [run, modelSleeps]);
 
   // ---- the tab title: where the reader is, in the browser's own chrome -------------------------
 
@@ -609,7 +611,7 @@ function WorkbenchSurface() {
                     <Divider docWidth={split.docWidth} setDocWidth={split.setDocWidth} onPointerDown={split.startDrag} />
                     <AssistantPanel
                       modelPlace={accessKnown ? (modelPlace(apiHealth)?.place ?? null) : null}
-                      modelSleeps={accessKnown && apiHealth?.modelLocation === "hosted"}
+                      modelSleeps={modelSleeps}
                       doc={doc}
                       runs={runs}
                       guidance={guidance}
@@ -628,6 +630,7 @@ function WorkbenchSurface() {
                       onJump={jumpTo}
                       onOpenPalette={() => setPaletteOpen(true)}
                       reduceMotion={reduceMotion}
+                      isSample={isSample}
                     />
                   </div>
                 </motion.div>

@@ -99,8 +99,11 @@ def test_a_quote_is_never_found_inside_a_longer_number_or_word() -> None:
     assert locate("able to terminate", "The Provider is unable to terminate for convenience.") is None
     assert locate("Section 1", "Section 12 applies to renewals.") is None
     assert locate("pay", "Payment is due on receipt.") is None
-    found = locate("15) days", "Customer may cure within fifteen (15) days of notice.")
+    found = locate("(15) days", "Customer may cure within fifteen (15) days of notice.")
     assert found is not None and found.method == "exact"
+    # Verifier v8: the parentheses around a number are its own (accounting writes a negative so, and a restated "(15)"
+    # cannot be told from one), so "15) days" splits "(15)". Until v8 this line asserted it was found exact.
+    assert locate("15) days", "Customer may cure within fifteen (15) days of notice.") is None
 
 
 def test_a_quote_ending_on_punctuation_stays_exact_when_a_letter_follows_it() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -18,17 +19,21 @@ from sqlalchemy import text
 from . import db as db_module
 from .api import access, batches, documents, engineering, findings, guidance, health, memos, model, runs, trust
 from .api.body_limit import BodyLimitMiddleware
+from .application import trust_run
 from .application.recover_runs import recover_interrupted_runs
 from .application.retention import purge_expired_workspaces, sweep_orphaned_files
 from .config import settings
 from .db import SessionLocal, init_db
 from .errors import WorkbenchError
+from .ingest import bounded
 from .providers import make_provider
 from .providers.base import ModelProvider
 from .runs.events import bus
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("app")
+# An id a caller may give its request (X-Request-ID): letters, digits and hyphens, at most 64 of them.
+_REQUEST_ID = re.compile(r"[A-Za-z0-9-]{1,64}")
 
 
 def refuse_a_store_with_owner_records() -> None:
@@ -53,7 +58,10 @@ def refuse_a_store_with_owner_records() -> None:
 async def _retain_hourly() -> None:
     while True:
         try:
-            await asyncio.to_thread(purge_expired_workspaces, db_module.engine)
+            try:
+                await asyncio.to_thread(purge_expired_workspaces, db_module.engine)
+            finally:
+                trust_run.forget_readings()  # no document read again outlives a pass that deleted it, even one that failed midway
             await asyncio.to_thread(sweep_orphaned_files, db_module.engine)
         except Exception:  # a failed pass is logged and tried again next hour; it never takes the API down
             log.exception("retention pass failed")
@@ -73,6 +81,9 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         init_db()
+        left = bounded.use_handoff_dir(bounded.handoff_folder(settings.data_dir))
+        if left:
+            log.warning("removed %d reading file(s) a stopped process left", left)
         if settings.anonymous_sessions:
             refuse_a_store_with_owner_records()
         with SessionLocal() as session:
@@ -86,6 +97,7 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         yield
         if retention is not None:
             retention.cancel()
+        bounded.release_handoff_dir()
 
     access.check_configuration()
     app = FastAPI(title="Contract Workbench", version="0.1.0", lifespan=lifespan)
@@ -113,7 +125,10 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def request_log(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+        # A caller's own id is kept only when it is one: an unchecked header wrote whole forged lines into the log
+        # ("x method=DELETE path=/api/documents/all status=200 …", security review, 2026-10-14).
+        offered = request.headers.get("x-request-id", "")
+        request_id = offered if _REQUEST_ID.fullmatch(offered) else uuid.uuid4().hex[:12]
         started = time.perf_counter()
         response = await call_next(request)
         # For a streamed response this is the time to first byte, not the life of the stream.

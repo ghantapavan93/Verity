@@ -60,7 +60,10 @@ HEADING_WEIGHT = 3
 # What "the sections handed to the model" means: this tokenizer and stopword list, BM25 with the heading counted three
 # times, only sections scored above zero, and the opening sections when none is (runs.service). Part of a run's
 # identity (runs.versions); changed by hand when any of that changes.
-RETRIEVAL_VERSION = "retrieval-v1"
+# retrieval-v2 (2026-10-14): after the ranking, the sections the top three ranked ones depend on where the contract says
+# which (a definition they use, an amendment of them, a clause or schedule they cite), at most two, within the same
+# worst-case text (runs.links). The ranking itself is unchanged.
+RETRIEVAL_VERSION = "retrieval-v2"
 
 
 @dataclass(frozen=True)

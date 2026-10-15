@@ -8,7 +8,7 @@ import { ACCESS_REQUIRED_EVENT, enterWithInvite, errorMessage, getAccess, health
 import type { AccessView } from "@/lib/types";
 import { modelPlace } from "@/lib/modelPlace";
 import { SOURCE, TopLinks } from "../landing/TopLinks";
-import { PublicDemo } from "./PublicDemo";
+import { AccessModeKnown, PublicDemo } from "./PublicDemo";
 
 /**
  * The door in front of the workbench, when the API has one (backend/app/api/access.py). This component decides
@@ -70,6 +70,8 @@ export function AccessGate({ children }: { children: ReactNode }) {
   // Anonymous health names no provider or model, only where the model runs; nothing is claimed until it answers.
   const [apiHealth, setApiHealth] = useState<Health | null>(null);
   const [demo, setDemo] = useState<{ retentionDays: number } | null>(null);
+  // Whether the API said which door it is; the workbench opens either way, but claims neither door until it has.
+  const [modeKnown, setModeKnown] = useState(true);
   const demoRef = useRef(false);
 
   const startVisit = useCallback(async (): Promise<State> => {
@@ -114,10 +116,17 @@ export function AccessGate({ children }: { children: ReactNode }) {
       try {
         const access = await getAccess();
         const next = await settle(access);
-        if (!cancelled) setState(next);
+        if (!cancelled) {
+          setModeKnown(true);
+          setState(next);
+        }
       } catch {
-        // The API did not answer. The workbench says so in its own words; the door has nothing to add.
-        if (!cancelled) setState("open");
+        // The API did not answer. The workbench says so in its own words; the door has nothing to add, and claims
+        // no door (AccessModeKnown).
+        if (!cancelled) {
+          setModeKnown(false);
+          setState("open");
+        }
       }
     };
     void arrive();
@@ -169,7 +178,12 @@ export function AccessGate({ children }: { children: ReactNode }) {
   };
 
   const place = modelPlace(apiHealth);
-  if (state === "open") return <PublicDemo.Provider value={demo}>{children}</PublicDemo.Provider>;
+  if (state === "open")
+    return (
+      <AccessModeKnown.Provider value={modeKnown}>
+        <PublicDemo.Provider value={demo}>{children}</PublicDemo.Provider>
+      </AccessModeKnown.Provider>
+    );
   // While the API is asked, the frame the visitor is about to see, not an empty page (the first paint on a slow phone
   // was blank until the session answered: lab LCP 4.4 s, 2026-10-09).
   if (state === "checking")
@@ -257,7 +271,9 @@ export function AccessGate({ children }: { children: ReactNode }) {
           {place && (
             <p className={door.gateNote}>
               {place.hosted
-                ? `Contracts and questions are sent to ${place.place}, where the model runs.`
+                ? // Everything a question sends, listed (analysis/service.py build_user_message), not only the sections: the
+                  // file's name and the guidance go too, and the opening sections when retrieval ranks none (counter-review).
+                  `Each question is sent to ${place.place}, where the model runs, with any guidance, the contract's file name and sections of the contract.`
                 : `Contracts and questions stay with this deployment: the model runs on ${place.place}.`}
             </p>
           )}

@@ -12,6 +12,7 @@
 
 import Link from "next/link";
 import { createContext, Fragment, useContext, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { INDEPENDENCE } from "@/lib/independence";
 
 import { StatusChip } from "../workbench/shell/primitives";
 import { STATUS_SOURCE_LABELS } from "@/lib/types";
@@ -397,7 +398,8 @@ function InputPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
   return (
     <div className={styles.stack}>
       <p className={styles.panelLead}>
-        Exactly what the model was sent: the prompt&apos;s instructions, then the question and the six sections retrieval chose.
+        Exactly what the model was sent: the prompt&apos;s instructions, then the question, the guidance line, the contract&apos;s name and the sections
+        retrieval chose.
       </p>
       <dl className={styles.facts}>
         <div>
@@ -1104,7 +1106,7 @@ export function BreakStory({ record }: { record: PageRecord }) {
           </Link>
           <nav aria-label="Sections" className={styles.nav}>
             {NAV.map(([id, name]) => (
-              <a key={id} href={`#${id}`} className={styles.navLink}>
+              <a key={id} href={`#${id}`} className={id === "fix" ? `${styles.navLink} ${styles.navKey}` : styles.navLink}>
                 {name}
               </a>
             ))}
@@ -1125,6 +1127,7 @@ export function BreakStory({ record }: { record: PageRecord }) {
           <Counterexample />
           <YourTurn />
           <Sources headline={headline} />
+          <p className={styles.provenance}>{INDEPENDENCE}</p>
         </main>
       </div>
     </RecordContext.Provider>

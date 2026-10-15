@@ -97,6 +97,11 @@ def golden_cases() -> list[Case]:
         if golden["kind"] != "present" or not golden["sections"]:
             continue
         wanted = set(golden["sections"])
+        # A golden that names a section the reading does not have is a stale label, never an unreachable case: reader v14
+        # renumbered the sample's sub-items ("5.3.1" became "5.3(a)") and five goldens were silently dropped (2026-10-14).
+        absent = wanted - {number for number, _, _ in sections}
+        if absent:
+            raise SystemExit(f"golden {golden['id']} names {sorted(absent)}, which the reading of the sample does not have")
         question = str(golden["question"]) + (f" {golden['guidance']}" if golden.get("guidance") else "")
         cases.append(Case("goldens", str(golden["category"]), question, sections, lambda number, _t, wanted=wanted: number in wanted))
     return cases

@@ -14,25 +14,41 @@ The two directions are not held to the same standard, and they are not owned ali
 A shortfall is code's decision (`computed_days`): where the model offered the quote as the contract's position, code
 reports that its period falls short of the guidance whether the model hinted pass or needs review.
 
-A pass is never code's decision alone. The model proposes it; code confirms it (`confirmed_days`) when the period
-meets the guidance and nothing in the source text stands against it: `policy.proof.pass_blockers` reads the quotes,
-their sentences and the guidance for that, and a passage that points at a section the model was not handed blocks it
-as well. Hold the quote and the guidance still and change only the model's hint from pass to needs review, and there
-is no pass: so the record does not say code decided one. An unconfirmed pass is the model's hint, shown as its view,
-with the reasons. None of the model's words about the quote (topic, observed, required) can earn a confirmation;
-they can only lose one.
+A pass is never code's decision. The model proposes it, and since policy-v3 (2026-10-02) it is recorded as the
+model's (`model_hint`) whatever code finds. Code compares the periods and reads the source text for a reason against
+the pass: `policy.proof.pass_blockers` reads the quotes, their sentences and the guidance, and a passage that points at
+a section the model was not handed counts against it as well; where no period was compared, a pass still names that
+section in its reason (policy-v8). A pass that clears every check carries code's sentence
+that the day counts are consistent and that the shared subject is the model's reading (`SUBJECT_IS_THE_MODELS`); one
+that does not carries the reasons. Those checks are lexical and cannot establish that a quote and the guidance concern
+the same point, and holding the quote and the guidance still while the model's hint changes from pass to needs review
+leaves no pass: so the record never says code decided or confirmed one. None of the model's words about the quote
+(topic, observed, required) can make code vouch for a pass. `confirmed_days`, "confirmed by code", is a record made
+under policy-v2 (2026-10-02, before v3 the same day); it is kept for the runs that carry it and nothing writes it now.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ..analysis.schema import StatusHint
 from ..models import STATUSES_BY_SOURCE, FindingStatusName, StatusSourceName
-from ..policy.durations import Duration, ObservedFact, evaluate, observed_fact, parse_durations, parse_rule, stated_periods, stated_rules
-from ..policy.proof import pass_blockers, same_point
+from ..policy.durations import (
+    BusinessWeek,
+    DayConvention,
+    Duration,
+    ObservedFact,
+    evaluate,
+    observed_fact,
+    parse_durations,
+    parse_rule,
+    periods_as_the_contract_reads,
+    read_as_the_contract_does,
+    stated_rules,
+)
+from ..policy.proof import pass_blockers, same_point, unseen_reason
 from .values import redaction_given_as_value, unquoted_values
 
 # The version of the rules in this module and in `policy`: what a status means. Part of a run's identity
@@ -42,6 +58,9 @@ from .values import redaction_given_as_value, unquoted_values
 # model's, confirmed by code only when every period of the guidance is met and the source text, the sentences around
 # the quote and the run's related findings give no reason against it. Changing what any of this means is a new
 # version: tests/test_semantic_versions.py fails until the version and its fingerprint are recorded together.
+# policy-v3 (2026-10-02, red team): code confirms no pass. The checks a pass must clear are lexical and cannot establish
+# that a quote and the guidance concern the same point, so a pass stays the model's (`model_hint`) with code's sentence;
+# `confirmed_days` is never written again and is kept for the policy-v2 records that carry it (DECISIONS.md).
 # policy-v4 (2026-10-09): a guidance bound is read as written or not at all. "Must not exceed 60 days" was a floor;
 # every ceiling phrasing is now a ceiling, and a period beside a negation or a bare comparative code does not read
 # ("more than 60 days are not acceptable") states no rule. Replayed over the 63 recorded findings with guidance: none
@@ -56,7 +75,37 @@ from .values import redaction_given_as_value, unquoted_values
 # policy-v6 (2026-10-10, Contract Reality Lab): a pass is lowered to needs review when its conclusion states a value no
 # verified quote or guidance states (the question is not evidence), or gives a redaction mark ("[***]") as its value (`check_values`). Both were
 # disclosed beside the answer and left the pass standing. Over 896 recorded passes (owner and lab stores): 17 change.
-POLICY_VERSION = "policy-v6"
+# policy-v7 is the name of the party check that was not adopted (57e4dae); runs recorded under it (the /break headline)
+# keep that name, so it is not reused.
+# policy-v8 (2026-10-13, war room F-04): a pass whose verified sentence points at a section the model was not handed
+# says so ("the sentence points at §14.3, which was not handed to the model", `policy.proof.unseen_reason`) whether or
+# not a period was compared; until v6 only a pass whose periods code compared named it, and a pass with no guidance
+# carried no reason at all. No status changes; the reason is new. Over 1,623 recorded passes in 12 local stores, 216
+# would carry it (135 of 856 in the owner's), none with guidance. A reference names the section numbered exactly so before
+# one whose number only ends in it: without that, 5 more would have named a §5.1 that was handed.
+# policy-v9 (2026-10-14, the legal pilot's H4-Q5): where the guidance and the verified quote both state a period and code
+# cannot compare them (calendar days against Business Days, months against days), a pass the model proposed is lowered
+# to needs review with that reason (`position_check`). Until v9 the comparison came back "incomparable" and fell through
+# to the model's hint, so "30 days, which meets the guidance" of 30 Business Days stood as within guidance, with no
+# reason, on real Qwen output. Replayed over 14,352 recorded findings in 55 local stores (827 with guidance), v9
+# changes 3 decisions, all H4-Q5: the pilot's run and two scripted probes of the same clause.
+# policy-v10 (2026-10-14, the product mission): periods in units that do not convert are placed on the calendar
+# (policy.durations.calendar_days): a month is 28 to 31 days, a year 365 or 366, and N business days at least
+# N + 2 × ⌊(N − 1) / 5⌋ when the contract's own definition makes a Business Day a weekday (policy.durations.business_week,
+# read from the whole document). A contract period short of the guidance on every calendar is code's shortfall
+# (`computed_days`): H4-Q5's 30 days against 30 Business Days, on a contract that defines a Business Day; a pass that
+# holds on every calendar stays the model's with the counts consistent; ranges that overlap, or business days whose
+# weekdays code cannot read from the contract, stay as v9 sends them, with the ranges, or what follows if a Business Day is a weekday, in
+# the reason. A contract that says its bare "days" are Business Days is read so (policy.durations.day_convention). Replayed
+# over 14,352 recorded findings in 55 local stores (827 with guidance): 6 change, each from incomparable to a shortfall
+# code computes, five of them H4-Q5's clause (its contract defines a Business Day in §1.4) and one two months against
+# at least 90 days.
+# policy-v11 (2026-10-14, the intent-first mission): the contract's own statements that one provision replaces another, or
+# that its parts rank for a conflict, are located and recorded with the run (runs.relations). One status changes: a
+# question about the agreement as it stands, answered from text the contract replaced in full, without the replacement,
+# is needs review set by code (`check_replaced`, `position_check`), and the quote stays verified. A limited replacement
+# or a ranking of parts is a concern only: whether the limit applies, or which part governs, is not code's to decide.
+POLICY_VERSION = "policy-v11"
 
 
 @dataclass(frozen=True)
@@ -89,11 +138,15 @@ def decide(
     topic: str | None = None,
     dependencies: Sequence[str] = (),
     passages: Sequence[str] = (),
+    week: BusinessWeek | None = None,
+    days: DayConvention | None = None,
 ) -> Decision:
     """``quotes`` are the verified quotes and ``guidance`` the guidance text: the source facts. ``status_hint``,
     ``observed``, ``required`` and ``topic`` are the model's. ``passages`` are the whole sentences of the stored
     section text that the quotes sit in (`enclosing_sentences`), and ``dependencies`` the sections those sentences
-    point at that the model was not handed (`unseen_references`); the caller computes both from the record."""
+    point at that the model was not handed (`unseen_references`); the caller computes both from the record. ``week`` is
+    the contract's own definition of a Business Day, read from the whole document (`policy.durations.business_week`), and
+    ``days`` what the contract says its bare "days" are (`policy.durations.day_convention`)."""
     if not all_spans_verified:
         return Decision("unresolved", "no_evidence")
     # The model's stated positions are checked against the record before anything is computed.
@@ -105,6 +158,9 @@ def decide(
         return Decision("needs_review", "position_check", "the requirement the model stated is not in the guidance")
     rule = parse_rule(guidance, topic) if guidance_present else None
     fact = next((f for f in (observed_fact(q, stated=observed) for q in quotes) if f is not None), None)
+    read = read_as_the_contract_does(fact, days) if fact is not None else None
+    converted = read is not None and fact is not None and read.duration != fact.duration
+    fact = read
     if rule is not None and fact is not None:
         if status_hint == "missing":
             # The model reported the point as not found, and the prompt (rule 8) has it cite the closest provision it
@@ -123,13 +179,16 @@ def decide(
         # minimum. Which period governs is a reading of the clause; code does not make it. (No recorded finding rested
         # on such a quote: 12 computed passes, none with a second period.) A carve-out with no number is a period too:
         # "90 days' notice, except that Provider may terminate immediately" was a computed pass, by the live model.
-        periods: set[Duration] = set().union(*(stated_periods(q) for q in quotes))
-        outcomes = {evaluate(ObservedFact("notice_period", d, "", 0, 0), rule).outcome for d in periods}
+        periods: set[Duration] = set().union(*(periods_as_the_contract_reads(q, days) for q in quotes))
+        outcomes = {evaluate(ObservedFact("notice_period", d, "", 0, 0), rule, week).outcome for d in periods}
         if len(outcomes) > 1:
             return Decision(
                 "needs_review", "ambiguous_fact", f"the quote states more than one period ({_periods(periods)}) and they do not all meet the guidance alike"
             )
-        evaluation = evaluate(fact, rule)
+        evaluation = evaluate(fact, rule, week)
+        if converted and days is not None:
+            # The quote's "days" are the contract's Business Days: the reason says so, where every reader of it can check it.
+            evaluation = replace(evaluation, reason=f"{evaluation.reason} ({days.note})")
         if evaluation.outcome == "needs_review":
             # A shortfall is code's to report: 60 days where the guidance requires 90 sends the finding to a person. What
             # code established is the conflict between the two periods. That the quoted period is the guidance's subject
@@ -143,7 +202,7 @@ def decide(
             if status_hint != "pass":
                 # The model read the clause and did not call it a pass. Code compared two numbers; it does not overrule a reading.
                 blockers.append("the model asked for review")
-            if any(evaluate(fact, other).outcome != "pass" for other in stated_rules(guidance)):
+            if any(evaluate(fact, other, week).outcome != "pass" for other in stated_rules(guidance)):
                 # "At least 30 days' notice; enterprise agreements require 90": which period binds this agreement is a
                 # reading of the guidance, and code does not make it.
                 blockers.append(f"the guidance states more than one period ({_periods(in_guidance)}) and the quote does not meet them all")
@@ -158,11 +217,48 @@ def decide(
             return Decision("pass", "model_hint", f"{evaluation.reason}; code found the day counts consistent, and {SUBJECT_IS_THE_MODELS}")
         if evaluation.outcome == "ambiguous":
             return Decision("needs_review", "ambiguous_fact", evaluation.reason)
+        if evaluation.outcome == "incomparable" and status_hint == "pass":
+            # Both sides state a period and code cannot put them in order: units it cannot place on the calendar, or
+            # ranges that overlap (a month, 28 to 31 days, against at least 30). The model's "meets the guidance" is then
+            # a claim nothing checked: it goes to a person, and the reason says why (policy-v9, v10).
+            return Decision("needs_review", "position_check", f"{evaluation.reason}; so the pass the model proposed is not established")
+    if status_hint == "pass" and dependencies:
+        # A pass rests on what the model read. Where no period was compared (no guidance, guidance with no period, a
+        # quote with none) it carried no reason, so "Subject to Section 14.3, …" passed without saying that §14.3 was
+        # never handed over (war room F-04, 2026-10-13). The pass stays the model's; the reason says what it did not see.
+        return Decision("pass", "model_hint", unseen_reason(dependencies))
     return Decision(status_hint, "model_hint")
 
 
 # The one thing a day comparison cannot establish, said the same way wherever code reports one.
 SUBJECT_IS_THE_MODELS = "that the quoted period and the guidance concern the same point is the model's reading, not code's"
+
+# What a recorded status rests on, read back from its source and the reason code wrote, in every wording `decide` has
+# written: whether code compared a period in a verified quote with one in the guidance, and the sentence naming the
+# sections the quote's sentence points at that the model was not handed. A pass whose reason only names such sections
+# (policy-v8) compared nothing, yet the interface headed it "Code compared", and the memo did not mention it at all
+# (release integration, 2026-10-13). Read from the record, so a run made under an earlier policy reads as it was decided.
+_COMPARED_A_PERIOD = (", but code does not confirm that as a pass: ", "code found the day counts consistent")
+_UNSEEN = (
+    re.compile(r"the sentence points at .+?, which (?:were|was) not handed to the model"),  # policy-v8 on (proof.unseen_reason)
+    re.compile(r"the quoted passage refers to .+?, which the model was not handed"),  # policy-v3 to policy-v6
+)
+
+
+@dataclass(frozen=True)
+class Basis:
+    code_compared: bool
+    unseen: str | None  # the sentence as code wrote it, or None
+
+
+def basis(source: str, reason: str | None) -> Basis:
+    """What a finding's status rests on (see above): never more than the record says."""
+    reason = reason or ""
+    compared = source in ("computed_days", "confirmed_days", "ambiguous_fact") or (
+        source == "model_hint" and any(phrase in reason for phrase in _COMPARED_A_PERIOD)
+    )
+    unseen = next((match.group(0) for wording in _UNSEEN if (match := wording.search(reason))), None)
+    return Basis(compared, unseen)
 
 
 @dataclass(frozen=True)
@@ -287,7 +383,10 @@ def unseen_references(passage: str, sections: Iterable[tuple[str, str]], handed:
     unseen: list[str] = []
     for reference in references(passage):
         reference = reference.rstrip(".")
-        targets = [pair for pair in every if pair[0] and (pair[0] == reference or pair[0].endswith("." + reference))]
+        # The section numbered so is the one meant. A number that only ends in it ("0.15.11" for clause 15.11) is a
+        # reader's prefixed numbering, read only when no section carries the number itself: beside a §5.1 that was
+        # handed, an unhanded §5.5.1 made "§5.1" unseen (replay of 2026-10-13: 5 recorded passes, one document).
+        targets = [pair for pair in every if pair[0] == reference] or [pair for pair in every if pair[0] and pair[0].endswith("." + reference)]
         if targets and any(pair not in seen for pair in targets) and f"§{reference}" not in unseen:
             unseen.append(f"§{reference}")
     for kind, mark in ATTACHMENT.findall(passage):
@@ -297,6 +396,16 @@ def unseen_references(passage: str, sections: Iterable[tuple[str, str]], handed:
         if targets and any(pair not in seen for pair in targets) and label not in unseen:
             unseen.append(label)
     return unseen
+
+
+def check_replaced(decision: Decision, replaced: str | None) -> Decision:
+    """A finding answered from text the contract replaced in full, for a question about the agreement as it stands, is
+    needs review set by code, with ``replaced``, the sentence runs.relations wrote: code located the replacing statement,
+    and does not decide which wording governs. Whatever the status was (a shortfall code computed from the replaced
+    period included), it rested on text the contract says no longer stands. A withheld finding stays withheld."""
+    if replaced is None or decision.status == "unresolved":
+        return decision
+    return Decision("needs_review", "position_check", replaced)
 
 
 def check_references(

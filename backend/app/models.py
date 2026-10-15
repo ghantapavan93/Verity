@@ -203,6 +203,9 @@ class Run(Base):
     document_sha256: Mapped[str] = mapped_column(String(64))
     guidance_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     candidates_json: Mapped[str] = mapped_column(Text, default="[]")
+    # What the contract says about how its provisions act on one another, located, and what that means for each finding
+    # (runs.relations, policy-v11). Written once when the run finishes; NULL on every run recorded before, never re-derived.
+    relations_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # How those candidates were chosen (RetrievalModeName); NULL before 2026-10-02, when only the stage's sentence said it.
     retrieval_mode: Mapped[RetrievalModeName | None] = mapped_column(String(32), nullable=True)
     # The workspace the run belongs to; null for a curated record (every run before 2026-10-02, the goldens and the
@@ -244,7 +247,11 @@ class RunStage(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[StageStatusName | None] = mapped_column(String(16), nullable=True)
-    attempt: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempt: Mapped[int | None] = mapped_column(Integer, nullable=True)  # model calls, a transport retry included
+    # The checking stage's validation rounds (analysis.service.analyze): 1 when the recorded output answered the message
+    # `input_hash` covers; 2 when it answered the corrected retry, a message the record does not keep. NULL on rows
+    # written before 2026-10-13, which reconstruct_input reads from `attempt` where the record allows it.
+    rounds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # sha256 of what the stage consumed and what it produced, so a stage can be replayed and compared.
     input_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     output_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

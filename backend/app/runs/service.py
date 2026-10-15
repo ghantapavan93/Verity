@@ -34,15 +34,18 @@ from ..models import (
     as_utc,
     utcnow,
 )
+from ..policy.durations import business_week, day_convention
 from ..providers.base import ModelProvider, ProviderError
 from ..retrieval.aliases import ALIASES_SHA256, expand_query
 from ..retrieval.hybrid import HybridIndex, ollama_embed
 from ..retrieval.lexical import LexicalIndex
-from ..verify.spans import Located, locate
+from ..verify.spans import Located, locate, verification_pass
 from .events import StageEvent, bus
+from .links import because, linked
 from .owner import this_process
 from .prose import label_handles
-from .status import Decision, Grounds, check_references, check_values, decide, enclosing_sentences, settle_together, unseen_references
+from .relations import Note, Recorded, assess, dump, locate_relations, parts_of, relevant
+from .status import Decision, Grounds, check_references, check_replaced, check_values, decide, enclosing_sentences, settle_together, unseen_references
 from .transitions import assert_transition
 from .versions import stale_versions
 
@@ -103,8 +106,10 @@ def _set_stage(
     bus.publish(StageEvent(run.id, stage, detail))
 
 
-def _note_stage(session: Session, run: Run, stage: RunStageName, detail: str, *, output_hash: str | None = None, attempt: int | None = None) -> None:
-    """Record what a stage produced once it has run: counts, timing, the hash of its output, attempts."""
+def _note_stage(
+    session: Session, run: Run, stage: RunStageName, detail: str, *, output_hash: str | None = None, attempt: int | None = None, rounds: int | None = None
+) -> None:
+    """Record what a stage produced once it has run: counts, timing, the hash of its output, attempts and rounds."""
     row = session.query(RunStage).filter_by(run_id=run.id, stage=stage).order_by(RunStage.id.desc()).first()
     if row is not None:
         row.detail = detail
@@ -112,6 +117,8 @@ def _note_stage(session: Session, run: Run, stage: RunStageName, detail: str, *,
             row.output_hash = output_hash
         if attempt is not None:
             row.attempt = attempt
+        if rounds is not None:
+            row.rounds = rounds
         session.commit()
     session.expire(run, ["stages"])
     bus.publish(StageEvent(run.id, stage, detail))
@@ -180,9 +187,10 @@ class FrozenOptions:
         )
 
 
-def _retrieve(sections: list[Section], question: str, guidance: str | None, frozen: FrozenOptions) -> tuple[list[Section], RetrievalModeName]:
-    """The sections handed to the model, and how they were chosen. `opening_fallback` means the retriever ranked no
-    section for the question, and the opening sections were handed over instead: they were not chosen for it."""
+def _retrieve(sections: list[Section], question: str, guidance: str | None, frozen: FrozenOptions) -> tuple[list[Section], RetrievalModeName, dict[str, str]]:
+    """The sections handed to the model, how they were chosen, and, by section id, why each section the contract points
+    to was added (retrieval-v2, runs.links). `opening_fallback` means the retriever ranked no section for the question,
+    and the opening sections were handed over instead: they were not chosen for it, and no link is followed from them."""
     pairs = [(s.heading, s.text) for s in sections]
     hybrid = frozen.retriever == "hybrid"
     index: LexicalIndex | HybridIndex = HybridIndex(pairs, embed=partial(ollama_embed, model=frozen.embed_model)) if hybrid else LexicalIndex(pairs)
@@ -192,8 +200,13 @@ def _retrieve(sections: list[Section], question: str, guidance: str | None, froz
     candidates = index.search(query, frozen.retrieval_k)
     if not candidates and sections:
         # A question the retriever ranks nothing for still gets the opening sections rather than nothing.
-        return sections[: min(frozen.retrieval_k, len(sections))], "opening_fallback"
-    return [sections[c.index] for c in candidates], "hybrid_match" if hybrid else "lexical_match"
+        return sections[: min(frozen.retrieval_k, len(sections))], "opening_fallback", {}
+    ranked = [c.index for c in candidates]
+    # retrieval-v2: what the top ranked sections depend on, where the contract says which (a definition, an amendment,
+    # a clause or schedule they cite), added after them within the same worst-case text (runs.links).
+    added = linked(sections, ranked, frozen.window)
+    why = {sections[link.index].id: because(link, sections) for link in added}
+    return [sections[i] for i in ranked] + [sections[link.index] for link in added], "hybrid_match" if hybrid else "lexical_match", why
 
 
 def bound_to(provider: ModelProvider, frozen: FrozenOptions) -> ModelProvider:
@@ -203,6 +216,7 @@ def bound_to(provider: ModelProvider, frozen: FrozenOptions) -> ModelProvider:
     return bind(frozen.decoding) if bind is not None else provider
 
 
+@verification_pass()  # what is worked out about each text is kept for this pass only (verify/spans.py)
 def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
     run = session.get(Run, run_id)
     if run is None:
@@ -218,13 +232,24 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         _note_stage(session, run, "reading", f"{pages}{len(sections)} sections", output_hash=sha256_text("\x1f".join(s.text for s in sections)))
 
         _set_stage(session, run, "finding_evidence", input_hash=sha256_text(f"{run.question}\x1f{run.guidance_sha256 or ''}"))
-        chosen, retrieval_mode = _retrieve(sections, run.question, guidance_text, frozen)
+        chosen, retrieval_mode, linked_because = _retrieve(sections, run.question, guidance_text, frozen)
         by_label = {SECTION_LABEL.format(ordinal=s.ordinal): s for s in chosen}
         # What a handle reads as once the model's prose reaches a person.
         labels = {label: (f"§{s.number}" if s.number else s.heading) for label, s in by_label.items()}
-        run.candidates_json = json.dumps([{"label": label, "section_id": s.id, "number": s.number, "heading": s.heading} for label, s in by_label.items()])
+        run.candidates_json = json.dumps(
+            [
+                {"label": label, "section_id": s.id, "number": s.number, "heading": s.heading}
+                # A section the contract points to from a ranked one says why it was handed (retrieval-v2).
+                | ({"linked": linked_because[s.id]} if s.id in linked_because else {})
+                for label, s in by_label.items()
+            ]
+        )
         # A field, not only a sentence on the stage: every projection of the run can say which it was.
         run.retrieval_mode = retrieval_mode
+        # The contract's own statements of replacement and precedence, located once and recorded with the run (policy-v11):
+        # those touching the sections read first. What each means for a finding is added when the findings are made.
+        relations = relevant(locate_relations(sections, as_utc(run.created_at).date()), {s.id for s in chosen})
+        run.relations_json = dump(Recorded(tuple(relations)))
         session.commit()
         _note_stage(
             session,
@@ -235,7 +260,8 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             # sentence says what the retriever did, not why: on an agreement of two sections BM25 scores every section
             # at zero or below although both contain the question's words, and "no section matched the question's
             # words" was untrue there.
-            f"{len(chosen)} candidate section{'s' if len(chosen) != 1 else ''}"
+            f"{len(chosen) - len(linked_because)} candidate section{'s' if len(chosen) - len(linked_because) != 1 else ''}"
+            + (f" and {len(linked_because)} the contract points to from them" if linked_because else "")
             if retrieval_mode != "opening_fallback"
             else f"retrieval ranked no section for this question; the opening {len(chosen)} of {len(sections)} were read instead",
             output_hash=sha256_text("\x1f".join(s.id for s in chosen)),
@@ -264,10 +290,12 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         answered = f"model answered in {seconds:.0f} s" if seconds >= 1 else "model answered"
         if result.attempts > 1:
             answered += f" · attempt {result.attempts}"
+        if result.rounds > 1:
+            answered += " · after a rejected first answer"
         admitted = getattr(provider, "last", None)
         if admitted is not None and admitted.queue_wait_ms >= 1000:
             answered += f" · queued {admitted.queue_wait_ms / 1000:.0f} s behind {admitted.queue_depth_at_arrival + 1}"
-        _note_stage(session, run, "checking", answered, output_hash=sha256_text(result.generation.text), attempt=result.attempts)
+        _note_stage(session, run, "checking", answered, output_hash=sha256_text(result.generation.text), attempt=result.attempts, rounds=result.rounds)
 
         if result.proposal is None:
             _finish(
@@ -304,6 +332,13 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         printed = stated_clause_numbers([s.text for s in sections])  # the clause numbers the document's own text opens
         clause_numbers = {s.number for s in sections if s.number} | printed  # a value written as one of these points (runs.values)
         handed = [(s.number, s.heading) for s in chosen]
+        # The contract's own definition of a Business Day, from the whole document: what a period in business days takes
+        # on the calendar rests on it (policy-v10), never on an assumption.
+        cited_as = [(f"§{s.number}" if s.number else s.heading, s.text) for s in sections]
+        week = business_week(cited_as)
+        days = day_convention(cited_as)  # what the contract says its bare "days" are (policy-v10)
+        parts = parts_of(sections) if relations else {}
+        notes: dict[int, tuple[Note, ...]] = {}
         proposed: list[tuple[Finding, Decision, Grounds]] = []
         for ordinal, item in enumerate(proposal.findings):
             spans: list[EvidenceSpan] = []
@@ -345,6 +380,8 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 topic=item.topic,
                 dependencies=dependencies,
                 passages=passages,
+                week=week,
+                days=days,
             )
             decision = check_references(decision, label_handles(item.conclusion, labels), (s.number for s in sections), by_label, printed)
             decision = check_values(
@@ -355,6 +392,12 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 guidance_text,
                 clause_numbers,
             )
+            if relations:
+                # What the located statements mean for this finding: only its verified quotes ground anything (runs.relations).
+                answer = " ".join(label_handles(text, labels) for text in (item.conclusion, item.observed) if text)
+                quoted = [(span.section_id, span.start, span.end) for span in spans if span.verified and span.section_id]
+                notes[ordinal] = tuple(assess(relations, quoted, answer, run.question, parts))
+                decision = check_replaced(decision, next((n.sentence for n in notes[ordinal] if n.effect == "replaced"), None))
             verified_any = verified_any or all_verified
             if not all_verified:
                 withheld_count += 1
@@ -376,6 +419,8 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         for (finding, _, _), decision in zip(proposed, settled, strict=True):
             finding.status, finding.status_source, finding.status_reason = decision.status, decision.source, decision.reason or None
             session.add(finding)
+        if notes:
+            run.relations_json = dump(Recorded(tuple(relations), notes))
         session.commit()
         if total_count == 0:
             # An answer with no quoted passage is not a finding; the schema asks for at least one,

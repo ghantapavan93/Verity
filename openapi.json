@@ -483,6 +483,17 @@
             "title": "Label",
             "type": "string"
           },
+          "linked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked"
+          },
           "number": {
             "default": "",
             "title": "Number",
@@ -1243,6 +1254,17 @@
             "title": "Label",
             "type": "string"
           },
+          "linked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked"
+          },
           "number": {
             "default": "",
             "title": "Number",
@@ -1933,8 +1955,31 @@
       },
       "FindingOut": {
         "properties": {
+          "codeCompared": {
+            "default": false,
+            "title": "Codecompared",
+            "type": "boolean"
+          },
+          "concerns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Concerns",
+            "type": "array"
+          },
           "conclusion": {
             "title": "Conclusion",
+            "type": "string"
+          },
+          "decidedBy": {
+            "default": "model",
+            "enum": [
+              "code",
+              "model",
+              "withheld"
+            ],
+            "title": "Decidedby",
             "type": "string"
           },
           "evidenceKind": {
@@ -1945,6 +1990,11 @@
             ],
             "title": "Evidencekind",
             "type": "string"
+          },
+          "flagged": {
+            "default": false,
+            "title": "Flagged",
+            "type": "boolean"
           },
           "guidanceReference": {
             "anyOf": [
@@ -1981,6 +2031,14 @@
               }
             ],
             "title": "Observed"
+          },
+          "relations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RelationNoteOut"
+            },
+            "title": "Relations",
+            "type": "array"
           },
           "required": {
             "anyOf": [
@@ -2076,6 +2134,17 @@
             "title": "Unquotedvalues",
             "type": "array"
           },
+          "unseenReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unseenreason"
+          },
           "valueChoices": {
             "default": [],
             "items": {
@@ -2120,12 +2189,30 @@
             "title": "Citations",
             "type": "array"
           },
+          "concerns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Concerns",
+            "type": "array"
+          },
           "conclusion": {
             "title": "Conclusion",
             "type": "string"
           },
           "createdAt": {
             "title": "Createdat",
+            "type": "string"
+          },
+          "decidedBy": {
+            "default": "model",
+            "enum": [
+              "code",
+              "model",
+              "withheld"
+            ],
+            "title": "Decidedby",
             "type": "string"
           },
           "documentId": {
@@ -2144,6 +2231,11 @@
             ],
             "title": "Evidencekind",
             "type": "string"
+          },
+          "flagged": {
+            "default": false,
+            "title": "Flagged",
+            "type": "boolean"
           },
           "hasGuidance": {
             "default": false,
@@ -2810,6 +2902,16 @@
             "title": "Detail",
             "type": "string"
           },
+          "fault": {
+            "default": "",
+            "enum": [
+              "",
+              "store",
+              "model"
+            ],
+            "title": "Fault",
+            "type": "string"
+          },
           "model": {
             "title": "Model",
             "type": "string"
@@ -3016,6 +3118,40 @@
         "title": "ModelWakeOut",
         "type": "object"
       },
+      "PassageOut": {
+        "description": "Where a statement or a provision is: offsets into the stored text of its section, and that text.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "sectionId": {
+            "title": "Sectionid",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sectionId",
+          "label",
+          "start",
+          "end",
+          "text"
+        ],
+        "title": "PassageOut",
+        "type": "object"
+      },
       "ProposalEvidence": {
         "properties": {
           "citedLabel": {
@@ -3079,6 +3215,120 @@
           "summary"
         ],
         "title": "RecordedPolicyEvaluation",
+        "type": "object"
+      },
+      "RelationNoteOut": {
+        "description": "What one recorded relation means for one finding: \"replaced\" (the answer quotes text replaced in full and neither\nquotes the replacement nor states a value only it states, for a question about the agreement as it stands; code set\nthe status), \"scoped\", \"precedence\", \"dated\" (the question names a time) or \"old_value\" (the answer quotes the\nreplacement and states only the replaced values): a concern code cannot resolve; or \"context\" (nothing to resolve).",
+        "properties": {
+          "effect": {
+            "enum": [
+              "replaced",
+              "scoped",
+              "precedence",
+              "dated",
+              "old_value",
+              "context"
+            ],
+            "title": "Effect",
+            "type": "string"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/RelationOut"
+          },
+          "sentence": {
+            "title": "Sentence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "effect",
+          "sentence",
+          "relation"
+        ],
+        "title": "RelationNoteOut",
+        "type": "object"
+      },
+      "RelationOut": {
+        "description": "A statement the contract makes about its own provisions, located by code (runs.relations): that a provision is\nreplaced, with its own text and the new wording where found, and any stated limit; or that its parts rank for a\nconflict. A fact about the text, not a ruling on its effect.",
+        "properties": {
+          "effective": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective"
+          },
+          "kind": {
+            "enum": [
+              "replaces",
+              "precedence"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "parts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "replaced": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PassageOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "replacement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PassageOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "statement": {
+            "$ref": "#/components/schemas/PassageOut"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "kind",
+          "statement"
+        ],
+        "title": "RelationOut",
         "type": "object"
       },
       "ReviewIn": {
@@ -3397,6 +3647,20 @@
               }
             ],
             "title": "Reason"
+          },
+          "relations": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RelationOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relations"
           },
           "retrievalMode": {
             "anyOf": [
@@ -3782,6 +4046,20 @@
             ],
             "title": "Reason"
           },
+          "relations": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RelationOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relations"
+          },
           "retrievalMode": {
             "anyOf": [
               {
@@ -4164,6 +4442,11 @@
               }
             ],
             "title": "Sectionid"
+          },
+          "sectionLabel": {
+            "default": "",
+            "title": "Sectionlabel",
+            "type": "string"
           },
           "start": {
             "title": "Start",

@@ -140,9 +140,51 @@ describe("checkLedger: what was checked, and by whom", () => {
   it("credits code for a comparison it made even when it left the model's status standing (round 2, AD15)", () => {
     const reason =
       'the contract provides 120 calendar days; the guidance requires at least 90 calendar days, but code does not confirm that as a pass: the clause carries a condition or an exception ("except")';
-    const rows = checkLedger(finding({ statusSource: "model_hint", statusReason: reason }), true, sections, null);
+    const rows = checkLedger(finding({ statusSource: "model_hint", statusReason: reason, codeCompared: true }), true, sections, null);
     expect(row(rows, "comparison")).toMatchObject({ by: "code" });
     expect(row(rows, "comparison")?.text).toBe(`Code compared: ${reason}. The status is still the model's view.`);
+  });
+
+  // Release integration, 2026-10-13: every reason on a model's status was headed "Code compared", including policy-v8's
+  // "the sentence points at §9, which was not handed to the model", where nothing was compared. Whether code compared is
+  // the API's to say (FindingOut.codeCompared); what the model never saw is a row of its own.
+  it("never says code compared when the reason is only what the model was not shown", () => {
+    const unseen = "the sentence points at §9, which was not handed to the model";
+    const rows = checkLedger(finding({ statusSource: "model_hint", statusReason: unseen, codeCompared: false, unseenReason: unseen }), false, sections, null);
+    expect(rows.map((r) => r.text).join(" ")).not.toMatch(/Code compared/);
+    expect(row(rows, "comparison")).toMatchObject({ by: "nobody", text: "Nothing: no guidance was given to compare against; the status is the model's view" });
+    expect(row(rows, "unseen")).toEqual({
+      key: "unseen",
+      label: "Not shown",
+      text: `Code found that ${unseen}. The answer may depend on it, and nothing checked that.`,
+      by: "code",
+    });
+  });
+
+  it("says nothing was compared over the not-found reason", () => {
+    const notFound =
+      "the model reported the point as not found, so the quoted passage is the closest provision read, not the contract's position; code compared no periods";
+    const rows = checkLedger(finding({ status: "missing", statusSource: "model_hint", statusReason: notFound, codeCompared: false }), true, sections, null);
+    expect(row(rows, "comparison")).toMatchObject({ by: "nobody", text: `Nothing: ${notFound}` });
+    expect(row(rows, "unseen")).toBeUndefined();
+  });
+
+  it("control: a comparison that also found an unseen section says both", () => {
+    const reason =
+      "the contract provides 90 calendar days; the guidance requires at least 90 calendar days, but code does not confirm that as a pass: the sentence points at §9, which was not handed to the model";
+    const rows = checkLedger(
+      finding({
+        statusSource: "model_hint",
+        statusReason: reason,
+        codeCompared: true,
+        unseenReason: "the sentence points at §9, which was not handed to the model",
+      }),
+      true,
+      sections,
+      null,
+    );
+    expect(row(rows, "comparison")).toMatchObject({ by: "code", text: `Code compared: ${reason}. The status is still the model's view.` });
+    expect(row(rows, "unseen")).toMatchObject({ by: "code" });
   });
 
   it("says when the model answered from part of the document", () => {

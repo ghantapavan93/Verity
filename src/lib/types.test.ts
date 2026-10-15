@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  stageAnnouncement,
   codeRole,
   decidedByCode,
   evidenceJump,
@@ -30,7 +31,7 @@ describe("statusLabel", () => {
 
   it("leaves the other statuses as they are", () => {
     expect(statusLabel("needs_review", true, "model_hint")).toBe("Needs review");
-    expect(statusLabel("missing", false)).toBe("Not found in the sections read");
+    expect(statusLabel("missing", false)).toBe("Not found in the sections read (model's view)");
   });
 
   it("gives a caller that does not say who decided the weaker claim", () => {
@@ -121,5 +122,17 @@ describe("evidenceJump", () => {
 
   it("control: a finding with no located passage goes nowhere", () => {
     expect(evidenceJump(finding(span("s2", false), span(null, false)), wide)).toBeNull();
+  });
+});
+
+describe("stageAnnouncement", () => {
+  it("says, on a hosted model, that checking may wait for the model to wake", () => {
+    // War room UX-06: the live region said "Checking" and then nothing for up to three minutes.
+    expect(stageAnnouncement("checking", true)).toBe("Checking. The model may be waking, which adds one and a half to three minutes to the first answer.");
+  });
+
+  it("control: other stages, and a model that does not sleep, say the stage alone", () => {
+    expect(stageAnnouncement("checking", false)).toBe("Checking");
+    expect(stageAnnouncement("reading", true)).toBe("Reading contract");
   });
 });

@@ -29,6 +29,7 @@ from __future__ import annotations
 import base64
 import binascii
 import hmac
+import ipaddress
 import json
 import secrets
 import shutil
@@ -36,19 +37,19 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request, Response
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
+from ..application.quotas import document_quotas, refuse_if_spent
 from ..application.workspace import PUBLIC_PREFIX, is_public
 from ..config import settings
 from ..db import SessionLocal, get_session
 from ..errors import AccessRequired, Forbidden, InvalidInput, NotFound, Paused, TooManyRequests
 from ..hashing import mac_sha256
-from ..models import DocumentAccess, Run, VisitorWorkspace, as_utc, utcnow
+from ..models import VisitorWorkspace, as_utc, utcnow
 from ..schemas import AccessOut, InviteIn
 
 SESSION_COOKIE = "__Host-verity_session"
@@ -220,23 +221,32 @@ def client_address(request: Request) -> str:
     return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "unknown")
 
 
+def client_network(request: Request) -> str:
+    """The network a request comes from, for the bounds on what one network has in flight at once (api/body_limit.py,
+    api/documents.py): an IPv4 address itself, an IPv6 address's /64, the block one subscriber or one server is commonly
+    given, so a host cannot multiply its share by using more of its own addresses. The hourly windows (SlidingWindow)
+    still count by full address (war room F-32, the owner's decision)."""
+    address = client_address(request)
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return address
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is None:
+        # From the number, not the text: a scoped address ("fe80::1%eth0") does not parse back as a network.
+        return str(ipaddress.IPv6Network((int(ip) >> 64 << 64, 64)))
+    return str(ip.ipv4_mapped if isinstance(ip, ipaddress.IPv6Address) else ip)
+
+
 def limit_run_starts(request: Request) -> None:
     """Mounted on the runs router: a reader may start so many runs in a while, and is told when to come back. With the
     gate on the reader is the invite's subject; with it off, the address. Until 2026-10-02 the limit applied only with
-    the gate on, so an open site had none, and the deployed site was open."""
+    the gate on, so an open site had none, and the deployed site was open. A public workspace's questions for the day
+    are counted where the run is written (application/quotas.py), not here: counted here, every start of a burst passed."""
     if request.method != "POST":
         return
     refuse_if_paused()
-    workspace = getattr(request.state, "workspace", "")
-    if is_public_workspace(workspace):
+    if is_public_workspace(getattr(request.state, "workspace", "")):
         _take(address_runs, client_address(request), "questions were asked from your network")
-        with SessionLocal() as session:
-            today = session.scalar(select(func.count(Run.id)).where(Run.workspace_id == workspace, Run.created_at >= _day_start())) or 0
-        if today >= settings.anonymous_max_runs_per_day:
-            raise TooManyRequests(
-                f"This demo workspace has asked {settings.anonymous_max_runs_per_day} questions today, its limit. Try again tomorrow (UTC).",
-                retry_after=_seconds_to_tomorrow(),
-            )
     wait = run_starts.take(getattr(request.state, "subject", None) or client_address(request))
     if wait is not None:
         raise TooManyRequests(
@@ -328,15 +338,6 @@ def _visitor_workspace_open(subject: str) -> bool:
         return row is not None and as_utc(row.expires_at) > utcnow()
 
 
-def _day_start() -> datetime:
-    now = utcnow()
-    return datetime(now.year, now.month, now.day, tzinfo=UTC)
-
-
-def _seconds_to_tomorrow() -> int:
-    return int((_day_start() + timedelta(days=1) - utcnow()).total_seconds()) + 1
-
-
 def _take(window: SlidingWindow, key: str, what: str) -> None:
     wait = window.take(key)
     if wait is not None:
@@ -380,28 +381,25 @@ def owner_only(request: Request) -> None:
         raise NotFound("route", request.url.path)
 
 
+def refuse_upload_on_headers(request: Request) -> None:
+    """What an upload is refused for on its headers alone, asked at the door (api/body_limit.py) before a byte of its
+    body is read: the gate, the owner's pause, and a public store's disk. A paused demo still took a 20 MB body before
+    saying so (war room W5 p4). admit_upload asks the last two again, with the bounds that need the store."""
+    require_access(request)
+    refuse_if_paused()
+    if is_public_workspace(current_workspace(request)):
+        refuse_if_disk_low()
+
+
 def admit_upload(request: Request, session: DbSession, workspace: str) -> None:
-    """Called before an upload is read. Every workspace: the owner's pause. A public workspace: its own bound, its
-    address's, and everyone's for the day."""
+    """Called before an upload is read. Every workspace: the owner's pause. A public workspace: the disk, its own bound
+    and everyone's for the day as they stand now, and its address's. The bounds are counted here only to spare reading
+    a file that would be refused; the count that decides is made again with the grant (application/quotas.py)."""
     refuse_if_paused()
     if not is_public_workspace(workspace):
         return
     refuse_if_disk_low()
-    held = session.scalar(select(func.count()).select_from(DocumentAccess).where(DocumentAccess.workspace_id == workspace)) or 0
-    if held >= settings.anonymous_max_documents:
-        raise TooManyRequests(
-            f"This demo workspace already holds {settings.anonymous_max_documents} contracts, its limit. Ask about one of them.", retry_after=3600
-        )
-    today = (
-        session.scalar(
-            select(func.count())
-            .select_from(DocumentAccess)
-            .where(DocumentAccess.workspace_id.like(f"{PUBLIC_PREFIX}%"), DocumentAccess.created_at >= _day_start())
-        )
-        or 0
-    )
-    if today >= settings.anonymous_max_uploads_per_day:
-        raise TooManyRequests("The demo has taken all the uploads it takes in a day. Try again tomorrow (UTC).", retry_after=_seconds_to_tomorrow())
+    refuse_if_spent(session, document_quotas(workspace))
     _take(address_uploads, client_address(request), "uploads from your network")
 
 

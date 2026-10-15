@@ -8,8 +8,10 @@ import { IconCheck, IconClose } from "../icons";
 import { EASE } from "../shell/constants";
 import { StatusChip, Visible } from "../shell/primitives";
 import { DayGauge, readComparison } from "./DayGauge";
+import { RelationNotes } from "./RelationNotes";
 import { WhyThisAnswer } from "./WhyThisAnswer";
 import { absolute, errorMessage, isConflict, reviewFinding } from "@/lib/api";
+import { unseenNote } from "@/lib/checks";
 import { formatWhen } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
 import {
@@ -165,7 +167,7 @@ function EvidenceBody({
             tone:
               finding.evidenceKind === "coverage"
                 ? "muted"
-                : unquoted.length > 0
+                : unquoted.length > 0 || finding.unseenReason
                   ? "review"
                   : finding.spans.length && verified === finding.spans.length
                     ? "pass"
@@ -180,6 +182,7 @@ function EvidenceBody({
                   ? `they state several values; the answer uses ${(finding.valueChoices ?? []).map((c) => c.answer).join(", ")}`
                   : null,
                 relocated ? "in another section" : null,
+                finding.unseenReason ? "they point at a section the model was not shown" : null,
               ]
                 .filter(Boolean)
                 .join("; ") || (finding.spans.length ? "where it was cited" : undefined),
@@ -339,6 +342,19 @@ function EvidenceBody({
         )}
       </section>
 
+      {finding.relations.length > 0 && (
+        <section className={`${styles.drawerSection} ${styles.layer}`} data-testid="layer-relations">
+          <div className={styles.layerHead}>
+            <h4>The contract on these clauses</h4>
+          </div>
+          <RelationNotes notes={finding.relations} full onJump={onJump} />
+          <p className={styles.drawerRefStatic}>
+            Code located each statement and the passages it joins in this document. That a statement is there is a fact about the text; what it means for this
+            question is the model&apos;s reading and yours.
+          </p>
+        </section>
+      )}
+
       <section className={`${styles.drawerSection} ${styles.layer} ${setByModel ? "" : styles.layerSet}`} data-testid="layer-code">
         {/* The heading is a claim. It says "Code found a conflict" only under a source where code compared two periods; the
             model's own phrases, its pointer into the guidance and its suggestion are in the layer above, never here. */}
@@ -365,6 +381,12 @@ function EvidenceBody({
                     : codeAccount(finding.statusSource).sentence)}
             </dd>
           </div>
+          {finding.unseenReason && (
+            <div data-testid="unseen-fact">
+              <dt>Not shown to the model</dt>
+              <dd>{unseenNote(finding.unseenReason)}</dd>
+            </div>
+          )}
           <div>
             <dt>Result</dt>
             <dd>

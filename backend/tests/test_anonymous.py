@@ -66,23 +66,6 @@ def arrive(client: TestClient, cookie: str | None = None, address: str = "198.51
     return Visitor(client, found.group(1) if found else cookie), response
 
 
-@pytest.fixture
-def public(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """The deployment's settings: the gate required, anonymous sessions on, https, one origin."""
-    monkeypatch.setattr(config.settings, "access_secret", SECRET)
-    monkeypatch.setattr(config.settings, "access_required", True)
-    monkeypatch.setattr(config.settings, "anonymous_sessions", True)
-    monkeypatch.setattr(config.settings, "app_url", ORIGIN)
-    monkeypatch.setattr(config.settings, "access_revoked", [])
-    access.visits.reset()
-    access.address_uploads.reset()
-    access.address_runs.reset()
-    access.workspace_writes.reset()
-    access.address_writes.reset()
-    client.base_url = ORIGIN
-    return client
-
-
 # ---------------------------------------------------------------------------- the session
 
 

@@ -170,6 +170,11 @@ def _dates(text: str) -> list[tuple[str | None, int, int]]:
     return found
 
 
+def date_spans(text: str) -> list[tuple[int, int]]:
+    """Where ``text`` writes a date, in reading order: every date `stated_values` reads, one either way round included."""
+    return sorted((start, end) for _, start, end in _dates(text))
+
+
 def _blank(text: str, spans: Iterable[tuple[int, int]]) -> str:
     chars = list(text)
     for start, end in spans:
@@ -246,6 +251,12 @@ def _kinds_of(text: str, *, words_need_a_unit: bool) -> dict[str, set[str]]:
     for key, start, _, _ in _stated(text, words_need_a_unit=words_need_a_unit):
         kinds.setdefault(key, set()).add(group_at.get(start, "plain"))
     return kinds
+
+
+def stated_values(text: str | None, *, answer: bool = False) -> set[str]:
+    """The values ``text`` states, each as its comparable key ("n:45", "d:2027-12-27"): the reading every check here
+    shares. In an answer (``answer``) a number word counts only before a unit, as `_stated` reads one."""
+    return {key for key, *_ in _stated(text or "", words_need_a_unit=answer)}
 
 
 def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = (), clause_numbers: Iterable[str] = ()) -> list[str]:

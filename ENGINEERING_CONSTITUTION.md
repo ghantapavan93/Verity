@@ -140,7 +140,7 @@ A second audit followed the external review of 2026-09-28 (`ivo-research/KIMI-WO
 | Vocabularies typed once | **partial**: Literal types lived in the API schema, the ORM columns were `str`, and every mapping cast implicitly | `RunStageName`, `FindingStatusName`, `RunReasonName` declared in `models.py`; ORM, schema, run service and status decision share them; a test asserts the schema carries the same types |
 | Static checks on the backend | **missing**: no linter, no type checker | `pyproject.toml`: ruff (style, imports, annotations, bugbear, pytest style) and mypy `--strict` over app, scripts and tests, all clean |
 | Frontend tests | **missing** | Vitest with Testing Library: the run follower and the URL state, the two behaviours no backend test can see; then seven Playwright flows against the production build with the model's answers replayed (`e2e/`, 2026-09-28) |
-| Continuous checks | **missing**: the type contract held only when someone remembered two commands | `.github/workflows/checks.yml`: backend, interface, and a job that regenerates `openapi.json` and `api.schema.ts` and fails on any difference |
+| Continuous checks | **missing**: the type contract held only when someone remembered two commands | (2026-10-13: this workflow is not on main, only on a local `ci` branch; `scripts/release-gate.sh` runs most of the backend and interface checks from a fresh clone, not `npm run format:check`, mypy over `app` and the exporter only, and not the regeneration of `openapi.json` and `api.schema.ts`) `.github/workflows/checks.yml`: backend, interface, and a job that regenerates `openapi.json` and `api.schema.ts` and fails on any difference |
 | Measured prompt changes | **missing**: `answer-v2` replaced `answer-v1` on judgement | the golden set: twelve questions judged by code per prompt version, a comparison on the Runs surface, and the kill rule in `docs/GOLDENS.md` |
 
 A third audit followed the role-specific review of 2026-09-28 (`DECISIONS.md`, P0 to P6). Each
@@ -175,7 +175,7 @@ repository is committed by the assistant.
 - No font-size heading detection for PDFs: pypdf's visitor did not report sizes on printed
   files; a character-metrics library would be a new dependency for one feature.
 - Browser tests came on an explicit requirement, not a broken release (the second way under
-  rule 2): twenty Playwright flows in `e2e/`, with the model's answers recorded once and replayed
+  rule 2): twenty Playwright flows in `e2e/` at the time (36 on 2026-10-13), with the model's answers recorded once and replayed
   so they run without a GPU (the CI workflow waits on branch `ci` for the token's workflow scope).
 - No pyright alongside mypy: one type checker, and mypy needs no Node in the backend job.
 - No guidance goldens yet: the status decision with guidance rests on day-count parsing the set

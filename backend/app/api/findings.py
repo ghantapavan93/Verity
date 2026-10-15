@@ -7,11 +7,13 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..application.clause_location import ClauseLocator
 from ..application.review_finding import latest_review_id, review_finding, review_out
 from ..application.workspace import require_finding, require_own_run, visible_runs
 from ..db import get_session
 from ..document_names import run_document_name
 from ..models import Document, EvidenceSpan, Finding, Run, iso
+from ..runs.account import account_of
 from ..schemas import FindingRecord, FindingReviewOut, ReviewIn
 from .access import current_workspace
 
@@ -54,7 +56,11 @@ def list_findings(
     if document_id:
         statement = statement.where(Run.document_id == document_id)
     records: list[FindingRecord] = []
+    clause_numbers: dict[str, frozenset[str]] = {}  # by document: read once, however many of its findings are listed
     for finding, run, document in session.execute(statement).all():
+        if document.id not in clause_numbers:
+            clause_numbers[document.id] = ClauseLocator(document.sections).clause_numbers
+        account = account_of(finding, clause_numbers[document.id] if finding.status != "missing" else frozenset())
         verified = session.scalar(select(EvidenceSpan.id).where(EvidenceSpan.finding_id == finding.id, EvidenceSpan.verified.is_(True)).limit(1))
         count = sum(1 for s in finding.spans if s.verified) if verified else 0
         citations: list[str] = []
@@ -82,6 +88,9 @@ def list_findings(
                 citations=citations,
                 has_guidance=run.guidance_id is not None,
                 status_source=finding.status_source,
+                decided_by=account.decided_by,
+                concerns=list(account.concerns),
+                flagged=account.flagged,
                 created_at=iso(run.created_at) or "",
             )
         )

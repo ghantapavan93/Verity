@@ -11,7 +11,8 @@ import type { RunController } from "../hooks/useRunFollower";
 import { EvidenceDrawer } from "./EvidenceDrawer";
 import { FindingCard } from "./FindingCard";
 import { GuidanceScope } from "./GuidanceScope";
-import { RevisionCheck } from "./RevisionCheck";
+import { UnclaimedRelations, relationKey } from "./RelationNotes";
+import { RevisionCheck, SAMPLE_REVISION } from "./RevisionCheck";
 import { RunOutcome, WithheldList } from "./RunOutcome";
 import { StageList } from "./StageList";
 import { absolute } from "@/lib/api";
@@ -25,6 +26,11 @@ import {
   type SpanView,
   type RunStage,
 } from "@/lib/types";
+
+/** The relations the shown answers already account for: each is said beside its answer, not again below them. */
+function claimedRelations(findings: FindingView[]): Set<string> {
+  return new Set(findings.flatMap((f) => f.relations.map((note) => relationKey(note.relation))));
+}
 
 // The third question has no answer in the sample; on it the model tends to propose a quote that
 // is not there, and the verifier withholds it. That moment is meant to be one click away.
@@ -67,6 +73,7 @@ export function AssistantPanel({
   onJump,
   onOpenPalette,
   reduceMotion,
+  isSample = false,
 }: {
   doc: DocumentView | null;
   runs: RunController;
@@ -86,6 +93,8 @@ export function AssistantPanel({
   /** A hosted model that sleeps when idle, so a run's wait may include waking it (StageList). */
   modelSleeps?: boolean;
   drawerCloseRef: Ref<HTMLButtonElement>;
+  /** The open document is the bundled sample: its prepared revision is offered beside an answer. */
+  isSample?: boolean;
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
   onOpenPalette: () => void;
@@ -207,6 +216,9 @@ export function AssistantPanel({
                     />
                   ))}
                   {run.withheld.length > 0 && <WithheldList findings={run.withheld} sectionsById={sectionsById} onEvidence={onOpenEvidence} />}
+                  {run.relations && run.relations.length > 0 && (
+                    <UnclaimedRelations relations={run.relations} claimed={claimedRelations(run.findings)} onJump={onJump} />
+                  )}
                   <div className={styles.memoRow}>
                     {runMemo ? (
                       <>
@@ -247,12 +259,15 @@ export function AssistantPanel({
                     <span>every quoted passage found in the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}</span>
                     {run.sectionsRead != null && doc && <span>{sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length)}</span>}
                   </p>
-                  {doc && <RevisionCheck key={run.id} runId={run.id} documentId={doc.id} />}
+                  {doc && <RevisionCheck key={run.id} runId={run.id} documentId={doc.id} run={run} prepared={isSample ? SAMPLE_REVISION : null} />}
                 </motion.div>
               ) : (
                 <motion.div key="unresolved" className={styles.unresolved} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={quick}>
                   {run ? (
-                    <RunOutcome run={run} runError={runError} sectionsById={sectionsById} onRetry={onAsk} onEvidence={onOpenEvidence} />
+                    <>
+                      <RunOutcome run={run} runError={runError} sectionsById={sectionsById} onRetry={onAsk} onEvidence={onOpenEvidence} />
+                      {run.relations && run.relations.length > 0 && <UnclaimedRelations relations={run.relations} claimed={new Set()} onJump={onJump} />}
+                    </>
                   ) : (
                     <p className={styles.errorLine} role="alert">
                       {runError}

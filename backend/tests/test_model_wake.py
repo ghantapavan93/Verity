@@ -28,7 +28,7 @@ from app.providers import ollama as ollama_module
 from app.providers.base import ProviderError
 from app.providers.ollama import OllamaProvider
 from tests.test_access import ORIGIN
-from tests.test_anonymous import arrive, public  # noqa: F401 - the deployment's settings, as a fixture
+from tests.test_anonymous import arrive
 
 
 class Clock:
@@ -198,7 +198,7 @@ def test_a_wake_up_the_endpoint_refuses_is_an_error_and_not_an_answer(endpoint: 
 
 
 @pytest.fixture
-def route(public: TestClient, monkeypatch: pytest.MonkeyPatch, waking: tuple[ModelWaker, Wakes, Clock]) -> tuple[TestClient, ModelWaker, Wakes]:  # noqa: F811
+def route(public: TestClient, monkeypatch: pytest.MonkeyPatch, waking: tuple[ModelWaker, Wakes, Clock]) -> tuple[TestClient, ModelWaker, Wakes]:
     waker, wakes, _ = waking
     monkeypatch.setattr(model_api, "waker", waker)
     model_api.address_wakes.reset()
@@ -234,10 +234,10 @@ def test_nothing_is_woken_while_questions_are_paused_or_after_the_days_questions
     assert visitor.post("/api/model/wake").json() == {"state": "off"}
     (config.settings.data_dir / "public.paused").unlink()
 
-    def spent(session: object) -> None:
+    def spent(session: object, quotas: object) -> None:
         raise TooManyRequests("Today's run budget for this workbench is spent", retry_after=3600)
 
-    monkeypatch.setattr(model_api, "refuse_past_daily_budget", spent)
+    monkeypatch.setattr(model_api, "refuse_if_spent", spent)
     assert visitor.post("/api/model/wake").json() == {"state": "limit"}
     assert wakes.count == 0
 

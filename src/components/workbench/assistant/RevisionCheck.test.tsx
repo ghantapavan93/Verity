@@ -83,8 +83,8 @@ describe("RevisionCheck", () => {
       .filter((row) => row.hasAttribute("data-verdict"));
     expect(rows.map((row) => row.getAttribute("data-verdict"))).toEqual(["stale", "unchanged"]);
     expect(rows[0].textContent).toContain("15 calendar days → 30 calendar days");
-    expect(rows[0].textContent).toContain("supported → unsupported");
-    expect(rows[1].textContent).toContain("Its source evidence did not change.");
+    expect(rows[0].textContent).toContain("quotes stand → quotes do not stand");
+    expect(rows[1].textContent).toContain("The revision did not change the text its quotes stand on.");
   });
 
   it("says so when the file is the document the run already read, and records nothing", async () => {
@@ -122,5 +122,11 @@ describe("RevisionCheck", () => {
     await waitFor(() => expect(screen.queryByRole("group", { name: "Confirm the next version" })).toBeNull());
     expect(api.recordSupersedes).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Check a revised version" })).toBeTruthy();
+  });
+
+  it("the file input is never a stop for Tab: the button opens it", () => {
+    render(<RevisionCheck runId="run-1" documentId="doc-1" />);
+    expect(screen.getByLabelText("Revised contract file").tabIndex).toBe(-1);
+    expect(screen.getByRole("button", { name: "Check a revised version" }).tabIndex).toBe(0);
   });
 });

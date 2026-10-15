@@ -36,7 +36,7 @@ from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
-from ..verify.spans import locate
+from ..verify.spans import locate, verification_pass
 from .compile import unique_obligation
 from .facts import facts_in
 from .model import Evidence, Need, Obligation, SectionText, Standing, TrustManifest, TrustState, derive, snapshot_hash
@@ -263,6 +263,7 @@ def _fact_after(old: Obligation, found: Found) -> tuple[Standing, str]:
     return Standing.NOT_ESTABLISHED, f"the passage that stated {old.fact.value} no longer states one {old.fact.kind.value}"
 
 
+@verification_pass()  # what is worked out about each text is kept for this pass only (verify/spans.py)
 def trust_diff(manifest: TrustManifest, old: Sequence[SectionText], new: Sequence[SectionText], new_reader_version: str) -> TrustDiff:
     """Take a run's manifest to a revised document. ``old`` are the sections the run read, ``new`` the revision's."""
     to_snapshot = snapshot_hash(new_reader_version, tuple(new))

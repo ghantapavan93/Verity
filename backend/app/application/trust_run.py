@@ -7,13 +7,17 @@ for and is the same every time; a revised document never changes a run, it is co
 from __future__ import annotations
 
 import json
-from functools import lru_cache
+import threading
+import time
+from collections import OrderedDict
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from ..errors import Conflict
-from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, ingest
+from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile
+from ..ingest.bounded import read_file
 from ..models import TERMINAL_STAGES, Document, Run
 from ..runs.versions import SEMANTIC_VERSIONS, stale_versions
 from ..trust.compile import FindingRecord, SpanRecord, compile_manifest
@@ -32,16 +36,75 @@ def document_snapshot(document: Document) -> str:
     return snapshot_hash(document.parser_version or "", sections_of(document))
 
 
-@lru_cache(maxsize=32)
-def _read_again(path: Path, name: str, reader: str) -> tuple[SectionText, ...] | None:
-    """The stored bytes as today's reader reads them, or None when they cannot be read. Nothing is written. Cached by
-    path and reader: the bytes are named by their hash and never change, so one reading per reader is enough."""
-    del reader  # part of the key only: a new reader is a new reading
+class _NotNow(Exception):
+    """A reading refused at a bound, which load can cause: answered as unreadable now, never kept as unreadable."""
+
+
+Reading = tuple[SectionText, ...] | None
+# Documents are read again off the request's thread, one at a time, each once. A request waits REREAD_WAIT_SECONDS for
+# its reading and is otherwise answered without it ("could not be read again"), while the reading finishes for the next
+# request. Each request had read on a thread of the pool every sync route shares, waiting as long as a slot took: sixty
+# at once held that pool and /api/health answered after 21.5 s (war room W5 p5, 2026-10-13). One at a time, so readings
+# again never hold more than one of the READINGS_AT_ONCE slots uploads need (ingest/bounded.py).
+REREAD_WAIT_SECONDS = 2.0
+_KEPT = 32
+# A reading holds the document's text, so it is kept for minutes, not for the life of the process, and every
+# retention pass drops all of them (application/retention.py): kept by path, the reading of a deleted visitor's
+# contract stayed in memory after its workspace was deleted (release integration, 2026-10-13).
+READING_KEPT_SECONDS = 600.0
+_rereads = ThreadPoolExecutor(max_workers=1, thread_name_prefix="verity-reread")
+_readings: OrderedDict[tuple[Path, str, str], tuple[Future[Reading], float]] = OrderedDict()
+_readings_lock = threading.Lock()
+
+
+def _read_again(path: Path, name: str, reader: str) -> Reading:
+    """The stored bytes as today's reader reads them, or None when they cannot be read now. Nothing is written. Kept by
+    path and reader, the latest _KEPT: the bytes are named by their hash and never change, so one reading per reader is
+    enough. A refusal at a bound, or a failure, is not kept: a reading timed out under load once stayed "unreadable"
+    for the life of the process (counter-review, 2026-10-13)."""
+    key = (path, name, reader)
+    now = time.monotonic()
+    with _readings_lock:
+        for old_key, (old, asked) in list(_readings.items()):
+            if old.done() and now - asked > READING_KEPT_SECONDS:
+                del _readings[old_key]
+        kept = _readings.get(key)
+        if kept is None:
+            reading = _rereads.submit(_read_once, path, name)
+            _readings[key] = (reading, now)
+            while len(_readings) > _KEPT:
+                _, (dropped, _) = _readings.popitem(last=False)
+                dropped.cancel()  # one not yet started is not read; one reading finishes unkept
+        else:
+            reading = kept[0]
+            _readings.move_to_end(key)
     try:
-        parsed = ingest(name, path.read_bytes())
-    except (UnsupportedFile, TooLargeToRead, OSError):
+        return reading.result(timeout=REREAD_WAIT_SECONDS)
+    except TimeoutError:
+        return None  # still waiting or being read: not read now, and asked again it may be
+    except BaseException as failed:
+        with _readings_lock:
+            if key in _readings and _readings[key][0] is reading:
+                del _readings[key]
+        if isinstance(failed, (_NotNow, CancelledError)):  # refused at a bound, or dropped before it was read
+            return None
+        raise
+
+
+def _read_once(path: Path, name: str) -> Reading:
+    try:
+        parsed = read_file(name, path.read_bytes())
+    except TooLargeToRead as refused:  # before UnsupportedFile, which it is a kind of
+        raise _NotNow from refused
+    except (UnsupportedFile, OSError):
         return None
     return tuple(SectionText(index, s.number, s.heading, s.text) for index, s in enumerate(parsed.sections))
+
+
+def forget_readings() -> None:
+    """Drop every reading kept: after each retention pass, and in tests, which change the reader under the same path."""
+    with _readings_lock:
+        _readings.clear()
 
 
 def current_reading(session: Session, document: Document) -> tuple[SectionText, ...] | None:

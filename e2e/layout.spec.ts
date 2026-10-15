@@ -59,3 +59,70 @@ test("control: the documents, findings and runs views stay inside their panes at
     expect(await outside(page, ["inner"]), view).toEqual([]);
   }
 });
+
+test("every stop Tab reaches in an answered workbench is visible and moves nothing, both ways, at 1440 and 375 px", async ({ page }) => {
+  // A clipped one-pixel file input took focus with no indicator and scrolled the answer pane 434 px (UX-01, 2026-10-13).
+  // Every stop is visited, round the whole cycle back to the composer, and after each one: it is at least 8 x 8 px, its
+  // centre is on screen and inside every box that clips it, and no box that does not scroll for the reader has moved
+  // (counter-review, 2026-10-13: a fixed forty presses, and panes compared only at the end, could miss a stop).
+  await openSample(page);
+  const composer = page.getByPlaceholder("Ask a question about this contract");
+  await composer.fill(LIABILITY);
+  await composer.press("Enter");
+  await expect(page.getByText(/Found in the document text at /).first()).toBeVisible();
+  for (const width of [1440, 375]) {
+    await page.setViewportSize({ width, height: width > 400 ? 900 : 812 });
+    await page.waitForTimeout(300);
+    // Only boxes that do not scroll for the reader (overflow hidden or clip, either way): a scrollable list follows focus
+    // by design, but a hidden-overflow box that moves cannot be moved back (the 434 px shift).
+    const panes = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>("main *, body > div *")]
+          .filter((el) => {
+            const style = getComputedStyle(el);
+            const fixed = (overflow: string) => overflow === "hidden" || overflow === "clip";
+            return (fixed(style.overflowY) && el.scrollHeight > el.clientHeight) || (fixed(style.overflowX) && el.scrollWidth > el.clientWidth);
+          })
+          .map((el) => `${el.scrollTop},${el.scrollLeft}`),
+      );
+    const measure = () =>
+      page.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null;
+        if (!el || el === document.body) return null;
+        const r = el.getBoundingClientRect();
+        const [x, y] = [r.left + r.width / 2, r.top + r.height / 2];
+        let shown = x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight;
+        // A fixed element (the skip link) is placed against the viewport, and no ancestor's overflow clips it.
+        if (getComputedStyle(el).position !== "fixed") {
+          for (let box = el.parentElement; box && shown; box = box.parentElement) {
+            const style = getComputedStyle(box);
+            if (style.overflowX === "visible" && style.overflowY === "visible") continue;
+            const b = box.getBoundingClientRect();
+            if (b.width === 0 && b.height === 0) continue; // display: contents draws no box of its own
+            shown = x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+          }
+        }
+        return { label: el.getAttribute("aria-label") ?? el.textContent?.trim().slice(0, 30) ?? el.tagName, w: r.width, h: r.height, shown };
+      });
+    const before = await panes();
+    expect(before.length, `at ${width}: the fixed panes are found`).toBeGreaterThan(0);
+    for (const key of ["Tab", "Shift+Tab"]) {
+      await composer.focus();
+      let stops = 0;
+      for (;;) {
+        await page.keyboard.press(key);
+        if (await composer.evaluate((el) => el === document.activeElement)) break;
+        stops += 1;
+        expect(stops, `${key} at ${width}: focus comes back to the composer`).toBeLessThan(300);
+        const focused = await measure();
+        if (!focused) continue; // between the last stop and the first, focus leaves the page
+        expect(focused.w >= 8 && focused.h >= 8, `${key} at ${width}: ${focused.label} is ${focused.w}x${focused.h}`).toBe(true);
+        // A stop may slide into view as it takes focus (the skip link's transform transition); measured at once it is still
+        // off screen. It must be shown once that settles, within a second; one that never arrives still fails.
+        await expect.poll(async () => (await measure())?.shown ?? true, { message: `${key} at ${width}: ${focused.label} is shown`, timeout: 1000 }).toBe(true);
+        expect(await panes(), `${key} at ${width}: no hidden-overflow pane moved at ${focused.label}`).toEqual(before);
+      }
+      expect(stops, `${key} at ${width}: the stops of an answered workbench`).toBeGreaterThan(5);
+    }
+  }
+});

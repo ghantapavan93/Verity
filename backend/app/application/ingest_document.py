@@ -17,15 +17,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..errors import InvalidInput, TooLarge
+from ..errors import Busy, InvalidInput, TooLarge
 from ..hashing import sha256_bytes
-from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, base_name, ingest
+from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, base_name
+from ..ingest.bounded import ReadingBusy, read_file
 from ..ingest.coverage import coverage_report
 from ..ingest.readers import SUFFIX_OF, file_type, read
-from ..models import Document, Section
+from ..models import Document, DocumentAccess, Section
+from .quotas import admit, document_quotas
 from .workspace import document_is_curated, grant_document, is_public
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+READINGS_BUSY = "Other contracts are being read right now, so this one was not added. Try again in a minute."
 
 
 @dataclass(frozen=True)
@@ -95,11 +98,12 @@ def refuse_unsupported_type(filename: str, data: bytes) -> None:
         raise InvalidInput(str(error)) from error
 
 
-def ingest_document(session: Session, filename: str, data: bytes, workspace: str | None = None) -> IngestedDocument:
+def ingest_document(session: Session, filename: str, data: bytes, workspace: str | None = None, *, reading_wait: float | None = None) -> IngestedDocument:
     """``workspace`` is the uploader's; it is granted the document. Deduplication stays by bytes and reader version: a
     second workspace uploading the same bytes gets a grant on the one stored reading. The bytes tell it nothing it did
     not hold; the stored name and date are the first uploader's, so each grant keeps the name its workspace gave
-    (application/workspace.py display_name). "created" is from that workspace's side: new to it, or already its."""
+    (application/workspace.py display_name). "created" is from that workspace's side: new to it, or already its.
+    ``reading_wait`` is the longest to wait for a reading slot (None: until one is free); past it, Busy."""
     refuse_if_too_large(len(data))
     refuse_unsupported_type(filename, data)
     given = base_name(filename or "upload")  # the name this workspace gave the file, kept on its grant
@@ -111,7 +115,9 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
 
     started = time.perf_counter()
     try:
-        parsed = ingest(filename or "upload", data)
+        parsed = read_file(filename or "upload", data, wait=reading_wait)  # read where it can be stopped (ingest/bounded.py)
+    except ReadingBusy as error:
+        raise Busy(READINGS_BUSY, retry_after=30) from error
     except TooLargeToRead as error:
         raise TooLarge(str(error)) from error
     except UnsupportedFile as error:
@@ -132,12 +138,14 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
         coverage_json=json.dumps(coverage_report(parsed.coverage, PARSER_VERSION, "persisted")),
     )
     document.sections = [Section(ordinal=i, number=s.number, heading=s.heading, text=s.text) for i, s in enumerate(parsed.sections)]
-    # The bytes are on disk before the row exists. The row used to be committed first: a write that failed after it
-    # left a document with no original, and every later upload of the same bytes was handed that row without the
-    # write being tried again (fault injection, 2026-10-02). A file with no row is harmless: it is named by its hash.
-    keep_original(document, data)
-    session.add(document)
-    try:
+
+    def store() -> Document:
+        # The bytes are on disk before the row exists. The row used to be committed first: a write that failed after it
+        # left a document with no original, and every later upload of the same bytes was handed that row without the
+        # write being tried again (fault injection, 2026-10-02). Written once the quotas have admitted the upload, so a
+        # refused upload leaves no file behind.
+        keep_original(document, data)
+        session.add(document)
         # The uploader's grant is written in the same transaction as the document. Committed apart, a request that read
         # the row between the two commits saw a document with no grant, which the read rules call curated, and was
         # granted nothing: told the upload worked, then refused it (5 of 50 races, audit 2026-10-09). A crash in the gap
@@ -145,10 +153,15 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
         if workspace is not None:
             session.flush()
             grant_document(session, document, workspace, given)
-        session.commit()
+        return document
+
+    try:
+        # The workspace's quotas are counted again here, under the write lock, with the grant they limit: the count made
+        # before the reading (api/access.admit_upload) was passed by every upload of a burst (war room F-13, 2026-10-13).
+        admit(session, document_quotas(workspace), store)
     except IntegrityError:
-        # Another request stored the same bytes between the lookup and the insert; the database kept its row.
-        session.rollback()
+        # Another request stored the same bytes between the lookup and the insert; the database kept its row (admit has
+        # rolled this one back).
         winner = stored_document(session, parsed.sha256)
         if winner is None:
             raise
@@ -162,15 +175,18 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
 def _grant(session: Session, document: Document, workspace: str | None, new: bool, name: str) -> bool:
     """Grant the workspace the document. A document this upload created is always granted to its uploader; one already
     stored is granted unless it is curated (no grants at all, readable by every workspace) or already the workspace's.
-    True when the grant is new."""
+    True when the grant is new: a document the workspace now holds, admitted against its quotas."""
     if workspace is None:
         return False
     if not new and document_is_curated(session, document.id):
         return False
-    if not grant_document(session, document, workspace, name):
-        return False
-    session.commit()
-    return True
+    _, created = admit(
+        session,
+        document_quotas(workspace),
+        lambda: grant_document(session, document, workspace, name),
+        find=lambda: session.get(DocumentAccess, (workspace, document.id)),
+    )
+    return created
 
 
 def keep_original(document: Document, data: bytes) -> None:
