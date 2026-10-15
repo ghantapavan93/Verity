@@ -953,6 +953,48 @@
   background: var(--accent-tint);
 }
 
+/* The words in which a replaced clause and its replacement differ (RelationNotes, lib/diff): the same mark on both
+   sides, so neither reads as struck out or approved. */
+.changed {
+  background: var(--accent-tint);
+  color: var(--text);
+  font-style: normal;
+  border-radius: 2px;
+  box-shadow: inset 0 -1px 0 var(--accent-line);
+}
+
+.contrastNote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* The stored text around a verified quote, on a phone (EvidenceDrawer QuoteContext). */
+.quoteContext {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+
+.quoteContext summary {
+  min-height: 32px;
+  padding: 6px 0;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.quoteContextText {
+  margin: 4px 0;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.quoteContextText strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* A passage shown where it cannot be opened (the evidence sheet on a phone): read, not pressed. */
 .citationStatic,
 .citationStatic:hover {
@@ -2102,6 +2144,17 @@
 
   .narrowNote p {
     margin: 0;
+  }
+
+  /* While the evidence sheet is open it is the reading surface, so it takes the whole width: the rail and the note about
+     the hidden contract text step aside, and closing the sheet brings them back. Layout only; no state. */
+  .workspace:has(.drawer) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace:has(.drawer) .rail,
+  .main:has(.drawer) .narrowNote {
+    display: none;
   }
 
   .drawerBody {

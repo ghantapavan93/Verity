@@ -3,6 +3,7 @@
 import styles from "../Workbench.module.css";
 import { NARROW_QUERY } from "../shell/constants";
 import { Visible } from "../shell/primitives";
+import { aroundChanges, wordContrast, type DiffPiece } from "@/lib/diff";
 import { passageSpan, type PassageView, type RelationNoteView, type RelationView, type SpanView } from "@/lib/types";
 
 /**
@@ -15,13 +16,35 @@ function excerpt(text: string, max = 150): string {
   return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
 }
 
-/** The passages a relation joins, in the order a reader checks them. */
-export function relationEnds(relation: RelationView): { role: string; passage: PassageView }[] {
-  if (relation.kind === "precedence") return [{ role: "Order of precedence", passage: relation.statement }];
-  const ends: { role: string; passage: PassageView }[] = [];
-  if (relation.replaced) ends.push({ role: `Original clause ${relation.target ?? ""}`.trim(), passage: relation.replaced });
-  ends.push(relation.replacement ? { role: "Replacement", passage: relation.replacement } : { role: "Replacing statement", passage: relation.statement });
+type Side = "original" | "replacement" | null;
+
+/** The passages a relation joins, in the order a reader checks them, and which side of a replacement each is. */
+export function relationEnds(relation: RelationView): { role: string; passage: PassageView; side: Side }[] {
+  if (relation.kind === "precedence") return [{ role: "Order of precedence", passage: relation.statement, side: null }];
+  const ends: { role: string; passage: PassageView; side: Side }[] = [];
+  if (relation.replaced) ends.push({ role: `Original clause ${relation.target ?? ""}`.trim(), passage: relation.replaced, side: "original" });
+  ends.push(
+    relation.replacement
+      ? { role: "Replacement", passage: relation.replacement, side: "replacement" }
+      : { role: "Replacing statement", passage: relation.statement, side: null },
+  );
   return ends;
+}
+
+function Pieces({ pieces }: { pieces: readonly DiffPiece[] }) {
+  return (
+    <>
+      {pieces.map((piece, i) =>
+        piece.changed ? (
+          <mark key={i} className={styles.changed}>
+            <Visible text={piece.text} />
+          </mark>
+        ) : (
+          <Visible key={i} text={piece.text} />
+        ),
+      )}
+    </>
+  );
 }
 
 /** What the contract states, and nothing about any answer. */
@@ -39,7 +62,7 @@ export function relationSummary(note: RelationNoteView): string {
   const line = statementLine(note.relation);
   switch (note.effect) {
     case "replaced":
-      return `${line} The answer quotes the replaced wording, and neither quotes the replacement nor states a value only it states.`;
+      return `${line} The answer quotes the replaced wording, and neither quotes the replacement nor states a value only it states. Which wording governs is not decided by code.`;
     case "scoped":
       return `${line} Whether the limit applies here is not settled by code.`;
     case "dated":
@@ -49,7 +72,7 @@ export function relationSummary(note: RelationNoteView): string {
     case "precedence":
       return `${line} The quoted passages come from parts it ranks; which applies here is not settled by code.`;
     default:
-      return line;
+      return `${line} Context only: code raised no concern from it.`;
   }
 }
 
@@ -69,6 +92,10 @@ function RelationRow({
   onEvidence?: (trigger: HTMLElement | null) => void;
   effect: RelationNoteView["effect"] | "stated";
 }) {
+  // Where the statement gives both the clause and its new wording, the words they differ in are marked, and the card
+  // shows each end around them: a replacement usually keeps the clause's opening, so the first 150 characters of each
+  // were the same words, cut before the change. The sheet shows both in full, qualifications included.
+  const contrast = relation.replaced && relation.replacement ? wordContrast(relation.replaced.text, relation.replacement.text) : null;
   return (
     <div className={styles.relation} data-effect={effect}>
       <p className={styles.valueNote}>
@@ -78,14 +105,16 @@ function RelationRow({
         <span className={styles.visuallyHidden}>Located by code: </span>
         {line}
       </p>
-      {relationEnds(relation).map(({ role, passage }) => {
+      {contrast && <p className={styles.contrastNote}>Marked: the words in which the original and the replacement differ.</p>}
+      {relationEnds(relation).map(({ role, passage, side }) => {
+        const pieces = contrast && side ? contrast[side] : null;
         const content = (
           <>
             <span className={styles.citationLabel}>
               {role} · {passage.label}
             </span>
             <span className={styles.citationExcerpt}>
-              <Visible text={full ? passage.text : excerpt(passage.text)} />
+              {pieces ? <Pieces pieces={full ? pieces : aroundChanges(pieces)} /> : <Visible text={full ? passage.text : excerpt(passage.text)} />}
             </span>
           </>
         );

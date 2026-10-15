@@ -398,4 +398,33 @@ describe("one drawer, another finding", () => {
       delete (window as { matchMedia?: unknown }).matchMedia;
     }
   });
+
+  it("on a phone, shows the stored text around a verified quote, only where its offsets fit that text", () => {
+    const at = SECTION.text.indexOf(QUOTE);
+    const base = finding(null);
+    const located = { ...base, spans: [{ ...base.spans[0], start: at, end: at + QUOTE.length }] } as unknown as FindingView;
+    const around = (view: FindingView, narrow: boolean) => {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        writable: true,
+        value: (media: string) => ({ matches: narrow, media, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+      });
+      renderDrawer(view);
+      const summary = screen.queryByText("Text around this quote");
+      const shown = summary ? (summary.closest("details")?.querySelector("strong")?.textContent ?? "") : null;
+      const labelled = !!screen.queryByText(/as Verity read it, not an image of the page/);
+      cleanup();
+      return { shown, labelled };
+    };
+    try {
+      // The text at the quote's offsets is what is emphasised, and it is called text Verity read, not the page.
+      expect(around(located, true)).toEqual({ shown: QUOTE, labelled: true });
+      // A wide screen has the document beside it; offsets outside the stored text and an unverified quote show nothing.
+      expect(around(located, false).shown).toBeNull();
+      expect(around(base, true).shown).toBeNull();
+      expect(around({ ...located, spans: [{ ...located.spans[0], verified: false }] } as unknown as FindingView, true).shown).toBeNull();
+    } finally {
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
 });

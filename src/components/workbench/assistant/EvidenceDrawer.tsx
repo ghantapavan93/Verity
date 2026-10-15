@@ -106,6 +106,33 @@ function proposalFor(explanation: RunExplanationView | null, findingId: string) 
   return explanation.proposals.find((p) => p.ordinal === ordinal) ?? null;
 }
 
+const AROUND = 280; // characters of stored text shown on each side of a quote
+
+/**
+ * On a phone, where the contract text is hidden: the stored text around a verified quote, read from its offsets, in a
+ * native disclosure (keyboard and screen reader for free). Nothing when the offsets do not fit the text.
+ */
+function QuoteContext({ text, start, end }: { text: string; start: number; end: number }) {
+  if (!(start >= 0 && end > start && end <= text.length)) return null;
+  const before = text.slice(Math.max(0, start - AROUND), start);
+  const after = text.slice(end, end + AROUND);
+  const lead = start > AROUND ? `…${before.replace(/^\S*\s/, "")}` : before;
+  const trail = end + AROUND < text.length ? `${after.replace(/\s\S*$/, "")}…` : after;
+  return (
+    <details className={styles.quoteContext}>
+      <summary>Text around this quote</summary>
+      <p className={styles.quoteContextText}>
+        <Visible text={lead} />
+        <strong>
+          <Visible text={text.slice(start, end)} />
+        </strong>
+        <Visible text={trail} />
+      </p>
+      <p className={styles.drawerRefStatic}>From the contract text as Verity read it, not an image of the page.</p>
+    </details>
+  );
+}
+
 function EvidenceBody({
   finding,
   run,
@@ -338,6 +365,7 @@ function EvidenceBody({
               {span.verified && !match && span.matchCount != null && span.matchCount > 1 && (
                 <div className={styles.drawerRefStatic}>This passage occurs {span.matchCount} times in the section; the first is highlighted.</div>
               )}
+              {narrow && section && span.verified && <QuoteContext text={section.text} start={span.start} end={span.end} />}
             </div>
           );
         })}

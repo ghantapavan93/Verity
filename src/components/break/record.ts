@@ -5,6 +5,10 @@
  * offsets, and the rejected check's counts. Nothing here decides anything the record did not.
  */
 
+import { commonItems, joinPieces, type DiffPiece } from "@/lib/diff";
+
+export type { DiffPiece };
+
 export interface SpanRecord {
   sectionId: string;
   start: number;
@@ -181,44 +185,17 @@ export function wordsOf(text: string): string[] {
   return (text.match(/[\p{L}\p{N}]+/gu) ?? []).map((w) => w.toLowerCase());
 }
 
-export interface DiffPiece {
-  text: string;
-  changed: boolean;
-}
-
-function pieces(text: string, kept: boolean[]): DiffPiece[] {
-  const out: DiffPiece[] = [];
-  for (let i = 0; i < text.length; i++) {
-    const changed = !kept[i];
-    const last = out[out.length - 1];
-    if (last && last.changed === changed) last.text += text[i];
-    else out.push({ text: text[i], changed });
-  }
-  return out;
-}
-
 /** Which characters of ``left`` and ``right`` lie outside their longest common subsequence: the differences. */
 export function charDiff(left: string, right: string): { same: boolean; left: DiffPiece[]; right: DiffPiece[] } {
-  const n = left.length;
-  const m = right.length;
-  const table = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      table[i][j] = left[i] === right[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
-    }
-  }
-  const keptLeft = new Array<boolean>(n).fill(false);
-  const keptRight = new Array<boolean>(m).fill(false);
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (left[i] === right[j]) {
-      keptLeft[i++] = true;
-      keptRight[j++] = true;
-    } else if (table[i + 1][j] >= table[i][j + 1]) i++;
-    else j++;
-  }
-  return { same: left === right, left: pieces(left, keptLeft), right: pieces(right, keptRight) };
+  // UTF-16 units, as this compared before the comparison moved to lib/diff.
+  const a = left.split("");
+  const b = right.split("");
+  const kept = commonItems(a, b);
+  return {
+    same: left === right,
+    left: joinPieces(a, kept.left.map((k) => !k)),
+    right: joinPieces(b, kept.right.map((k) => !k)),
+  };
 }
 
 /**

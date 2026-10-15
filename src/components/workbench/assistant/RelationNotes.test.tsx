@@ -103,6 +103,65 @@ describe("RelationNotes", () => {
   });
 });
 
+describe("RelationNotes: the difference first, the whole text kept", () => {
+  // The synthetic amended sample's clause 7.2 and its replacement: the same opening, the notice window changed late.
+  const OPENING =
+    '7.2 This Agreement renews automatically at the end of the Initial Term and at the end of each Renewal Term for a further term of twelve (12) months (each a "Renewal Term") unless either party gives the other written notice of non-renewal not less than';
+  const LONG: RelationView = {
+    ...REPLACES,
+    target: "7.2",
+    replaced: { sectionId: "s7", label: "§7", start: 0, end: 300, text: `${OPENING} ninety (90) days before the end of the then-current Term.` },
+    replacement: {
+      sectionId: "amend",
+      label: "AMENDMENT NO. 1 TO LINEN AND LAUNDRY SERVICES AGREEMENT",
+      start: 0,
+      end: 400,
+      text: `${OPENING} one hundred fifty (150) days, and not more than two hundred ten (210) days, before the end of the then-current Term. A notice of non-renewal given outside that period has no effect.`,
+    },
+  };
+  const row = (name: RegExp) => screen.getByRole("button", { name });
+
+  it("shows on the card the words each side differs in, wherever they sit in the clause", () => {
+    render(<RelationNotes notes={[{ effect: "replaced", sentence: "", relation: LONG }]} onJump={vi.fn()} />);
+    expect(row(/^Original clause 7\.2/).textContent).toContain("ninety (90)");
+    expect(row(/^Replacement/).textContent).toContain("one hundred fifty (150)");
+    expect(row(/^Replacement/).textContent).toContain("two hundred ten (210)");
+    expect(row(/^Original clause 7\.2/).querySelector("mark")?.textContent).toContain("ninety (90)");
+    expect(screen.getByText(/Marked: the words in which the original and the replacement differ/)).toBeTruthy();
+  });
+
+  it("keeps both complete texts, qualifications included, where the sheet shows them in full", () => {
+    render(<RelationNotes notes={[{ effect: "replaced", sentence: "code's whole sentence", relation: LONG }]} full />);
+    expect(screen.getByText(/Replacement · AMENDMENT NO\. 1/).parentElement?.textContent).toContain(LONG.replacement!.text);
+    expect(screen.getByText(/Original clause 7\.2 · §7/).parentElement?.textContent).toContain(LONG.replaced!.text);
+  });
+
+  it("offers no comparison where the statement gives only one text", () => {
+    const deletion = { ...LONG, replacement: null };
+    const { container } = render(
+      <RelationNotes
+        notes={[
+          { effect: "replaced", sentence: "", relation: deletion },
+          { effect: "precedence", sentence: "", relation: PRECEDENCE },
+        ]}
+        onJump={vi.fn()}
+      />,
+    );
+    expect(container.querySelectorAll("mark")).toHaveLength(0);
+    expect(screen.queryByText(/Marked: the words/)).toBeNull();
+  });
+
+  it("does not give the original agreement's wording the concern a replaced answer gets", () => {
+    const historical = relationSummary({ effect: "context", sentence: "", relation: LONG });
+    const replaced = relationSummary({ effect: "replaced", sentence: "", relation: LONG });
+    expect(historical).toMatch(/Context only: code raised no concern/);
+    expect(historical).not.toMatch(/not decided|not settled/);
+    expect(replaced).toMatch(/Which wording governs is not decided by code\./);
+    const scoped = relationSummary({ effect: "scoped", sentence: "", relation: { ...LONG, scope: "for the second Contract Year only" } });
+    expect(scoped).toMatch(/only within a stated limit \(for the second Contract Year only\)/);
+  });
+});
+
 describe("UnclaimedRelations", () => {
   it("lists the run's statements no shown answer accounts for, and only those", () => {
     render(<UnclaimedRelations relations={[REPLACES, PRECEDENCE]} claimed={new Set([relationKey(PRECEDENCE)])} onJump={vi.fn()} />);
