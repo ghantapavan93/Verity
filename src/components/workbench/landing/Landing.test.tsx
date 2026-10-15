@@ -3,7 +3,7 @@
  * preview … readable through your invite and no other" for the first seconds of an open site (QA review, 2026-10-08).
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Health, RunSummary } from "@/lib/types";
 
@@ -50,6 +50,7 @@ function renderLanding(
   proof: RunSummary | null = null,
   proofStory = false,
   uploadError: { name: string | null; reason: string } | null = null,
+  onLoadSample: (kind: "standard" | "amended") => void = vi.fn(),
 ) {
   return render(
     <Landing
@@ -60,7 +61,7 @@ function renderLanding(
       setComposerText={vi.fn()}
       onHome={vi.fn()}
       onPickFile={vi.fn()}
-      onLoadSample={vi.fn()}
+      onLoadSample={onLoadSample}
       proof={proof}
       proofStory={proofStory}
       onOpenProof={vi.fn()}
@@ -267,6 +268,16 @@ describe("Landing: a file that could not be added", () => {
   });
 });
 
+describe("Landing: the samples", () => {
+  it("offers the real standard agreement and a synthetic amended one, each loading its own", () => {
+    const load = vi.fn();
+    renderLanding(health("off"), true, null, false, null, load);
+    fireEvent.click(screen.getByRole("button", { name: "try a sample agreement" }));
+    fireEvent.click(screen.getByRole("button", { name: "try an amended agreement" }));
+    expect(load.mock.calls).toEqual([["standard"], ["amended"]]);
+  });
+});
+
 describe("Landing: when the workbench cannot be reached", () => {
   it("says the workbench is unreachable in a sentence, and offers nothing that would fail", () => {
     renderLanding({ ok: false, provider: "", model: "", detail: "The workbench API answered 502", access: "off" } as Health, false);
@@ -274,6 +285,7 @@ describe("Landing: when the workbench cannot be reached", () => {
     expect(document.body.textContent).not.toMatch(/Model offline: /);
     expect((screen.getByRole("button", { name: "Add a contract" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "try a sample agreement" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "try an amended agreement" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("a store that cannot take a write is not called a model outage, and says adding or asking may fail", () => {

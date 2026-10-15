@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { memo, type Ref } from "react";
 import styles from "../Workbench.module.css";
 import { transitions } from "../shell/constants";
+import { SAMPLES, type SampleKind } from "../samples";
 import { formatWhen, plural } from "@/lib/format";
 import { codePointLength, splitByCodePoints } from "@/lib/text";
 import { Visible } from "../shell/primitives";
@@ -39,7 +40,7 @@ function describe(doc: DocumentView): string {
 /** The contract on paper: the source of truth on screen. Renders sections and marks stored offsets; decides nothing. */
 export function DocumentPane({
   doc,
-  isSample,
+  sample,
   lit,
   highlight,
   reduceMotion,
@@ -48,7 +49,7 @@ export function DocumentPane({
   onJump,
 }: {
   doc: DocumentView | null;
-  isSample: boolean;
+  sample: SampleKind | null;
   lit: string | null;
   highlight: Highlight | null;
   reduceMotion: boolean;
@@ -98,7 +99,7 @@ export function DocumentPane({
             readOnly={highlight?.sectionId === section.id && readNotRelied(findings, highlight.span)}
           />
         ))}
-        {isSample && <p className={styles.paperNote}>Sample · Common Paper Cloud Service Agreement · CC BY 4.0 · a real standard agreement, unmodified</p>}
+        {sample && <p className={styles.paperNote}>{SAMPLES[sample].note}</p>}
       </article>
     </motion.div>
   );

@@ -7,6 +7,7 @@ import { IconArrowRight, IconFile } from "../icons";
 import { transitions, type Stage } from "../shell/constants";
 import { Brand, Shimmer, StatusChip } from "../shell/primitives";
 import { OneRun, RecordPipeline, Refusals } from "./LandingStory";
+import type { SampleKind } from "../samples";
 import { getCitations, getRun, listDocuments, type Health } from "@/lib/api";
 import { plural } from "@/lib/format";
 import { modelPlace } from "@/lib/modelPlace";
@@ -59,7 +60,7 @@ export function Landing({
   setComposerText: Dispatch<SetStateAction<string>>;
   onHome: () => void;
   onPickFile: () => void;
-  onLoadSample: () => void;
+  onLoadSample: (kind: SampleKind) => void;
   proof: RunSummary | null;
   /** The proof is the configured proof run (NEXT_PUBLIC_PROOF_RUN): the four-step story is written about that run alone. */
   proofStory?: boolean;
@@ -250,8 +251,12 @@ export function Landing({
               )}
               <p className={styles.after}>
                 No contract to hand? Use the sample, a real standard agreement:{" "}
-                <button type="button" className={styles.link} onClick={onLoadSample} disabled={unreachable}>
+                <button type="button" className={styles.link} onClick={() => onLoadSample("standard")} disabled={unreachable}>
                   try a sample agreement
+                </button>
+                {", or a synthetic one an amendment changes, to see what code says about it: "}
+                <button type="button" className={styles.link} onClick={() => onLoadSample("amended")} disabled={unreachable}>
+                  try an amended agreement
                 </button>
               </p>
               {demo && (

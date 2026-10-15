@@ -13,6 +13,7 @@ import { FindingCard } from "./FindingCard";
 import { GuidanceScope } from "./GuidanceScope";
 import { UnclaimedRelations, relationKey } from "./RelationNotes";
 import { RevisionCheck, SAMPLE_REVISION } from "./RevisionCheck";
+import { suggestionsFor, type SampleKind } from "../samples";
 import { RunOutcome, WithheldList } from "./RunOutcome";
 import { StageList } from "./StageList";
 import { absolute } from "@/lib/api";
@@ -73,7 +74,7 @@ export function AssistantPanel({
   onJump,
   onOpenPalette,
   reduceMotion,
-  isSample = false,
+  sample = null,
 }: {
   doc: DocumentView | null;
   runs: RunController;
@@ -94,7 +95,8 @@ export function AssistantPanel({
   modelSleeps?: boolean;
   drawerCloseRef: Ref<HTMLButtonElement>;
   /** The open document is the bundled sample: its prepared revision is offered beside an answer. */
-  isSample?: boolean;
+  /** The bundled sample that is open, if one is: it brings its own questions, and the standard one a prepared revision. */
+  sample?: SampleKind | null;
   sectionsById: Map<string, SectionView>;
   onJump: (sectionId: string, span: SpanView | null) => void;
   onOpenPalette: () => void;
@@ -139,7 +141,7 @@ export function AssistantPanel({
             <div className={styles.assistantKicker}>Ask about this contract</div>
             <p className={styles.assistantPrompt}>One question at a time, answered from the contract&apos;s own words.</p>
             <div className={styles.actionList}>
-              {ASSISTANT_SUGGESTIONS.map((s, i) => (
+              {suggestionsFor(sample, ASSISTANT_SUGGESTIONS).map((s, i) => (
                 <button key={s} type="button" className={styles.actionItem} onClick={() => onAsk(s)}>
                   <span className={styles.actionIndex} aria-hidden="true">
                     {String(i + 1).padStart(2, "0")}
@@ -259,7 +261,7 @@ export function AssistantPanel({
                     <span>every quoted passage found in the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}</span>
                     {run.sectionsRead != null && doc && <span>{sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length)}</span>}
                   </p>
-                  {doc && <RevisionCheck key={run.id} runId={run.id} documentId={doc.id} run={run} prepared={isSample ? SAMPLE_REVISION : null} />}
+                  {doc && <RevisionCheck key={run.id} runId={run.id} documentId={doc.id} run={run} prepared={sample === "standard" ? SAMPLE_REVISION : null} />}
                 </motion.div>
               ) : (
                 <motion.div key="unresolved" className={styles.unresolved} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={quick}>

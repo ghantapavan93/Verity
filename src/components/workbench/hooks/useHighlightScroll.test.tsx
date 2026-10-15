@@ -43,7 +43,7 @@ const SECTION_TOP = 5400;
 function Harness({ highlight, reduceMotion = false }: { highlight: Highlight | null; reduceMotion?: boolean }) {
   const paneRef = useRef<HTMLDivElement>(null);
   useHighlightScroll(paneRef, highlight, reduceMotion);
-  return <DocumentPane doc={DOC} isSample={false} lit={null} highlight={highlight} reduceMotion={reduceMotion} paneRef={paneRef} />;
+  return <DocumentPane doc={DOC} sample={null} lit={null} highlight={highlight} reduceMotion={reduceMotion} paneRef={paneRef} />;
 }
 
 /** A jump is a new highlight object, as the workbench makes one for every jump. */

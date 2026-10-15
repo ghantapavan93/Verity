@@ -25,7 +25,7 @@ const span = (sectionId: string, start: number, end: number): SpanView =>
   ({ sectionId, start, end, quote: "", verified: true, method: "exact" }) as unknown as SpanView;
 
 function paper(highlight: Highlight | null) {
-  return <DocumentPane doc={doc} isSample={false} lit={null} highlight={highlight} reduceMotion paneRef={null} />;
+  return <DocumentPane doc={doc} sample={null} lit={null} highlight={highlight} reduceMotion paneRef={null} />;
 }
 
 describe("DocumentPane with memoised blocks", () => {

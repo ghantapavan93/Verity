@@ -16,6 +16,7 @@ import { CommandPalette, type Command } from "./CommandPalette";
 import styles from "./Workbench.module.css";
 import { AccessGate } from "./access/AccessGate";
 import { ASSISTANT_SUGGESTIONS, AssistantPanel } from "./assistant/AssistantPanel";
+import { SAMPLES, suggestionsFor, type SampleKind } from "./samples";
 import { outcomeTitle } from "./assistant/RunOutcome";
 import { useDocWidth } from "./hooks/useDocWidth";
 import { useDropZone } from "./hooks/useDropZone";
@@ -53,10 +54,6 @@ import {
 const HIGHLIGHT_MS = 1600;
 const READY_PAUSE_MS = 450;
 
-// A real, openly licensed agreement bundled for "try the sample": Common Paper's Cloud Service
-// Agreement, CC BY 4.0. Attribution is shown under the document when it is loaded.
-const SAMPLE_PATH = "/samples/cloud-service-agreement.docx";
-const SAMPLE_NAME = "Cloud Service Agreement (Common Paper).docx";
 // The run the first screen offers as a finished review, set at build time for a deployment whose store holds it
 // (the Phase 1 proof run, docs/DEMO-PROOF.md), and that run or none (landing/proofRun.ts); otherwise the latest complete run with findings.
 const PROOF_RUN_ID = process.env.NEXT_PUBLIC_PROOF_RUN ?? "";
@@ -78,7 +75,7 @@ function WorkbenchSurface() {
   const [processingLabel, setProcessingLabel] = useState("Reading document");
   const [pendingName, setPendingName] = useState("");
   const [doc, setDoc] = useState<DocumentView | null>(null);
-  const [isSample, setIsSample] = useState(false);
+  const [sample, setSample] = useState<SampleKind | null>(null);
   const [uploadError, setUploadError] = useState<{ name: string | null; reason: string } | null>(null);
   const [apiHealth, setApiHealth] = useState<Health | null>(null);
   const [accessKnown, setAccessKnown] = useState(true);
@@ -167,7 +164,7 @@ function WorkbenchSurface() {
   // ---- upload -----------------------------------------------------------------------------
 
   const loadFile = useCallback(
-    async (file: File, sample = false) => {
+    async (file: File, kind: SampleKind | null = null) => {
       // The first screen's box promises "Your question, asked once the contract is added": a question typed there is
       // asked when the document opens. Until 2026-10-08 it was carried into the composer and left unsent (QA review).
       // A file added from inside the workspace sends nothing the person did not send themselves.
@@ -182,7 +179,7 @@ function WorkbenchSurface() {
         const uploaded = await uploadDocument(file);
         setDoc(uploaded);
         setContractsAdded((n) => n + 1);
-        setIsSample(sample);
+        setSample(kind);
         showRun(null); // the previous run's follower and drawer do not outlive its document
         resetMemo();
         setHighlight(null);
@@ -220,14 +217,14 @@ function WorkbenchSurface() {
     return () => window.cancelAnimationFrame(handle);
   }, [stage, doc]);
 
-  const loadSample = useCallback(async () => {
+  const loadSample = useCallback(async (kind: SampleKind) => {
     setUploadError(null);
     try {
       // eslint-disable-next-line no-restricted-globals -- the bundled sample is a static file of this origin, not the API
-      const response = await fetch(SAMPLE_PATH);
+      const response = await fetch(SAMPLES[kind].path);
       if (!response.ok) throw new Error("The sample agreement is missing from this build.");
       const blob = await response.blob();
-      await loadFile(new File([blob], SAMPLE_NAME, { type: blob.type }), true);
+      await loadFile(new File([blob], SAMPLES[kind].name, { type: blob.type }), kind);
     } catch (error) {
       setUploadError({ name: null, reason: errorMessage(error) });
     }
@@ -284,7 +281,7 @@ function WorkbenchSurface() {
         const loaded = await getDocument(id);
         stopRun();
         setDoc(loaded);
-        setIsSample(false);
+        setSample(null);
         showRun(null);
         resetMemo();
         setRunError(null);
@@ -316,7 +313,7 @@ function WorkbenchSurface() {
         if (!current()) return;
         stopRun();
         setDoc(loadedDoc);
-        setIsSample(false);
+        setSample(null);
         showRun(loadedRun); // followed when it is still in flight
         setGuidance(loadedGuidance ? { id: loadedGuidance.id, text: loadedGuidance.text } : null);
         setGuidanceDraft(loadedGuidance ? loadedGuidance.text : DEFAULT_GUIDANCE);
@@ -495,7 +492,7 @@ function WorkbenchSurface() {
 
   // The palette calls this once when it mounts; nothing here runs during the workbench render.
   const buildCommands = (): Command[] => {
-    const list: Command[] = ASSISTANT_SUGGESTIONS.map((s) => ({ id: `ask-${s}`, label: s, group: "Ask", run: () => void ask(s) }));
+    const list: Command[] = suggestionsFor(sample, ASSISTANT_SUGGESTIONS).map((s) => ({ id: `ask-${s}`, label: s, group: "Ask", run: () => void ask(s) }));
     list.push({
       id: "guidance-edit",
       label: guidanceRecord ? "Edit legal guidance" : "Add legal guidance",
@@ -561,7 +558,7 @@ function WorkbenchSurface() {
             setComposerText={setComposerText}
             onHome={goHome}
             onPickFile={() => !unreachable && fileInputRef.current?.click()}
-            onLoadSample={() => void loadSample()}
+            onLoadSample={(kind) => void loadSample(kind)}
             proof={proof}
             proofStory={Boolean(PROOF_RUN_ID) && proof?.id === PROOF_RUN_ID}
             onOpenProof={(id, findingId) => void openRun(id, findingId)}
@@ -600,7 +597,7 @@ function WorkbenchSurface() {
                   <div className={styles.split} style={{ gridTemplateColumns: `${split.docWidth}% 8px minmax(0, 1fr)` }}>
                     <DocumentPane
                       doc={doc}
-                      isSample={isSample}
+                      sample={sample}
                       lit={lit}
                       highlight={highlight}
                       reduceMotion={reduceMotion}
@@ -630,7 +627,7 @@ function WorkbenchSurface() {
                       onJump={jumpTo}
                       onOpenPalette={() => setPaletteOpen(true)}
                       reduceMotion={reduceMotion}
-                      isSample={isSample}
+                      sample={sample}
                     />
                   </div>
                 </motion.div>
