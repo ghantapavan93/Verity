@@ -13,6 +13,7 @@ import { runOutcome } from "@/lib/checks";
 import wb from "../Workbench.module.css";
 import { WhyThisAnswer } from "../assistant/WhyThisAnswer";
 import { TERMINAL } from "../shell/constants";
+import { PackLink } from "../shell/PackLink";
 import { StatusChip } from "../shell/primitives";
 import styles from "./Views.module.css";
 import { Figures, MethodBar } from "./Figures";
@@ -471,13 +472,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
         <button type="button" className={wb.primaryButton} onClick={onOpen}>
           Open in workspace
         </button>
-        <a
-          className={wb.actionLink}
-          href={absolute(`/api/runs/${run.id}/evidence-pack`)}
-          title="The original bytes, the sections, every located span and a verify.py that checks them without this service"
-        >
-          Download evidence pack
-        </a>
+        <PackLink runId={run.id} className={wb.actionLink} />
       </div>
 
       <section className={styles.section}>

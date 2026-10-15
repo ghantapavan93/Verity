@@ -23,7 +23,10 @@ Checks, in order:
      an input the run did not keep, which is not reconstructable; this checker then says so and
      prints no PASS for the model input;
   6. a located span that lies beyond the slice the model was shown is reported: the quote exists
-     in the document, but the model never saw those characters (a NOTE, not a failure).
+     in the document, but the model never saw those characters (a NOTE, not a failure);
+  7. when the pack carries the model's output (model_output.txt), its bytes hash to what the run recorded
+     when the model answered: the findings' sentences are that output with section handles written as
+     labels, and this file keeps the model's own words.
 For a run the workbench verified under verifier v8 or later (run.json options.verifier_version), check 3
 also holds what v8 holds: neither edge of a span splits a run of letters and digits or a number as it
 is written (its sign, parentheses, groups, currency and percent signs), and the typed check compares a
@@ -389,6 +392,11 @@ def main():
             report(ok, f"context slice {s['label']} (rank {s['rank']}): {s['end'] - s['start']} characters{' of a truncated section' if s['truncated'] else ''}, in the user message")
     elif model_input:
         print(f"NOTE the model input could not be rebuilt from the record: {model_input.get('problem')}")
+    output = run.get("model_output") or {}
+    if output.get("file") and output.get("sha256_recorded"):
+        report(sha256(HERE / output["file"]) == output["sha256_recorded"], f"model output: the recorded answer hashes to what the run recorded {output['sha256_recorded'][:16]}...")
+    elif output.get("file"):
+        print("NOTE the run recorded no hash of the model's output (older record); model_output.txt is the record's copy, unchecked")
     beyond = 0
     for finding in findings:
         for span in finding["spans"]:

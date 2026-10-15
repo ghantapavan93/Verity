@@ -72,7 +72,9 @@ README_TXT = """Evidence pack for one Contract Workbench run.
   run.json        the run: question, stage, hashes of the document, sections, prompt and options, model
   sections.json   the canonical sections the run read, exactly as stored (offsets index into these texts)
   findings.json   every finding the model proposed with its status and every quoted span, located or withheld;
-                  `conclusion` is the model's own sentence as recorded, `shown_conclusion` what the workbench shows
+                  `conclusion` is the model's own sentence as recorded, its section handles written as the sections'
+                  labels (one that names no section it was given as "[unidentified section]"; model_output.txt
+                  keeps the handles), `shown_conclusion` what the workbench shows
                   (for a point the model reported as not found, only that it was not found in the sections given).
                   Who said what, per finding:
                     status, status_source, status_reason  the status and what set it; a status_source of model_hint
@@ -91,6 +93,8 @@ README_TXT = """Evidence pack for one Contract Workbench run.
   relations.json  the replacement and precedence statements the run located (policy-v11), each end with its offsets
                   into sections.json; verify.py checks every one. A located statement is a fact about the text, not
                   a ruling on its legal effect. Absent for a run recorded before policy-v11
+  model_output.txt  the model's structured output exactly as the run recorded it, in the model's own words; verify.py
+                  checks it against the hash the run recorded when the model answered
   document/       the original uploaded bytes, when they were kept
   model_input/    the exact system and user messages behind the answer this pack records, rebuilt from the
                   record when it allows it (for a run without an answer, the messages of its first call); run.json
@@ -230,6 +234,13 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         "guidance_file": "guidance.txt" if run.guidance else None,
         "review_head": review_head(run),
         "model_input": model_input,
+        # The model's own words, exactly as recorded: findings.json gives its sentences with the run's section handles
+        # replaced (runs.prose), so a handle it was not given shows here as it wrote it. The checking stage recorded the
+        # hash of this text when the model answered; a run recorded before stages kept hashes has none to check against.
+        "model_output": {
+            "file": "model_output.txt" if run.raw_output is not None else None,
+            "sha256_recorded": next((s.output_hash for s in run.stages if s.stage == "checking"), None),
+        },
         "context_slices": context_slices,
         # How the sections handed to the model were chosen. `mode` is null on a run recorded before it was a field.
         "retrieval": {"mode": run.retrieval_mode, "requested_k": options.get("retrieval_k"), "returned": len(context_slices) if rebuilt.slices else None},
@@ -267,6 +278,8 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
         if run.relations_json:
             pack.writestr("relations.json", json.dumps([asdict(r) for r in recorded.relations], ensure_ascii=False, indent=1))
         pack.writestr("verify.py", verify_py)
+        if run.raw_output is not None:
+            pack.writestr("model_output.txt", run.raw_output)
         if original_bytes is not None:
             pack.writestr(f"document/{pack_name(shown_file)}", original_bytes)
         if rebuilt.answered and rebuilt.system is not None and rebuilt.user is not None:

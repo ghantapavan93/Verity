@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 from app.providers.admission import INTERACTIVE_TURNS, AdmissionController, AdmittedProvider
@@ -54,22 +55,46 @@ def test_calls_in_flight_are_bounded_and_waits_are_recorded() -> None:
     assert snapshot["recent"]["interactive"]["calls"] == 5 and snapshot["waiting"] == 0 and snapshot["in_flight"] == 0
 
 
+class HoldingProvider(SlowProvider):
+    """The call asked "hold" keeps the one slot until released, so a test forms its queue before anything is served."""
+
+    def __init__(self, seconds: float) -> None:
+        super().__init__(seconds)
+        self.release = threading.Event()
+
+    def generate_json(self, system: str, user: str, schema: dict[str, Any]) -> Generation:
+        if user == "hold":
+            assert self.release.wait(10), "the held call was never released"
+        return super().generate_json(system, user, schema)
+
+
+def _until(condition: Callable[[], bool]) -> None:
+    deadline = time.monotonic() + 10
+    while not condition():
+        assert time.monotonic() < deadline, "timed out waiting for the queue to form"
+        time.sleep(0.001)
+
+
 def test_interactive_calls_go_before_batch_calls_but_batch_still_progresses() -> None:
-    slow = SlowProvider(0.02)
+    # The queue is formed by waiting for it, not by sleeping: under a loaded machine 5 ms sleeps let the held call finish
+    # before the queue formed, and the order checked was the order threads happened to start (a release gate, 2026-10-15).
+    slow = HoldingProvider(0.02)
     controller = AdmissionController(limit=1)
     blocker = AdmittedProvider(slow, controller, "batch")
     holder = threading.Thread(target=blocker.generate_json, args=("s", "hold", {}))
     holder.start()
-    time.sleep(0.005)  # the slot is taken; everything below queues
+    _until(lambda: controller.snapshot()["in_flight"] == 1)  # the slot is taken; everything below queues
     batch = [AdmittedProvider(slow, controller, "batch") for _ in range(3)]
     interactive = [AdmittedProvider(slow, controller, "interactive") for _ in range(6)]
     threads = [threading.Thread(target=p.generate_json, args=("s", f"batch {i}", {})) for i, p in enumerate(batch)]
     for t in threads:
         t.start()
-    time.sleep(0.005)
+    _until(lambda: controller.snapshot()["waiting"] == 3)
     threads += [threading.Thread(target=p.generate_json, args=("s", f"interactive {i}", {})) for i, p in enumerate(interactive)]
     for t in threads[3:]:
         t.start()
+    _until(lambda: controller.snapshot()["waiting"] == 9)
+    slow.release.set()
     for t in [holder, *threads]:
         t.join()
     order = slow.order[1:]  # after the holder

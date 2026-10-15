@@ -270,6 +270,23 @@ export function createMemo(runId: string): Promise<MemoRecord> {
   });
 }
 
+/**
+ * A file the API sends as an attachment (an evidence pack), read here so that a refusal is shown on the page instead of
+ * replacing it, and saved under the name the API gave it (the fallback when the header cannot be read cross-origin).
+ */
+export async function attachment(path: string, fallbackName: string): Promise<{ blob: Blob; name: string }> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  } catch {
+    throw new Error(unreachable(API_URL));
+  }
+  if (response.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event(ACCESS_REQUIRED_EVENT));
+  if (!response.ok) throw new ApiError(response.status, await readError(response));
+  const named = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "");
+  return { blob: await response.blob(), name: named?.[1] ?? fallbackName };
+}
+
 export function absolute(url: string): string {
   return url.startsWith("http") ? url : `${API_URL}${url}`;
 }

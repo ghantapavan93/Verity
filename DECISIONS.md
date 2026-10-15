@@ -1373,3 +1373,15 @@ belongs to another workspace or no longer exists, nothing more. Handles: a range
 cleanup would close ("sec_1 ,2"), and a paragraph with a space or left open are sub-references; a short word in
 brackets ("(fees)") is not. Left as it is: "sec_1, 2 and 3" reads "§7, 2 and 3", because ", 2" after a handle is
 also ordinary prose ("in sec_5, 30 days' notice"), and lowering that would be the larger error.
+
+Exports, audited against the brief after the gate. The evidence pack gave the model's sentences with its section handles
+written as labels and had no copy of what the model wrote, so a reader of the pack could not see a replaced handle. It now
+carries `model_output.txt`, the recorded output byte for byte, and `verify.py` checks it against the hash the checking
+stage recorded when the model answered; the README no longer calls the relabelled sentence the model's own. The download
+links were plain anchors: a refused pack replaced the workbench with the API's JSON, and nothing showed while a large pack
+was made. One `PackLink` now says what the zip holds, shows the wait, saves the file under the API's name and says a
+refusal in place; its address stays, so it can still be copied. The Runs page showed an operator's instruction raw when
+the contract-state record is absent; it now says what /state says, with the instruction labelled as the operator's.
+The gate on that tree failed once on `test_admission`'s ordering test, which formed its queue with 5 ms sleeps: on a
+loaded machine the held call finished before the queue formed. The test now holds the slot until the queue it checks has
+formed, read from the controller; it passed 20 runs in four parallel loops.

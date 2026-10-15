@@ -173,7 +173,8 @@ describe("ContractState", () => {
 
   it("says when the record is not connected and shows an edited file as edited", () => {
     render(<ContractState view={{ available: false, source: null, detail: "contract-state.json not found", evidence: {}, arrivals: [] }} />);
-    expect(screen.getByText(/The contract-state record is not connected\. contract-state\.json not found/)).toBeTruthy();
+    expect(screen.getByText(/The contract-state record is not connected\. This deployment does not carry it/)).toBeTruthy();
+    expect(screen.getByText(/^For whoever runs it: contract-state\.json not found/)).toBeTruthy();
     cleanup();
     render(<ContractState view={{ ...VIEW, sha256Verified: false }} />);
     expect(screen.getByText(/FILE DOES NOT MATCH ITS HASH/)).toBeTruthy();

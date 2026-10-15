@@ -7,11 +7,12 @@ import { useNarrow } from "../hooks/useNarrow";
 import { useRunExplanation } from "../hooks/useRunExplanation";
 import { IconCheck, IconClose } from "../icons";
 import { EASE } from "../shell/constants";
+import { PackLink } from "../shell/PackLink";
 import { StatusChip, Visible } from "../shell/primitives";
 import { DayGauge, readComparison } from "./DayGauge";
 import { RelationNotes } from "./RelationNotes";
 import { WhyThisAnswer } from "./WhyThisAnswer";
-import { absolute, errorMessage, isConflict, reviewFinding } from "@/lib/api";
+import { errorMessage, isConflict, reviewFinding } from "@/lib/api";
 import { unseenNote } from "@/lib/checks";
 import { formatWhen } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
@@ -474,13 +475,7 @@ function EvidenceBody({
                 <div>
                   <dt>Take it away</dt>
                   <dd>
-                    <a
-                      className={styles.actionLink}
-                      href={absolute(`/api/runs/${run.id}/evidence-pack`)}
-                      title="The original bytes, the sections, every located span and a verify.py that checks them without this service"
-                    >
-                      Download evidence pack
-                    </a>
+                    <PackLink runId={run.id} className={styles.actionLink} />
                   </dd>
                 </div>
               </dl>

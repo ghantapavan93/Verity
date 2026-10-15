@@ -86,7 +86,9 @@ export function ContractState({ view }: { view: ContractStateView }) {
         <h2 id="state-title" className={styles.title}>
           One contract changes
         </h2>
-        <p className={styles.quiet}>The contract-state record is not connected. {view.detail}</p>
+        {/* As on /state: a sentence for the visitor, and the operator's instruction labelled as theirs, not shown raw. */}
+        <p className={styles.quiet}>The contract-state record is not connected. This deployment does not carry it; the workbench does not use it.</p>
+        <p className={styles.operatorNote}>For whoever runs it: {view.detail}</p>
       </section>
     );
   }

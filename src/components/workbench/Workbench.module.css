@@ -1158,6 +1158,26 @@
   color: var(--status-pass-text);
 }
 
+/* The evidence pack's link, what it holds, and a refusal in place (shell/PackLink). */
+.packLink {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.packNote {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.packProblem {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--status-review-text);
+}
+
 .actionLink {
   font-size: 13px;
   color: var(--text);
