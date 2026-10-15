@@ -30,7 +30,7 @@ from typing import Literal, Protocol
 
 from ..ingest.sections import clause_openings
 from .status import REFERENCE
-from .values import date_spans, stated_values
+from .values import NOT_A_QUANTITY, date_spans, stated_values
 
 RelationKind = Literal["replaces", "precedence"]
 Effect = Literal["replaced", "scoped", "precedence", "dated", "old_value", "context"]
@@ -119,8 +119,7 @@ _CURRENT = re.compile(r"\b(?:now|currently|today|as\s+amended|at\s+present|as\s+
 # every one of them ("each Contract Year").
 _YEAR_TIME = re.compile(
     r"\b(?:in|during|throughout|between|as\s+(?:of|at)|until|till|before|after|since|prior\s+to|through)\s+"
-    r"(?:(?:the\s+)?(?:calendar\s+|financial\s+|fiscal\s+)?year\s+)?(?:19|20)\d{2}\b(?![-/.]\d)"
-    r"(?![\s-]*(?:[%$€£]|(?:calendar\s+|business\s+|working\s+)?(?:days?|weeks?|months?|years?|hours?|minutes?|units?|items?|tonnes?|cases?|pieces?)\b))",
+    rf"(?:(?:the\s+)?(?:calendar\s+|financial\s+|fiscal\s+)?year\s+)?(?:19|20)\d{{2}}\b{NOT_A_QUANTITY}",
     re.IGNORECASE,
 )
 _RELATIVE_TIME = re.compile(

@@ -49,7 +49,7 @@ from ..policy.durations import (
     stated_rules,
 )
 from ..policy.proof import pass_blockers, same_point, unseen_reason
-from .values import redaction_given_as_value, unquoted_values
+from .values import frame_times, redaction_given_as_value, unquoted_values
 
 # The version of the rules in this module and in `policy`: what a status means. Part of a run's identity
 # (runs.versions), so a question answered under one version is asked again, not handed back, under the next.
@@ -105,7 +105,11 @@ from .values import redaction_given_as_value, unquoted_values
 # question about the agreement as it stands, answered from text the contract replaced in full, without the replacement,
 # is needs review set by code (`check_replaced`, `position_check`), and the quote stays verified. A limited replacement
 # or a ranking of parts is a concern only: whether the limit applies, or which part governs, is not code's to decide.
-POLICY_VERSION = "policy-v11"
+# policy-v12 (2026-10-15): the time a question asks at ("What was the deadline in June 2026?") counts as stated when the
+# answer repeats it (`values.frame_times`): repeating when it answers for takes no figure from the question, and the
+# status no longer depends on whether the answer says it. A question that asks to confirm a date, or gives one as a
+# property ("the payment due on 1 March 2027"), still has its date read as a premise. Everything else is v11's.
+POLICY_VERSION = "policy-v12"
 
 
 @dataclass(frozen=True)
@@ -440,7 +444,8 @@ def check_values(
             "position_check",
             f"the answer gives {mark}, a redaction mark, as its value: this copy of the contract withholds the figure, so the evidence cannot establish it",
         )
-    unsupported = unquoted_values(conclusion, quotes, [guidance or ""], clause_numbers)
+    # The time the question asks at is not a figure taken from it (policy-v12): repeated, it says when the answer is for.
+    unsupported = unquoted_values(conclusion, quotes, [guidance or "", *frame_times(question)], clause_numbers)
     if not unsupported:
         return decision
     beyond_question = set(unquoted_values(conclusion, quotes, [question or "", guidance or ""], clause_numbers))

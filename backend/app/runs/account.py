@@ -26,7 +26,7 @@ from sqlalchemy.orm import object_session
 from ..models import Finding, Guidance
 from .relations import CONCERNS, Note, load
 from .status import basis
-from .values import ValueChoice, unquoted_values, value_choices
+from .values import ValueChoice, frame_times, unquoted_values, value_choices
 
 
 def notes_of(finding: Finding) -> tuple[Note, ...]:
@@ -75,7 +75,9 @@ def value_checks(finding: Finding, clause_numbers: frozenset[str] = frozenset())
     session = object_session(finding)
     guidance = session.get(Guidance, run.guidance_id) if session is not None and run.guidance_id else None
     choices = value_choices(finding.shown_conclusion, quotes, [run.question], [guidance.text] if guidance else [])
-    return unquoted_values(finding.shown_conclusion, quotes, [guidance.text if guidance else ""], clause_numbers), list(choices)
+    # The time the question asks at counts as stated, as the status reads it (policy-v12, `values.frame_times`).
+    stated = [guidance.text if guidance else "", *frame_times(run.question)]
+    return unquoted_values(finding.shown_conclusion, quotes, stated, clause_numbers), list(choices)
 
 
 def _choice_sentence(choice: ValueChoice) -> str:

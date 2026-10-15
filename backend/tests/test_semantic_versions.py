@@ -73,6 +73,9 @@ RECORDED: dict[str, str] = {
     # run's date; quoting the replacement with only the replaced values is a concern; a month start is read, not raised on.
     # policy-v11 was never committed, so its fingerprint was replaced rather than bumped.
     "policy-v11": "b3728ef49122b641",
+    # policy-v12, 2026-10-15: the time a question asks at ("in June 2026") counts as stated when the answer repeats it, so
+    # the status no longer depends on whether the answer says it (values.frame_times). v11 is committed, so this is a bump.
+    "policy-v12": "995405407aa14b15",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
     # v8, 2026-10-13: no span begins or ends inside a number; a number's sign is part of its value (F-03). Re-recorded the

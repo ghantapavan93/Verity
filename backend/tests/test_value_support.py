@@ -20,9 +20,13 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from app.providers.base import Generation
 from app.runs.status import Decision, check_values
+from app.runs.values import frame_times
+from tests.support import FUZZ_SCALE
 
 PASS = Decision("pass", "model_hint")
 HOURS = "Service Provider will allocate a minimum of 20 hours per month, but will not exceed 40 hours per month, without prior approval."
@@ -83,6 +87,71 @@ def test_a_question_figure_is_lowered_whatever_role_the_answer_gives_it() -> Non
     hypothetical = "What credit applies if availability is 97.4%?"
     assert lowered(check_values(PASS, "A credit of 10% applies if availability is 97.4%.", [tiers], hypothetical, None))
     assert check_values(PASS, "A credit of 10% of the monthly fee applies.", [tiers], hypothetical, None) == PASS
+
+
+ORIGINAL_7_2 = "unless either party gives the other written notice of non-renewal not less than ninety (90) days before the end of the then-current Term."
+
+
+def test_the_time_the_question_asks_at_repeated_by_the_answer_is_not_a_premise() -> None:
+    """policy-v12. The dated journey of 2026-10-15 (real qwen3:8b, a fresh PDF): the answer was right, and it was lowered
+    because it said "in June 2026" back to a question about June 2026, while the same answer without those words kept
+    its pass. Saying when it answers for takes no figure from the question."""
+    question = "What was the deadline for giving a notice of non-renewal in June 2026?"
+    answer = "The deadline for giving a notice of non-renewal in June 2026 was ninety (90) days before the end of the then-current Term."
+    assert check_values(PASS, answer, [ORIGINAL_7_2], question, None) == PASS
+    # A figure the question does not frame is still a premise, beside the frame.
+    lowered_too = check_values(PASS, answer.replace("ninety (90)", "sixty (60)"), [ORIGINAL_7_2], question, None)
+    assert lowered(lowered_too) and "60" in lowered_too.reason and "June 2026" not in lowered_too.reason
+
+
+FRAMES = ["in June 2026", "on 3 June 2028", "as of 1 March 2027", "as at 2025-03-01", "during 2024", "in the financial year 2024", "at 31 December 2026"]
+
+
+@settings(max_examples=80 * FUZZ_SCALE, deadline=None)
+@given(
+    frame=st.sampled_from(FRAMES),
+    ask=st.sampled_from(["What was the notice period {f}?", "How much notice applied {f}?", "{F}, what notice was required?"]),
+    answer=st.sampled_from(["Notice was ninety (90) days before the end of the then-current Term.", "Notice was sixty (60) days before expiry."]),
+)
+def test_the_status_never_depends_on_repeating_the_time_the_question_asks_at(frame: str, ask: str, answer: str) -> None:
+    question = ask.format(f=frame, F=frame[0].upper() + frame[1:])
+    framed = f"{frame[0].upper() + frame[1:]}, {answer[0].lower() + answer[1:]}"
+    assert check_values(PASS, framed, [ORIGINAL_7_2], question, None) == check_values(PASS, answer, [ORIGINAL_7_2], question, None)
+
+
+@pytest.mark.parametrize(
+    ("question", "answer"),
+    [
+        # A question that asks to confirm a date: the date is the claim, and a premise when no quote states it.
+        ("Is the renewal fee payable in June 2026?", "Yes, the renewal fee is payable in June 2026."),
+        ("In 2026, is the renewal fee payable on 1 July 2026?", "Yes, the renewal fee is payable on 1 July 2026."),
+        # A date the question gives as a property of something: a premise, as the $1,000,000 cash payment is.
+        ("What happens to the payment due on 1 March 2027?", "The payment due on 1 March 2027 is refundable."),
+        ("What notice must be given for the term ending on 31 March 2029?", "For the term ending on 31 March 2029, ninety (90) days."),
+    ],
+)
+def test_control_a_date_the_question_asks_to_confirm_or_gives_as_a_property_is_still_a_premise(question: str, answer: str) -> None:
+    decision = check_values(PASS, answer, [ORIGINAL_7_2, "The renewal fee is refundable on request."], question, None)
+    assert lowered(decision) and "comes from the question" in decision.reason
+
+
+@pytest.mark.parametrize(
+    ("question", "frames"),
+    [
+        ("What was the deadline for giving a notice of non-renewal in June 2026?", ["June 2026"]),
+        ("What attendance time applied to a tyre breakdown on 3 June 2028?", ["3 June 2028"]),
+        ("How much notice was needed during 2024 and in 2025?", ["2024", "2025"]),
+        ("What is the fee as of the calendar year 2027?", ["2027"]),
+        ("In June 2026, what was the notice period?", ["June 2026"]),
+        ("Is the fee payable in June 2026?", []),
+        ("What happens to the payment due on 1 March 2027?", []),
+        ("Is a fee due after 2000 hours of use?", []),
+        ("What fee applies in 2000 units?", []),
+        ("What was agreed under the amendment of 18 September 2025?", []),
+    ],
+)
+def test_the_times_a_question_asks_at(question: str, frames: list[str]) -> None:
+    assert frame_times(question) == frames
 
 
 def test_changing_the_quoted_amount_does_not_let_the_old_answer_stand() -> None:

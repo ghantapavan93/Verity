@@ -1325,3 +1325,16 @@ and failed again on retry; "September 18, 2025" was cut at its comma and never r
 month from its 1st, and anything else stays a limit (a Hypothesis test over written dates). The oracle still matches 82 of
 82, with labels it has none for counted as failures. v11 was never committed, so its fingerprint was replaced, not bumped.
 
+## 2026-10-15: policy-v12, the time a question asks at is not a premise
+
+The first real journey with a dated question (the Skelbrook PDF, local qwen3:8b: "What was the deadline for giving a
+notice of non-renewal in June 2026?") answered correctly from the original clause, and code lowered it: "June 2026 comes
+from the question, and no verified quote states it". The same answer without the words "in June 2026" kept its pass, so
+the status hung on the wording. Invariant: repeating the time a question asks at takes no figure from the question, so
+the status does not depend on it. `values.frame_times` reads a date, month or year that a what, when or how-much question
+puts after "in", "during", "throughout", "on", "at", "as of" or "as at"; the status rule and the account count it as
+stated. Kept as premises, as policy-v6 decided for figures: a date in a question that asks to confirm ("Is the fee payable
+in June 2026?"), and a date the question gives as a property ("the payment due on 1 March 2027"). Held by a property
+(the decision with and without the frame is equal) and four controls. Replayed over the 81 local QA stores: 4 recorded
+findings were lowered for a value from the question; only the June 2026 one changes. Not done: a time phrased in a way
+this does not read ("for the June 2026 renewal") is still read as a premise, which asks a person to look.

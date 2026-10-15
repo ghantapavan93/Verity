@@ -175,6 +175,49 @@ def date_spans(text: str) -> list[tuple[int, int]]:
     return sorted((start, end) for _, start, end in _dates(text))
 
 
+# A four-digit year that is a year, not a quantity or part of a numeric date ("after 2000 hours", "2025-03-01").
+NOT_A_QUANTITY = (
+    r"(?![-/.]\d)(?![\s-]*(?:[%$€£]|(?:calendar\s+|business\s+|working\s+)?"
+    r"(?:days?|weeks?|months?|years?|hours?|minutes?|units?|items?|tonnes?|cases?|pieces?)\b))"
+)
+# The time a question asks at, as its frame: "What was the deadline in June 2026?". An answer that repeats it ("In June
+# 2026 the deadline was …") says when it answers for; it takes no figure from the question (policy-v12: the dated
+# journey of 2026-10-15 was lowered for repeating "June 2026", while the same answer without those words kept its pass,
+# so the status hung on the wording). A question that asks to confirm ("Is the fee payable in June 2026?") and a date
+# the question gives as a property ("the payment due on 1 March 2027") are still premises (test_value_support).
+_FRAME_LEAD = re.compile(
+    r"(?:\b(?P<before>[\w'-]+)\s+)?(?:in|during|throughout|on|at|as\s+of|as\s+at)\s+"
+    r"(?:(?:the\s+)?(?:calendar\s+|financial\s+|fiscal\s+)?year\s+)?$",
+    re.IGNORECASE,
+)
+_FRAME_YEAR = re.compile(rf"(?<![\w-])(?:19|20)\d{{2}}\b{NOT_A_QUANTITY}")
+_CONFIRMS = re.compile(
+    r"^\W*(?:(?:in|during|on|at|as\s+of|as\s+at)\b[^,?]{1,60},\s*)?"
+    r"(?:is|are|was|were|does|do|did|can|could|will|would|must|has|have|had|should|shall|may|might)\b",
+    re.IGNORECASE,
+)
+_PROPERTY = frozenset((
+    "due", "payable", "paid", "made", "signed", "dated", "effective", "expiring", "expires", "ending", "ends", "starting",
+    "starts", "commencing", "commences", "beginning", "begins", "delivered", "received", "given", "served", "issued",
+    "executed", "entered", "held", "scheduled", "falling", "falls", "occurring", "occurs", "terminating", "terminates",
+    "renewing", "renews", "closing", "closes", "sent", "filed",
+))  # fmt: skip
+
+
+def frame_times(question: str | None) -> list[str]:
+    """The times ``question`` asks at, as written ("June 2026", "1 March 2027", "2024"): a date, month or year that a
+    question asking what, when or how much puts after "in", "during", "throughout", "on", "at", "as of" or "as at".
+    None of a question that asks to confirm, and none the question gives as a property of something ("due on")."""
+    if not question or _CONFIRMS.match(question):
+        return []
+    found = []
+    for start, end in sorted(date_spans(question) + [m.span() for m in _FRAME_YEAR.finditer(question)]):
+        lead = _FRAME_LEAD.search(question, 0, start)
+        if lead is not None and (lead.group("before") or "").casefold() not in _PROPERTY:
+            found.append(question[start:end])
+    return found
+
+
 def _blank(text: str, spans: Iterable[tuple[int, int]]) -> str:
     chars = list(text)
     for start, end in spans:
