@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, type Ref } from "react";
 import styles from "../Workbench.module.css";
+import { useNarrow } from "../hooks/useNarrow";
 import { useRunExplanation } from "../hooks/useRunExplanation";
 import { IconCheck, IconClose } from "../icons";
 import { EASE } from "../shell/constants";
@@ -121,6 +122,8 @@ function EvidenceBody({
   onReviewed?: (findingId: string, review: ReviewView | null | undefined, latestReviewId?: number) => void;
 }) {
   const [prove, setProve] = useState(false);
+  // Where the contract text is hidden (a phone), the sheet offers no button that would mark a passage in it.
+  const narrow = useNarrow();
   // Read once when the drawer opens: the first layer needs it, and "Prove it" renders the same read.
   const read = useRunExplanation(run ? run.id : null);
   const explanation = read?.explanation ?? null;
@@ -293,9 +296,14 @@ function EvidenceBody({
             <div key={i} className={styles.drawerSpan}>
               {section && span.verified ? (
                 <>
-                  <button type="button" className={styles.drawerRef} onClick={() => onJump(section.id, span)}>
-                    {passageLabel(span, section)}
-                  </button>
+                  {narrow ? (
+                    // On a phone the contract text is hidden: the passage is shown below, and nothing claims to open it.
+                    <div className={styles.drawerRefStatic}>{passageLabel(span, section)}</div>
+                  ) : (
+                    <button type="button" className={styles.drawerRef} onClick={() => onJump(section.id, span)}>
+                      {passageLabel(span, section)}
+                    </button>
+                  )}
                   {span.clauseLabel && <div className={styles.drawerRefStatic}>within {citationLabel(section)}, as the reading divided the document</div>}
                 </>
               ) : (
@@ -347,7 +355,7 @@ function EvidenceBody({
           <div className={styles.layerHead}>
             <h4>The contract on these clauses</h4>
           </div>
-          <RelationNotes notes={finding.relations} full onJump={onJump} />
+          <RelationNotes notes={finding.relations} full onJump={narrow ? undefined : onJump} />
           <p className={styles.drawerRefStatic}>
             Code located each statement and the passages it joins in this document. That a statement is there is a fact about the text; what it means for this
             question is the model&apos;s reading and yours.

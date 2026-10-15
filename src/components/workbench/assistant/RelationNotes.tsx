@@ -64,7 +64,8 @@ function RelationRow({
   line: string;
   relation: RelationView;
   full: boolean;
-  onJump: (sectionId: string, span: SpanView | null) => void;
+  /** Absent where the contract text is hidden (the evidence sheet on a phone): each end is then shown, not offered. */
+  onJump?: (sectionId: string, span: SpanView | null) => void;
   onEvidence?: (trigger: HTMLElement | null) => void;
   effect: RelationNoteView["effect"] | "stated";
 }) {
@@ -77,25 +78,39 @@ function RelationRow({
         <span className={styles.visuallyHidden}>Located by code: </span>
         {line}
       </p>
-      {relationEnds(relation).map(({ role, passage }) => (
-        <button
-          key={role}
-          type="button"
-          className={styles.citationRow}
-          // As a quote does: on a phone the paper is hidden, so the evidence sheet opens instead (FindingCard).
-          onClick={(e) =>
-            onEvidence && window.matchMedia(NARROW_QUERY).matches ? onEvidence(e.currentTarget) : onJump(passage.sectionId, passageSpan(passage))
-          }
-          title="Show in the document"
-        >
-          <span className={styles.citationLabel}>
-            {role} · {passage.label}
-          </span>
-          <span className={styles.citationExcerpt}>
-            <Visible text={full ? passage.text : excerpt(passage.text)} />
-          </span>
-        </button>
-      ))}
+      {relationEnds(relation).map(({ role, passage }) => {
+        const content = (
+          <>
+            <span className={styles.citationLabel}>
+              {role} · {passage.label}
+            </span>
+            <span className={styles.citationExcerpt}>
+              <Visible text={full ? passage.text : excerpt(passage.text)} />
+            </span>
+          </>
+        );
+        if (!onJump) {
+          return (
+            <div key={role} className={`${styles.citationRow} ${styles.citationStatic}`}>
+              {content}
+            </div>
+          );
+        }
+        return (
+          <button
+            key={role}
+            type="button"
+            className={styles.citationRow}
+            // As a quote does: on a phone the paper is hidden, so the evidence sheet opens instead (FindingCard).
+            onClick={(e) =>
+              onEvidence && window.matchMedia(NARROW_QUERY).matches ? onEvidence(e.currentTarget) : onJump(passage.sectionId, passageSpan(passage))
+            }
+            title="Show in the document"
+          >
+            {content}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -109,7 +124,7 @@ export function RelationNotes({
 }: {
   notes: RelationNoteView[];
   full?: boolean;
-  onJump: (sectionId: string, span: SpanView | null) => void;
+  onJump?: (sectionId: string, span: SpanView | null) => void;
   onEvidence?: (trigger: HTMLElement | null) => void;
 }) {
   if (notes.length === 0) return null;

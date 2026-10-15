@@ -64,6 +64,13 @@ describe("RelationNotes", () => {
     expect(onJump).toHaveBeenLastCalledWith("amend", expect.objectContaining({ start: 122, end: 260 }));
   });
 
+  it("where the document cannot be opened, shows each end and offers no button for it", () => {
+    render(<RelationNotes notes={[{ effect: "replaced", sentence: "code's whole sentence", relation: REPLACES }]} full />);
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.getByText(/Original clause 3\.2 · §3/)).toBeTruthy();
+    expect(screen.getByText(/Replacement · RECITALS/)).toBeTruthy();
+  });
+
   it("shows code's whole sentence where the drawer asks for it", () => {
     render(
       <RelationNotes notes={[{ effect: "precedence", sentence: "code's whole sentence about the ranking", relation: PRECEDENCE }]} full onJump={vi.fn()} />,

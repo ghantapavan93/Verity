@@ -365,4 +365,37 @@ describe("one drawer, another finding", () => {
     expect(within(human()).queryByLabelText("Your name, recorded with the decision")).toBeNull();
     expect(within(human()).getByRole("button", { name: "Dismiss" })).toBeTruthy();
   });
+
+  it("on a phone, where the contract text is hidden, offers no button that would mark a passage in it", () => {
+    // The 375 px review (2026-10-15): the sheet's source link and relation ends marked text in the hidden document pane.
+    const replaces = {
+      kind: "replaces",
+      statement: { sectionId: "s0", label: "AMENDMENT NO. 1", start: 0, end: 30, text: "clause 4.1 is deleted and replaced" },
+      target: "4.1",
+      replaced: { sectionId: "s0", label: "EXHIBIT 10.102 (part 1)", start: 4136, end: 4284, text: QUOTE },
+      replacement: null,
+      scope: null,
+      effective: null,
+      parts: [],
+    };
+    const view = { ...finding(null), relations: [{ effect: "replaced", sentence: "code's whole sentence", relation: replaces }] } as unknown as FindingView;
+    const buttons = (narrow: boolean): number => {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        writable: true,
+        value: (media: string) => ({ matches: narrow, media, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+      });
+      renderDrawer(view);
+      const count = screen.getAllByRole("button").length;
+      expect(screen.getByText(/Original clause 4\.1/)).toBeTruthy(); // the passage is still shown, as text
+      cleanup();
+      return count;
+    };
+    try {
+      // On a wide screen: the source link and both ends of the relation open the document; on a phone none is offered.
+      expect(buttons(false) - buttons(true)).toBe(3);
+    } finally {
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
 });

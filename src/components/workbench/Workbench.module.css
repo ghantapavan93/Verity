@@ -953,6 +953,14 @@
   background: var(--accent-tint);
 }
 
+/* A passage shown where it cannot be opened (the evidence sheet on a phone): read, not pressed. */
+.citationStatic,
+.citationStatic:hover {
+  cursor: default;
+  border-color: var(--border);
+  background: var(--bg-sunken);
+}
+
 .citationLabel {
   font-size: 12.5px;
   font-weight: 600;
