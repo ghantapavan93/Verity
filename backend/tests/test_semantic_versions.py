@@ -76,6 +76,9 @@ RECORDED: dict[str, str] = {
     # policy-v12, 2026-10-15: the time a question asks at ("in June 2026") counts as stated when the answer repeats it, so
     # the status no longer depends on whether the answer says it (values.frame_times). v11 is committed, so this is a bump.
     "policy-v12": "995405407aa14b15",
+    # policy-v13, 2026-10-15: the model's stated value is its stance between a replaced clause and its replacement; a
+    # section handle the model was not given is marked and lowers a pass. v12 is committed, so this is a bump.
+    "policy-v13": "9e5f78fbbf5ead56",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
     # v8, 2026-10-13: no span begins or ends inside a number; a number's sign is part of its value (F-03). Re-recorded the

@@ -87,3 +87,59 @@ describe("FindingsView", () => {
     expect(api.listFindings).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("FindingsView: what needs a person comes first", () => {
+  it("lists a finding that needs review before an answer within the same contract, whatever order the API gave", async () => {
+    const answered = { ...record("f3", "Payment terms", null, 0), status: "pass", statusSource: "model_hint" } as FindingRecord;
+    const flagged = record("f4", "Renewal notice", null, 0);
+    api.listFindings.mockResolvedValue([answered, flagged]);
+    render(<FindingsView notice={null} onOpen={vi.fn()} />);
+    const first = await screen.findByText("Renewal notice");
+    expect(first.compareDocumentPosition(screen.getByText("Payment terms")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("lists every undecided finding before a decided one, a decided needs-review finding included", async () => {
+    const decided = { ...record("f5", "Renewal notice", CONFIRMED, 1) } as FindingRecord;
+    const answered = { ...record("f6", "Payment terms", null, 0), status: "pass", statusSource: "model_hint" } as FindingRecord;
+    const flagged = record("f7", "Liability cap", null, 0);
+    api.listFindings.mockResolvedValue([decided, answered, flagged]);
+    render(<FindingsView notice={null} onOpen={vi.fn()} />);
+    const at = (topic: string) => screen.findByText(topic);
+    const [cap, payment, renewal] = await Promise.all([at("Liability cap"), at("Payment terms"), at("Renewal notice")]);
+    expect(cap.compareDocumentPosition(payment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(payment.compareDocumentPosition(renewal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps a row where it is once it is decided here, under the reader's hand", async () => {
+    const flagged = record("f8", "Liability cap", null, 0);
+    const answered = { ...record("f9", "Payment terms", null, 0), status: "pass", statusSource: "model_hint" } as FindingRecord;
+    api.listFindings.mockResolvedValue([answered, flagged]);
+    api.reviewFinding.mockResolvedValue({ review: CONFIRMED, latestReviewId: 1 } as Awaited<ReturnType<typeof reviewFinding>>);
+    render(<FindingsView notice={null} onOpen={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm: Liability cap" }));
+    await screen.findByRole("button", { name: /Undo/ });
+    const cap = screen.getByText("Liability cap");
+    expect(cap.compareDocumentPosition(screen.getByText("Payment terms")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps a row where it is when a refused decision reads the list again", async () => {
+    const flagged = record("f10", "Liability cap", null, 0);
+    const answered = { ...record("f11", "Payment terms", null, 0), status: "pass", statusSource: "model_hint" } as FindingRecord;
+    api.listFindings.mockResolvedValueOnce([answered, flagged]).mockResolvedValueOnce([answered, { ...flagged, review: CONFIRMED, latestReviewId: 1 }]);
+    api.reviewFinding.mockRejectedValue(Object.assign(new Error("decided since"), { status: 409 }));
+    render(<FindingsView notice={null} onOpen={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Dismiss: Liability cap" }));
+    await screen.findByText(/decided since/);
+    await screen.findByText(/Confirmed/);
+    const cap = screen.getByText("Liability cap");
+    expect(cap.compareDocumentPosition(screen.getByText("Payment terms")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("offers the amendment challenge when there is nothing to list", async () => {
+    api.listFindings.mockResolvedValue([]);
+    const start = vi.fn();
+    render(<FindingsView notice={null} onOpen={vi.fn()} onStart={start} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Try the amendment challenge" }));
+    expect(start).toHaveBeenCalledOnce();
+  });
+});

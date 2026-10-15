@@ -286,7 +286,8 @@ export function StateStory({ initial }: { initial?: ContractStateView }) {
       <Shell>
         <div className={styles.notice} role="alert">
           <h1 className={styles.noticeTitle}>The contract-state record is not connected.</h1>
-          <p>{view.detail}</p>
+          <p>This deployment does not carry the recorded research this page shows. The workbench does not use it.</p>
+          <p className={styles.noticeDetail}>For whoever runs it: {view.detail}</p>
         </div>
       </Shell>
     );

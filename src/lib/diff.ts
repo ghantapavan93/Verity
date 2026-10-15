@@ -95,13 +95,22 @@ export function aroundChanges(pieces: readonly DiffPiece[], contextWords = 8, ma
   while (!pieces[last].changed) last--;
   const out: DiffPiece[] = [];
   const before = pieces[first - 1]?.text ?? "";
-  const lead = before.split(/(?<=\s)/).slice(-contextWords).join("");
+  const lead = before
+    .split(/(?<=\s)/)
+    .slice(-contextWords)
+    .join("");
   out.push({ text: (lead.length < before.length ? "…" : "") + lead, changed: false });
   out.push(...pieces.slice(first, last + 1));
   const after = pieces[last + 1]?.text ?? "";
-  const trail = after.split(/(?<=\s)/).slice(0, contextWords).join("");
+  const trail = after
+    .split(/(?<=\s)/)
+    .slice(0, contextWords)
+    .join("");
   out.push({ text: trail + (trail.length < after.length ? "…" : ""), changed: false });
-  return clip(out.filter((p) => p.text.length > 0), maxChars);
+  return clip(
+    out.filter((p) => p.text.length > 0),
+    maxChars,
+  );
 }
 
 function clip(pieces: DiffPiece[], maxChars: number): DiffPiece[] {

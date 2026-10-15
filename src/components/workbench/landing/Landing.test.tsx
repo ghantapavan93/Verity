@@ -258,7 +258,7 @@ describe("Landing: a file that could not be added", () => {
     renderLanding(health("entered"), true, null, false, { name: "scan.pdf", reason: "the PDF has no text layer on any page" });
     const alert = screen.getByRole("alert");
     expect(alert.textContent).toBe("scan.pdf was not added: the PDF has no text layer on any page");
-    const sample = screen.getByText(/No contract to hand\?/);
+    const sample = screen.getByText(/Or open a real standard agreement/);
     expect(alert.compareDocumentPosition(sample) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -273,7 +273,7 @@ describe("Landing: the samples", () => {
     const load = vi.fn();
     renderLanding(health("off"), true, null, false, null, load);
     fireEvent.click(screen.getByRole("button", { name: "try a sample agreement" }));
-    fireEvent.click(screen.getByRole("button", { name: "try an amended agreement" }));
+    fireEvent.click(screen.getByRole("button", { name: /Try the amendment challenge/ }));
     expect(load.mock.calls).toEqual([["standard"], ["amended"]]);
   });
 });
@@ -285,7 +285,7 @@ describe("Landing: when the workbench cannot be reached", () => {
     expect(document.body.textContent).not.toMatch(/Model offline: /);
     expect((screen.getByRole("button", { name: "Add a contract" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "try a sample agreement" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "try an amended agreement" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /Try the amendment challenge/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("a store that cannot take a write is not called a model outage, and says adding or asking may fail", () => {

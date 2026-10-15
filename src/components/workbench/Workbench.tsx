@@ -36,7 +36,19 @@ import { FindingsView } from "./views/FindingsView";
 import { RunsView } from "./views/RunsView";
 import { Divider } from "./workspace/Divider";
 import { DocumentPane, type Highlight } from "./workspace/DocumentPane";
-import { errorMessage, getDocument, getGuidance, getRun, getRunDetail, health, listDocuments, listRuns, uploadDocument, type Health } from "@/lib/api";
+import {
+  ApiError,
+  errorMessage,
+  getDocument,
+  getGuidance,
+  getRun,
+  getRunDetail,
+  health,
+  listDocuments,
+  listRuns,
+  uploadDocument,
+  type Health,
+} from "@/lib/api";
 import {
   STAGE_LABELS,
   stageAnnouncement,
@@ -76,6 +88,8 @@ function WorkbenchSurface() {
   const [pendingName, setPendingName] = useState("");
   const [doc, setDoc] = useState<DocumentView | null>(null);
   const [sample, setSample] = useState<SampleKind | null>(null);
+  // On a phone the split shows one pane at a time (Workbench.module.css): the answer, or the contract. View state only.
+  const [narrowPane, setNarrowPane] = useState<"answer" | "contract">("answer");
   const [uploadError, setUploadError] = useState<{ name: string | null; reason: string } | null>(null);
   const [apiHealth, setApiHealth] = useState<Health | null>(null);
   const [accessKnown, setAccessKnown] = useState(true);
@@ -94,6 +108,15 @@ function WorkbenchSurface() {
 
   const runs = useRunFollower();
   const { run, show: showRun, refresh: refreshRun, claim: claimRun, setRunError, stop: stopRun, ask: startRun } = runs;
+  // On a phone, a new contract or a new run on screen opens on its answer, whatever put it there (an upload, a list, the
+  // palette, a link): the pane an earlier passage left on the contract hides the composer and the answer (skeptic
+  // review, 2026-10-15). Adjusted while rendering, keyed on what is shown; a jump within the same run keeps its pane.
+  const shownKey = `${doc?.id ?? ""}:${run?.id ?? ""}`;
+  const [paneKey, setPaneKey] = useState(shownKey);
+  if (paneKey !== shownKey) {
+    setPaneKey(shownKey);
+    setNarrowPane("answer");
+  }
   const guidance = useGuidance();
   const { guidance: guidanceRecord, setGuidance, setDraft: setGuidanceDraft, open: guidanceOpen, setOpen: setGuidanceOpen } = guidance;
   const memo = useMemoAction();
@@ -217,18 +240,21 @@ function WorkbenchSurface() {
     return () => window.cancelAnimationFrame(handle);
   }, [stage, doc]);
 
-  const loadSample = useCallback(async (kind: SampleKind) => {
-    setUploadError(null);
-    try {
-      // eslint-disable-next-line no-restricted-globals -- the bundled sample is a static file of this origin, not the API
-      const response = await fetch(SAMPLES[kind].path);
-      if (!response.ok) throw new Error("The sample agreement is missing from this build.");
-      const blob = await response.blob();
-      await loadFile(new File([blob], SAMPLES[kind].name, { type: blob.type }), kind);
-    } catch (error) {
-      setUploadError({ name: null, reason: errorMessage(error) });
-    }
-  }, [loadFile]);
+  const loadSample = useCallback(
+    async (kind: SampleKind) => {
+      setUploadError(null);
+      try {
+        // eslint-disable-next-line no-restricted-globals -- the bundled sample is a static file of this origin, not the API
+        const response = await fetch(SAMPLES[kind].path);
+        if (!response.ok) throw new Error("The sample agreement is missing from this build.");
+        const blob = await response.blob();
+        await loadFile(new File([blob], SAMPLES[kind].name, { type: blob.type }), kind);
+      } catch (error) {
+        setUploadError({ name: null, reason: errorMessage(error) });
+      }
+    },
+    [loadFile],
+  );
 
   // The API could not be asked: a dropped or picked file would only fail (round 2: a drop still said "Release to add").
   const unreachable = apiHealth !== null && !apiHealth.ok && !accessKnown;
@@ -252,6 +278,13 @@ function WorkbenchSurface() {
 
   // ---- opening records from the Documents, Findings and Runs surfaces ----------------------
 
+  /** Why a record could not be opened. A 404 says so in a sentence (the API's "run not found" read as a fault, QA
+   *  2026-10-15), and claims only what a 404 means here: not readable from this workspace, or gone. */
+  const openFailure = (error: unknown, record: "run" | "contract"): string =>
+    error instanceof ApiError && error.status === 404
+      ? `This ${record} cannot be opened in this workspace: it belongs to another one, or no longer exists.`
+      : errorMessage(error);
+
   const navigate = useCallback(
     (next: View) => {
       setViewError(null);
@@ -273,6 +306,7 @@ function WorkbenchSurface() {
       setViewError(null);
       if (doc?.id === id) {
         focusComposerOnOpen.current = show;
+        setNarrowPane("answer");
         setStage("workspace");
         if (show) setView("assistant");
         return;
@@ -288,10 +322,11 @@ function WorkbenchSurface() {
         setHighlight(null);
         setEvidence(null);
         focusComposerOnOpen.current = show;
+        setNarrowPane("answer");
         setStage("workspace");
         if (show) setView("assistant");
       } catch (error) {
-        setViewError(errorMessage(error));
+        setViewError(openFailure(error, "contract"));
       }
     },
     [doc, stopRun, showRun, resetMemo, setRunError],
@@ -322,10 +357,12 @@ function WorkbenchSurface() {
         setHighlight(null);
         setEvidence(null);
         setPendingFindingId(findingId);
+        // A run opens on its answer: the pane left on the contract by an earlier passage is not what was asked for.
+        setNarrowPane("answer");
         setStage("workspace");
         if (show) setView("assistant");
       } catch (error) {
-        if (current()) setViewError(errorMessage(error));
+        if (current()) setViewError(openFailure(error, "run"));
       }
     },
     [doc, claimRun, stopRun, showRun, setGuidance, setGuidanceDraft, resetMemo, setRunError],
@@ -380,6 +417,8 @@ function WorkbenchSurface() {
 
   const jumpTo = useCallback((sectionId: string, span: SpanView | null = null) => {
     if (!docPaneRef.current?.querySelector(`[data-section="${sectionId}"]`)) return;
+    // On a phone the contract is the other pane: show it, then mark the passage there.
+    if (window.matchMedia(NARROW_QUERY).matches) setNarrowPane("contract");
     // A new object every time, so jumping to the passage already marked scrolls back to it.
     setHighlight({ sectionId, span });
     setLit(sectionId);
@@ -394,8 +433,12 @@ function WorkbenchSurface() {
     (finding: FindingView, trigger: HTMLElement | null) => {
       evidenceTriggerRef.current = trigger;
       const shown = !!run?.findings.some((f) => f.id === finding.id);
-      const span = evidenceJump(finding, { shown, narrow: window.matchMedia(NARROW_QUERY).matches });
+      const narrow = window.matchMedia(NARROW_QUERY).matches;
+      const span = evidenceJump(finding, { shown, narrow });
       if (span) jumpTo(span.sectionId, span);
+      // On a phone the drawer is a sheet over the answer, and closing it returns focus to the card that opened it:
+      // that card must be on screen, not behind the contract pane.
+      if (narrow) setNarrowPane("answer");
       setEvidence(finding);
     },
     [jumpTo, run],
@@ -584,17 +627,27 @@ function WorkbenchSurface() {
                       notice={viewError}
                       onOpen={(id) => void openDocument(id)}
                       onAdd={() => fileInputRef.current?.click()}
+                      onStart={() => void loadSample("amended")}
                     />
                   )}
-                  {view === "findings" && <FindingsView notice={viewError} onOpen={(record) => void openRun(record.runId, record.id)} />}
+                  {view === "findings" && (
+                    <FindingsView notice={viewError} onOpen={(record) => void openRun(record.runId, record.id)} onStart={() => void loadSample("amended")} />
+                  )}
                   {view === "runs" && <RunsView notice={viewError} currentRunId={run?.id ?? null} onOpenRun={(id) => void openRun(id)} />}
                 </motion.div>
               ) : (
                 <motion.div key="workspace" className={styles.main} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={quick}>
                   <div className={styles.narrowNote}>
-                    <p>The contract text needs a wider window. Findings, evidence and the record work at this size.</p>
+                    <div className={styles.paneSwitch} role="group" aria-label="Show on this screen">
+                      <button type="button" aria-pressed={narrowPane === "answer"} onClick={() => setNarrowPane("answer")}>
+                        Answer
+                      </button>
+                      <button type="button" aria-pressed={narrowPane === "contract"} onClick={() => setNarrowPane("contract")}>
+                        Contract
+                      </button>
+                    </div>
                   </div>
-                  <div className={styles.split} style={{ gridTemplateColumns: `${split.docWidth}% 8px minmax(0, 1fr)` }}>
+                  <div className={styles.split} data-pane={narrowPane} style={{ gridTemplateColumns: `${split.docWidth}% 8px minmax(0, 1fr)` }}>
                     <DocumentPane
                       doc={doc}
                       sample={sample}

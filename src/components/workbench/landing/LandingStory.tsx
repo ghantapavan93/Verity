@@ -326,11 +326,11 @@ export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place
   const lines = [
     {
       head: "It does not read the whole agreement.",
-      text: "Up to six sections per question, chosen by retrieval, and up to two more the contract itself points to from them (a definition they use, an amendment, a clause they cite); or the opening sections when retrieval ranks none. The rest of the contract is not read. Every answer says how many it was handed and why, and the memo repeats it.",
+      text: "Up to six sections per question, chosen by retrieval, and up to two the contract points to from them. The rest is not read. Every answer says how many it was handed, and why.",
     },
     {
       head: "It does not pass a clause on its own.",
-      text: "A pass is the model's proposal, never code's. Code lowers it to review when the evidence shown does not establish it: a value no verified quote states, a section the document does not have, a period short of your guidance. Who holds a right, and whether a condition was left out, code does not check.",
+      text: "A pass is the model's proposal. Code lowers it to review when the evidence shown does not establish it. Who holds a right, or whether a condition was left out, code does not check.",
     },
     {
       head: "It does not hide a miss.",

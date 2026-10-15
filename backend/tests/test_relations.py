@@ -313,3 +313,70 @@ def test_an_unverified_quote_grounds_nothing_and_the_record_round_trips() -> Non
     recorded = load(dump(Recorded(tuple(relations), {0: tuple(notes)})))
     assert recorded.relations == tuple(relations) and recorded.notes == {0: tuple(notes)}
     assert load(None) == Recorded()
+
+
+# The 30/60-day full replacement: an answer can quote both clauses and state both values whatever it concludes, so the
+# quotes and the prose's values cannot tell a wrong answer from a right one. The model's own stated value (`observed`)
+# can, when it names one of the values the two texts differ in. No phrase of the prose is read.
+COMPETING = [
+    section("9.1 Supplier shall give thirty (30) days' notice of a price increase.", number="9", heading="PRICES", id="s9"),
+    section(
+        "Clause 9.1 of the Agreement is deleted in its entirety and replaced with the following: "
+        '"9.1 Supplier shall give sixty (60) days\' notice of a price increase."',
+        id="am",
+    ),
+]
+BOTH = "Supplier must give 30 days' notice; the amendment mentions 60 days."
+
+
+def _competing(
+    answer: str, observed: str | None, old: bool, new: bool, question: str = "How much notice must Supplier give before raising prices?"
+) -> list[str]:
+    relations = locate_relations(COMPETING, AS_OF)
+    (relation,) = relations
+    assert relation.replaced is not None and relation.replacement is not None
+    spans = [(p.section_id, p.start, p.end) for p, used in ((relation.replaced, old), (relation.replacement, new)) if used]
+    return [n.effect for n in assess(relations, spans, f"{answer} {observed or ''}".strip(), question, parts_of(COMPETING), observed)]
+
+
+@pytest.mark.parametrize(
+    ("answer", "observed", "old", "new", "effect"),
+    [
+        (BOTH, "30 days", True, True, "old_value"),  # quotes both; its stated value is the replaced one: a concern
+        (BOTH, "60 days", True, True, "context"),  # control: its stated value is the replacement's
+        (BOTH, "30 or 60 days", True, True, "context"),  # control: it does not decide; nothing for code to say
+        (BOTH, None, True, True, "context"),  # control: no stated value; the prose states both (as before)
+        (BOTH, "30 days", True, False, "replaced"),  # quotes only the old clause, states the old value: code's status
+        ("Supplier must give 60 days' notice.", "60 days", True, False, "context"),  # control: the replacement's value
+    ],
+)
+def test_the_models_stated_value_is_its_stance_between_two_quoted_clauses(answer: str, observed: str | None, old: bool, new: bool, effect: str) -> None:
+    assert _competing(answer, observed, old, new) == [effect]
+
+
+def test_control_a_historical_question_keeps_the_original_as_context_whatever_the_stated_value() -> None:
+    assert _competing(BOTH, "30 days", True, True, question="What notice did the agreement originally require?") == ["context"]
+
+
+def _competing_sentence(answer: str, observed: str | None, old: bool, new: bool) -> str:
+    relations = locate_relations(COMPETING, AS_OF)
+    (relation,) = relations
+    assert relation.replaced is not None and relation.replacement is not None
+    spans = [(p.section_id, p.start, p.end) for p, used in ((relation.replaced, old), (relation.replacement, new)) if used]
+    question = "How much notice must Supplier give before raising prices?"
+    (note,) = assess(relations, spans, f"{answer} {observed or ''}".strip(), question, parts_of(COMPETING), observed)
+    return note.sentence
+
+
+@pytest.mark.parametrize(("old", "new"), [(True, True), (True, False)])
+def test_a_sentence_decided_by_the_stated_value_speaks_of_that_value_not_of_everything_the_answer_states(old: bool, new: bool) -> None:
+    # The prose names both values; only the stated value is the replaced one. "States none only the new wording states"
+    # would be false of this answer (skeptic, 2026-10-15).
+    sentence = _competing_sentence(BOTH, "30 days", old, new)
+    assert "the value it gives as the contract's includes one only the replaced wording states" in sentence
+    assert "states a value only the replaced wording states" not in sentence and "nor states a value only it states" not in sentence
+
+
+def test_control_with_no_stated_value_the_sentence_still_speaks_of_what_the_answer_states() -> None:
+    sentence = _competing_sentence("Supplier must give 30 days' notice.", None, True, True)
+    assert "states a value only the replaced wording states and none only the new wording states" in sentence

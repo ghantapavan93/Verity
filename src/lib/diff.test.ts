@@ -13,7 +13,11 @@ const REPLACEMENT =
   '7.2 This Agreement renews automatically at the end of the Initial Term and at the end of each Renewal Term for a further term of twelve (12) months (each a "Renewal Term") unless either party gives the other written notice of non-renewal not less than one hundred fifty (150) days, and not more than two hundred ten (210) days, before the end of the then-current Term. A notice of non-renewal given outside that period has no effect.';
 
 const text = (pieces: readonly DiffPiece[]) => pieces.map((p) => p.text).join("");
-const marked = (pieces: readonly DiffPiece[]) => pieces.filter((p) => p.changed).map((p) => p.text).join(" | ");
+const marked = (pieces: readonly DiffPiece[]) =>
+  pieces
+    .filter((p) => p.changed)
+    .map((p) => p.text)
+    .join(" | ");
 
 describe("wordContrast", () => {
   it("marks the words the two clauses differ in, and nothing they share", () => {
@@ -30,7 +34,7 @@ describe("wordContrast", () => {
   });
 
   it("gives back each text exactly, so nothing is invented or lost", () => {
-    const seeded = (seed: number) => () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    const seeded = (seed: number) => () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
     const random = seeded(7);
     const words = ["notice", "days", "(90)", "the", "Term.", "not", "less", "than", "  ", "\n"];
     for (let round = 0; round < 200; round++) {

@@ -17,18 +17,13 @@ import { INDEPENDENCE } from "@/lib/independence";
 import { runOutcome } from "@/lib/checks";
 import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
-/** How a status is set, in the order the evidence drawer reads it. Static: it describes the product, not one run. */
+/** How a status is set, in the order the evidence drawer reads it, each step with who acts. Static: it describes the
+ *  product, not one run. One line each: the drawer and the record carry the detail. */
 const LAYERS = [
-  {
-    name: "Model proposed",
-    text: "An open-weights model reads the sections retrieval chose for the question and proposes an answer, quoting the contract.",
-  },
-  { name: "Source checked", text: "Code looks for every quote in the document text. A quote it cannot find is withheld: never shown as evidence." },
-  {
-    name: "Code compared",
-    text: "Where the contract and your guidance both state a period, code puts them on the calendar: days, weeks, months, and Business Days as the contract defines them. A shortfall sends the finding to review, and so does a pair code cannot put in order. A pass stays the model's proposal.",
-  },
-  { name: "Person reviewed", text: "A reviewer confirms or dismisses each finding. The decision is kept with the run, under their name." },
+  { who: "model", name: "Proposes", text: "An answer from the sections retrieval chose, quoting the contract." },
+  { who: "code", name: "Looks for every quote", text: "One it cannot find in the document is withheld, never shown as evidence." },
+  { who: "code", name: "Compares periods", text: "Contract against your guidance, on the calendar. A shortfall goes to review." },
+  { who: "person", name: "Decides", text: "Confirms or dismisses each finding, under their name." },
 ] as const;
 
 /** The first screen: what Verity is, where a contract goes, and one finished review a stranger can open. */
@@ -154,6 +149,11 @@ export function Landing({
 
       <div className={`${styles.body} ${stage === "dragging" ? styles.dimmed : ""}`}>
         <div>
+          {viewError && (
+            <p className={styles.linkError} role="alert">
+              {viewError}
+            </p>
+          )}
           <motion.p className={styles.kicker} {...rise(0)}>
             <motion.span
               className={styles.kickerRule}
@@ -167,10 +167,24 @@ export function Landing({
             Ask about a contract. <span className={styles.titleQuiet}>See who decided each answer.</span>
           </motion.h1>
           <motion.p className={styles.lead} {...rise(0.12)}>
-            Verity hands an open-weights model the sections your question needs, checks every passage it quotes against the document text, and records each run
-            so an answer can be replayed and traced. Whether a quote supports the answer is a reading code does not make: a person has the last word.
+            An open-weights model answers. Code looks for every quote in the contract, withholds any it cannot find, and points to the amendment and precedence
+            wording it can locate. A person decides.
           </motion.p>
-          <motion.p className={styles.breakLine} {...rise(0.15)}>
+          {/* The strongest first visit is the real one: a contract whose amendment changes the answer. One primary action. */}
+          {stage === "empty" && (
+            <motion.div {...rise(0.15)}>
+              <button type="button" className={styles.challenge} onClick={() => onLoadSample("amended")} disabled={unreachable}>
+                <span className={styles.challengeTitle}>
+                  Try the amendment challenge
+                  <IconArrowRight />
+                </span>
+                <span className={styles.challengeText}>
+                  A synthetic agreement whose amendment replaces a clause. Ask a ready question; see what the model said and what code checked.
+                </span>
+              </button>
+            </motion.div>
+          )}
+          <motion.p className={styles.breakLine} {...rise(0.18)}>
             <a href="/break">An answer that passed every check and still gave a right to the wrong party</a>
           </motion.p>
 
@@ -233,7 +247,7 @@ export function Landing({
                             : "."}
                     </div>
                   </div>
-                  <button type="button" className={styles.primary} aria-label="Add a contract" onClick={onPickFile} disabled={unreachable}>
+                  <button type="button" className={styles.secondary} aria-label="Add a contract" onClick={onPickFile} disabled={unreachable}>
                     Add a contract
                   </button>
                 </div>
@@ -250,13 +264,9 @@ export function Landing({
                 </p>
               )}
               <p className={styles.after}>
-                No contract to hand? Use the sample, a real standard agreement:{" "}
+                Or open a real standard agreement, unmodified:{" "}
                 <button type="button" className={styles.link} onClick={() => onLoadSample("standard")} disabled={unreachable}>
                   try a sample agreement
-                </button>
-                {", or a synthetic one an amendment changes, to see what code says about it: "}
-                <button type="button" className={styles.link} onClick={() => onLoadSample("amended")} disabled={unreachable}>
-                  try an amended agreement
                 </button>
               </p>
               {demo && (
@@ -294,11 +304,6 @@ export function Landing({
                     The model is offline ({apiHealth.detail}). Contracts can still be added and read; questions will fail until it is back.
                   </p>
                 )
-              )}
-              {viewError && (
-                <p className={styles.error} role="alert">
-                  {viewError}
-                </p>
               )}
               {recent.length > 0 && (
                 <motion.div className={styles.ledger} {...rise(0.24)}>
@@ -384,15 +389,16 @@ export function Landing({
             )}
             <ol className={styles.layers}>
               <li className={styles.layersHead}>How each status is set</li>
-              {LAYERS.map((layer, i) => (
-                <li key={layer.name} className={styles.layer}>
-                  <span className={`${styles.layerNode} ${i === 2 ? styles.layerNodeCode : ""}`}>{i + 1}</span>
+              {LAYERS.map((layer) => (
+                <li key={layer.name} className={styles.layer} data-who={layer.who}>
+                  <span className={styles.layerWho}>{layer.who}</span>
                   <span>
                     <span className={styles.layerName}>{layer.name}</span>
                     <p className={styles.layerText}>{layer.text}</p>
                   </span>
                 </li>
               ))}
+              <li className={styles.layersFoot}>Code can lower a status, never raise one. A pass stays the model&apos;s.</li>
             </ol>
           </motion.aside>
         )}

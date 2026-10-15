@@ -230,8 +230,8 @@ export function RunsView({
           )}
         </h1>
         <p className={styles.lede}>
-          A run stores the document and guidance hashes, the prompt version and hash, the decoding options, the sections handed to the model, the raw structured
-          output and how each quoted passage was verified. Nothing is summarised away.
+          Every input and output of each run, kept as recorded: hashes, prompt, options, the sections the model was handed, its raw output, each quote&apos;s
+          check.
         </p>
         {citations && citations.runs > 0 && (
           <>

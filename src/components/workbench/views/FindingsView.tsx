@@ -27,7 +27,37 @@ const VERB: Record<ReviewVerdict, string> = { confirmed: "Confirm", dismissed: "
  * Findings across runs, grouped by document. Model proposes, code verifies, a person adjudicates:
  * each row carries the person's decision as the API recorded it, and the controls to record one.
  */
-export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen: (record: FindingRecord) => void }) {
+/**
+ * What needs a person first, within each document: undecided needs review, then other undecided answers, then decided
+ * ones (a needs-review finding someone decided has had its person). Documents keep the API's order, newest run first,
+ * and a stable sort keeps it inside each rank. Read once, when the list loads: a row decided here stays where it is,
+ * under the reader's hand, until the list is read again (a live re-sort moved it away from the click).
+ */
+export function forAttention(rows: FindingRecord[]): FindingRecord[] {
+  const documents = new Map<string, number>();
+  for (const r of rows) if (!documents.has(r.documentId)) documents.set(r.documentId, documents.size);
+  const rank = (r: FindingRecord) => (r.review ? 2 : r.status === "needs_review" ? 0 : 1);
+  return [...rows].sort((a, b) => (documents.get(a.documentId) ?? 0) - (documents.get(b.documentId) ?? 0) || rank(a) - rank(b));
+}
+
+/** A list read again while it is shown keeps its rows where they are: a refused decision reads it again, and the row the
+ *  reader just clicked must not move. Rows it did not show go after them, in attention order. */
+function inShownOrder(rows: FindingRecord[], shown: FindingRecord[]): FindingRecord[] {
+  const at = new Map(shown.map((r, i) => [r.id, i]));
+  const known = rows.filter((r) => at.has(r.id)).sort((a, b) => (at.get(a.id) ?? 0) - (at.get(b.id) ?? 0));
+  return [...known, ...forAttention(rows.filter((r) => !at.has(r.id)))];
+}
+
+export function FindingsView({
+  notice,
+  onOpen,
+  onStart,
+}: {
+  notice: string | null;
+  onOpen: (record: FindingRecord) => void;
+  /** Opens the amended sample: the empty list's next step. */
+  onStart?: () => void;
+}) {
   const [records, setRecords] = useState<FindingRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -38,14 +68,14 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
   useEffect(() => {
     let cancelled = false;
     listFindings()
-      .then((rows) => !cancelled && setRecords(rows))
+      .then((rows) => !cancelled && setRecords((shown) => (shown ? inShownOrder(rows, shown) : forAttention(rows))))
       .catch((e: unknown) => !cancelled && setError(errorMessage(e)));
     return () => {
       cancelled = true;
     };
   }, [attempt]);
 
-  // Grouped by document, newest run first, in the order the API returned them.
+  // Grouped by document, newest run first, in the order forAttention left them.
   const groups = useMemo(() => {
     const byDocument = new Map<string, { name: string; items: FindingRecord[] }>();
     for (const r of (records ?? []).filter((row) => keep(filter, row))) {
@@ -97,9 +127,7 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
           {records && <span className={styles.count}>{records.length}</span>}
         </h1>
         <p className={styles.lede}>
-          Every finding here cites text that code found in the contract, word for word or differing only in spacing, case, punctuation, how a number is written,
-          or a section number and heading at the quote&rsquo;s start. Found is not the same as right: open a finding to see its passage in the document and
-          decide. Where a point was not found, the passages marked <em>searched</em> are the closest provisions read, not support for a claim.
+          Every finding cites text code found in the contract. Found is not right: open one, read the passage, decide.
           {records && records.length > 0 && ` ${plural(awaiting, "finding")} awaiting review · ${reviewed} reviewed.`}
         </p>
         {records && records.length > 0 && (
@@ -129,7 +157,12 @@ export function FindingsView({ notice, onOpen }: { notice: string | null; onOpen
 
         {records && records.length === 0 && (
           <div className={styles.empty}>
-            <p>No findings yet. Open a contract and ask it a question.</p>
+            <p>No findings yet. A finding is one answer to a question about a contract, with the passages it cites.</p>
+            {onStart && (
+              <button type="button" className={wb.ghostButton} onClick={onStart}>
+                Try the amendment challenge
+              </button>
+            )}
           </div>
         )}
         {records && records.length > 0 && groups.length === 0 && (

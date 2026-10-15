@@ -189,12 +189,35 @@ test.describe("interaction and accessibility", () => {
     await expect(drawer).toBeHidden();
   });
 
-  test("a narrow window gets a plain note instead of a cramped split", async ({ page }) => {
+  test("on a phone, a contract opened again from the list opens on its answer, not the pane left open before", async ({ page }) => {
+    // Skeptic review, 2026-10-15: the pane was view state that nothing reset, so a run or contract opened from a list
+    // showed the contract text with the composer hidden.
     await page.setViewportSize({ width: 600, height: 700 });
     await page.goto("/");
     await page.getByRole("button", { name: "try a sample agreement" }).click();
     await expect(page).toHaveURL(/[?&]document=/);
-    await expect(page.getByText(/needs a wider window/)).toBeVisible();
+    const composer = page.getByPlaceholder("Ask a question about this contract");
+    await page.getByRole("button", { name: "Contract", exact: true }).click();
+    await expect(composer).toBeHidden();
+    await page.getByRole("button", { name: "Documents" }).click();
+    await page.getByRole("button").filter({ hasText: "Cloud Service Agreement (Common Paper)" }).first().click();
+    await expect(composer).toBeVisible();
+  });
+
+  test("a narrow window shows one pane at a time, the answer or the contract, never a cramped split", async ({ page }) => {
+    await page.setViewportSize({ width: 600, height: 700 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "try a sample agreement" }).click();
+    await expect(page).toHaveURL(/[?&]document=/);
+    const composer = page.getByPlaceholder("Ask a question about this contract");
+    const contract = page.getByLabel("Contract text");
+    await expect(composer).toBeVisible();
+    await expect(contract).toBeHidden();
+    await page.getByRole("button", { name: "Contract", exact: true }).click();
+    await expect(contract).toBeVisible();
+    await expect(composer).toBeHidden();
+    await page.getByRole("button", { name: "Answer", exact: true }).click();
+    await expect(composer).toBeVisible();
   });
 
   test("no serious or critical accessibility violations on the landing, the workspace and the open drawer", async ({ page }) => {

@@ -12,19 +12,23 @@ so of two requests racing each other the second is handed the first's run, and n
 from __future__ import annotations
 
 import json
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, load_prompt
 from ..config import settings
-from ..errors import NotFound
+from ..errors import InvalidInput, NotFound
 from ..hashing import fingerprint
 from ..ingest.invisible import visible_text
-from ..models import Document, Guidance, Run
+from ..models import Document, Guidance, Run, Section, utcnow
 from ..providers.base import ModelProvider
 from ..retrieval.aliases import ALIASES_SHA256
 from ..routing.router import ModelRouter, task_for
+from ..runs.relations import reached_start, replacement_starts
 from ..runs.versions import SEMANTIC_VERSIONS
 from .quotas import admit, run_quotas
 from .workspace import require_document, require_guidance
@@ -67,6 +71,41 @@ def run_options(model: str | None = None) -> RunOptions:
     return options
 
 
+# The replacement starts each document's statements give. A document's sections never change (its id and sha256 name
+# its text), so they are read once per process, not on every request: a repeated question is handed its run without
+# reading the document again.
+_STARTS: OrderedDict[tuple[str, str], tuple[str, ...]] = OrderedDict()
+_STARTS_KEPT = 256
+_STARTS_LOCK = threading.Lock()
+
+
+def _document_starts(session: Session, document: Document) -> tuple[str, ...]:
+    key = (document.id, document.sha256)
+    with _STARTS_LOCK:
+        if key in _STARTS:
+            _STARTS.move_to_end(key)
+            return _STARTS[key]
+    sections = session.query(Section).filter(Section.document_id == document.id).order_by(Section.ordinal).all()
+    starts = replacement_starts(sections)
+    with _STARTS_LOCK:
+        _STARTS[key] = starts
+        while len(_STARTS) > _STARTS_KEPT:
+            _STARTS.popitem(last=False)
+    return starts
+
+
+def identity_options(session: Session, document: Document, model: str | None, now: datetime) -> RunOptions:
+    """The options that are a run's identity on ``now``: run_options, and the latest replacement start the document gives
+    that is already reached. Whether a start is reached decides what a run says (runs.relations), so a run is the same
+    run only while the same starts are reached; the key enters only when there is one, so a document with no dated start
+    keeps the fingerprint it always had. Every lookup of a run by its inputs uses this (start_run, goldens.run_for)."""
+    options = run_options(model)
+    reached = reached_start(_document_starts(session, document), now.date())
+    if reached is not None:
+        options["latest_start_reached"] = reached
+    return options
+
+
 def router() -> ModelRouter:
     return ModelRouter(default_model=settings.model, policy=settings.routing_policy)
 
@@ -105,10 +144,17 @@ def start_run(
             raise NotFound("guidance", guidance_id)
 
     question = visible_text(question).strip()
+    # The length check before this counted invisible characters: a question of nothing but zero-width spaces passed it,
+    # was stored empty and cost a model call. What is left once they are removed is what is asked.
+    if not question:
+        raise InvalidInput("The question has no visible text. Type a question about the contract.")
     prompt = load_prompt(prompt_version)
     task = task_for(guidance is not None)
     decision = router().select(task, model)
-    options = run_options(decision.model)
+    # One instant for the identity and the run: the relation step reads the run's created_at as the day it was asked, so
+    # the starts that entered the identity are the starts the run is assessed against, even across midnight.
+    now = utcnow()
+    options = identity_options(session, document, decision.model, now)
     key = compute_fingerprint(document.id, guidance.id if guidance else None, question, prompt.sha256, options, workspace)
 
     run = Run(
@@ -127,6 +173,7 @@ def start_run(
         guidance_sha256=guidance.sha256 if guidance else None,
         fingerprint=key,
         workspace_id=workspace,
+        created_at=now,
     )
 
     def write() -> Run:

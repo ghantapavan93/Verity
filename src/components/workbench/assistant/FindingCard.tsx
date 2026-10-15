@@ -124,12 +124,7 @@ export function FindingCard({
         ))}
       </dl>
       <div className={styles.resultActions}>
-        <button
-          type="button"
-          className={`${styles.actionButton} ${styles.wideOnly}`}
-          onClick={() => primary && onJump(primary.section.id, primary.span)}
-          disabled={!primary}
-        >
+        <button type="button" className={styles.actionButton} onClick={() => primary && onJump(primary.section.id, primary.span)} disabled={!primary}>
           View in document
         </button>
         <button type="button" className={`${styles.actionButton} ${styles.actionPrimary}`} onClick={(e) => onEvidence(e.currentTarget)}>

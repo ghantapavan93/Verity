@@ -15,11 +15,14 @@ export function DocumentsView({
   notice,
   onOpen,
   onAdd,
+  onStart,
 }: {
   currentId: string | null;
   notice: string | null;
   onOpen: (id: string) => void;
   onAdd: () => void;
+  /** Opens the amended sample: the empty workspace's other next step. */
+  onStart?: () => void;
 }) {
   const [documents, setDocuments] = useState<DocumentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,10 +82,17 @@ export function DocumentsView({
 
         {documents && documents.length === 0 && (
           <div className={styles.empty}>
-            <p>No documents yet.</p>
-            <button type="button" className={wb.ghostButton} onClick={onAdd}>
-              Add a contract
-            </button>
+            <p>No documents yet. Add a PDF, DOCX or TXT contract, or start with the sample whose amendment changes its answer.</p>
+            <div className={styles.emptyActions}>
+              <button type="button" className={wb.ghostButton} onClick={onAdd}>
+                Add a contract
+              </button>
+              {onStart && (
+                <button type="button" className={wb.ghostButton} onClick={onStart}>
+                  Try the amendment challenge
+                </button>
+              )}
+            </div>
           </div>
         )}
 

@@ -1811,8 +1811,9 @@
   color: var(--text-3);
 }
 
+/* A quote found in the text is a fact, not a pass: the mark stays neutral beside any status. */
 .verifiedMark {
-  color: var(--status-pass-text);
+  color: var(--text-2);
 }
 
 .proof {
@@ -2123,14 +2124,25 @@
     display: none;
   }
 
+  /* One pane at a time: the reader switches, and a jump to a passage switches to the contract (Workbench jumpTo). */
+  .split[data-pane="contract"] > .docPane {
+    display: block;
+    height: 100%;
+    padding: 12px 10px 48px;
+  }
+
+  .split[data-pane="contract"] > .assistantPane {
+    display: none;
+  }
+
+  .paper {
+    padding: 28px 18px 40px;
+    font-size: 16px;
+  }
+
   .split .assistantPane {
     height: 100%;
     border-left: 0;
-  }
-
-  /* A control that shows the paper has nothing to show when the paper is hidden. */
-  .wideOnly {
-    display: none;
   }
 
   .narrowNote {
@@ -2142,8 +2154,56 @@
     color: var(--text-3);
   }
 
-  .narrowNote p {
-    margin: 0;
+  .paneSwitch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-sunken);
+  }
+
+  .paneSwitch button {
+    min-height: 40px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    font: 600 14px/1 var(--font-sans);
+    cursor: pointer;
+  }
+
+  .paneSwitch button[aria-pressed="true"] {
+    background: var(--surface-3);
+    color: var(--text);
+  }
+
+  /* Touch: the controls a phone reader uses are at least 40 to 44 px, and the question box is 16 px so iOS does not zoom
+     into it on focus. */
+  .iconButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .railButton,
+  .railMark {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* A finding's actions and Send are the controls a phone reader taps most (adversarial QA, 2026-10-15: 30 and 32 px). */
+  .actionButton {
+    height: 44px;
+  }
+
+  .sendButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .composerInput {
+    font-size: 16px;
   }
 
   /* While the evidence sheet is open it is the reading surface, so it takes the whole width: the rail and the note about

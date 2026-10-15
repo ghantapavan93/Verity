@@ -62,17 +62,19 @@ export function relationSummary(note: RelationNoteView): string {
   const line = statementLine(note.relation);
   switch (note.effect) {
     case "replaced":
-      return `${line} The answer quotes the replaced wording, and neither quotes the replacement nor states a value only it states. Which wording governs is not decided by code.`;
+      return note.relation.replacement
+        ? `${line} The answer quotes the replaced wording, not the replacement. Which wording governs is not decided by code.`
+        : `${line} The answer quotes wording the contract deletes. Whether it still applies is not decided by code.`;
     case "scoped":
       return `${line} Whether the limit applies here is not settled by code.`;
     case "dated":
       return `${line} The question names a time; which wording applied then is not settled by code.`;
     case "old_value":
-      return `${line} The answer quotes the replacement but states only values of the replaced wording.`;
+      return `${line} The answer quotes the replacement but gives a value only the replaced wording states.`;
     case "precedence":
       return `${line} The quoted passages come from parts it ranks; which applies here is not settled by code.`;
     default:
-      return `${line} Context only: code raised no concern from it.`;
+      return `${line} Context: code checked what the answer quotes, not which wording it applies.`;
   }
 }
 

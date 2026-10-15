@@ -11,26 +11,29 @@
   --font-serif: var(--font-source-serif), Georgia, "Times New Roman", serif;
   --font-mono: var(--font-jetbrains), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
-  /* Ground: three steps of warm graphite. Elevation is a step and a hairline, rarely a shadow. */
-  --bg: #0e0e0f;
-  --bg-raised: #141415;
-  --bg-sunken: #0a0a0b;
+  /* Ground: three steps of warm ink, the desk the contract's paper lies on. Elevation is a step and a hairline, rarely
+     a shadow. Neutrals lean warm (red over blue) so the ivory paper and the brass read as one family, not as a cold
+     terminal with a page pasted in. */
+  --bg: #13110e;
+  --bg-raised: #1b1814;
+  --bg-sunken: #0d0b09;
   --bg-glow: rgba(214, 180, 106, 0.045);
-  --surface: rgba(255, 255, 255, 0.028);
-  --surface-2: rgba(255, 255, 255, 0.055);
-  --surface-3: rgba(255, 255, 255, 0.08);
-  --glass: rgba(20, 20, 21, 0.96);
-  --glass-opaque: #141415;
+  --surface: rgba(255, 244, 228, 0.03);
+  --surface-2: rgba(255, 244, 228, 0.058);
+  --surface-3: rgba(255, 244, 228, 0.085);
+  --glass: rgba(27, 24, 20, 0.96);
+  --glass-opaque: #1b1814;
   --glass-blur: 16px;
-  --border: rgba(255, 255, 255, 0.075);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --hairline: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 240, 220, 0.08);
+  --border-strong: rgba(255, 240, 220, 0.15);
+  --hairline: rgba(255, 240, 220, 0.065);
 
-  --text: #ecebe6;
-  --text-2: #a9a69e;
-  /* text-3 is the quietest colour words may use (5:1 on --bg); text-4 is for marks that carry no words. */
-  --text-3: #8d897f;
-  --text-4: #5f5c55;
+  --text: #f2ede3;
+  --text-2: #b8b0a2;
+  /* text-3 is the quietest colour words may use (6.3:1 on --bg, 5.9:1 on --bg-raised); text-4 is for marks that carry
+     no words. */
+  --text-3: #9d9485;
+  --text-4: #6b6357;
 
   /* The one accent: brass. Focus, the marked passage, the layer where a status was set, primary actions. */
   --accent: #d8b46a;
@@ -57,10 +60,10 @@
 
   --assistant-bg: var(--bg-raised);
   --assistant-border: var(--border);
-  --composer-bg: rgba(255, 255, 255, 0.035);
+  --composer-bg: rgba(255, 244, 228, 0.04);
   --halo: 0 0 0 1px var(--border);
   --halo-active: 0 0 0 1px var(--accent-line), 0 0 0 5px rgba(216, 180, 106, 0.08);
-  --chip-bg: rgba(255, 255, 255, 0.045);
+  --chip-bg: rgba(255, 244, 228, 0.05);
   --rail-bg: var(--bg-sunken);
 
   /* Status tones. Each is a fill, a word colour and a border; the word always says what the tone means. */
@@ -70,9 +73,9 @@
   --status-pass-bg: rgba(126, 186, 150, 0.12);
   --status-pass-text: #a6d6b8;
   --status-pass-border: rgba(126, 186, 150, 0.34);
-  --status-muted-bg: rgba(255, 255, 255, 0.045);
+  --status-muted-bg: rgba(255, 244, 228, 0.05);
   --status-muted-text: #aaa79f;
-  --status-muted-border: rgba(255, 255, 255, 0.14);
+  --status-muted-border: rgba(255, 240, 220, 0.15);
   --status-bad-bg: rgba(229, 122, 112, 0.12);
   --status-bad-text: #eea198;
   --status-bad-border: rgba(229, 122, 112, 0.34);

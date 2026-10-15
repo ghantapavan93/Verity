@@ -553,6 +553,12 @@ button.figureActive:hover {
   margin: 0 0 12px;
 }
 
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* ---- run record ---- */
 
 .back {
@@ -840,6 +846,11 @@ button.figureActive:hover {
 
   .title {
     font-size: 25px;
+  }
+
+  /* Four figures in two rows of two, not three and one left alone. */
+  .figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .indexed {

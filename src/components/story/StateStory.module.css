@@ -649,6 +649,12 @@ p.quiet {
   color: var(--text);
 }
 
+.noticeDetail {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
 .button {
   margin-top: 12px;
   padding: 8px 14px;

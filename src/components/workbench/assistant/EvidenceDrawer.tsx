@@ -200,7 +200,9 @@ function EvidenceBody({
                 : unquoted.length > 0 || finding.unseenReason
                   ? "review"
                   : finding.spans.length && verified === finding.spans.length
-                    ? "pass"
+                    ? // Found is a fact about the text, not an approval: never the pass colour, so it cannot read as a pass
+                      // beside a status code set to review.
+                      "muted"
                     : finding.spans.length
                       ? "review"
                       : "muted",

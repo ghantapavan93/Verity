@@ -86,14 +86,20 @@ describe("RelationNotes", () => {
   });
 
   it("says a time the question names, or an answer quoting the replacement with the old values, is not settled by code", () => {
-    expect(relationSummary({ effect: "dated", sentence: "", relation: REPLACES })).toMatch(/The question names a time; which wording applied then is not settled by code\./);
-    expect(relationSummary({ effect: "old_value", sentence: "", relation: REPLACES })).toMatch(/quotes the replacement but states only values of the replaced wording\./);
+    expect(relationSummary({ effect: "dated", sentence: "", relation: REPLACES })).toMatch(
+      /The question names a time; which wording applied then is not settled by code\./,
+    );
+    expect(relationSummary({ effect: "old_value", sentence: "", relation: REPLACES })).toMatch(
+      /quotes the replacement but gives a value only the replaced wording states\./,
+    );
   });
 
   it("says only what code saw in the answer: what it quotes and states, never what it uses or rests on", () => {
     const effects: RelationNoteView["effect"][] = ["replaced", "scoped", "precedence", "dated", "old_value", "context"];
     for (const effect of effects) {
-      expect(relationSummary({ effect, sentence: "", relation: effect === "precedence" ? PRECEDENCE : REPLACES })).not.toMatch(/\b(uses?|relies|rests?|follows?)\b/);
+      expect(relationSummary({ effect, sentence: "", relation: effect === "precedence" ? PRECEDENCE : REPLACES })).not.toMatch(
+        /\b(uses?|relies|rests?|follows?)\b/,
+      );
     }
   });
 
@@ -154,7 +160,9 @@ describe("RelationNotes: the difference first, the whole text kept", () => {
   it("does not give the original agreement's wording the concern a replaced answer gets", () => {
     const historical = relationSummary({ effect: "context", sentence: "", relation: LONG });
     const replaced = relationSummary({ effect: "replaced", sentence: "", relation: LONG });
-    expect(historical).toMatch(/Context only: code raised no concern/);
+    // Context never reads as reassurance: code says what it checked, not that the answer is fine.
+    expect(historical).toMatch(/Context: code checked what the answer quotes, not which wording it applies/);
+    expect(historical).not.toMatch(/no concern/);
     expect(historical).not.toMatch(/not decided|not settled/);
     expect(replaced).toMatch(/Which wording governs is not decided by code\./);
     const scoped = relationSummary({ effect: "scoped", sentence: "", relation: { ...LONG, scope: "for the second Contract Year only" } });

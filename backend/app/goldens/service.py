@@ -17,11 +17,11 @@ from sqlalchemy.orm import Session
 from ..analysis.service import PROMPTS_DIR, PromptPackage, load_prompt
 from ..application.ingest_document import ingest_document
 from ..application.save_guidance import stored_guidance
-from ..application.start_run import compute_fingerprint, run_options
+from ..application.start_run import compute_fingerprint, identity_options, run_options
 from ..config import BACKEND_DIR
 from ..hashing import sha256_bytes, sha256_text
 from ..ingest import PARSER_VERSION
-from ..models import TERMINAL_STAGES, Document, FindingStatusName, Run
+from ..models import TERMINAL_STAGES, Document, FindingStatusName, Run, utcnow
 from ..runs.versions import without_versions
 from ..schemas import (
     GoldenCategoryCount,
@@ -164,14 +164,15 @@ def run_for(session: Session, document: Document, golden: Golden, prompt: Prompt
     guidance_id = guidance_id_for(session, golden)
     if golden.guidance is not None and guidance_id is None:
         return None
-    options = run_options(model)
+    # The identity start_run gives the same request today, so the run found is the one a request would be handed.
+    options = identity_options(session, document, model, utcnow())
     key = compute_fingerprint(document.id, guidance_id, golden.question, prompt.sha256, options)
     runs = session.query(Run).filter(Run.fingerprint == key).order_by(Run.created_at.desc()).all()
     if not runs:
         # No recording under today's rules: the report shows the recording made before the rules were versioned
         # (to 2026-10-02), which is what the set's published numbers are. It is superseded the first time the set is
         # recorded again, and never reused as the answer to a request (application.start_run looks up today's key only).
-        legacy = compute_fingerprint(document.id, guidance_id, golden.question, prompt.sha256, without_versions(options))
+        legacy = compute_fingerprint(document.id, guidance_id, golden.question, prompt.sha256, without_versions(run_options(model)))
         runs = session.query(Run).filter(Run.fingerprint == legacy).order_by(Run.created_at.desc()).all()
     return next((r for r in runs if r.stage != "failed"), runs[0] if runs else None)
 

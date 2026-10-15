@@ -172,6 +172,7 @@ class Relation:
     scope: str | None = None  # replaces: the limits the statement states, verbatim; None when it is unqualified
     effective: str | None = None  # replaces: a stated start code read and found already reached ("2025-09-18, the Amendment Date")
     parts: tuple[str, ...] = ()  # precedence: the parts it ranks, as written, in its order
+    starts: tuple[str, ...] = ()  # replaces: every start code read in the statement (ISO dates), reached or not
 
 
 @dataclass(frozen=True)
@@ -332,8 +333,11 @@ def _replacements(document: _Document, section: Readable, as_of: date) -> Iterat
         limits = ([" ".join(only.split())] if only else []) + [" ".join(m.group(0).split()) for m in _LIMIT.finditer(stated)]
         replaced = document.provision(target, section.id)
         effective = None
+        starts: list[str] = []
         for begins in _STARTS.finditer(stated):
             when, said = document.date_named(begins.group("when")), " ".join(begins.group(0).split())
+            if when is not None:
+                starts.append(when.isoformat())
             if when is not None and when <= as_of:
                 effective = f"{when.isoformat()}, {' '.join(begins.group('when').split())}"
             else:
@@ -346,6 +350,7 @@ def _replacements(document: _Document, section: Readable, as_of: date) -> Iterat
             replacement=Passage(section.id, _label(section), wording[0], wording[1], text[wording[0] : wording[1]]) if wording else None,
             scope="; ".join(limits) or None,
             effective=effective,
+            starts=tuple(starts),
         )
 
 
@@ -438,11 +443,20 @@ def _excerpt(text: str, limit: int = 180) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def assess(relations: Sequence[Relation], spans: Sequence[tuple[str, int, int]], answer: str, question: str, parts: dict[str, str]) -> list[Note]:
+def assess(
+    relations: Sequence[Relation],
+    spans: Sequence[tuple[str, int, int]],
+    answer: str,
+    question: str,
+    parts: dict[str, str],
+    observed: str | None = None,
+) -> list[Note]:
     """What each relation means for one finding. ``spans`` are its verified quotes as (section id, start, end) in the
-    stored text: an unverified quote grounds nothing. ``answer`` is the model's conclusion and stated position."""
+    stored text: an unverified quote grounds nothing. ``answer`` is the model's conclusion and stated position;
+    ``observed`` is the value the model gave as what the contract says, when it gave one."""
     notes: list[Note] = []
     said = stated_values(answer, answer=True)
+    position = stated_values(observed, answer=True) if observed else set()
     asked, when = perspective(question), asked_time(question)
     explained: set[tuple[str, int, int]] = set()
     for index, relation in enumerate(relations):
@@ -473,7 +487,20 @@ def assess(relations: Sequence[Relation], spans: Sequence[tuple[str, int, int]],
         # wording the answer applies: an answer can quote the replacement and conclude from the replaced wording.
         new_values = stated_values(relation.replacement.text) if relation.replacement else set()
         old_values = stated_values(relation.replaced.text) if relation.replaced else set()
-        states_new, states_old = bool(said & (new_values - old_values)), bool(said & (old_values - new_values))
+        only_new, only_old = new_values - old_values, old_values - new_values
+        # The model's stance is its own stated value when that names one of the values the two texts differ in: an answer
+        # can mention both ("30 days; the amendment's 60 days does not apply") while its stated value is the replaced one.
+        # Otherwise everything the answer states is read. No phrase in the prose is interpreted.
+        # Each sentence names the source it read: "the value it gives as the contract's" when the stated value decided,
+        # "states" when the whole answer did. A sentence about the whole answer is false when the prose names both values.
+        by_position = bool(position & (only_new | only_old))
+        stance = position if by_position else said
+        states_new, states_old = bool(stance & only_new), bool(stance & only_old)
+        gives_old = (
+            "the value it gives as the contract's includes one only the replaced wording states and none only the new wording states"
+            if by_position
+            else "states a value only the replaced wording states and none only the new wording states"
+        )
         if asked == "historical":
             original = f"the quoted {target} is the original wording; {where} later replaced it, and the question asks about the original agreement"
             notes.append(Note(index, "context", original if old else new_wording))
@@ -487,14 +514,19 @@ def assess(relations: Sequence[Relation], spans: Sequence[tuple[str, int, int]],
                 Note(
                     index,
                     "old_value",
-                    f"the answer quotes the new wording of {target} that {where} gives, but states a value only the replaced wording states "
-                    "and none only the new wording states; which wording governs is not decided by code",
+                    f"the answer quotes the new wording of {target} that {where} gives, but {gives_old}; which wording governs is not decided by code",
                 )
             )
         elif not old:
             notes.append(Note(index, "context", new_wording))
         elif new or states_new:
-            seen = "also quotes the replacement" if new else "states a value only the replacement states"
+            seen = (
+                "also quotes the replacement"
+                if new
+                else "gives as the contract's a value that includes one only the replacement states"
+                if by_position
+                else "states a value only the replacement states"
+            )
             notes.append(Note(index, "context", f"the quoted {target} was replaced by {where}, and the answer {seen}"))
         else:
             asks = (
@@ -502,7 +534,13 @@ def assess(relations: Sequence[Relation], spans: Sequence[tuple[str, int, int]],
                 if asked == "current"
                 else "the question names no time and does not say it asks about the original agreement"
             )
-            unquoted = "the answer neither quotes the replacement nor states a value only it states, and " if does == "replaces in full" else ""
+            neither = (
+                "the answer does not quote the replacement, the value it gives as the contract's includes one only the replaced wording states and "
+                "none only the replacement states, and "
+                if by_position
+                else "the answer neither quotes the replacement nor states a value only it states, and "
+            )
+            unquoted = neither if does == "replaces in full" else ""
             notes.append(
                 Note(
                     index,
@@ -527,6 +565,25 @@ def assess(relations: Sequence[Relation], spans: Sequence[tuple[str, int, int]],
 
 
 # ----------------------------------------------------------------------------- the record
+
+
+def replacement_starts(sections: Sequence[Readable]) -> tuple[str, ...]:
+    """Every start the document's replacement statements give (ISO dates, sorted), reached or not. Which statements a
+    document holds does not depend on the day, only whether their starts are reached, so this is read once per document
+    (application.start_run keeps it)."""
+    return tuple(sorted({start for relation in locate_relations(sections, date.min) for start in relation.starts}))
+
+
+def reached_start(starts: Sequence[str], as_of: date) -> str | None:
+    """The latest of ``starts`` already reached on ``as_of``, or None. It changes exactly when another start is reached,
+    so it can stand for every start comparison a run makes: a run asked before an amendment takes effect is not handed
+    back as the answer after it."""
+    return max((start for start in starts if start <= as_of.isoformat()), default=None)
+
+
+def latest_start_reached(sections: Sequence[Readable], as_of: date) -> str | None:
+    """The latest start a replacement statement in the document gives that is already reached on ``as_of``."""
+    return reached_start(replacement_starts(sections), as_of)
 
 
 def relevant(relations: Sequence[Relation], section_ids: set[str]) -> list[Relation]:
@@ -561,6 +618,7 @@ def load(raw: str | None) -> Recorded:
             replacement=passage(r.get("replacement")),
             scope=r.get("scope"),
             effective=r.get("effective"),
+            starts=tuple(r.get("starts") or ()),
             parts=tuple(r.get("parts") or ()),
         )
         for r in data.get("relations", [])

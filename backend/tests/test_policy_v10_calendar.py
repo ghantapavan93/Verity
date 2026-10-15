@@ -188,7 +188,7 @@ H4_Q5_QUOTE = ["Seller may dispute the Closing Statement by written notice to Bu
 
 
 def test_the_pilots_business_day_error_is_codes_shortfall_where_the_contract_defines_a_business_day() -> None:
-    assert POLICY_VERSION == "policy-v12"  # v11 and v12 keep the v10 calendar
+    assert POLICY_VERSION == "policy-v13"  # v11 to v13 keep the v10 calendar
     required = "at least thirty (30) Business Days"
     decision = decide("pass", "thirty (30) days", required, True, True, H4_Q5_QUOTE, H4_Q5_GUIDANCE, "Dispute Period", week=WEEKDAYS)
     assert (decision.status, decision.source) == ("needs_review", "computed_days")

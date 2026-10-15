@@ -49,6 +49,7 @@ from ..policy.durations import (
     stated_rules,
 )
 from ..policy.proof import pass_blockers, same_point, unseen_reason
+from .prose import UNRESOLVED
 from .values import frame_times, redaction_given_as_value, unquoted_values
 
 # The version of the rules in this module and in `policy`: what a status means. Part of a run's identity
@@ -109,7 +110,11 @@ from .values import frame_times, redaction_given_as_value, unquoted_values
 # answer repeats it (`values.frame_times`): repeating when it answers for takes no figure from the question, and the
 # status no longer depends on whether the answer says it. A question that asks to confirm a date, or gives one as a
 # property ("the payment due on 1 March 2027"), still has its date read as a premise. Everything else is v11's.
-POLICY_VERSION = "policy-v12"
+# policy-v13 (2026-10-15): (1) the model's own stated value (`observed`) is its stance between a replaced clause and its
+# replacement when it names one of the values the two differ in (runs.relations.assess): an answer that quotes both
+# and states both, but gives the replaced value as its own, raises a concern. (2) A section handle the model wrote
+# that names no section it was given is shown as such and lowers a pass (runs.prose, `check_references`).
+POLICY_VERSION = "policy-v13"
 
 
 @dataclass(frozen=True)
@@ -413,11 +418,27 @@ def check_replaced(decision: Decision, replaced: str | None) -> Decision:
 
 
 def check_references(
-    decision: Decision, conclusion: str | None, section_numbers: Iterable[str], handed_ids: Iterable[str], stated: Iterable[str] = ()
+    decision: Decision,
+    conclusion: str | None,
+    section_numbers: Iterable[str],
+    handed_ids: Iterable[str],
+    stated: Iterable[str] = (),
+    unresolved: Sequence[str] = (),
 ) -> Decision:
     """A pass that sends the reader to a section the document does not have is not a pass: the quote may be
-    real, the reference is not, and a person must look. Other statuses already ask for that."""
-    if decision.status != "pass" or not unknown_references(conclusion, section_numbers, handed_ids, stated):
+    real, the reference is not, and a person must look. Other statuses already ask for that. ``unresolved`` are section
+    handles the model wrote that name no section it was given (runs.prose): the same failure, named in the reason. The
+    reason speaks of the reference as the reader sees it, never of the internal handle."""
+    if decision.status != "pass":
+        return decision
+    if unresolved:
+        cited = (
+            f"a section reference that names no section the model was given; it is shown as “{UNRESOLVED}”"
+            if len(unresolved) == 1
+            else f"{len(unresolved)} section references that name no section the model was given; each is shown as “{UNRESOLVED}”"
+        )
+        return Decision("needs_review", "reference_check", f"the answer cites {cited}")
+    if not unknown_references(conclusion, section_numbers, handed_ids, stated):
         return decision
     return Decision("needs_review", "reference_check")
 

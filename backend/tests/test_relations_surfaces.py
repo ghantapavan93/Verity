@@ -126,7 +126,7 @@ def test_control_asked_about_the_original_agreement_the_same_quote_raises_nothin
         # The run's date is not the time a question names: the same quote of the replaced clause, asked about June 2025.
         ("What notice did renewal need in June 2025?", (OLD,), "dated", "the question names a time (“June 2025”)"),
         # Quoting the replacement is not following it: the answer quotes both and states only the replaced periods.
-        ("When must the distributor give notice to renew?", (OLD, NEW), "old_value", "states a value only the replaced wording states"),
+        ("When must the distributor give notice to renew?", (OLD, NEW), "old_value", "one only the replaced wording states"),
     ],
 )
 def test_a_concern_code_cannot_resolve_is_one_account_on_every_surface_and_never_codes_status(

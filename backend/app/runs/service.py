@@ -43,7 +43,7 @@ from ..verify.spans import Located, locate, verification_pass
 from .events import StageEvent, bus
 from .links import because, linked
 from .owner import this_process
-from .prose import label_handles
+from .prose import label_handles, unresolved_handles
 from .relations import Note, Recorded, assess, dump, locate_relations, parts_of, relevant
 from .status import Decision, Grounds, check_references, check_replaced, check_values, decide, enclosing_sentences, settle_together, unseen_references
 from .transitions import assert_transition
@@ -383,7 +383,18 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 week=week,
                 days=days,
             )
-            decision = check_references(decision, label_handles(item.conclusion, labels), (s.number for s in sections), by_label, printed)
+            decision = check_references(
+                decision,
+                label_handles(item.conclusion, labels),
+                (s.number for s in sections),
+                by_label,
+                printed,
+                [
+                    handle
+                    for text in (item.topic, item.conclusion, item.guidance_reference, item.observed, item.required, item.suggested_position)
+                    for handle in unresolved_handles(text, labels)
+                ],
+            )
             decision = check_values(
                 decision,
                 label_handles(item.conclusion, labels),
@@ -396,7 +407,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 # What the located statements mean for this finding: only its verified quotes ground anything (runs.relations).
                 answer = " ".join(label_handles(text, labels) for text in (item.conclusion, item.observed) if text)
                 quoted = [(span.section_id, span.start, span.end) for span in spans if span.verified and span.section_id]
-                notes[ordinal] = tuple(assess(relations, quoted, answer, run.question, parts))
+                notes[ordinal] = tuple(assess(relations, quoted, answer, run.question, parts, label_handles(item.observed, labels)))
                 decision = check_replaced(decision, next((n.sentence for n in notes[ordinal] if n.effect == "replaced"), None))
             verified_any = verified_any or all_verified
             if not all_verified:

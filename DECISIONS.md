@@ -1338,3 +1338,38 @@ in June 2026?"), and a date the question gives as a property ("the payment due o
 (the decision with and without the frame is equal) and four controls. Replayed over the 81 local QA stores: 4 recorded
 findings were lowered for a value from the question; only the June 2026 one changes. Not done: a time phrased in a way
 this does not read ("for the June 2026 renewal") is still read as a premise, which asks a person to look.
+
+## 2026-10-15: policy-v13, run identity by reached starts, and section handles kept honest
+
+Three defects from the final review, each reproduced first. (1) A run's fingerprint carried no date while a
+replacement's stated start was compared with the run's creation date, so a question asked again after an amendment
+took effect was handed the run decided before it (a limit) instead of a new one (needs review). Invariant: a run is
+the same run only while the same starts are reached. `relations.latest_start_reached` enters the run's options, and
+so its identity, only when a reached start exists; documents without one keep their fingerprints, the earlier run
+stays as recorded. (2) An answer quoting both the replaced clause and its replacement, and stating both values, was
+context whatever it concluded; the card then said "code raised no concern". The model's own stated value
+(`observed`) is now its stance when it names one of the differing values, so "30 days" beside a quoted 60-day
+replacement raises the old_value concern; with no such value nothing changes. No phrase is interpreted. The context
+line now says what code checked. The oracle still matches 82 of 82. (3) A section handle the model was not given was
+dropped ("found in sec_12.3." became "found in.3.") and so never reached the reference check; "sec_1.2(b)" became
+"§7.2(b)", a clause the model never named. Unknown and sub-numbered handles are now shown as "[unidentified
+section]" and lower a pass with a reason naming them; the raw output keeps the model's words.
+
+Skeptic review of the same tree, applied before commit. Each relation sentence names the source it read: "the value it
+gives as the contract's" when the stated value decided, "states" when the whole answer did; a sentence about the whole
+answer was false when the prose named both values. The card's one-line summaries claim only what holds under either
+source. One identity function (`start_run.identity_options`) serves both the request and the goldens' lookup; a
+document's starts are read once per document (its sections never change) instead of on every request; the run's
+created_at is the instant its identity was read, so the starts in the fingerprint are the starts it is assessed
+against even across midnight. Every sub-reference form after a handle (".2", "(b)", ",2", and inside brackets) is no
+address, in every field the model wrote, and the status reason speaks of the reference as the reader sees it, not of
+the internal handle.
+
+A second skeptic pass on the fixes, also applied. Phones: a new contract or run on screen opens on its answer by one
+rule keyed on what is shown, so an upload and a palette question are covered with the list paths. Findings: the order
+that puts what needs a person first is read when the list loads, so a row decided there stays under the reader's hand.
+Copy: code looks for every quote and withholds any it cannot find (it does not find every one); a 404 says the record
+belongs to another workspace or no longer exists, nothing more. Handles: a range ("sec_1-3"), a continuation the
+cleanup would close ("sec_1 ,2"), and a paragraph with a space or left open are sub-references; a short word in
+brackets ("(fees)") is not. Left as it is: "sec_1, 2 and 3" reads "§7, 2 and 3", because ", 2" after a handle is
+also ordinary prose ("in sec_5, 30 days' notice"), and lowering that would be the larger error.

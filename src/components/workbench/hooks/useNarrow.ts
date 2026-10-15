@@ -19,5 +19,9 @@ function subscribe(change: () => void): () => void {
  * could see). False on the server and wherever matchMedia is absent.
  */
 export function useNarrow(): boolean {
-  return useSyncExternalStore(subscribe, () => narrowQuery()?.matches ?? false, () => false);
+  return useSyncExternalStore(
+    subscribe,
+    () => narrowQuery()?.matches ?? false,
+    () => false,
+  );
 }
