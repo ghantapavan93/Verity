@@ -1438,10 +1438,24 @@ reader to the first screen's top, the contract gone, the refusal 896 px down a 9
 now returns to the view it was added from with the refusal there, as an alert. That first repair showed it on Documents
 only: the candidate's review found a sample refused from Findings shown nowhere, and a refusal on Documents outliving a
 newer failure, because two states were kept and one was always shown before the other. The workbench now keeps one
-notice, the latest, and every view it can leave the reader on shows it; Findings and Runs announce it as Documents does.
-Browser flows: a file refused on Documents and a sample refused on Findings, at both widths, and a newer failure taking a
-refusal's place and the reverse; red on the old interface for Findings and the stale refusal, the Documents flows the
-control.
+notice, shown on the first screen, Documents, Findings and Runs; Findings and Runs announce it as Documents does. Each
+open, upload or question clears it, and a failed open is said only while it is still the latest, so a slow 404 of an
+earlier click never replaces a newer refusal (the review of this repair found that race); an upload's refusal is always
+said. Browser flows: a file refused on Documents and a sample refused on Findings, at both widths; a newer failure taking
+a refusal's place and the reverse; a slow 404 under a newer refusal. Each was red on the interface before its repair,
+the Documents flows aside, which are the control.
+
+*Known limits, older than these repairs.* The Assistant has no place for a notice: a run Back cannot open, or a finding
+opened from Findings that fails once the reader is on the Assistant, is said nowhere, and the screen keeps what it
+showed. A late response can still change the screen: an upload that ends after the reader pressed Back to a run returns
+them to where the upload started, with its refusal; a contract whose reading arrives after the reader moved on still
+opens (a run's open is dropped when a question or another run came after it); a question typed on the first screen is
+asked of its file when the file is read, even if the reader has gone Back meanwhile. Each needs a slow response and a
+second action inside it. Four attempts in this round to show the notice on the Assistant, scoped to its screen, and to
+give the screen one owner were each reviewed and rejected: every one closed a race and opened another (a refusal shown
+nowhere; a failure shown beside a contract it was not about; a question started on a file the reader had left). Closing
+these needs one owner for the screen across uploads, opens, Back and the first screen's question, designed as a change
+of its own.
 
 *Wording (U2, U3).* The reading stage printed "1 pages"; counts now take their noun's number. A visitor read "… the model
 endpoint is not reachable (ConnectError)", on the answer and on the public /api/health. Since the journey audit

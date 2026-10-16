@@ -111,6 +111,15 @@ function WorkbenchSurface() {
   const [view, setView] = useState<View>("assistant");
   const [recent, setRecent] = useState<DocumentSummary[]>([]);
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
+  // The reader's latest open, upload or question (review of these repairs, 2026-10-16). Each one clears the notice, and
+  // a failed open is said only while it is still the latest, so a slow 404 of an earlier click never replaces a newer
+  // notice. An upload's refusal is always said: it ends the upload's own screen.
+  const latestAction = useRef(0);
+  const beginAction = useCallback(() => {
+    const mine = ++latestAction.current;
+    setNotice(null);
+    return () => latestAction.current === mine;
+  }, []);
 
   const runs = useRunFollower();
   const { run, show: showRun, refresh: refreshRun, claim: claimRun, setRunError, stop: stopRun, ask: startRun } = runs;
@@ -202,7 +211,7 @@ function WorkbenchSurface() {
       // refusal on that view (blind contract stress test, 2026-10-16: it sent them to the first screen's top, the
       // contract gone and the refusal below the fold).
       const addedFrom = stage === "workspace" ? view : null;
-      setNotice(null);
+      beginAction();
       setPendingName(file.name);
       setProcessingLabel("Reading document");
       // A file added from another view (Documents) is read on the first screen, where its progress and result show.
@@ -237,7 +246,7 @@ function WorkbenchSurface() {
         }
       }
     },
-    [showRun, resetMemo, stage, view, composerText, startRun, guidanceRecord],
+    [beginAction, showRun, resetMemo, stage, view, composerText, startRun, guidanceRecord],
   );
 
   useEffect(() => {
@@ -257,7 +266,7 @@ function WorkbenchSurface() {
 
   const loadSample = useCallback(
     async (kind: SampleKind) => {
-      setNotice(null);
+      beginAction();
       try {
         // eslint-disable-next-line no-restricted-globals -- the bundled sample is a static file of this origin, not the API
         const response = await fetch(SAMPLES[kind].path);
@@ -268,7 +277,7 @@ function WorkbenchSurface() {
         setNotice({ kind: "refused", name: null, reason: errorMessage(error) });
       }
     },
-    [loadFile],
+    [beginAction, loadFile],
   );
 
   // The API could not be asked: a dropped or picked file would only fail (round 2: a drop still said "Release to add").
@@ -281,6 +290,7 @@ function WorkbenchSurface() {
     async (text: string) => {
       const question = text.trim();
       if (!question || !doc) return;
+      beginAction();
       setComposerText("");
       setEvidence(null);
       setHighlight(null);
@@ -288,7 +298,7 @@ function WorkbenchSurface() {
       const started = await startRun(doc.id, guidanceRecord?.id ?? null, question);
       if (!started) setComposerText(text); // the API refused it; the words are the person's, not the error's
     },
-    [doc, guidanceRecord, startRun, resetMemo],
+    [beginAction, doc, guidanceRecord, startRun, resetMemo],
   );
 
   // ---- opening records from the Documents, Findings and Runs surfaces ----------------------
@@ -318,7 +328,7 @@ function WorkbenchSurface() {
 
   const openDocument = useCallback(
     async (id: string, show = true) => {
-      setNotice(null);
+      const latest = beginAction();
       if (doc?.id === id) {
         focusComposerOnOpen.current = show;
         setNarrowPane("answer");
@@ -341,16 +351,16 @@ function WorkbenchSurface() {
         setStage("workspace");
         if (show) setView("assistant");
       } catch (error) {
-        setNotice({ kind: "failed", text: openFailure(error, "contract") });
+        if (latest()) setNotice({ kind: "failed", text: openFailure(error, "contract") });
       }
     },
-    [doc, stopRun, showRun, resetMemo, setRunError],
+    [beginAction, doc, stopRun, showRun, resetMemo, setRunError],
   );
 
   /** Show a recorded run in the workspace: its document, its guidance as the scope, its findings. */
   const openRun = useCallback(
     async (runId: string, findingId: string | null = null, show = true) => {
-      setNotice(null);
+      const latest = beginAction();
       // Opening waits on three fetches; a question asked or another run opened meanwhile is newer and keeps the screen.
       const current = claimRun();
       try {
@@ -377,10 +387,10 @@ function WorkbenchSurface() {
         setStage("workspace");
         if (show) setView("assistant");
       } catch (error) {
-        if (current()) setNotice({ kind: "failed", text: openFailure(error, "run") });
+        if (current() && latest()) setNotice({ kind: "failed", text: openFailure(error, "run") });
       }
     },
-    [doc, claimRun, stopRun, showRun, setGuidance, setGuidanceDraft, resetMemo, setRunError],
+    [beginAction, doc, claimRun, stopRun, showRun, setGuidance, setGuidanceDraft, resetMemo, setRunError],
   );
 
   useUrlState({ view, doc, stage, run, findingId: evidence?.id ?? null, openRun, openDocument, navigate, goHome });

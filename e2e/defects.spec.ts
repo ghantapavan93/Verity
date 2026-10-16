@@ -209,15 +209,23 @@ test("a file refused on Findings while a contract is open, on a phone, leaves th
   await refusedWhereAdded(page, ADDED_FROM.findings, 375, 812);
 });
 
-test("a newer failure takes the place of a refusal on screen, and a newer refusal the place of a failure", async ({ page }) => {
-  await openAt(page, 1440, 900);
-  // A contract listed but gone when it is opened, as when its workspace expired in between.
+/** Documents lists a contract that is gone when it is opened, as when its workspace expired in between; opening it
+ *  fails with a 404 after `delayMs`. */
+async function listGoneContract(page: Page, delayMs = 0): Promise<void> {
   await page.route("**/api/documents", async (route) => {
     if (route.request().method() !== "GET") return route.continue();
     const listed = await (await route.fetch()).json();
     await route.fulfill({ json: [{ ...listed[0], id: "gone", name: "gone-contract.txt" }, ...listed] });
   });
-  await page.route("**/api/documents/gone", (route) => route.fulfill({ status: 404, json: { detail: "document not found" } }));
+  await page.route("**/api/documents/gone", async (route) => {
+    await new Promise((r) => setTimeout(r, delayMs));
+    await route.fulfill({ status: 404, json: { detail: "document not found" } });
+  });
+}
+
+test("a newer failure takes the place of a refusal on screen, and a newer refusal the place of a failure", async ({ page }) => {
+  await openAt(page, 1440, 900);
+  await listGoneContract(page);
   await page.getByRole("button", { name: "Documents" }).click();
   await addNotAPdf(page);
   await expect(page.getByRole("alert").filter({ hasText: NOT_READABLE })).toBeVisible();
@@ -228,5 +236,20 @@ test("a newer failure takes the place of a refusal on screen, and a newer refusa
 
   await addNotAPdf(page);
   await expect(page.getByRole("alert").filter({ hasText: NOT_READABLE })).toBeVisible();
+  await expect(page.getByText(GONE)).toHaveCount(0);
+});
+
+test("a slow failure of an earlier click does not replace a newer refusal", async ({ page }) => {
+  await openAt(page, 1440, 900);
+  await listGoneContract(page, 3000);
+  await page.getByRole("button", { name: "Documents" }).click();
+  const late = page.waitForResponse((r) => r.url().endsWith("/api/documents/gone"));
+  await page.getByRole("button").filter({ hasText: "gone-contract" }).click();
+  await addNotAPdf(page); // added while the contract clicked first is still being opened
+  const refusal = page.getByRole("alert").filter({ hasText: NOT_READABLE });
+  await expect(refusal).toBeVisible();
+  await late; // the earlier click's 404 has arrived
+  await page.waitForTimeout(200); // and its handler has run
+  await expect(refusal).toBeVisible();
   await expect(page.getByText(GONE)).toHaveCount(0);
 });
