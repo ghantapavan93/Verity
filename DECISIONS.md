@@ -1474,6 +1474,13 @@ as its source, so the evidence pack reads one that code found consistent as not 
 Reading a chained reason by its words would let contract text quoted in the lowering sentence claim a comparison code
 never made; `basis` understates and never overstates.
 
+*The first screen, after the release.* Once 6574514 was live, its first screen still said "Who holds a right, or whether
+a condition was left out, code does not check": true until v14, an understatement since. It now says that code lowers a
+pass whose quote drops a condition its own sentence states, and that conditions elsewhere in the contract, and who holds
+a right, code does not check. The class is held in `test_docs_claims.py`: no page, README or document a reader is given
+may deny a check `runs/status.py` performs (a condition left out of the quote's sentence; one value given to every
+party), with a control that the old sentence is caught and its repair is not. It failed on that sentence alone.
+
 ## 2026-10-16: one Hetzner server, the model on it
 
 The owner's decision: one main branch, one deployment, Hetzner only. No serverless GPU: the model runs on the same host

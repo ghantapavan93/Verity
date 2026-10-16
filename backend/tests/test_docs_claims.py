@@ -227,3 +227,63 @@ def test_the_readme_and_every_page_say_the_same_independence_sentence() -> None:
     constant = re.search(r'INDEPENDENCE = "([^"]+)"', (ROOT / "src" / "lib" / "independence.ts").read_text(encoding="utf-8"))
     assert constant, "src/lib/independence.ts names the sentence"
     assert constant.group(1) in readme()
+
+
+# The checks policy-v14 added, each with the code that performs it and the words that would deny it. A page or document
+# saying code does not check what it now checks misleads a reader about what a status means: the first screen said
+# "whether a condition was left out, code does not check" for a day after policy-v14 began checking it (2026-10-16).
+_NO_CHECK = r"code (?:does not|doesn't|never|cannot) check"
+DENIED_CHECKS = {
+    "a condition the quote leaves out of its sentence": (
+        "def check_conditions",
+        re.compile(rf"condition[^.;]{{0,40}}\bleft out\b[^.;]{{0,60}}{_NO_CHECK}|{_NO_CHECK}[^.;]{{0,80}}condition[^.;]{{0,30}}\bleft out\b", re.IGNORECASE),
+    ),
+    "one value given to every party": (
+        "uniform_party_choices(",
+        re.compile(
+            rf"(?:one|the same) value[^.;]{{0,60}}(?:every|each|all) part(?:y|ies)[^.;]{{0,60}}{_NO_CHECK}"
+            rf"|{_NO_CHECK}[^.;]{{0,80}}(?:one|the same) value[^.;]{{0,40}}(?:every|each|all) part(?:y|ies)",
+            re.IGNORECASE,
+        ),
+    ),
+}
+
+
+def reader_facing() -> list[Path]:
+    """What a visitor or a reader of the repository reads as the product's own account of itself (DECISIONS.md is a
+    record of what was true when each entry was written, and is not read here)."""
+    return [
+        *(path for path in (ROOT / "src").rglob("*.ts*") if ".test." not in path.name),
+        README,
+        *sorted((ROOT / "docs").glob("*.md")),
+        ROOT / "proof" / "index.html",
+    ]
+
+
+@pytest.mark.parametrize("check", sorted(DENIED_CHECKS))
+def test_no_page_or_document_denies_a_check_the_policy_performs(check: str) -> None:
+    performed_by, denial = DENIED_CHECKS[check]
+    status = (BACKEND / "app" / "runs" / "status.py").read_text(encoding="utf-8")
+    assert performed_by in status, f"runs/status.py no longer has {performed_by!r}: if the check is gone, so must this entry be"
+    denials = [
+        f"{path.relative_to(ROOT)}: {sentence[:160]}"
+        for path in reader_facing()
+        if path.exists()
+        for sentence in sentences(path.read_text(encoding="utf-8"))
+        if denial.search(sentence)
+    ]
+    assert not denials, f"code checks {check} (policy-v14), and these say it does not:\n" + "\n".join(denials)
+
+
+def test_the_denial_patterns_find_the_old_first_screen_sentence_and_pass_its_repair() -> None:
+    """Control: the check above fails on the sentence the first screen carried at 6574514 and passes its repair."""
+    old = "Who holds a right, or whether a condition was left out, code does not check."
+    new = (
+        "Code lowers it to review when the evidence shown does not establish it, or when the quote drops a condition its "
+        "own sentence states and the answer does not. Who holds a right, and conditions elsewhere in the contract, code "
+        "does not check."
+    )
+    condition = DENIED_CHECKS["a condition the quote leaves out of its sentence"][1]
+    assert any(condition.search(s) for s in sentences(old))
+    assert not any(denial.search(s) for denial in (pattern for _, pattern in DENIED_CHECKS.values()) for s in sentences(new))
+    assert DENIED_CHECKS["one value given to every party"][1].search("Whether one value holds for every party, code does not check.")
