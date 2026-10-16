@@ -453,6 +453,75 @@ def page_furniture(blocks: Sequence[Block]) -> set[int]:
     return found
 
 
+# How many lines at each edge of a page are read for a running header or footer: one or two in every PDF measured.
+EDGE_LINES = 2
+_NUMBER_RUN = re.compile(r"\d{1,9}")
+
+
+@dataclass(frozen=True)
+class EdgeFurniture:
+    """The indexes of the lines a PDF's reading leaves out as page furniture, by edge (reader v15)."""
+
+    headers: frozenset[int]
+    footers: frozenset[int]
+
+
+def page_edge_furniture(lines: Sequence[str], pages: Sequence[int]) -> EdgeFurniture:
+    """The lines that are a page's running header (at its top) or footer (at its foot), for a format that has pages:
+    among the first or last EDGE_LINES lines with text on a page, a line printed the same on at least MIN_RUNNING_PAGES
+    pages and on most of the pages that carry text, or printed the same but for a number that rises page by page ("Page
+    3 of 12", "- 3 -"). Since reader v15 these are left out of the sections and counted in the coverage, as a Word
+    file's headers and footers are (blind contract stress test, 2026-10-16: "SYNTHETIC LEGAL BENCHMARK / LARKSPUR-2026"
+    at the top of each page sat inside §3, §11 and §13 and broke the sentence a page break fell in).
+
+    Kept: a line that opens with a clause number, a structural line ("EXHIBIT B" on each page of the exhibit), a line on
+    fewer pages, a line in the body of the page, and the lines at the top of the first page before any other line, which
+    are the document's own heading printed at its head (CUAD's eGain agreement, `page_furniture`)."""
+    by_page: dict[int, list[int]] = {}
+    for index, (line, page) in enumerate(zip(lines, pages, strict=True)):
+        if line.strip():
+            by_page.setdefault(page, []).append(index)
+    if len(by_page) < MIN_RUNNING_PAGES:
+        return EdgeFurniture(frozenset(), frozenset())
+
+    def same(line: str) -> str:
+        return " ".join(line.casefold().split())
+
+    def numbered(line: str) -> str:
+        return _NUMBER_RUN.sub("#", same(line))
+
+    def found(edge: dict[int, list[int]]) -> set[int]:
+        exact: dict[str, list[int]] = {}
+        rising: dict[str, list[tuple[int, int, int]]] = {}  # shape -> (page, number, index)
+        for page, indexes in edge.items():
+            for index in indexes:
+                line = lines[index]
+                if HEADING_NUMBER.match(line) or set(_words(line).split()[:1]) & _STRUCTURAL:
+                    continue
+                exact.setdefault(same(line), []).append(index)
+                if number := _NUMBER_RUN.search(line):
+                    rising.setdefault(numbered(line), []).append((page, int(number.group(0)), index))
+
+        def most(count: int) -> bool:
+            return count >= MIN_RUNNING_PAGES and 2 * count > len(by_page)
+
+        out = {index for indexes in exact.values() if most(len({pages[i] for i in indexes})) for index in indexes}
+        for printings in rising.values():
+            ordered = sorted(printings)
+            if most(len({page for page, _, _ in ordered})) and all(b[1] > a[1] for a, b in pairwise(ordered)):
+                out |= {index for _, _, index in ordered}
+        return out
+
+    tops = found({page: indexes[:EDGE_LINES] for page, indexes in by_page.items()})
+    foots = found({page: indexes[-EDGE_LINES:] for page, indexes in by_page.items()}) - tops
+    # The document's own heading, printed at the head of its first page before anything else, stays.
+    for index in by_page[min(by_page)]:
+        if index not in tops:
+            break
+        tops.discard(index)
+    return EdgeFurniture(frozenset(tops), frozenset(foots))
+
+
 def build_sections(blocks: list[Block], title: str = "") -> list[ParsedSection]:
     # A running header or footer is text where it stands: never a heading, and never deleted (it was printed).
     running = running_lines(blocks, title)
@@ -561,11 +630,30 @@ def split_paragraph(text: str, cap: int) -> list[str]:
     return pieces
 
 
+# "Schedule A. Service Level and Credits", "Annex 2 – Fees", "Appendix B: Data Processing Terms": a part of the agreement
+# named by its kind, its mark and, after a full stop, a colon or a dash, its title (reader v15). A Word file styles such a
+# line a heading; in a PDF it was body text, so a schedule was read into the clause before it and its passages were cited
+# as that clause's ("§13.3 No Penalty for Non-Renewal" for Schedule A's credit table; blind contract stress test,
+# 2026-10-16). Not a heading: the mark alone ("Exhibit 10.1" is printed at the top of every page of many EDGAR texts,
+# and as a heading it split their clauses at each page break: 174 of 5,984 corpus texts in the first v15 replay), a mark
+# followed by a space and words (a contents line, "Schedule 1 The Mandated Lead Arrangers and the Lenders"), a mark the
+# title runs into ("Schedule 2.5Fees"), and a title that ends in a page number.
+ATTACHMENT_HEADING = re.compile(
+    r"^(?:Schedule|Exhibit|Appendix|Annexure|Annex|Attachment|Addendum)\s+(?:[A-Z]{1,2}|\d{1,3}(?:\.\d{1,3})*)(?:[.:]|\s+[–—-])\s+(?P<title>\S.*)$"
+)
+_ENDS_IN_A_PAGE = re.compile(r"(?:\d|\.{3,}\s*\d*)$")
+
+
 def looks_like_heading(line: str) -> bool:
-    """For plain text and PDF: a short numbered line or a short all-caps line."""
+    """For plain text and PDF: a short numbered line, a line naming a part of the agreement, or a short all-caps line."""
     stripped = line.strip()
     if not stripped or len(stripped) > 90:
         return False
+    if attachment := ATTACHMENT_HEADING.match(stripped):
+        # Its title is a title: "Schedule A. This schedule sets out the fees" is a sentence, "Exhibit A. (Form of
+        # Assignment), Exhibit B …" a list of references, "Schedule A. Fees ........ 14" a contents line.
+        title = attachment.group("title").strip()
+        return not title.startswith("(") and not _ENDS_IN_A_PAGE.search(title) and title_cased(title)
     match = HEADING_NUMBER.match(stripped)
     # A title may end in a full stop ("Section 2.7 Purchase Price Adjustment."): until reader v14 such a line was body,
     # and a whole Article became one unnumbered section (retrieval study, 2026-10-14: 33 of 51 headings of an EDGAR-shaped

@@ -24,14 +24,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import pytest
-from hypothesis import assume, given, settings
-from hypothesis import strategies as st
 
 from app.ingest import ingest
 from app.ingest.sections import Block, build_sections
 from app.retrieval.aliases import expand_query
 from app.retrieval.lexical import LexicalIndex
-from tests.support import FUZZ_SCALE
 
 
 def _lease() -> list[Block]:
@@ -155,7 +152,13 @@ def test_the_war_room_pdf_keeps_the_exception_in_its_clause_and_retrieval_hands_
     assert [s.heading for s in sections].count("ACME SERVICES AGREEMENT") == 1, "only the title block carries the line as its name"
     liability = next(s for s in sections if s.number == "7")
     assert "shall not exceed the fees paid in the" in liability.text and "except for breach of Section 9" in liability.text
-    assert sum(s.text.count("ACME SERVICES AGREEMENT") for s in sections) == 4, "printed four times, kept four times as text: nothing is deleted"
+    # Reader v15 (test_reader_v15): printed four times, kept once as the document's own heading, left out three times and
+    # counted, as a Word file's headers are; the footers with their rising page number are left out and counted too.
+    assert sum(s.text.count("ACME SERVICES AGREEMENT") for s in sections) == 1
+    assert "ACME SERVICES AGREEMENT" not in " ".join(liability.text.split())
+    coverage = {part.part: part for part in ingest("acme.pdf", text_pdf(ACME)).coverage}
+    assert (coverage["headers"].status, coverage["headers"].count) == ("omitted", 3)
+    assert (coverage["footers"].status, coverage["footers"].count) == ("omitted", 4)
     # Retrieval is unchanged; the clause it ranks first now carries its exception.
     question = expand_query("What is the cap on each party's liability, and are there exceptions?")
     top = LexicalIndex([(s.heading, s.text) for s in sections]).search(question, 8)[0]
@@ -174,41 +177,9 @@ FURNITURE = [
 SUBJECTS = ["fees", "notice", "term", "audit", "renewal", "records", "insurance", "publicity"]
 
 
-@settings(max_examples=40 * FUZZ_SCALE, deadline=None)
-@given(
-    clauses=st.integers(min_value=3, max_value=7),
-    cuts=st.sets(st.integers(min_value=1, max_value=400), min_size=2, max_size=6),
-    furniture=st.sampled_from(FURNITURE),
-    where=st.sampled_from(["top", "bottom", "both"]),
-)
-def test_a_line_printed_on_every_page_never_splits_a_clause(clauses: int, cuts: set[int], furniture: str, where: str) -> None:
-    """Property: whatever the line, wherever it is printed and wherever the page breaks fall (between clauses, between a
-    heading and its body, or inside a sentence), every clause keeps its heading and its whole body in one section, and
-    every printing of the line is still in the text."""
-    rows = ["MASTER AGREEMENT", ""]
-    for k in range(1, clauses + 1):
-        subject, other = SUBJECTS[k], SUBJECTS[k - 1]
-        rows += [f"{k}. {subject.title()}", "", f"Clause {k} opens with the {subject} and runs on", f"until it ends with the {other} it names.", ""]
-    breaks = sorted({c % (len(rows) - 1) + 1 for c in cuts})
-    assume(len(breaks) >= 2)  # three pages at least: two printings are not a running line
-    body = [rows[a:b] for a, b in zip([0, *breaks], [*breaks, len(rows)], strict=True)]
-    top, bottom = where in ("top", "both"), where in ("bottom", "both")
-    pages = [[*([furniture, ""] if top else []), *lines, *(["", furniture] if bottom else [])] for lines in body]
-
-    sections = ingest("paged.pdf", text_pdf(pages)).sections
-
-    numbered = [s for s in sections if s.number]
-    assert [s.number for s in numbered] == [str(k) for k in range(1, clauses + 1)], [(s.number, s.heading) for s in sections]
-    for k, section in enumerate(numbered, start=1):
-        words = " ".join(section.text.replace(furniture, " ").split())
-        assert words == f"Clause {k} opens with the {SUBJECTS[k]} and runs on until it ends with the {SUBJECTS[k - 1]} it names.", (k, section.text)
-    # Before the first clause the line may stand once as the document's own heading (a cover page whose only other
-    # line is the title): that splits no clause. From the first clause on, it never names a section.
-    first = sections.index(numbered[0])
-    name = furniture.rstrip(".")
-    assert not any(name in s.heading for s in sections[first:]), [s.heading for s in sections]
-    kept = sum(1 for s in sections[1:first] if s.heading == name)
-    assert kept <= 1 and sum(s.text.count(furniture) for s in sections) + kept == sum(page.count(furniture) for page in pages), "nothing printed is deleted"
+# The property that a line printed on every page never splits a clause, wherever the page breaks fall, lives in
+# test_reader_v15 since reader v15 (2026-10-16), with that reader's accounting: each printing is read, or left out and
+# counted in the coverage (until v15: kept as text where it stood).
 
 
 def paged(pages: Sequence[Sequence[Block]]) -> list[Block]:

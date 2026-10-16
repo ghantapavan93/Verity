@@ -62,7 +62,14 @@ MAX_NAME = 255
 # text box, a tracked change), the heading has no number. All formats: a heading's lead-in title never ends at a
 # reference word before a number ("AMENDMENT NO. 1 TO …" was "AMENDMENT NO"), and a heading line holding a sentence end
 # followed by more words is a wrapped clause, read as body under a short label. Measured on the corpus: DECISIONS.md.
-PARSER_VERSION = "v14"
+# v15 (2026-10-16, the blind contract stress test): plain text and PDF. A line naming a part of the agreement by its kind
+# and its mark ("Schedule A. Service Level and Credits", "Exhibit C", "Annex 2 – Fees") is a heading, as Word styles it:
+# a PDF's Schedule A was read into §13 and its credit table cited as "§13.3". PDF: a line printed the same (or with a
+# page number that rises) at the top or foot of most pages is left out of the sections and counted in the coverage, its
+# lines named, as a Word file's headers and footers are (sections.page_edge_furniture); v12 kept such lines as text where
+# they stood, so they sat inside clauses and broke the sentence a page break fell in. The document's own heading printed
+# at the head of its first page stays. DOCX is read as in v14 but for unstyled lines naming a part. Measured: DECISIONS.md.
+PARSER_VERSION = "v15"
 
 
 @dataclass

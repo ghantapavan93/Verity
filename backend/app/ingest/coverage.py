@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -151,7 +152,23 @@ def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs:
     )
 
 
-def pdf_coverage(pages: int | None, textless_pages: int = 0) -> list[PartCoverage]:
+MAX_NAMED_LINES = 3
+
+
+def _left_out(edge: str, lines: Sequence[str], unknown: str) -> PartCoverage:
+    """A PDF's running headers or footers: left out and counted, with the lines named, when the reading found any
+    (reader v15, `sections.page_edge_furniture`); unknown otherwise, since a PDF does not mark them."""
+    if not lines:
+        return PartCoverage(f"{edge}s", Status.UNKNOWN, note=unknown)
+    distinct = list(dict.fromkeys(lines))
+    named = ", ".join(f"“{line}”" for line in distinct[:MAX_NAMED_LINES]) + (
+        f" and {len(distinct) - MAX_NAMED_LINES} more" if len(distinct) > MAX_NAMED_LINES else ""
+    )
+    where = "top" if edge == "header" else "foot"
+    return PartCoverage(f"{edge}s", Status.OMITTED, len(lines), f"lines printed at the {where} of most pages, left out of the reading: {named}")
+
+
+def pdf_coverage(pages: int | None, textless_pages: int = 0, headers: Sequence[str] = (), footers: Sequence[str] = ()) -> list[PartCoverage]:
     scanned = (
         PartCoverage("scanned_pages", Status.OMITTED, textless_pages, "pages with no text layer; nothing is read from them and no OCR is run")
         if textless_pages
@@ -160,8 +177,8 @@ def pdf_coverage(pages: int | None, textless_pages: int = 0) -> list[PartCoverag
     return [
         PartCoverage("main_body", Status.READ, pages or 0, "the text layer of every page, in reading order as the PDF gives it"),
         PartCoverage("tables", Status.PARTIAL, note="table cells come out as running text; columns are not reconstructed"),
-        PartCoverage("headers", Status.UNKNOWN, note="a PDF does not mark headers; page furniture may be in the text"),
-        PartCoverage("footers", Status.UNKNOWN, note="a PDF does not mark footers; page numbers may be in the text"),
+        _left_out("header", headers, "a PDF does not mark headers; page furniture may be in the text"),
+        _left_out("footer", footers, "a PDF does not mark footers; page numbers may be in the text"),
         PartCoverage("footnotes", Status.UNKNOWN, note="footnotes are text on the page like any other"),
         scanned,
         PartCoverage("embedded_objects", Status.OMITTED, note="images and attachments are not read"),

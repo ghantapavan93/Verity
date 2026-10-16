@@ -196,7 +196,8 @@ def test_a_number_written_in_the_heading_is_kept_whatever_word_does() -> None:
 
 
 def test_the_reader_version_names_the_change() -> None:
-    assert PARSER_VERSION in ("v13", "v14")  # v14 keeps every v13 rule here and prints Word's own numbers (test_post_pilot_repair.py)
+    # v14 keeps every v13 rule here and prints Word's own numbers (test_post_pilot_repair.py); v15 keeps both (test_reader_v15.py).
+    assert PARSER_VERSION in ("v13", "v14", "v15")
 
 
 KIND = st.sampled_from(["written", "word", "plain"])

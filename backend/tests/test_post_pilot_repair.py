@@ -304,8 +304,8 @@ def test_a_lettered_sub_item_is_cited_with_the_clause_it_sits_in() -> None:
     assert _numbers(top, ("Alpha",)) == ["(a)"]  # control: nothing above it to cite
 
 
-def test_the_reader_is_v14() -> None:
-    assert PARSER_VERSION == "v14"
+def test_the_reader_keeps_v14s_numbering() -> None:
+    assert PARSER_VERSION in ("v14", "v15")  # v15 (test_reader_v15.py) changes no DOCX numbering
 
 
 # ------------------------------------------------------------------------------------------------ 3. policy-v9

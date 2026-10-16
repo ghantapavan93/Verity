@@ -29,7 +29,7 @@ from pypdf import PdfReader
 
 from .coverage import PartCoverage, Status, docx_coverage, pdf_coverage, txt_coverage
 from .invisible import remove_format_characters, visible_text
-from .sections import HEADING_NUMBER, MAX_TOP_STEP, Block, continues_numbering, looks_like_heading
+from .sections import HEADING_NUMBER, MAX_TOP_STEP, Block, continues_numbering, looks_like_heading, page_edge_furniture
 
 log = logging.getLogger(__name__)
 
@@ -876,8 +876,13 @@ def read_pdf(data: bytes) -> ReadResult:
         lines.extend(re.sub(r"[ \t]{2,}", " ", line) for line in text.splitlines())
         lines.append("")
         line_pages.extend([number] * (len(lines) - len(line_pages)))
+    # A page's running header and footer are left out of the reading and counted, as a Word file's are (reader v15).
+    furniture = page_edge_furniture(lines, line_pages)
+    headers = [lines[i].strip() for i in sorted(furniture.headers)]
+    footers = [lines[i].strip() for i in sorted(furniture.footers)]
+    lines = ["" if i in furniture.headers or i in furniture.footers else line for i, line in enumerate(lines)]
     return ReadResult(
-        coverage=pdf_coverage(page_count, textless),
+        coverage=pdf_coverage(page_count, textless, headers, footers),
         blocks=_blocks_from_lines(lines, line_pages),
         pages=len(pages),
         title=_first_line(lines),
