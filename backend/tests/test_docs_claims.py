@@ -17,6 +17,7 @@ release gate does not run agrees with scripts/release-gate.sh.
 from __future__ import annotations
 
 import ast
+import html
 import re
 from collections.abc import Iterator
 from pathlib import Path
@@ -235,18 +236,21 @@ def test_the_readme_and_every_page_say_the_same_independence_sentence() -> None:
 # leaves to a person what code now checks misleads a reader about what a status means: for a day after policy-v14 began
 # checking it, the first screen said "whether a condition was left out, code does not check" and the README said it
 # "stays a person's call" (2026-10-16). The first version of this test matched that one sentence's word order and missed
-# the README. A denial is now any of the idioms below, which are the ways these pages leave a thing to a person or the
-# model (read across src/, the README, docs/ and proof/ on 2026-10-16); a page that finds another must add it here. A
-# check is named by its subject's words in any order.
-_NOT = r"(?:does not|doesn't|doesn’t|did not|never|cannot|can't|can’t|will not|won't|won’t)"
+# the README. A denial is one of the idioms below: those found where these pages leave a thing to a person or the model
+# (src/, the README, docs/ and proof/, read on 2026-10-16), matched in the text as a reader sees it. It is a tripwire for
+# the wordings found, not a proof that no other exists: a wording outside the list, a denial split by a semicolon or
+# across a table's cells, or one naming the check only by a pronoun passes (DECISIONS.md, 2026-10-16). A check is named
+# by its subject's words in any order.
+_NOT = r"(?:does not|doesn't|did not|never|cannot|can't|will not|won't)"
 _PERSON = r"(?:a |the )?(?:person|reader|reviewer|human)"
 DENIAL = re.compile(
     rf"\b(?:code|it|verity|the workbench|the verifier|the policy) {_NOT} (?:check|verify|catch|see|test|look at|tell|decide)"
     r"|\b(?:code|it|verity) never (?:checks|verifies|catches|sees|tests|looks at|decides)"
-    r"|\bnot (?:checked|verified|caught|tested|decided)\b|\bunchecked\b|\bnot code(?:'s|’s)|\bno code check"
-    r"|\bthe model(?:'s|’s) (?:reading|call|judgement|judgment|view)"
-    rf"|\bleft to {_PERSON}|\b(?:stays|stay|is|are|remains|remain|rests|rest) with {_PERSON}|\b{_PERSON} decides"
-    rf"|\b(?:stays|stay|is|are|remains|remain) {_PERSON}(?:'s|’s|s'|s’) (?:call|judgement|judgment|reading)",
+    r"|\bnot (?:checked|verified|caught|tested|decided)\b|\bunchecked\b|\bnot code's|\bno code check"
+    r"|\bthe model's (?:reading|call|judgement|judgment|view|job)"
+    rf"|\bleft to (?:the model|{_PERSON})|\b(?:stays|stay|is|are|remains|remain|rests|rest) with {_PERSON}|\b{_PERSON} decides"
+    rf"|\b(?:stays|stay|is|are|remains|remain) {_PERSON}(?:'s|s') (?:call|judgement|judgment|reading)"
+    r"|\b(?:yours|a person's|a reviewer's|the reader's|the model's) to (?:check|decide|judge)",
     re.IGNORECASE,
 )
 
@@ -265,7 +269,7 @@ DENIED_CHECKS = {
     "a condition the quote leaves out of its sentence": DeniedCheck(
         calls=(("runs/service.py", "left_out_condition("), ("runs/service.py", "check_conditions(")),
         subject=(
-            re.compile(r"\b(?:condition|exception|carve[- ]out|proviso|qualification)s?\b", re.IGNORECASE),
+            re.compile(r"\b(?:condition|exception|carve[- ]out|proviso|qualification)s?\b|[“\"](?:unless|except|subject to)[”\"]", re.IGNORECASE),
             re.compile(
                 r"\b(?:left[- ]out|leav(?:es|e|ing) (?:\S+ ){0,3}?out|omit(?:s|ted|ting)?|drop(?:s|ped|ping)?|missing|miss(?:es|ed)?"
                 r"|ignor(?:es|ed|ing)?|carr(?:y|ies)|states?|mentions?|includes?|keeps?|repeats?)\b",
@@ -303,19 +307,22 @@ def reader_facing() -> list[Path]:
 
 
 _HTML_HEADED_LIST = re.compile(r"<h\d[^>]*>([^<]*)</h\d>\s*<[ou]l[^>]*>(.*?)</[ou]l>", re.DOTALL)
-_MD_HEADED_LIST = re.compile(r"^([^\n]+):[ \t]*\n((?:[ \t]*[-*] [^\n]*\n?)+)", re.MULTILINE)
+# "Not checked by code:" or "### Not checked by code", then the list, a blank line between or not.
+_MD_HEADED_LIST = re.compile(r"^(?:([^\n#][^\n]*):|#{1,6}[ \t]+([^\n]+?))[ \t]*\n(?:[ \t]*\n)*((?:[ \t]*[-*] [^\n]*\n?)+)", re.MULTILINE)
 
 
 def statements(text: str) -> Iterator[str]:
-    """Each sentence, and each item of a list read with its heading: /break's "Not checked by the released code" heads
-    a list whose items name what is left to a person, and no item says so itself."""
+    """Each sentence as a reader sees it (JSX writes "the model&apos;s reading"; one apostrophe for ' and ’), and each
+    item of a list read with its heading: /break's "Not checked by the released code" heads a list whose items name what
+    is left to a person, and no item says so itself."""
+    text = html.unescape(text).replace("’", "'")
     yield from sentences(text)
     for heading, items in _HTML_HEADED_LIST.findall(text):
         for item in re.findall(r"<li[^>]*>(.*?)</li>", items, re.DOTALL):
             yield " ".join(f"{heading}: {item}".split())
-    for heading, items in _MD_HEADED_LIST.findall(text):
+    for label, title, items in _MD_HEADED_LIST.findall(text):
         for item in re.findall(r"^[ \t]*[-*] (.*)$", items, re.MULTILINE):
-            yield " ".join(f"{heading}: {item}".split())
+            yield " ".join(f"{label or title}: {item}".split())
 
 
 def denies(check: DeniedCheck, statement: str) -> bool:
@@ -380,6 +387,11 @@ def test_the_denial_patterns_catch_the_old_wordings_and_pass_the_true_limits() -
         "Code cannot tell whether a condition was left out.": condition,
         "A left-out condition is shown with no code check.": condition,
         "Code doesn’t check whether a condition was left out.": condition,
+        "Code doesn&apos;t check whether a condition was left out.": condition,
+        "Whether the answer leaves out a condition is the model&apos;s reading, and yours to decide.": condition,
+        "Whether a condition was left out is a reviewer&apos;s to check.": condition,
+        "Whether the answer drops an “unless” is left to the model.": condition,
+        "### Not checked by code\n\n- whether a condition was left out\n": condition,
         "Not checked by code: whether the answer states the exception its quote leaves out": condition,
         "<h3>Not checked by the released code</h3>\n<ul>\n<li>Who holds the right.</li>\n<li>Left-out conditions.</li>\n</ul>": condition,
         "Not checked by code:\n- who holds the right\n- whether a condition was left out\n": condition,
@@ -400,6 +412,7 @@ def test_the_denial_patterns_catch_the_old_wordings_and_pass_the_true_limits() -
         "The passages state 45 and 60 days. The answer uses 45; which one applies is the model's reading, not checked by code.",
         "The answer quotes wording the contract deletes. Whether it still applies is not decided by code.",
         "Absence is the model's view of the few sections it was handed.",
+        "Code checked that each passage is in the document text. Whether it supports the answer is the model&apos;s reading, and yours to decide.",
     ]
     for text in passed:
         assert not any(denies(check, s) for check in DENIED_CHECKS.values() for s in statements(text)), text
