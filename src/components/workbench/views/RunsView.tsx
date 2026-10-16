@@ -257,7 +257,11 @@ export function RunsView({
             Interface built from commit <code>{BUILD_SHA.slice(0, 12)}</code>; the API record names the reader, verifier, prompt and model of each run.
           </p>
         )}
-        {notice && <p className={styles.notice}>{notice}</p>}
+        {notice && (
+          <p className={styles.notice} role="alert">
+            {notice}
+          </p>
+        )}
         {error && !runs && (
           <ReadFailed
             what="the runs"

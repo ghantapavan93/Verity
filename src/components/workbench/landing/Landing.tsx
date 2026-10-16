@@ -26,12 +26,12 @@ const LAYERS = [
   { who: "person", name: "Decides", text: "Confirms or dismisses each finding, under their name." },
 ] as const;
 
-/** The first screen: what Verity is, where a contract goes, and one finished review a stranger can open. */
 /** A refused file, said the same way on the first screen and on the view it was added from. */
 export function refusal(error: { name: string | null; reason: string }): string {
   return error.name ? `${error.name} was not added: ${error.reason}` : error.reason;
 }
 
+/** The first screen: what Verity is, where a contract goes, and one finished review a stranger can open. */
 export function Landing({
   stage,
   processingLabel,

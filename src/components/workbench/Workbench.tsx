@@ -66,6 +66,11 @@ import {
 const HIGHLIGHT_MS = 1600;
 const READY_PAUSE_MS = 450;
 
+/** What was refused or failed: a file not added, or a record that could not be opened. */
+type Notice = { kind: "refused"; name: string | null; reason: string } | { kind: "failed"; text: string };
+const noticeText = (notice: Notice | null): string | null =>
+  notice === null ? null : notice.kind === "refused" ? refusal(notice) : notice.text;
+
 // The run the first screen offers as a finished review, set at build time for a deployment whose store holds it
 // (the Phase 1 proof run, docs/DEMO-PROOF.md), and that run or none (landing/proofRun.ts); otherwise the latest complete run with findings.
 const PROOF_RUN_ID = process.env.NEXT_PUBLIC_PROOF_RUN ?? "";
@@ -90,7 +95,10 @@ function WorkbenchSurface() {
   const [sample, setSample] = useState<SampleKind | null>(null);
   // On a phone the split shows one pane at a time (Workbench.module.css): the answer, or the contract. View state only.
   const [narrowPane, setNarrowPane] = useState<"answer" | "contract">("answer");
-  const [uploadError, setUploadError] = useState<{ name: string | null; reason: string } | null>(null);
+  // One notice, the latest: shown on whichever view the reader is left on, the first screen included. Two states, one
+  // shown before the other and on Documents only, left a refusal on Findings unseen and let an earlier refusal hide a
+  // newer failure (review of the blind contract stress test repairs, 2026-10-16).
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [apiHealth, setApiHealth] = useState<Health | null>(null);
   const [accessKnown, setAccessKnown] = useState(true);
   const [evidence, setEvidence] = useState<FindingView | null>(null);
@@ -103,7 +111,6 @@ function WorkbenchSurface() {
   const [composerText, setComposerText] = useState("");
   const [view, setView] = useState<View>("assistant");
   const [recent, setRecent] = useState<DocumentSummary[]>([]);
-  const [viewError, setViewError] = useState<string | null>(null);
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
 
   const runs = useRunFollower();
@@ -196,7 +203,7 @@ function WorkbenchSurface() {
       // refusal on that view (blind contract stress test, 2026-10-16: it sent them to the first screen's top, the
       // contract gone and the refusal below the fold).
       const addedFrom = stage === "workspace" ? view : null;
-      setUploadError(null);
+      setNotice(null);
       setPendingName(file.name);
       setProcessingLabel("Reading document");
       // A file added from another view (Documents) is read on the first screen, where its progress and result show.
@@ -222,7 +229,7 @@ function WorkbenchSurface() {
           });
         }, READY_PAUSE_MS);
       } catch (error) {
-        setUploadError({ name: file.name, reason: errorMessage(error) });
+        setNotice({ kind: "refused", name: file.name, reason: errorMessage(error) });
         if (addedFrom === null) {
           setStage("empty");
         } else {
@@ -251,7 +258,7 @@ function WorkbenchSurface() {
 
   const loadSample = useCallback(
     async (kind: SampleKind) => {
-      setUploadError(null);
+      setNotice(null);
       try {
         // eslint-disable-next-line no-restricted-globals -- the bundled sample is a static file of this origin, not the API
         const response = await fetch(SAMPLES[kind].path);
@@ -259,7 +266,7 @@ function WorkbenchSurface() {
         const blob = await response.blob();
         await loadFile(new File([blob], SAMPLES[kind].name, { type: blob.type }), kind);
       } catch (error) {
-        setUploadError({ name: null, reason: errorMessage(error) });
+        setNotice({ kind: "refused", name: null, reason: errorMessage(error) });
       }
     },
     [loadFile],
@@ -296,8 +303,7 @@ function WorkbenchSurface() {
 
   const navigate = useCallback(
     (next: View) => {
-      setViewError(null);
-      setUploadError(null);
+      setNotice(null);
       setPaletteOpen(false);
       setGuidanceOpen(false);
       setView(next);
@@ -313,7 +319,7 @@ function WorkbenchSurface() {
 
   const openDocument = useCallback(
     async (id: string, show = true) => {
-      setViewError(null);
+      setNotice(null);
       if (doc?.id === id) {
         focusComposerOnOpen.current = show;
         setNarrowPane("answer");
@@ -336,7 +342,7 @@ function WorkbenchSurface() {
         setStage("workspace");
         if (show) setView("assistant");
       } catch (error) {
-        setViewError(openFailure(error, "contract"));
+        setNotice({ kind: "failed", text: openFailure(error, "contract") });
       }
     },
     [doc, stopRun, showRun, resetMemo, setRunError],
@@ -345,7 +351,7 @@ function WorkbenchSurface() {
   /** Show a recorded run in the workspace: its document, its guidance as the scope, its findings. */
   const openRun = useCallback(
     async (runId: string, findingId: string | null = null, show = true) => {
-      setViewError(null);
+      setNotice(null);
       // Opening waits on three fetches; a question asked or another run opened meanwhile is newer and keeps the screen.
       const current = claimRun();
       try {
@@ -372,7 +378,7 @@ function WorkbenchSurface() {
         setStage("workspace");
         if (show) setView("assistant");
       } catch (error) {
-        if (current()) setViewError(openFailure(error, "run"));
+        if (current()) setNotice({ kind: "failed", text: openFailure(error, "run") });
       }
     },
     [doc, claimRun, stopRun, showRun, setGuidance, setGuidanceDraft, resetMemo, setRunError],
@@ -615,13 +621,13 @@ function WorkbenchSurface() {
             proof={proof}
             proofStory={Boolean(PROOF_RUN_ID) && proof?.id === PROOF_RUN_ID}
             onOpenProof={(id, findingId) => void openRun(id, findingId)}
-            uploadError={uploadError}
+            uploadError={notice?.kind === "refused" ? notice : null}
             apiHealth={apiHealth}
             accessKnown={accessKnown && apiHealth !== null}
             recent={recent}
             onOpenDocument={(id) => void openDocument(id)}
             onAllDocuments={() => navigate("documents")}
-            viewError={viewError}
+            viewError={notice?.kind === "failed" ? notice.text : null}
             reduceMotion={reduceMotion}
           />
         ) : (
@@ -634,16 +640,16 @@ function WorkbenchSurface() {
                   {view === "documents" && (
                     <DocumentsView
                       currentId={doc?.id ?? null}
-                      notice={uploadError ? refusal(uploadError) : viewError}
+                      notice={noticeText(notice)}
                       onOpen={(id) => void openDocument(id)}
                       onAdd={() => fileInputRef.current?.click()}
                       onStart={() => void loadSample("amended")}
                     />
                   )}
                   {view === "findings" && (
-                    <FindingsView notice={viewError} onOpen={(record) => void openRun(record.runId, record.id)} onStart={() => void loadSample("amended")} />
+                    <FindingsView notice={noticeText(notice)} onOpen={(record) => void openRun(record.runId, record.id)} onStart={() => void loadSample("amended")} />
                   )}
-                  {view === "runs" && <RunsView notice={viewError} currentRunId={run?.id ?? null} onOpenRun={(id) => void openRun(id)} />}
+                  {view === "runs" && <RunsView notice={noticeText(notice)} currentRunId={run?.id ?? null} onOpenRun={(id) => void openRun(id)} />}
                 </motion.div>
               ) : (
                 <motion.div key="workspace" className={styles.main} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={quick}>

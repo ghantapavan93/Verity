@@ -132,33 +132,101 @@ test("a health check that fails once does not hide where the model runs for the 
 // The drawer's decision form carried to another finding (also found 2026-10-13) needs a run with two findings, which
 // no recorded answer has: it is reproduced in assistant/EvidenceDrawer.test.tsx.
 
-// Blind contract stress test (2026-10-16): a file refused while a contract was open sent the reader to the first
-// screen's top, the contract gone and the refusal below the fold (896 px down at 900, 968 at 812).
-async function refuseWhileOpen(page: Page, width: number, height: number): Promise<void> {
+// Blind contract stress test (2026-10-16) and its review: what refused or failed is on the view the reader is left on,
+// and only the latest of it. A file refused while a contract was open sent the reader to the first screen's top, the
+// contract gone and the refusal below the fold (896 px down at 900, 968 at 812). The first repair showed the refusal on
+// Documents only: a sample refused from Findings showed nowhere, and a refusal outlived a newer failure on Documents.
+const NOT_A_PDF = { name: "not-a-pdf.pdf", mimeType: "application/pdf", buffer: Buffer.from("VERITY: this file is not a PDF.") };
+const NOT_READABLE = "not-a-pdf.pdf was not added: the file is not a readable PDF";
+const BUSY = "Reading is busy: add the contract again in a minute.";
+const GONE = "This contract cannot be opened in this workspace";
+
+/** Opens the sample at a size; returns its document id. */
+async function openAt(page: Page, width: number, height: number): Promise<string | null> {
   await page.setViewportSize({ width, height });
   await page.goto("/");
   await page.getByRole("button", { name: "try a sample agreement" }).click();
   await expect(page).toHaveURL(/[?&]document=/);
   // A phone opens a new contract on its answer, so the composer, shown at every width, says it is open.
   await expect(page.getByPlaceholder("Ask a question about this contract")).toBeVisible();
-  const opened = param(page, "document");
-  await page.getByRole("button", { name: "Documents" }).click();
-  const title = page.getByRole("heading", { name: /Contracts in this workbench/ });
-  await expect(title).toBeVisible();
+  return param(page, "document");
+}
+
+async function addNotAPdf(page: Page): Promise<void> {
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Add a contract" }).first().click();
-  await (await chooser).setFiles({ name: "not-a-pdf.pdf", mimeType: "application/pdf", buffer: Buffer.from("VERITY: this file is not a PDF.") });
-  const refusal = page.getByRole("alert").filter({ hasText: "not-a-pdf.pdf was not added: the file is not a readable PDF" });
+  await (await chooser).setFiles(NOT_A_PDF);
+}
+
+const ADDED_FROM = {
+  documents: { where: "Documents", title: /Contracts in this workbench/, refused: NOT_READABLE, add: addNotAPdf, before: async () => {} },
+  findings: {
+    // Findings offers the amended sample only while the workspace has no findings; its reading is refused as by a busy server.
+    where: "Findings",
+    title: /Findings and their passages/,
+    refused: BUSY,
+    add: async (page: Page) => {
+      await page.getByRole("button", { name: "Try the amendment challenge" }).click();
+    },
+    before: async (page: Page) => {
+      await page.route("**/api/findings", (route) => route.fulfill({ json: [] }));
+      await page.route("**/api/documents", (route) =>
+        route.request().method() === "POST" ? route.fulfill({ status: 503, json: { detail: BUSY } }) : route.continue(),
+      );
+    },
+  },
+} as const;
+
+/** A file refused on a view while a contract is open: the reader stays there, the contract open, the refusal on screen. */
+async function refusedWhereAdded(page: Page, from: (typeof ADDED_FROM)[keyof typeof ADDED_FROM], width: number, height: number): Promise<void> {
+  const opened = await openAt(page, width, height);
+  await from.before(page);
+  await page.getByRole("button", { name: from.where, exact: true }).click();
+  const title = page.getByRole("heading", { name: from.title });
+  await expect(title).toBeVisible();
+  await from.add(page);
+  const refusal = page.getByRole("alert").filter({ hasText: from.refused });
   await expect(refusal).toBeVisible();
   await expect(refusal).toBeInViewport();
   await expect(title).toBeVisible();
   expect(param(page, "document")).toBe(opened);
 }
 
-test("a file refused while a contract is open leaves the reader where they added it, the refusal on screen", async ({ page }) => {
-  await refuseWhileOpen(page, 1440, 900);
+// One test( per flow: backend/scripts/data_audit.py counts the flows by their calls.
+test("a file refused on Documents while a contract is open leaves the reader there, the refusal on screen", async ({ page }) => {
+  await refusedWhereAdded(page, ADDED_FROM.documents, 1440, 900);
 });
 
-test("a file refused while a contract is open, on a phone, leaves the reader where they added it, the refusal on screen", async ({ page }) => {
-  await refuseWhileOpen(page, 375, 812);
+test("a file refused on Documents while a contract is open, on a phone, leaves the reader there, the refusal on screen", async ({ page }) => {
+  await refusedWhereAdded(page, ADDED_FROM.documents, 375, 812);
+});
+
+test("a file refused on Findings while a contract is open leaves the reader there, the refusal on screen", async ({ page }) => {
+  await refusedWhereAdded(page, ADDED_FROM.findings, 1440, 900);
+});
+
+test("a file refused on Findings while a contract is open, on a phone, leaves the reader there, the refusal on screen", async ({ page }) => {
+  await refusedWhereAdded(page, ADDED_FROM.findings, 375, 812);
+});
+
+test("a newer failure takes the place of a refusal on screen, and a newer refusal the place of a failure", async ({ page }) => {
+  await openAt(page, 1440, 900);
+  // A contract listed but gone when it is opened, as when its workspace expired in between.
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const listed = await (await route.fetch()).json();
+    await route.fulfill({ json: [{ ...listed[0], id: "gone", name: "gone-contract.txt" }, ...listed] });
+  });
+  await page.route("**/api/documents/gone", (route) => route.fulfill({ status: 404, json: { detail: "document not found" } }));
+  await page.getByRole("button", { name: "Documents" }).click();
+  await addNotAPdf(page);
+  await expect(page.getByRole("alert").filter({ hasText: NOT_READABLE })).toBeVisible();
+
+  await page.getByRole("button").filter({ hasText: "gone-contract" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: GONE })).toBeVisible();
+  await expect(page.getByText(NOT_READABLE)).toHaveCount(0);
+
+  await addNotAPdf(page);
+  await expect(page.getByRole("alert").filter({ hasText: NOT_READABLE })).toBeVisible();
+  await expect(page.getByText(GONE)).toHaveCount(0);
 });
