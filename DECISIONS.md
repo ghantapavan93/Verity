@@ -1483,16 +1483,21 @@ quote when one stands before it, and an answer sharing two of the condition's wo
 "Except for the first sixty (60) calendar days of the Initial Term") all keep the pass. A rule with these edges cannot
 be stated whole on a card. The pages now say that code lowers some passes whose quote leaves out an "unless", "except"
 or "subject to" from its own sentence, where the answer does not mention it, and that whether the answer carries every
-condition is not checked; the failure envelope's row states the rule and its edges. The class is held in
-`test_docs_claims.py`: no page, README or document a reader is given may leave to a person a check the run performs (a
-condition left out of the quote's sentence; one value given to every party), in any of the ways these pages say so
-("code does not check", "not checked", "a person's call", "the model's reading, not code's", a list under a "Not
-checked" heading). A phrase naming more than the check covers ("every condition", "a condition in another clause") is
-set aside before the rest of the statement is read, so a denial beside a true limit still fails; the second review
-found that the first scope rule, read over the whole sentence, let one through. The words the pages name for the check
-must be `CARVE_OUT` words. The first version of the test matched one sentence's word order and missed the README; its
-control now holds both old sentences, sixteen other wordings, the repaired sentences and the limits still true
-(/break's "every condition and exception").
+condition is not checked; the failure envelope's row states the rule. A third review found that row overstating too: a
+condition made only of common contract words ("unless the Customer gives prior written notice") is never read, so a
+notice condition, this product's commonest, can keep its pass. The row now defines a condition's own words as code
+reads them, its sentence's ends as code finds them, and names the passes kept as some among others; each edge it states
+was run through `left_out_condition` and `check_conditions`. The deferred-triage row that listed "a carve-out the quote
+boundary cut" says one kind is read now. The class is held in `test_docs_claims.py`: no page, README or document a
+reader is given may leave to a person a check the run performs (a condition left out of the quote's sentence; one value
+given to every party) in any of the idioms these pages use for it, read across them on 2026-10-16 ("code does not
+check", "not checked", "not decided by code", "a person's call", "stays with a person", "the model's view", a list under
+a "Not checked" heading). A phrase naming more than the check covers ("every condition", "a condition in another
+clause") is set aside before the rest of the statement is read, so a denial beside a true limit still fails; the second
+review found that the first scope rule, read over the whole sentence, let one through. The words the pages name for the
+check must be `CARVE_OUT` words. The first version of the test matched one sentence's word order and missed the README;
+its control now holds both old sentences, twenty-three other wordings, the repaired sentences and the limits still true
+(/break's "every condition and exception", "Whether it still applies is not decided by code").
 
 ## 2026-10-16: one Hetzner server, the model on it
 

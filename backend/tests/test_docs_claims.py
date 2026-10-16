@@ -235,16 +235,18 @@ def test_the_readme_and_every_page_say_the_same_independence_sentence() -> None:
 # leaves to a person what code now checks misleads a reader about what a status means: for a day after policy-v14 began
 # checking it, the first screen said "whether a condition was left out, code does not check" and the README said it
 # "stays a person's call" (2026-10-16). The first version of this test matched that one sentence's word order and missed
-# the README; a denial is now any of the ways these pages leave a thing to a person, and a check is named by its
-# subject's words in any order.
+# the README. A denial is now any of the idioms below, which are the ways these pages leave a thing to a person or the
+# model (read across src/, the README, docs/ and proof/ on 2026-10-16); a page that finds another must add it here. A
+# check is named by its subject's words in any order.
+_NOT = r"(?:does not|doesn't|doesn’t|did not|never|cannot|can't|can’t|will not|won't|won’t)"
+_PERSON = r"(?:a |the )?(?:person|reader|reviewer|human)"
 DENIAL = re.compile(
-    r"\b(?:code|it|verity|the workbench|the verifier|the policy) (?:does not|doesn't|did not|never|cannot|can't|will not"
-    r"|won't) (?:check|verify|catch|see|test|look at)"
-    r"|\b(?:code|it|verity) never (?:checks|verifies|catches|sees|tests|looks at)"
-    r"|\bnot (?:checked|verified|caught|tested)\b|\bunchecked\b|\bnot code(?:'s|’s)"
-    r"|\bthe model(?:'s|’s) (?:reading|call|judgement|judgment)"
-    r"|\bleft to (?:a |the )?(?:person|reader|reviewer|human)"
-    r"|\b(?:stays|stay|is|are|remains|remain) (?:a |the )?(?:person|reader|reviewer|human)(?:'s|’s|s'|s’) (?:call|judgement|judgment|reading)",
+    rf"\b(?:code|it|verity|the workbench|the verifier|the policy) {_NOT} (?:check|verify|catch|see|test|look at|tell|decide)"
+    r"|\b(?:code|it|verity) never (?:checks|verifies|catches|sees|tests|looks at|decides)"
+    r"|\bnot (?:checked|verified|caught|tested|decided)\b|\bunchecked\b|\bnot code(?:'s|’s)|\bno code check"
+    r"|\bthe model(?:'s|’s) (?:reading|call|judgement|judgment|view)"
+    rf"|\bleft to {_PERSON}|\b(?:stays|stay|is|are|remains|remain|rests|rest) with {_PERSON}|\b{_PERSON} decides"
+    rf"|\b(?:stays|stay|is|are|remains|remain) {_PERSON}(?:'s|’s|s'|s’) (?:call|judgement|judgment|reading)",
     re.IGNORECASE,
 )
 
@@ -371,6 +373,13 @@ def test_the_denial_patterns_catch_the_old_wordings_and_pass_the_true_limits() -
         "Code never checks whether an answer drops a proviso.": condition,
         "Code does not check whether the answer leaves a condition out.": condition,
         "Whether the answer ignores an exception is the model's reading, not code's.": condition,
+        "Whether the answer leaves out a condition is not decided by code.": condition,
+        "Whether a condition was left out is the model's view.": condition,
+        "A left-out condition stays with a person.": condition,
+        "Whether a condition was left out, a person decides.": condition,
+        "Code cannot tell whether a condition was left out.": condition,
+        "A left-out condition is shown with no code check.": condition,
+        "Code doesn’t check whether a condition was left out.": condition,
         "Not checked by code: whether the answer states the exception its quote leaves out": condition,
         "<h3>Not checked by the released code</h3>\n<ul>\n<li>Who holds the right.</li>\n<li>Left-out conditions.</li>\n</ul>": condition,
         "Not checked by code:\n- who holds the right\n- whether a condition was left out\n": condition,
@@ -389,6 +398,8 @@ def test_the_denial_patterns_catch_the_old_wordings_and_pass_the_true_limits() -
         "Not checked by code: whether the passage supports the answer, including who holds the right or owes the duty",
         "Whether a condition in another clause was left out, code does not check.",
         "The passages state 45 and 60 days. The answer uses 45; which one applies is the model's reading, not checked by code.",
+        "The answer quotes wording the contract deletes. Whether it still applies is not decided by code.",
+        "Absence is the model's view of the few sections it was handed.",
     ]
     for text in passed:
         assert not any(denies(check, s) for check in DENIED_CHECKS.values() for s in statements(text)), text
