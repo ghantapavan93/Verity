@@ -15,7 +15,11 @@ about 270 (p90 2,300 and 440, the most 880; 76 real answers of the blind stress 
   NVMe. CPU only. Install Ubuntu 24.04 with Hetzner's `installimage`, the two disks as software RAID 1, and delete the
   swap partition its default layout carries (`PART swap …`): no swap, below. The model runs
   on the CPU; its speed on this machine is the first thing measured once it is rented (below, What only the server can
-  show), against the go/no-go of an answer's p90 within 120 s.
+  show), against the go/no-go of an answer's p90 within 120 s. For scale, the same container on the workstation's CPU
+  (Ryzen 9 5900HX: Zen 3, 8 cores, DDR4-3200), 2026-10-16: 19.9 tokens a second read and 5.6 written, so about 143 s
+  for the median answer and 195 s for the p90, after a first load of 239 s. The AX42's DDR5 and AVX-512 should do
+  better, by an amount only the server shows; even at the bound it is slower than the workstation's GPU today (34 s
+  for the median answer).
 - **If the AX42 misses that bound: a dedicated GEX45** (Helsinki): NVIDIA RTX PRO 4000 Blackwell, 24 GB, the same
   model in GPU memory, with `compose.gpu.yml`, the NVIDIA driver and the NVIDIA Container Toolkit. An answer is then
   expected to take seconds (not measured here), and two or more could run at once (OLLAMA_NUM_PARALLEL and
@@ -30,8 +34,8 @@ about 270 (p90 2,300 and 440, the most 880; 76 real answers of the blind stress 
   which dials out. Outbound open (Cloudflare, Docker Hub, the Ollama registry, Ubuntu updates).
 - SSH by key only: `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `PermitRootLogin prohibit-password`
   in `/etc/ssh/sshd_config.d/99-verity.conf`. `unattended-upgrades` on.
-- The staging VM of 2026-10-13 (Hetzner Cloud CAX11, Arm64, 2 vCPU, 4 GB) cannot hold the model (about 7.5 GB with its
-  16k context: 5.2 GB of weights, about 2.3 GB of cache): it stays a staging host for the pages until the owner removes it.
+- The staging VM of 2026-10-13 (Hetzner Cloud CAX11, Arm64, 2 vCPU, 4 GB) cannot hold the model (its container used 6.3 GiB
+  answering at the 16k context, in the rehearsal of 2026-10-16): it stays a staging host for the pages until the owner removes it.
 
 ## The model
 
@@ -221,11 +225,14 @@ On the acceptance name (The tunnel), with the release's images and the pinned mo
    a question is answered and its evidence opens, the evidence pack saves as `evidence-<run>.zip`, the memo's `.docx`
    opens, a phone shows one pane at a time.
 3. **Two visitors at once.** Two browsers on two addresses ask together: one answers, the other waits its turn and then
-   answers; neither can read the other's runs; the per-address limit reads Cf-Connecting-Ip.
+   answers; neither can read the other's runs; the per-address limit reads Cf-Connecting-Ip. While an answer computes on
+   the CPU, pages and a 25 MB upload still answer within their limits (on the rehearsal's 7.5 GiB VM they did not); if
+   they do not, the model's share of the cores is bounded and measured again, as a change of its own.
 4. **The acceptance script** (`acceptance.mjs`, with `BASE` the acceptance name and `SHA` the release) on the real model,
    then fresh PDF and DOCX uploads asked about, the amendment challenge, /break and /state.
 5. **Recovery on the host.** Each container restarted, Ollama stopped and started, a reboot: the stack returns, the store
-   intact, the model loaded again.
+   intact, the model loaded again. Then the API frozen (liveness), the owner's pause, and the retention purge of an ended
+   workspace: the rehearsal of 2026-10-16 did not reach these on this layout.
 6. **Provenance.** `docker image inspect` labels of both images name the release's full commit, which is on main, and the
    Runs page names the same commit.
 
