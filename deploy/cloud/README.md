@@ -152,7 +152,7 @@ server's two disks are a RAID 1 pair (HETZNER.md), so one failed disk loses noth
 | The host reboots | Docker starts the stack (`restart: unless-stopped`); the store and the model's weights are on their volumes; the first question after a start waits for the model to load | partly: every container stopped and started, the store intact; a Docker daemon restart was not rehearsed |
 | Ollama is down, or serves another build | The question fails with a sentence; health says the model is not reachable; nothing is answered by another build (`WORKBENCH_MODEL_DIGEST`) | yes, on Docker here (2026-10-16): the model container stopped mid-session and started again, and a pinned digest it did not serve was refused |
 | Ollama has started and is still loading the model | Health says ready (the model list answers); the first question waits for the load | partly, on Docker here (2026-10-16): the first answer after a start waited 239 s for the load (a call straight to the model container); health during the load was not checked |
-| An answer computes on every core of a CPU host | Pages, uploads and other questions wait while it does | seen on Docker here (2026-10-16), where the model held 6.3 of the VM's 7.5 GiB: a 29 MB upload timed out at 30 s and the VM swapped until Docker stopped answering. The AX42 has 64 GB; how the API fares beside an answer on its CPU is measured there (HETZNER.md) |
+| The VM runs short of memory beside the model | Requests wait or go unanswered | seen once on Docker here (2026-10-16): with the model holding 6.3 of the VM's 7.5 GiB, the deliberate over-limit upload got no 413 within 30 s, after the runs had finished, and the stack and then Docker stopped answering; the cause is not established (memory, or the body limit, which answered 413 in the 2026-10-12 rehearsal). The AX42 has 64 GB; this, and the API beside an answer on its CPU, are measured there (HETZNER.md) |
 | The host is lost | Rebuild: a new server as HETZNER.md says, the images built there from the release, the model fetched again and its digest checked, `.env` from where the owner keeps it (the secret), the record from ivo-experiments; the store starts empty | partly: on the same machine with the images loaded, every volume removed, healthy again in 10 s and `acceptance.mjs` 82 of 82 (2026-10-12); a new server was not |
 
 Keep the last two image archives on the build machine. `.env` is the only thing that cannot be rebuilt from the
@@ -213,9 +213,12 @@ words into the log; SQLite's temporary files and a swap file could each have put
 
 Not rehearsed then: public DNS and Let's Encrypt, a phone on the real hostname, a new host. The model was then planned
 on a serverless GPU. The layout above, the model in a container of its own, was rehearsed on this workstation's Docker
-on 2026-10-16: the API suite in the image (2,167 passed), both images labelled with their commit, the model fetched by
-its files and checked, Ollama stopped and started mid-session, another build refused, the interface unable to reach the
-model, health saying the model is on the server, and `acceptance.mjs` 83 of 83 with every answer from the model
-container on the CPU. A two-visitor run passed its first 15 checks; then the VM ran out of memory under a 29 MB upload
-(Recovery, above). Restart, liveness, pause, reboot, retention and the kit's PDF and DOCX were not rehearsed on this
-layout, and come first on the server (HETZNER.md, What only the server can show).
+on 2026-10-16. On f2128a9: the API suite in the image (2,167 passed) and both images labelled with their commit. On the
+457c927 images, whose compose file is this one but for comments: the model fetched by its files and checked, Ollama
+stopped and started mid-session, another build refused, health saying the model is on the server, and the interface's
+container unable to resolve the model's name while the API's reached it. On the f2128a9 images: `acceptance.mjs` 83 of
+83, every answer from the model container on the CPU, and a two-visitor run's first 15 checks; its next, the
+over-limit upload, got no answer within 30 s, and the stack then stopped answering (Recovery, above). Not reached on
+this layout: the rest of the visitors' run (the over-limit and wrong-type refusals, a cross-origin write, no 5xx),
+restart, liveness, pause, reboot, retention, a web restart and the kit's PDF and DOCX. They come first on the server
+(HETZNER.md, What only the server can show).

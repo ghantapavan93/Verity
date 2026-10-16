@@ -56,13 +56,23 @@ def test_a_model_said_to_be_on_the_server_and_elsewhere_stops_the_start() -> Non
         config.Settings(model_on_server=True, model_host="a GPU service in the US")
 
 
-@pytest.mark.parametrize("url", ["https://gpu.example.com", "http://10.0.0.7:11434", "http://203.0.113.9:11434"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://gpu.example.com",
+        "http://10.0.0.7:11434",
+        "http://203.0.113.9:11434",
+        "http://[2001:db8::7]:11434",
+        "http://2130706433:11434",
+        "http://host.docker.internal:11434",
+    ],
+)
 def test_a_model_on_another_machine_cannot_be_said_to_be_on_this_server(url: str) -> None:
     with pytest.raises(ValueError, match="an address elsewhere"):
         config.Settings(model_on_server=True, ollama_url=url)
 
 
-@pytest.mark.parametrize("url", ["http://ollama:11434", "http://127.0.0.1:11434", "http://localhost:11434"])
+@pytest.mark.parametrize("url", ["http://ollama:11434", "http://127.0.0.1:11434", "http://localhost:11434", "http://[::1]:11434"])
 def test_control_a_container_or_loopback_can_be_said_to_be_on_this_server(url: str) -> None:
     assert config.Settings(model_on_server=True, ollama_url=url).model_on_server
 

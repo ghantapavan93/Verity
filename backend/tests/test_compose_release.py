@@ -115,6 +115,8 @@ def test_the_model_is_reachable_from_the_api_only_and_writes_no_core() -> None:
     assert re.search(r"networks:\n\s+- default\n\s+- model\n", _service("api"))
     for other in ("web", "caddy", "tunnel"):
         assert not re.search(r"\bmodel\b", re.sub(r"#.*", "", _service(other))), other
+    for service in ("api", "ollama", "web", "caddy", "tunnel"):
+        assert "network_mode" not in _service(service), service  # sharing another service's network would undo the fence
 
 
 def test_the_deployment_says_the_model_is_on_this_server() -> None:

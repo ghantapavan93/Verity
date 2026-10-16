@@ -16,10 +16,10 @@ about 270 (p90 2,300 and 440, the most 880; 76 real answers of the blind stress 
   swap partition its default layout carries (`PART swap …`): no swap, below. The model runs
   on the CPU; its speed on this machine is the first thing measured once it is rented (below, What only the server can
   show), against the go/no-go of an answer's p90 within 120 s. For scale, the same container on the workstation's CPU
-  (Ryzen 9 5900HX: Zen 3, 8 cores, DDR4-3200), 2026-10-16: 19.9 tokens a second read and 5.6 written, so about 143 s
-  for the median answer and 195 s for the p90, after a first load of 239 s. The AX42's DDR5 and AVX-512 should do
-  better, by an amount only the server shows; even at the bound it is slower than the workstation's GPU today (34 s
-  for the median answer).
+  (Ryzen 9 5900HX: Zen 3, 8 cores, DDR4-3200), 2026-10-16: 19.9 tokens a second read and 5.6 written, so at least
+  144 s for the median answer and 194 s for the p90 (the probe's answer was short, and longer ones run slower per
+  token), after a first load of 239 s. The AX42's DDR5 and AVX-512 should do better, by an amount only the server
+  shows; even at the bound it is slower than the workstation's GPU today (a median 34.5 s in the blind stress test).
 - **If the AX42 misses that bound: a dedicated GEX45** (Helsinki): NVIDIA RTX PRO 4000 Blackwell, 24 GB, the same
   model in GPU memory, with `compose.gpu.yml`, the NVIDIA driver and the NVIDIA Container Toolkit. An answer is then
   expected to take seconds (not measured here), and two or more could run at once (OLLAMA_NUM_PARALLEL and
@@ -61,7 +61,7 @@ docker compose --env-file /opt/verity/shared/.env exec ollama mkdir -p /root/.ol
 for f in manifests/registry.ollama.ai/library/qwen3/8b $(cd ~/qwen3 && echo blobs/sha256-*); do   # the paths under ~/qwen3
   docker compose --env-file /opt/verity/shared/.env cp ~/qwen3/$f ollama:/root/.ollama/models/$f
 done
-docker compose --env-file /opt/verity/shared/.env exec ollama sh -c 'cd /root/.ollama/models && for d in $(grep -o "sha256:[0-9a-f]\{64\}" manifests/registry.ollama.ai/library/qwen3/8b | sort -u); do h=${d#sha256:}; [ -f blobs/sha256-$h ] && [ "$(sha256sum blobs/sha256-$h | cut -d" " -f1)" = "$h" ] || echo "STOP: blobs/sha256-$h"; done'   # every blob the manifest names, present and whole
+docker compose --env-file /opt/verity/shared/.env exec ollama sh -c 'cd /root/.ollama/models && [ -s manifests/registry.ollama.ai/library/qwen3/8b ] || echo "STOP: no manifest"; for d in $(grep -o "sha256:[0-9a-f]\{64\}" manifests/registry.ollama.ai/library/qwen3/8b | sort -u); do h=${d#sha256:}; [ -f blobs/sha256-$h ] && [ "$(sha256sum blobs/sha256-$h | cut -d" " -f1)" = "$h" ] || echo "STOP: blobs/sha256-$h"; done'   # every blob the manifest names, present and whole
 docker compose --env-file /opt/verity/shared/.env exec ollama ollama list   # ID must begin 500a1f067a9f
 ```
 
@@ -164,8 +164,9 @@ included (the owner's pause, logs, `down`), runs in `/opt/verity/current/deploy/
 The store is a Docker volume named in `.env` (`VERITY_STORE`), required by compose.yml. A role has its own store: the
 staging host of 2026-10-13 keeps the volume it already has, `VERITY_STORE=verity_verity-data`; serving the public name
 (below) is a new store, `VERITY_STORE=verity_production`, empty, which the API creates on its first start. The new
-host's acceptance, on its own name before any cutover, runs on a store of its own, `VERITY_STORE=verity_acceptance`, which
-holds only the acceptance visitors' data. Changing role
+host's acceptance, on its own name before any cutover, runs on a store of its own, `VERITY_STORE=verity_acceptance`: the
+acceptance name is for the owner and invited testers, not the public, and its store is the owner's to delete at the
+cutover, when its retention stops. Changing role
 never moves, copies or deletes a store; the staging store stays on the disk until it is deliberately removed, by the
 owner, as the visitor data it is. A visitor's data is never migrated between stores.
 
@@ -203,7 +204,8 @@ stands in front.
   `VERITY_STORE=verity_production`, then `docker compose --env-file /opt/verity/shared/.env up -d --no-build` in
   `/opt/verity/current/deploy/cloud`. The API recreates on an empty store (Stores, above). The store it served before
   (`verity_acceptance` on a new host, `verity_verity-data` on the staging host) stays on the disk, unused, and its
-  retention stops with the switch: what it holds is the acceptance visitors' data, the owner's to delete. The interface reads no `.env` and names no host: no rebuild. `VERITY_SITE` is
+  retention stops with the switch: what it holds (the acceptance runs, or the staging visitors') is the owner's to
+  delete. The interface reads no `.env` and names no host: no rebuild. `VERITY_SITE` is
   Caddy's and unused here, and the tunnel's ingress names no host, so nothing else changes. Then, in Cloudflare DNS,
   edit the name's CNAME target from the old tunnel's `<old id>.cfargotunnel.com` to `<this id>.cfargotunnel.com`
   (proxied); `cloudflared tunnel route dns --overwrite-dns <tunnel> <name>` does the same. Visitors start fresh here:
@@ -226,13 +228,14 @@ On the acceptance name (The tunnel), with the release's images and the pinned mo
    opens, a phone shows one pane at a time.
 3. **Two visitors at once.** Two browsers on two addresses ask together: one answers, the other waits its turn and then
    answers; neither can read the other's runs; the per-address limit reads Cf-Connecting-Ip. While an answer computes on
-   the CPU, pages and a 25 MB upload still answer within their limits (on the rehearsal's 7.5 GiB VM they did not); if
-   they do not, the model's share of the cores is bounded and measured again, as a change of its own.
+   the CPU, pages and a 25 MB upload still answer within their limits (not measured: the rehearsal's VM stopped
+   answering before it could be); if they do not, the model's share of the cores is bounded and measured again, as a
+   change of its own.
 4. **The acceptance script** (`acceptance.mjs`, with `BASE` the acceptance name and `SHA` the release) on the real model,
    then fresh PDF and DOCX uploads asked about, the amendment challenge, /break and /state.
-5. **Recovery on the host.** Each container restarted, Ollama stopped and started, a reboot: the stack returns, the store
-   intact, the model loaded again. Then the API frozen (liveness), the owner's pause, and the retention purge of an ended
-   workspace: the rehearsal of 2026-10-16 did not reach these on this layout.
+5. **Recovery on the host.** Each container restarted, Ollama stopped and started, a reboot, the API frozen (liveness),
+   the owner's pause, and the retention purge of an ended workspace: the stack returns, the store intact, the model
+   loaded again. The rehearsal of 2026-10-16 reached only Ollama stopped and started on this layout.
 6. **Provenance.** `docker image inspect` labels of both images name the release's full commit, which is on main, and the
    Runs page names the same commit.
 

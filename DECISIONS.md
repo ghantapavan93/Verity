@@ -1487,14 +1487,13 @@ answer on the workstation's build (qwen3:8b, 500a1f067a9f, Q4_K_M), which is not
 HETZNER.md: the server, the model, releases, stores, the cutover, what only the server can show, and the cost.
 
 The server, for the measured load: an answer reads about 1,900 tokens and writes about 270 (p90 2,300 and 440; the 76
-real answers of the blind stress test), one at a time. A dedicated AX42 (8 Zen 4 cores, 64 GB, two NVMe in RAID 1,
-about €97 a month) is expected to run it on its CPU; the go/no-go is an answer's p90 within 120 s, measured on the rented machine
-before anything moves. The same container on the workstation's CPU (Ryzen 9 5900HX, DDR4) read 19.9 tokens a second
-and wrote 5.6, about 143 s for the median answer and 195 s for the p90: the AX42 should do better, and even at the
-bound it answers more slowly than the workstation's GPU today (34 s). Missed, a GEX45 (24 GB GPU, about €214 a month)
-runs the same build on its GPU, expected in
-seconds and not measured here. Rejected: a Cloud VM (the dedicated-vCPU line unavailable and dearer after Hetzner's
-2026 increases; two shared vCPUs took 650-1,000 s).
+real answers of the blind stress test), one at a time. A dedicated AX42 (8 Zen 4 cores, 64 GB, two NVMe in RAID 1, about
+€97 a month) is expected to run it on its CPU; the go/no-go is an answer's p90 within 120 s, measured on the rented
+machine before anything moves. The same container on the workstation's CPU (Ryzen 9 5900HX, DDR4) read 19.9 tokens a
+second and wrote 5.6, at least 144 s for the median answer and 194 s for the p90: the AX42 should do better, and even at
+the bound it answers more slowly than the workstation's GPU today (a median 34.5 s). Missed, a GEX45 (24 GB GPU, about
+€214 a month) runs the same build on its GPU, expected in seconds and not measured here. Rejected: a Cloud VM (the
+dedicated-vCPU line unavailable and dearer after Hetzner's 2026 increases; two shared vCPUs took 650-1,000 s).
 Prices are as reported on 2026-10-16 and are read again in Hetzner's console before ordering.
 
 No visitor data moves. The production host opens a store of its own, empty; visitors start again there, and the
@@ -1503,5 +1502,6 @@ what its store holds is the owner's to delete. The way back is the tunnel record
 workstation's tunnel, which keeps running until the move is no longer wanted. The interface says the model is on the
 server because the deployment says so (`WORKBENCH_MODEL_ON_SERVER=1`): its address is a container name, and any address
 but loopback otherwise counts as elsewhere. Rehearsed on the workstation's Docker the same day (deploy/cloud/README.md):
-the model's container, health, the build check and acceptance held; the VM's memory ended the run before recovery,
-retention and the kit's files, which come first on the server.
+the model's container, health, the build check and acceptance held; the run stopped when the stack stopped
+answering at its over-limit upload (the cause not established), before recovery, retention and the kit's files, which
+come first on the server.

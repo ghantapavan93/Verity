@@ -134,11 +134,16 @@ class Settings(BaseModel):
     def _one_place_for_the_model(self) -> Settings:
         if self.model_on_server and self.model_host:
             raise ValueError("WORKBENCH_MODEL_ON_SERVER and WORKBENCH_MODEL_HOST name two places for the model; set one")
-        # "On this server" means another container here, reached by its service name: an address with a dot in it (a
-        # domain, or an IP that is not loopback) is a machine elsewhere, and the interface would say otherwise.
+        # "On this server" means loopback, or another container here reached by its service name: one name, no dot or
+        # colon, not a number. A domain or an IP (v4, v6 or decimal) is a machine elsewhere, and the interface would say
+        # otherwise; host.docker.internal is refused too, as the Docker host is not the container's own machine to say
+        # so of. A bare name that is a machine on the network passes: the flag is the deployment's word for that.
         host = (urlsplit(self.ollama_url).hostname or "").lower()
-        if self.model_on_server and "." in host and host != "127.0.0.1":
-            raise ValueError(f"WORKBENCH_MODEL_ON_SERVER is for a container on this machine; {host} is an address elsewhere")
+        local = host in ("localhost", "127.0.0.1", "::1") or (host != "" and "." not in host and ":" not in host and not host.isdigit())
+        if self.model_on_server and not local:
+            raise ValueError(
+                f"WORKBENCH_MODEL_ON_SERVER is for a container on this machine, reached by its service name; {host or 'no host'} is an address elsewhere"
+            )
         return self
 
     @property
