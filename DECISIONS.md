@@ -1476,19 +1476,23 @@ never made; `basis` understates and never overstates.
 
 *The first screen and the README, after the release.* Once 6574514 was live, its first screen said "Who holds a right,
 or whether a condition was left out, code does not check", and the README that it "stays a person's call": true until
-v14, an understatement since. Both now say what v14 checks and no more: a pass is lowered when its quote's sentence, up
-to a full stop or semicolon, carries an "unless", "except", "subject to" or another `CARVE_OUT` word outside the quoted
-words and the answer does not repeat what follows it; whether the answer carries every condition stays unchecked. The
-first repair said "a condition its own sentence states", which its review rejected: a condition opened by "if", "in the
-event that" or "upon", a proviso after a semicolon and a second condition in the sentence all keep the pass, and an
-answer sharing two of the condition's words ("during the Initial Term") counts as stating it. That review also found
-the README's sentence, which the first version of the test missed because it matched one sentence's word order. The
-class is held in `test_docs_claims.py`: no page, README or document a reader is given may leave to a person a check the
-run performs (a condition left out of the quote's sentence; one value given to every party), in any of the ways these
-pages say so ("code does not check", "not checked by code", "a person's call", a list under a "Not checked" heading),
-unless it is scoped to more than the check covers (every condition, another clause). Its control holds both old
-sentences, eight other wordings, the repaired sentences and the limits still true (/break's "every condition and
-exception"). It failed on the README alone, the landing having been repaired first.
+v14, an understatement since. Two repairs were reviewed and rejected for overstating the check. "When the quote drops a
+condition its own sentence states and the answer does not", then "… and the answer does not repeat what follows it",
+each promised a review code does not give: a condition opened by "if", "upon" or "in the event that", one after the
+quote when one stands before it, and an answer sharing two of the condition's words ("during the Initial Term" over
+"Except for the first sixty (60) calendar days of the Initial Term") all keep the pass. A rule with these edges cannot
+be stated whole on a card. The pages now say that code lowers some passes whose quote leaves out an "unless", "except"
+or "subject to" from its own sentence, where the answer does not mention it, and that whether the answer carries every
+condition is not checked; the failure envelope's row states the rule and its edges. The class is held in
+`test_docs_claims.py`: no page, README or document a reader is given may leave to a person a check the run performs (a
+condition left out of the quote's sentence; one value given to every party), in any of the ways these pages say so
+("code does not check", "not checked", "a person's call", "the model's reading, not code's", a list under a "Not
+checked" heading). A phrase naming more than the check covers ("every condition", "a condition in another clause") is
+set aside before the rest of the statement is read, so a denial beside a true limit still fails; the second review
+found that the first scope rule, read over the whole sentence, let one through. The words the pages name for the check
+must be `CARVE_OUT` words. The first version of the test matched one sentence's word order and missed the README; its
+control now holds both old sentences, sixteen other wordings, the repaired sentences and the limits still true
+(/break's "every condition and exception").
 
 ## 2026-10-16: one Hetzner server, the model on it
 

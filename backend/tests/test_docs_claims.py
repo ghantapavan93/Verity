@@ -26,6 +26,7 @@ import pytest
 
 from app.ingest import PARSER_VERSION
 from app.ingest.coverage import PARTS
+from app.policy.proof import CARVE_OUT
 from app.retrieval.lexical import RETRIEVAL_VERSION
 from app.runs.status import POLICY_VERSION
 from app.verify.spans import VERIFIER_VERSION
@@ -237,9 +238,11 @@ def test_the_readme_and_every_page_say_the_same_independence_sentence() -> None:
 # the README; a denial is now any of the ways these pages leave a thing to a person, and a check is named by its
 # subject's words in any order.
 DENIAL = re.compile(
-    r"\bcode (?:does not|doesn't|did not|never|cannot|can't|will not|won't) (?:check|verify|catch|see|test|look at)"
-    r"|\bcode never (?:checks|verifies|catches|sees|tests|looks at)"
-    r"|\bnot (?:checked|verified|caught|seen|tested) by (?:the )?(?:released )?code"
+    r"\b(?:code|it|verity|the workbench|the verifier|the policy) (?:does not|doesn't|did not|never|cannot|can't|will not"
+    r"|won't) (?:check|verify|catch|see|test|look at)"
+    r"|\b(?:code|it|verity) never (?:checks|verifies|catches|sees|tests|looks at)"
+    r"|\bnot (?:checked|verified|caught|tested)\b|\bunchecked\b|\bnot code(?:'s|’s)"
+    r"|\bthe model(?:'s|’s) (?:reading|call|judgement|judgment)"
     r"|\bleft to (?:a |the )?(?:person|reader|reviewer|human)"
     r"|\b(?:stays|stay|is|are|remains|remain) (?:a |the )?(?:person|reader|reviewer|human)(?:'s|’s|s'|s’) (?:call|judgement|judgment|reading)",
     re.IGNORECASE,
@@ -248,28 +251,28 @@ DENIAL = re.compile(
 
 class DeniedCheck(NamedTuple):
     calls: tuple[tuple[str, str], ...]  # (file under backend/app, call): the run path that performs the check
-    subject: tuple[re.Pattern[str], ...]  # every one appears in a sentence that names the check
-    scope: re.Pattern[str] | None  # a sentence naming more than the check covers states a true limit
+    subject: tuple[re.Pattern[str], ...]  # every one appears in a statement that names the check
+    # A phrase naming more than the check covers ("every condition", "a condition in another clause"): what is said of
+    # it is a true limit, so it is set aside before the subject is read, and the rest of the statement still counts.
+    scope: re.Pattern[str] | None
 
 
 DENIED_CHECKS = {
-    # check_conditions lowers a pass whose quote leaves out a condition its own sentence (to a full stop or semicolon)
-    # opens with a CARVE_OUT word, unless the answer repeats its words. Conditions in other sentences, a second one in
-    # the same sentence, or one not opened by those words are not checked: a sentence about every condition, or one
-    # elsewhere, says what is still true.
+    # check_conditions lowers a pass whose quote leaves out a condition its own sentence opens with a CARVE_OUT word,
+    # unless the answer shares enough of its words. Every condition, and conditions in other clauses, are not checked.
     "a condition the quote leaves out of its sentence": DeniedCheck(
         calls=(("runs/service.py", "left_out_condition("), ("runs/service.py", "check_conditions(")),
         subject=(
             re.compile(r"\b(?:condition|exception|carve[- ]out|proviso|qualification)s?\b", re.IGNORECASE),
             re.compile(
-                r"\b(?:left out|leaves? out|leaving out|omit(?:s|ted|ting)?|drop(?:s|ped|ping)?|missing|carr(?:y|ies)|states?"
-                r"|mentions?|includes?|keeps?|repeats?)\b",
+                r"\b(?:left[- ]out|leav(?:es|e|ing) (?:\S+ ){0,3}?out|omit(?:s|ted|ting)?|drop(?:s|ped|ping)?|missing|miss(?:es|ed)?"
+                r"|ignor(?:es|ed|ing)?|carr(?:y|ies)|states?|mentions?|includes?|keeps?|repeats?)\b",
                 re.IGNORECASE,
             ),
         ),
         scope=re.compile(
-            r"\b(?:every|each|all(?: the| its| their)?) (?:condition|exception)s?\b|\belsewhere\b"
-            r"|\b(?:another|other) (?:section|clause|sentence|part)s?\b",
+            r"\b(?:every|each|all(?: the| its| their)?) (?:condition|exception)s?(?: (?:and|or) (?:condition|exception)s?)?\b"
+            r"|\b(?:condition|exception)s? (?:elsewhere|in (?:another|other|a different) (?:section|clause|sentence|part)s?)\b",
             re.IGNORECASE,
         ),
     ),
@@ -314,9 +317,10 @@ def statements(text: str) -> Iterator[str]:
 
 
 def denies(check: DeniedCheck, statement: str) -> bool:
-    if not DENIAL.search(statement) or not all(word.search(statement) for word in check.subject):
+    if not DENIAL.search(statement):
         return False
-    return check.scope is None or not check.scope.search(statement)
+    rest = check.scope.sub(" ", statement) if check.scope else statement
+    return all(word.search(rest) for word in check.subject)
 
 
 @pytest.mark.parametrize("name", sorted(DENIED_CHECKS))
@@ -335,18 +339,40 @@ def test_no_page_or_document_denies_a_check_the_policy_performs(name: str) -> No
     assert not denials, f"code checks {name} (policy-v14), and these say it does not:\n" + "\n".join(denials)
 
 
+def test_the_words_the_pages_name_for_the_condition_check_open_a_condition() -> None:
+    """The first screen and the README name the words that open a condition the check reads; each must be one
+    (policy.proof.CARVE_OUT), or the page promises a check of words code does not read. The sentences say "some passes":
+    the rule itself (a sentence's end, the first condition only, how many words the answer must share) is the failure
+    envelope's, and a page that states it as "every" overstates it (the review of 2026-10-16)."""
+    pages = (ROOT / "src" / "components" / "workbench" / "landing" / "LandingStory.tsx", README)
+    for page in pages:
+        named = [s for s in sentences(page.read_text(encoding="utf-8")) if "lowers some passes whose quote leaves out" in s]
+        assert named, f"{page.name} no longer says which passes the condition check lowers"
+        words = [word for s in named for word in re.findall(r"[“\"]([^”\"]+)[”\"]", s)]
+        assert words, f"{page.name} names no words that open a condition"
+        assert all(CARVE_OUT.fullmatch(word) for word in words), f"{page.name} names {words}; CARVE_OUT reads {CARVE_OUT.pattern}"
+
+
 def test_the_denial_patterns_catch_the_old_wordings_and_pass_the_true_limits() -> None:
     """Control: what the first screen and the README said at 6574514, and the other ways these pages leave a thing to a
-    person, are caught; the repaired sentences and the limits that are still true are not."""
+    person, are caught, also beside a true limit; the repaired sentences and the limits still true are not."""
     condition, party = DENIED_CHECKS["a condition the quote leaves out of its sentence"], DENIED_CHECKS["one value given to every party"]
     caught = {
         "Who holds a right, or whether a condition was left out, code does not check.": condition,
         "What a clause means, who holds a right, or whether a condition was left out, stays a person's call.": condition,
+        "Who holds a right, whether a condition was left out, or whether the answer carries every condition, stays a person's call.": condition,
+        "Code does not check whether the answer leaves out a condition, in this or any other clause.": condition,
+        "Whether a condition was left out, here or elsewhere, code does not check.": condition,
         "Whether the answer leaves out a condition is not checked by code.": condition,
+        "Whether a condition was left out is not checked.": condition,
+        "It does not check whether a condition was left out.": condition,
+        "A left-out condition is a person's call.": condition,
         "Whether an exception was omitted is left to a reviewer.": condition,
         "Code never checks whether an answer drops a proviso.": condition,
+        "Code does not check whether the answer leaves a condition out.": condition,
+        "Whether the answer ignores an exception is the model's reading, not code's.": condition,
         "Not checked by code: whether the answer states the exception its quote leaves out": condition,
-        "<h3>Not checked by the released code</h3>\n<ul>\n<li>Who holds the right.</li>\n<li>Whether the answer keeps a condition.</li>\n</ul>": condition,
+        "<h3>Not checked by the released code</h3>\n<ul>\n<li>Who holds the right.</li>\n<li>Left-out conditions.</li>\n</ul>": condition,
         "Not checked by code:\n- who holds the right\n- whether a condition was left out\n": condition,
         "Whether one value holds for every party, code does not check.": party,
         "Code does not check whether each party gets the same period.": party,
@@ -354,15 +380,14 @@ def test_the_denial_patterns_catch_the_old_wordings_and_pass_the_true_limits() -
     for text, check in caught.items():
         assert any(denies(check, s) for s in statements(text)), text
     passed = [
-        "A pass is the model's proposal. Code lowers it to review when the evidence shown does not establish it, or when "
-        "the quote's sentence, up to a full stop or semicolon, carries an “unless”, “except”, “subject to” or the like "
-        "outside the quoted words, and the answer does not repeat what follows it. Whether the answer carries every "
-        "condition, and who holds a right, code does not check.",
+        "A pass is the model's proposal. Code lowers it to review when the evidence shown does not establish it. Code also "
+        "lowers some passes whose quote leaves out an “unless”, “except” or “subject to” from its own sentence, where the "
+        "answer does not mention it. Whether the answer carries every condition, and who holds a right, code does not check.",
         "What a clause means, who holds a right, and whether an answer carries every condition stay a person's call.",
         "<h3>Not checked by the released code</h3>\n<ul>\n<li>Who holds the right or owes the duty.</li>\n"
         "<li>Whether the answer carries every condition and exception.</li>\n</ul>",
         "Not checked by code: whether the passage supports the answer, including who holds the right or owes the duty",
-        "Whether a condition in another clause limits the answer, code does not check.",
+        "Whether a condition in another clause was left out, code does not check.",
         "The passages state 45 and 60 days. The answer uses 45; which one applies is the model's reading, not checked by code.",
     ]
     for text in passed:
