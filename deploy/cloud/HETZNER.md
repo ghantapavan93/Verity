@@ -57,7 +57,7 @@ docker compose --env-file /opt/verity/shared/.env exec ollama mkdir -p /root/.ol
 for f in manifests/registry.ollama.ai/library/qwen3/8b $(cd ~/qwen3 && echo blobs/sha256-*); do   # the paths under ~/qwen3
   docker compose --env-file /opt/verity/shared/.env cp ~/qwen3/$f ollama:/root/.ollama/models/$f
 done
-docker compose --env-file /opt/verity/shared/.env exec ollama sh -c 'cd /root/.ollama/models/blobs && for b in sha256-*; do [ "sha256-$(sha256sum $b | cut -d" " -f1)" = "$b" ] || echo "STOP: $b"; done'
+docker compose --env-file /opt/verity/shared/.env exec ollama sh -c 'cd /root/.ollama/models && for d in $(grep -o "sha256:[0-9a-f]\{64\}" manifests/registry.ollama.ai/library/qwen3/8b | sort -u); do h=${d#sha256:}; [ -f blobs/sha256-$h ] && [ "$(sha256sum blobs/sha256-$h | cut -d" " -f1)" = "$h" ] || echo "STOP: blobs/sha256-$h"; done'   # every blob the manifest names, present and whole
 docker compose --env-file /opt/verity/shared/.env exec ollama ollama list   # ID must begin 500a1f067a9f
 ```
 
@@ -144,6 +144,7 @@ VERITY_TAG=$TAG docker compose --env-file /opt/verity/shared/.env run --rm --no-
 # store there is nothing yet ("unable to open database file") and nothing to compare.
 sed -i "s/^VERITY_TAG=.*/VERITY_TAG=$TAG/" /opt/verity/shared/.env && grep ^VERITY_TAG= /opt/verity/shared/.env
 ln -sfn $R /opt/verity/current                                  # the switch: one link
+# The first release on a host only: fetch and check the model now (The model, above), before this up starts the API.
 cd /opt/verity/current/deploy/cloud && docker compose --env-file /opt/verity/shared/.env up -d --no-build
 docker builder prune -f --filter until=72h && df -h / && docker system df   # after: the build cache grows with every release
 ```
@@ -196,8 +197,9 @@ stands in front.
 - **Moving a live name here (cutover):** first point this stack at the name and at a store of its own: in
   `/opt/verity/shared/.env` set `WORKBENCH_APP_URL=https://<name>`, `WORKBENCH_CORS_ORIGINS=https://<name>` and
   `VERITY_STORE=verity_production`, then `docker compose --env-file /opt/verity/shared/.env up -d --no-build` in
-  `/opt/verity/current/deploy/cloud`. The API recreates on an empty store (Stores, above); the staging store stays on
-  the disk, unused, until it is deliberately removed. The interface reads no `.env` and names no host: no rebuild. `VERITY_SITE` is
+  `/opt/verity/current/deploy/cloud`. The API recreates on an empty store (Stores, above). The store it served before
+  (`verity_acceptance` on a new host, `verity_verity-data` on the staging host) stays on the disk, unused, and its
+  retention stops with the switch: what it holds is the acceptance visitors' data, the owner's to delete. The interface reads no `.env` and names no host: no rebuild. `VERITY_SITE` is
   Caddy's and unused here, and the tunnel's ingress names no host, so nothing else changes. Then, in Cloudflare DNS,
   edit the name's CNAME target from the old tunnel's `<old id>.cfargotunnel.com` to `<this id>.cfargotunnel.com`
   (proxied); `cloudflared tunnel route dns --overwrite-dns <tunnel> <name>` does the same. Visitors start fresh here:
@@ -205,7 +207,8 @@ stands in front.
   the Origin header), so check through the new name once it moves.
 - **Moving it back (rollback):** edit the same record's target back to the old tunnel. Keep the old origin running, with
   its connector up, until the move back is no longer wanted. A store's retention runs only while its API runs: keep the
-  origin that no longer serves the name running seven days more, and its visitors' workspaces end as promised; stop it
+  origin that no longer serves the name running eight days more (seven, and its hourly passes to spare), and its
+  visitors' workspaces end as promised; stop it
   sooner and what its store still holds is the owner's to delete.
 
 ## What only the server can show (before any cutover)

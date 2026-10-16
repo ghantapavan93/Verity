@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -133,6 +134,11 @@ class Settings(BaseModel):
     def _one_place_for_the_model(self) -> Settings:
         if self.model_on_server and self.model_host:
             raise ValueError("WORKBENCH_MODEL_ON_SERVER and WORKBENCH_MODEL_HOST name two places for the model; set one")
+        # "On this server" means another container here, reached by its service name: an address with a dot in it (a
+        # domain, or an IP that is not loopback) is a machine elsewhere, and the interface would say otherwise.
+        host = (urlsplit(self.ollama_url).hostname or "").lower()
+        if self.model_on_server and "." in host and host != "127.0.0.1":
+            raise ValueError(f"WORKBENCH_MODEL_ON_SERVER is for a container on this machine; {host} is an address elsewhere")
         return self
 
     @property

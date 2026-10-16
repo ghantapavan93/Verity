@@ -114,7 +114,7 @@ def test_the_model_is_reachable_from_the_api_only_and_writes_no_core() -> None:
     assert re.search(r"ulimits:\n\s+core: 0", model) and re.search(r"cap_drop:\n\s+- ALL", model)
     assert re.search(r"networks:\n\s+- default\n\s+- model\n", _service("api"))
     for other in ("web", "caddy", "tunnel"):
-        assert "- model" not in _service(other), other
+        assert not re.search(r"\bmodel\b", re.sub(r"#.*", "", _service(other))), other
 
 
 def test_the_deployment_says_the_model_is_on_this_server() -> None:

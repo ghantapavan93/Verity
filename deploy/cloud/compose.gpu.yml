@@ -1,6 +1,7 @@
 # On a host with an NVIDIA GPU (a Hetzner GEX45, HETZNER.md: The server), once the NVIDIA driver and the NVIDIA Container
-# Toolkit are installed: `docker compose -f compose.yml -f compose.gpu.yml up -d`. The model, its build and every
-# setting stay the same; only where Ollama computes changes.
+# Toolkit are installed: `COMPOSE_FILE=compose.yml:compose.gpu.yml` in /opt/verity/shared/.env, so that every compose
+# command, run as HETZNER.md gives it, reads this file too. The model, its build and every setting stay the same; only
+# where Ollama computes changes.
 services:
   ollama:
     deploy:
