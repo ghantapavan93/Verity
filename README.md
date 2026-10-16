@@ -9,12 +9,10 @@ evidence, and measures whether a fix holds on contracts it was not built on.
 It has three parts that share one rule, that a claim is kept only with the source evidence for it:
 
 - **The workbench.** Upload a contract (PDF, DOCX or TXT) and, optionally, the guidance your team uses; ask a
-  question. A small open model (Qwen3 8B, one pinned build) answers from the sections retrieval chose: on the public
-  site it runs on an on-demand L4 GPU at Modal, billed by the second, which sleeps between readers and took about one
-  and a half to three minutes to wake on staging (requests enter through Modal's servers in Virginia; the GPU's region
-  is not pinned, so it may run in any region Modal has; it was observed in us-east); on your own machine it runs through Ollama at no
-  cost. With each question the model host is sent the question, any guidance, the contract's file name and the sections
-  retrieval chose; the contract itself and the visitor's workspace stay on the application's server. Code looks
+  question. A small open model (Qwen3 8B, one pinned build) answers from the sections retrieval chose. On the public
+  site today the application, the visitors' store and the model all run on one machine, the owner's workstation, with
+  Ollama on its own GPU, reached through a Cloudflare Tunnel: nothing a visitor adds is sent to a model host anywhere
+  else, and the site answers only while that machine is on. On your own machine it runs through Ollama at no cost. Code looks
   for every quoted passage in the document's own text and withholds a finding whose quote it cannot find. Where the
   guidance states a rule code can compare, a notice period against a minimum for example, code reports a shortfall
   itself, and a pass stays the model's view with code's note on whether the day counts are consistent; everywhere else
@@ -47,7 +45,7 @@ Verity is an independent personal project by **Pavankalyan Ghanta** and is not a
 
 | | Where | Who |
 |---|---|---|
-| The live workbench: upload a contract or the sample, ask, open the cited passage, review | [ivo.pavankg.dev](https://ivo.pavankg.dev) | anyone, no sign-in: each browser gets a workspace of its own, deleted with everything in it 7 days after its first visit. The application and the visitors' store run on a Hetzner Cloud server in Helsinki, reached through a Cloudflare Tunnel; the model runs at Modal, its GPU region not pinned (above) |
+| The live workbench: upload a contract or the sample, ask, open the cited passage, review | [ivo.pavankg.dev](https://ivo.pavankg.dev) | anyone, no sign-in: each browser gets a workspace of its own, deleted with everything in it 7 days after its first visit. The application, the visitors' store and the model run on the owner's workstation, reached through a Cloudflare Tunnel (above) |
 | Break Verity: one recorded failure, its record, the fix that did not hold, a rule's false alarm | [ivo.pavankg.dev/break](https://ivo.pavankg.dev/break) | anyone |
 | The recorded Contract State research | [ivo.pavankg.dev/state](https://ivo.pavankg.dev/state), and always available as static files at [verity-state.pages.dev](https://verity-state.pages.dev) | anyone |
 
