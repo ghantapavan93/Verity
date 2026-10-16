@@ -131,3 +131,34 @@ test("a health check that fails once does not hide where the model runs for the 
 
 // The drawer's decision form carried to another finding (also found 2026-10-13) needs a run with two findings, which
 // no recorded answer has: it is reproduced in assistant/EvidenceDrawer.test.tsx.
+
+// Blind contract stress test (2026-10-16): a file refused while a contract was open sent the reader to the first
+// screen's top, the contract gone and the refusal below the fold (896 px down at 900, 968 at 812).
+async function refuseWhileOpen(page: Page, width: number, height: number): Promise<void> {
+  await page.setViewportSize({ width, height });
+  await page.goto("/");
+  await page.getByRole("button", { name: "try a sample agreement" }).click();
+  await expect(page).toHaveURL(/[?&]document=/);
+  // A phone opens a new contract on its answer, so the composer, shown at every width, says it is open.
+  await expect(page.getByPlaceholder("Ask a question about this contract")).toBeVisible();
+  const opened = param(page, "document");
+  await page.getByRole("button", { name: "Documents" }).click();
+  const title = page.getByRole("heading", { name: /Contracts in this workbench/ });
+  await expect(title).toBeVisible();
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Add a contract" }).first().click();
+  await (await chooser).setFiles({ name: "not-a-pdf.pdf", mimeType: "application/pdf", buffer: Buffer.from("VERITY: this file is not a PDF.") });
+  const refusal = page.getByRole("alert").filter({ hasText: "not-a-pdf.pdf was not added: the file is not a readable PDF" });
+  await expect(refusal).toBeVisible();
+  await expect(refusal).toBeInViewport();
+  await expect(title).toBeVisible();
+  expect(param(page, "document")).toBe(opened);
+}
+
+test("a file refused while a contract is open leaves the reader where they added it, the refusal on screen", async ({ page }) => {
+  await refuseWhileOpen(page, 1440, 900);
+});
+
+test("a file refused while a contract is open, on a phone, leaves the reader where they added it, the refusal on screen", async ({ page }) => {
+  await refuseWhileOpen(page, 375, 812);
+});

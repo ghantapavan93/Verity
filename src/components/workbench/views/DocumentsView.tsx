@@ -67,7 +67,11 @@ export function DocumentsView({
             ]}
           />
         )}
-        {notice && <p className={styles.notice}>{notice}</p>}
+        {notice && (
+          <p className={styles.notice} role="alert">
+            {notice}
+          </p>
+        )}
         {error && (
           <ReadFailed
             what="the contracts"

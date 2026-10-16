@@ -26,7 +26,7 @@ import { useModelWake } from "./hooks/useModelWake";
 import { useMemoAction } from "./hooks/useMemoAction";
 import { useRunFollower } from "./hooks/useRunFollower";
 import { useUrlState } from "./hooks/useUrlState";
-import { Landing } from "./landing/Landing";
+import { Landing, refusal } from "./landing/Landing";
 import { chooseProof } from "./landing/proofRun";
 import { modelPlace } from "@/lib/modelPlace";
 import { Rail } from "./shell/Rail";
@@ -192,6 +192,10 @@ function WorkbenchSurface() {
       // asked when the document opens. Until 2026-10-08 it was carried into the composer and left unsent (QA review).
       // A file added from inside the workspace sends nothing the person did not send themselves.
       const question = stage !== "workspace" ? composerText.trim() : "";
+      // The view a file was added from while a contract was open: a refused file leaves the person there, with the
+      // refusal on that view (blind contract stress test, 2026-10-16: it sent them to the first screen's top, the
+      // contract gone and the refusal below the fold).
+      const addedFrom = stage === "workspace" ? view : null;
       setUploadError(null);
       setPendingName(file.name);
       setProcessingLabel("Reading document");
@@ -219,10 +223,15 @@ function WorkbenchSurface() {
         }, READY_PAUSE_MS);
       } catch (error) {
         setUploadError({ name: file.name, reason: errorMessage(error) });
-        setStage("empty");
+        if (addedFrom === null) {
+          setStage("empty");
+        } else {
+          setView(addedFrom);
+          setStage("workspace");
+        }
       }
     },
-    [showRun, resetMemo, stage, composerText, startRun, guidanceRecord],
+    [showRun, resetMemo, stage, view, composerText, startRun, guidanceRecord],
   );
 
   useEffect(() => {
@@ -288,6 +297,7 @@ function WorkbenchSurface() {
   const navigate = useCallback(
     (next: View) => {
       setViewError(null);
+      setUploadError(null);
       setPaletteOpen(false);
       setGuidanceOpen(false);
       setView(next);
@@ -624,7 +634,7 @@ function WorkbenchSurface() {
                   {view === "documents" && (
                     <DocumentsView
                       currentId={doc?.id ?? null}
-                      notice={viewError}
+                      notice={uploadError ? refusal(uploadError) : viewError}
                       onOpen={(id) => void openDocument(id)}
                       onAdd={() => fileInputRef.current?.click()}
                       onStart={() => void loadSample("amended")}
