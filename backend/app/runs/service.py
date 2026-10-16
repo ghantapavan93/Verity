@@ -45,7 +45,19 @@ from .links import because, linked
 from .owner import this_process
 from .prose import label_handles, unresolved_handles
 from .relations import Note, Recorded, assess, dump, locate_relations, parts_of, relevant
-from .status import Decision, Grounds, check_references, check_replaced, check_values, decide, enclosing_sentences, settle_together, unseen_references
+from .status import (
+    Decision,
+    Grounds,
+    check_conditions,
+    check_references,
+    check_replaced,
+    check_values,
+    decide,
+    enclosing_sentences,
+    left_out_condition,
+    settle_together,
+    unseen_references,
+)
 from .transitions import assert_transition
 from .versions import stale_versions
 
@@ -344,6 +356,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             spans: list[EvidenceSpan] = []
             passages: list[str] = []
             dependencies: list[str] = []
+            conditions: list[str] = []  # what each verified quote's own sentence carries outside it (policy-v14)
             all_verified = bool(item.evidence)
             for span_ordinal, evidence in enumerate(item.evidence):
                 section, located, method = verify_evidence(evidence.quote, evidence.section_id, by_label, chosen, window=window)
@@ -354,6 +367,8 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                     passage = enclosing_sentences(section.text, located.start, located.end)
                     passages.append(passage)
                     dependencies += [d for d in unseen_references(passage, every_section, handed) if d not in dependencies]
+                    if (condition := left_out_condition(section.text, located.start, located.end)) is not None:
+                        conditions.append(condition)
                 total_count += 1
                 verified_count += 1 if verified else 0
                 spans.append(
@@ -403,6 +418,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 guidance_text,
                 clause_numbers,
             )
+            decision = check_conditions(decision, label_handles(item.conclusion, labels), conditions)
             if relations:
                 # What the located statements mean for this finding: only its verified quotes ground anything (runs.relations).
                 answer = " ".join(label_handles(text, labels) for text in (item.conclusion, item.observed) if text)

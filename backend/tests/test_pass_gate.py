@@ -355,21 +355,28 @@ def test_through_the_run_a_clause_subject_to_an_unseen_section_is_the_models_vie
     dependent = ask(client, monkeypatch, lead="Subject to Sections 6, 7 and 8, ")
     assert "8" not in [c["number"] for c in dependent["candidates"]], "two links at most: §8 was not handed over"
     finding = dependent["findings"][0]
-    assert (finding["status"], finding["statusSource"]) == ("pass", "model_hint"), finding
+    # Since policy-v14 a quote that leaves its sentence's condition out, under an answer that does not state it, is no
+    # pass (test_left_out_conditions); the reason still names the section the model never read and what code compared.
+    assert (finding["status"], finding["statusSource"]) == ("needs_review", "position_check"), finding
+    assert finding["statusReason"].startswith("the quote leaves out of its sentence “Subject to Sections 6, 7 and 8”")
     assert "the sentence points at §8, which was not handed to the model" in finding["statusReason"]
     assert 'a condition or an exception ("subject to")' in finding["statusReason"], "the words outside the quote, in its sentence, were read too"
 
 
 def test_through_the_run_without_guidance_a_pass_says_what_it_did_not_see(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """War room F-04: with no guidance nothing is compared, and the pass carried no reason although its sentence was
-    "Subject to Section 8, …" and §8 was never handed over. The status stays the model's; the reason names §8."""
+    "Subject to Section 8, …" and §8 was never handed over. The reason names §8. Since policy-v14 the quote, which leaves
+    the sentence's "Subject to …" out under an answer that does not state it, no longer stands as a pass."""
     plain = ask(client, monkeypatch, lead="", with_guidance=False)["findings"][0]
     assert (plain["status"], plain["statusSource"], plain["statusReason"]) == ("pass", "model_hint", None), "control: nothing unseen, nothing said"
     dependent = ask(client, monkeypatch, lead="Subject to Sections 6, 7 and 8, ", with_guidance=False)
     assert "8" not in [c["number"] for c in dependent["candidates"]]  # two links at most (retrieval-v2): §6 and §7, not §8
     finding = dependent["findings"][0]
-    assert (finding["status"], finding["statusSource"]) == ("pass", "model_hint"), finding
-    assert finding["statusReason"] == "the sentence points at §8, which was not handed to the model"
+    assert (finding["status"], finding["statusSource"]) == ("needs_review", "position_check"), finding
+    assert finding["statusReason"] == (
+        "the quote leaves out of its sentence “Subject to Sections 6, 7 and 8”, and the answer does not state it; "
+        "the sentence points at §8, which was not handed to the model"
+    )
 
 
 def test_what_the_quote_left_out_of_its_own_sentence_still_blocks_a_pass() -> None:

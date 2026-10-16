@@ -54,7 +54,7 @@ _WORD = re.compile(r"[a-z]{4,}")
 CONCEPT_WORDS_NEEDED = 2
 
 # A condition or an exception anywhere in the quote. A bare "if" is not listed: it is how most rights are granted.
-_CARVE_OUT = re.compile(
+CARVE_OUT = re.compile(
     r"\b(?:unless|except|excluding|provided(?:,)? (?:that|however)|notwithstanding|subject to|save (?:as|that|for)|other than|only if"
     r"|so long as|as long as|in which case|however|but not|to the extent)\b",
     re.IGNORECASE,
@@ -115,7 +115,7 @@ def pass_blockers(quotes: Sequence[str], guidance: str, rule: GuidanceRule, depe
             if counts_back(quote, mention) != guidance_counts_back:
                 blockers.append("one of the two periods is counted back from an event and the other is not")
     for passage in passages or quotes:
-        carve_out = _CARVE_OUT.search(passage)
+        carve_out = CARVE_OUT.search(passage)
         if carve_out is not None:
             blockers.append(f'the clause carries a condition or an exception ("{carve_out.group(0).lower()}")')
     quoted_periods = set().union(*(stated_periods(q) for q in quotes)) if quotes else set()

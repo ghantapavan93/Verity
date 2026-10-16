@@ -99,7 +99,10 @@ def test_every_surface_says_a_pass_rests_on_a_section_the_model_never_read(clien
     run_id = started.json()["id"]
     finding = client.get(f"/api/runs/{run_id}/detail").json()["findings"][0]
     expected = "the sentence points at §9, which was not handed to the model"
-    assert (finding["status"], finding["statusSource"]) == ("pass", "model_hint"), "the status is the model's, unchanged"
+    # Since policy-v14 the quote's leaving out its sentence's "Subject to Sections 7, 8 and 9" lowers the pass
+    # (test_left_out_conditions); the lowered status still says, on every surface, what the model never read.
+    assert (finding["status"], finding["statusSource"]) == ("needs_review", "position_check"), finding
+    assert finding["statusReason"] == f"the quote leaves out of its sentence “Subject to Sections 7, 8 and 9”, and the answer does not state it; {expected}"
     assert finding["codeCompared"] is False and finding["unseenReason"] == expected, finding
 
     memo = client.post("/api/memos", json={"runId": run_id}).json()
@@ -113,7 +116,7 @@ def test_every_surface_says_a_pass_rests_on_a_section_the_model_never_read(clien
     assert pack.status_code == 200, pack.text
     with zipfile.ZipFile(io.BytesIO(pack.content)) as archive:
         packed = json.loads(archive.read("findings.json"))[0]
-    assert packed["code_compared"] is False and packed["unseen_reason"] == expected and packed["status_reason"] == expected
+    assert packed["code_compared"] is False and packed["unseen_reason"] == expected and packed["status_reason"] == finding["statusReason"]
 
 
 def test_control_a_compared_pass_says_code_compared_and_names_nothing_unseen(client: TestClient) -> None:

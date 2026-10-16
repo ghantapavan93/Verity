@@ -48,9 +48,9 @@ from ..policy.durations import (
     read_as_the_contract_does,
     stated_rules,
 )
-from ..policy.proof import pass_blockers, same_point, unseen_reason
+from ..policy.proof import CARVE_OUT, concept_stems, pass_blockers, same_point, unseen_reason
 from .prose import UNRESOLVED
-from .values import frame_times, redaction_given_as_value, unquoted_values
+from .values import frame_times, redaction_given_as_value, uniform_party_choices, unquoted_values
 
 # The version of the rules in this module and in `policy`: what a status means. Part of a run's identity
 # (runs.versions), so a question answered under one version is asked again, not handed back, under the next.
@@ -114,7 +114,13 @@ from .values import frame_times, redaction_given_as_value, unquoted_values
 # replacement when it names one of the values the two differ in (runs.relations.assess): an answer that quotes both
 # and states both, but gives the replaced value as its own, raises a concern. (2) A section handle the model wrote
 # that names no section it was given is shown as such and lowers a pass (runs.prose, `check_references`).
-POLICY_VERSION = "policy-v13"
+# policy-v14 (2026-10-16, the blind contract stress test): two more ways a pass rests on evidence that does not carry it,
+# each needs review set by code (`position_check`). (1) One value given to every party ("Each party must give … 45
+# calendar days") where the passages state several of that kind and none gives that value to every party (the Customer
+# 45, the Provider 60): `check_values`, `values.uniform_party_choices`. (2) A verified quote whose own sentence carries a
+# condition outside the quoted words ("Except for the first sixty (60) calendar days of the Initial Term, …") that the
+# answer does not state: `check_conditions`, `left_out_condition`. Replay over recorded passes: DECISIONS.md.
+POLICY_VERSION = "policy-v14"
 
 
 @dataclass(frozen=True)
@@ -369,9 +375,7 @@ ATTACHMENT = re.compile(r"\b(Schedule|Exhibit|Appendix|Annexure|Annex|Attachment
 _PASSAGE_END = re.compile(r"(?<=[.;!?])\s+|\n+")
 
 
-def enclosing_sentences(text: str, start: int, end: int) -> str:
-    """The whole sentences of ``text`` that the span touches. A quote is the shortest passage that carries the point
-    (prompt rule 1), so the words that qualify it ("Subject to Section 14.3, …") are often just outside it."""
+def _sentence_bounds(text: str, start: int, end: int) -> tuple[int, int]:
     first, last = 0, len(text)
     for boundary in _PASSAGE_END.finditer(text):
         if boundary.end() <= start:
@@ -379,7 +383,81 @@ def enclosing_sentences(text: str, start: int, end: int) -> str:
         elif boundary.start() >= end:
             last = boundary.start()
             break
+    return first, last
+
+
+def enclosing_sentences(text: str, start: int, end: int) -> str:
+    """The whole sentences of ``text`` that the span touches. A quote is the shortest passage that carries the point
+    (prompt rule 1), so the words that qualify it ("Subject to Section 14.3, …") are often just outside it."""
+    first, last = _sentence_bounds(text, start, end)
     return text[first:last]
+
+
+MAX_CONDITION_CHARS = 200
+
+
+def left_out_condition(text: str, start: int, end: int) -> str | None:
+    """The condition or exception that the span's own sentence carries outside the span (`policy.proof.CARVE_OUT`),
+    as written: before the span, from the condition word to where it meets the quote ("Except for the first sixty (60)
+    calendar days of the Initial Term" before "Customer may terminate …"); else after it, to the sentence's end ("unless
+    Customer has paid"). None when the sentence carries none outside the quote: a condition the quote includes is shown
+    with it, and one in another sentence is not this sentence's (blind contract stress test, 2026-10-16)."""
+    first, last = _sentence_bounds(text, start, end)
+    before, after = text[first:start], text[end:last]
+    # A sentence that ends inside quotation marks ('… written notice." Section 5.2 …') ends there too: the words
+    # before it are another sentence, often another clause's quoted text (the blind kit's Amendment One).
+    if ends := list(_QUOTED_END.finditer(before)):
+        before = before[ends[-1].end() :]
+    if ends := list(_QUOTED_END.finditer(after)):
+        after = after[: ends[0].start() + 1]
+    for side, found in ((before, CARVE_OUT.search(before)), (after, CARVE_OUT.search(after))):
+        # A condition word with nothing of its own after it ("However, …") is a turn of phrase, not a condition.
+        if found is None or not concept_stems(side[found.end() :]):
+            continue
+        condition = side[found.start() :].strip().rstrip(",;:—–-.").strip()
+        if len(condition) > MAX_CONDITION_CHARS:
+            cut = condition.rfind(" ", 0, MAX_CONDITION_CHARS)
+            condition = condition[: cut if cut > 0 else MAX_CONDITION_CHARS] + "…"
+        return condition
+    return None
+
+
+_QUOTED_END = re.compile(r"[.!?][\"”’)]+\s+")
+# How many of the condition's own words an answer must carry to state it ("except during the first 60 days of the
+# Initial Term" for "Except for the first sixty (60) calendar days of the Initial Term"; "exceptions … indemnification
+# obligations, gross negligence" for "EXCEPT FOR (A) A PARTY'S INDEMNIFICATION OBLIGATIONS …, (B) … GROSS NEGLIGENCE").
+CONDITION_WORDS_NEEDED = 2
+
+
+def _states_condition(conclusion: str, condition: str) -> bool:
+    """Whether the answer states the condition: it carries words of the condition's own, the condition word aside (an
+    answer with "unless Customer is in breach" states some other condition). Measured over the recorded passes:
+    DECISIONS.md."""
+    word = CARVE_OUT.search(condition)
+    own = concept_stems(condition[word.end() :] if word else condition)
+    return len(own & concept_stems(conclusion)) >= min(CONDITION_WORDS_NEEDED, len(own))
+
+
+def check_conditions(decision: Decision, conclusion: str | None, conditions: Sequence[str]) -> Decision:
+    """A pass that rests on a quote whose own sentence carries a condition outside the quoted words (``conditions``,
+    `left_out_condition`, one per verified span that has one) and that does not state the condition itself is not a pass
+    (policy-v14): the quote is real and the answer drops what limits it, as "Customer may terminate … on 30 days' notice"
+    did over a sentence opening "Except for the first sixty (60) calendar days of the Initial Term". Whether the condition
+    applies is a reading; code says only that the answer leaves it out. Other statuses already ask a person to look."""
+    if decision.status != "pass":
+        return decision
+    unstated = [condition for condition in conditions if not _states_condition(conclusion or "", condition)]
+    if not unstated:
+        return decision
+    return Decision(
+        "needs_review", "position_check", _with_earlier(f"the quote leaves out of its sentence “{unstated[0]}”, and the answer does not state it", decision)
+    )
+
+
+def _with_earlier(reason: str, decision: Decision) -> str:
+    """A lowered pass keeps what its reason already said ("the sentence points at §8, which was not handed to the
+    model"): every surface reads that from the record (`basis`), and a lowered status must not unsay it."""
+    return f"{reason}; {decision.reason}" if decision.reason else reason
 
 
 def unseen_references(passage: str, sections: Iterable[tuple[str, str]], handed: Iterable[tuple[str, str]]) -> list[str]:
@@ -446,11 +524,14 @@ def check_references(
 def check_values(
     decision: Decision, conclusion: str | None, quotes: Sequence[str], question: str | None, guidance: str | None, clause_numbers: Iterable[str] = ()
 ) -> Decision:
-    """A pass whose conclusion states a value its evidence does not establish is not a pass (policy-v6). Two forms are
-    code's to see: a value no verified quote and no guidance states (`values.unquoted_values`), and a redaction mark given
-    as the value (`values.redaction_given_as_value`). The quote may be real; the value it is cited for is not in it, and a
-    person must look. The value may still be right (a total computed from quoted figures, a period stated elsewhere in
-    the contract): code says only that the evidence shown does not establish it, never that it is wrong.
+    """A pass whose conclusion states a value its evidence does not establish is not a pass (policy-v6). Three forms are
+    code's to see: a value no verified quote and no guidance states (`values.unquoted_values`), a redaction mark given
+    as the value (`values.redaction_given_as_value`), and, since policy-v14, one value given to every party where the
+    passages state several of that kind and none gives it to every party (`values.uniform_party_choices`: "Each party must
+    give 45 days" over a quote in which the Provider gives 60). The quote may be real; the value it is cited for is not
+    in it, or not for everyone the answer gives it to, and a person must look. The value may still be right (a total
+    computed from quoted figures, a period stated elsewhere in the contract): code says only that the evidence shown does
+    not establish it, never that it is wrong.
 
     The guidance is a standard the reader set and the answer is compared with, so its values count as stated. The
     question does not: it is what the reader asked, not what the contract says, and a value an answer takes from it
@@ -468,7 +549,18 @@ def check_values(
     # The time the question asks at is not a figure taken from it (policy-v12): repeated, it says when the answer is for.
     unsupported = unquoted_values(conclusion, quotes, [guidance or "", *frame_times(question)], clause_numbers)
     if not unsupported:
-        return decision
+        uniform = uniform_party_choices(conclusion, quotes, [question or ""], [guidance] if guidance else [])
+        if not uniform:
+            return decision
+        given, values = uniform[0].choice.answer, ", ".join(uniform[0].choice.values)
+        more = f" and {uniform[0].choice.more} more" if uniform[0].choice.more else ""
+        return Decision(
+            "needs_review",
+            "position_check",
+            _with_earlier(
+                f"the answer gives {given} to {uniform[0].phrase.lower()}; its passages state {values}{more}, and none gives {given} to every party", decision
+            ),
+        )
     beyond_question = set(unquoted_values(conclusion, quotes, [question or "", guidance or ""], clause_numbers))
     from_question = [v for v in unsupported if v not in beyond_question]
     elsewhere = [v for v in unsupported if v in beyond_question]

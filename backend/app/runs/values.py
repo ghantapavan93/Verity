@@ -447,27 +447,89 @@ def value_choices(answer: str | None, quotes: Iterable[str], question: Iterable[
     beside a contract's 30 is the very conflict to show (triage and the fresh evaluation, 2026-10-09)."""
     if not answer:
         return []
-    asked_kinded, asked_plain = _readers_values(question)
-    guide_kinded, guide_plain = _readers_values(guidance)
-    standard_kinded, standard_plain = asked_kinded | guide_kinded, asked_plain | guide_plain
-    # Per group: each distinct value once (key -> as written, in the passages' order). Dicts, not scans: a quote of
-    # thousands of values stays linear.
-    offered: dict[str, dict[str, str]] = {}
-    for quote in quotes:
-        for _, group, key, number, start, end in _kinded(quote, words_need_a_unit=False):
-            if key not in asked_kinded and number not in asked_plain:
-                offered.setdefault(group, {}).setdefault(key, quote[start:end].strip())
+    return [choice for choice, _ in _choices(answer, _Offer.of(quotes, question, guidance))]
+
+
+@dataclass(frozen=True)
+class _Offer:
+    """What the passages offer, read once: each group's distinct values (key -> as written, in the passages' order),
+    the reader's values set aside."""
+
+    offered: dict[str, dict[str, str]]
+    standard_kinded: set[str]
+    standard_plain: set[str]
+
+    @classmethod
+    def of(cls, quotes: Iterable[str], question: Iterable[str], guidance: Iterable[str]) -> _Offer:
+        asked_kinded, asked_plain = _readers_values(question)
+        guide_kinded, guide_plain = _readers_values(guidance)
+        # Dicts, not scans: a quote of thousands of values stays linear.
+        offered: dict[str, dict[str, str]] = {}
+        for quote in quotes:
+            for _, group, key, number, start, end in _kinded(quote, words_need_a_unit=False):
+                if key not in asked_kinded and number not in asked_plain:
+                    offered.setdefault(group, {}).setdefault(key, quote[start:end].strip())
+        return cls(offered, asked_kinded | guide_kinded, asked_plain | guide_plain)
+
+
+def _choices(answer: str, offer: _Offer) -> list[tuple[ValueChoice, set[str]]]:
+    """The answer's choices among what the passages offer, each with the keys of the values the answer used."""
     blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
     used: dict[str, tuple[ChoiceKind, dict[str, str]]] = {}
     for kind, group, key, number, start, end in _kinded(blanked, words_need_a_unit=True):
-        if key in standard_kinded or number in standard_plain or key not in offered.get(group, {}):
+        if key in offer.standard_kinded or number in offer.standard_plain or key not in offer.offered.get(group, {}):
             continue
         used.setdefault(group, (kind, {}))[1].setdefault(key, answer[start:end].strip())
-    choices: list[ValueChoice] = []
+    choices: list[tuple[ValueChoice, set[str]]] = []
     for group, (kind, chosen) in used.items():
-        values = list(offered[group].values())
+        values = list(offer.offered[group].values())
         # A choice is some of the values used and others left out: an answer that gives them all chose nothing.
         if len(values) >= 2 and len(chosen) < len(values):
             shown = values[:MAX_CHOICES_SHOWN]
-            choices.append(ValueChoice(kind, ", ".join(chosen.values()), shown, len(values) - len(shown)))
+            choices.append((ValueChoice(kind, ", ".join(chosen.values()), shown, len(values) - len(shown)), set(chosen)))
     return choices
+
+
+# A subject that takes in every party to the agreement: "each party", "either of the parties", "both sides", "the parties",
+# "neither party", and two named parties joined under "both" ("both Customer and Provider"; names are capitalised).
+_EVERY_PARTY = re.compile(
+    r"(?i:\b(?:each|either|both|every|all|neither)\s+(?:of\s+the\s+)?(?:two\s+)?(?:part(?:y|ies)|sides?)\b|\bthe\s+parties\b)"
+    r"|\b(?i:both)\s+(?:the\s+)?[A-Z][a-z]+\s+and\s+(?:the\s+)?[A-Z][a-z]+\b"
+)
+# Where one statement ends: a sentence, or a clause after a semicolon ("Customer must give 45 days; Provider must give 60").
+_STATEMENT_END = re.compile(r"(?<=[.;!?])\s+")
+
+
+@dataclass(frozen=True)
+class UniformChoice:
+    """A statement of the answer that gives every party one value where its passages state several of that kind."""
+
+    phrase: str  # how the answer names every party, as written ("Each party")
+    choice: ValueChoice
+
+
+def uniform_party_choices(answer: str | None, quotes: Iterable[str], question: Iterable[str] = (), guidance: Iterable[str] = ()) -> list[UniformChoice]:
+    """Each statement of the answer that names every party and gives it some, not all, of the values of a kind its
+    passages state, when no statement of the passages gives that value to every party (blind contract stress test,
+    2026-10-16: "Each party must give … 45 calendar days" over "Customer must give … forty-five (45) …; Provider must give
+    … sixty (60) …"). Statements are read one by one: a later one naming the other value does not take back the first.
+    A value the contract itself gives to every party ("Either party may terminate on thirty (30) days' notice") is not a
+    generalisation, whatever else the passages state. Code reads the subject's words, never who the parties are."""
+    if not answer:
+        return []
+    quotes = list(quotes)
+    offer = _Offer.of(quotes, question, guidance)
+    general = {
+        key
+        for quote in quotes
+        for statement in _STATEMENT_END.split(quote)
+        if _EVERY_PARTY.search(statement)
+        for _, _, key, _, _, _ in _kinded(statement, words_need_a_unit=False)
+    }
+    found: list[UniformChoice] = []
+    for statement in _STATEMENT_END.split(answer):
+        subject = _EVERY_PARTY.search(statement)
+        if subject is None:
+            continue
+        found += [UniformChoice(subject.group(0), choice) for choice, used in _choices(statement, offer) if not used & general]
+    return found
