@@ -210,8 +210,9 @@ test("a file refused on Findings while a contract is open, on a phone, leaves th
 });
 
 /** Documents lists a contract that is gone when it is opened, as when its workspace expired in between; opening it
- *  fails with a 404 after `delayMs`. */
-async function listGoneContract(page: Page, delayMs = 0): Promise<void> {
+ *  fails with a 404 after `delayMs`. Returns whether that 404 has been sent. */
+async function listGoneContract(page: Page, delayMs = 0): Promise<() => boolean> {
+  let answered = false;
   await page.route("**/api/documents", async (route) => {
     if (route.request().method() !== "GET") return route.continue();
     const listed = await (await route.fetch()).json();
@@ -219,8 +220,10 @@ async function listGoneContract(page: Page, delayMs = 0): Promise<void> {
   });
   await page.route("**/api/documents/gone", async (route) => {
     await new Promise((r) => setTimeout(r, delayMs));
+    answered = true;
     await route.fulfill({ status: 404, json: { detail: "document not found" } });
   });
+  return () => answered;
 }
 
 test("a newer failure takes the place of a refusal on screen, and a newer refusal the place of a failure", async ({ page }) => {
@@ -241,13 +244,14 @@ test("a newer failure takes the place of a refusal on screen, and a newer refusa
 
 test("a slow failure of an earlier click does not replace a newer refusal", async ({ page }) => {
   await openAt(page, 1440, 900);
-  await listGoneContract(page, 3000);
+  const answered = await listGoneContract(page, 3000);
   await page.getByRole("button", { name: "Documents" }).click();
   const late = page.waitForResponse((r) => r.url().endsWith("/api/documents/gone"));
   await page.getByRole("button").filter({ hasText: "gone-contract" }).click();
   await addNotAPdf(page); // added while the contract clicked first is still being opened
   const refusal = page.getByRole("alert").filter({ hasText: NOT_READABLE });
   await expect(refusal).toBeVisible();
+  expect(answered()).toBe(false); // the refusal came first, so the 404 below is the late one
   await late; // the earlier click's 404 has arrived
   await page.waitForTimeout(200); // and its handler has run
   await expect(refusal).toBeVisible();

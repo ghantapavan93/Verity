@@ -1449,13 +1449,13 @@ the Documents flows aside, which are the control.
 opened from Findings that fails once the reader is on the Assistant, is said nowhere, and the screen keeps what it
 showed. A late response can still change the screen: an upload that ends after the reader pressed Back to a run returns
 them to where the upload started, with its refusal; a contract whose reading arrives after the reader moved on still
-opens (a run's open is dropped when a question or another run came after it); a question typed on the first screen is
-asked of its file when the file is read, even if the reader has gone Back meanwhile. Each needs a slow response and a
-second action inside it. Four attempts in this round to show the notice on the Assistant, scoped to its screen, and to
-give the screen one owner were each reviewed and rejected: every one closed a race and opened another (a refusal shown
-nowhere; a failure shown beside a contract it was not about; a question started on a file the reader had left). Closing
-these needs one owner for the screen across uploads, opens, Back and the first screen's question, designed as a change
-of its own.
+opens, and so does a run unless, after it, a question was asked or another run or contract opened (an upload that was
+refused does not count); a question typed on the first screen is asked of its file when the file is read, even if the
+reader has gone Back meanwhile. Each needs a slow response and a second action inside it. Four attempts in this round to
+show the notice on the Assistant, scoped to its screen, and to give the screen one owner were each reviewed and
+rejected: every one closed a race and opened another (a refusal shown nowhere; a failure shown beside a contract it was
+not about; a question started on a file the reader had left). Closing these needs one owner for the screen across
+uploads, opens, Back and the first screen's question, designed as a change of its own.
 
 *Wording (U2, U3).* The reading stage printed "1 pages"; counts now take their noun's number. A visitor read "… the model
 endpoint is not reachable (ConnectError)", on the answer and on the public /api/health. Since the journey audit
