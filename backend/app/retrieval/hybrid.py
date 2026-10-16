@@ -47,8 +47,8 @@ def ollama_embed(texts: list[str], model: str | None = None) -> list[list[float]
             log.warning("embedding call failed: %s", error)
             raise ProviderError(failed_call(f"Embedding with {name} failed", error)) from error
         except (KeyError, ValueError) as error:
-            log.warning("embedding response unreadable: %s", error)
-            raise ProviderError(f"Embedding with {name} failed: the model endpoint's answer could not be read ({type(error).__name__})") from error
+            log.warning("embedding response unreadable: %s: %s", type(error).__name__, error)
+            raise ProviderError(f"Embedding with {name} failed: the model endpoint's answer could not be read") from error
     return vectors
 
 

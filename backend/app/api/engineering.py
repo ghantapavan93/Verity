@@ -6,6 +6,7 @@ is retyped."""
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
@@ -32,6 +33,8 @@ from ..schemas import (
     StateSummary,
 )
 from .access import current_workspace, owner_only
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/engineering", tags=["engineering"])
 # The recorded contract-state experiment, as the public research page shows it: no reader's data, so no session.
@@ -65,7 +68,9 @@ def load_experiments(path: Path) -> ExperimentsOut:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
-        return ExperimentsOut(available=False, source=path.name, detail=f"results.json unreadable: {type(error).__name__}")
+        # The record's detail is shown on public pages; the error's class is for the log.
+        log.warning("%s unreadable: %s", path.name, type(error).__name__)
+        return ExperimentsOut(available=False, source=path.name, detail="results.json unreadable")
     board = data.get("board")
     if not isinstance(board, list) or not board:
         return ExperimentsOut(available=False, source=path.name, detail="results.json has no board; rebuild it with the current results_page")
@@ -108,7 +113,8 @@ def load_contract_state(path: Path) -> ContractStateOut:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
-        return ContractStateOut(available=False, source=path.name, detail=f"contract-state.json unreadable: {type(error).__name__}")
+        log.warning("%s unreadable: %s", path.name, type(error).__name__)
+        return ContractStateOut(available=False, source=path.name, detail="contract-state.json unreadable")
     if not isinstance(data, dict) or data.get("schema") != CONTRACT_STATE_SCHEMA:
         return ContractStateOut(available=False, source=path.name, detail=f"the file is not a {CONTRACT_STATE_SCHEMA} record")
     # The record carries the sha256 of its own body (sorted keys, UTF-8); a copy matches, an edit does not.
@@ -119,7 +125,8 @@ def load_contract_state(path: Path) -> ContractStateOut:
         summary = StateSummary(**data["summary"])
         arrivals = [StateArrival(**row) for row in data.get("arrivals") or []]
     except (ValidationError, KeyError, TypeError) as error:
-        return ContractStateOut(available=False, source=path.name, detail=f"the record does not fit {CONTRACT_STATE_SCHEMA}: {type(error).__name__}")
+        log.warning("%s does not fit %s: %s", path.name, CONTRACT_STATE_SCHEMA, type(error).__name__)
+        return ContractStateOut(available=False, source=path.name, detail=f"the record does not fit {CONTRACT_STATE_SCHEMA}")
     return ContractStateOut(
         available=True,
         source=path.name,

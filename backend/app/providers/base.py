@@ -3,10 +3,13 @@ validation happen in the caller, so a provider can never smuggle structure past 
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 
 class ProviderError(RuntimeError):
@@ -16,16 +19,19 @@ class ProviderError(RuntimeError):
 
 
 def failed_call(what: str, error: httpx.HTTPError) -> str:
-    """A failed call to the model endpoint in words a reader can act on, with the error's class for whoever reads the
-    log beside it. ``what`` names the call ("the model", "embedding with nomic-embed-text")."""
-    kind = type(error).__name__
+    """A failed call to the model endpoint in words a reader can act on. ``what`` names the call ("the model",
+    "embedding with nomic-embed-text"). The error's class is written to the log beside the sentence, never into it: the
+    sentence reaches visitors (blind contract stress test, 2026-10-16: "… not reachable (ConnectError)")."""
     if isinstance(error, httpx.ConnectError):
-        return f"{what}: the model endpoint is not reachable ({kind})"
-    if isinstance(error, httpx.TimeoutException):
-        return f"{what}: the model endpoint did not answer in time ({kind})"
-    if isinstance(error, httpx.HTTPStatusError):
-        return f"{what}: the model endpoint answered HTTP {error.response.status_code} ({kind})"
-    return f"{what}: the request to the model endpoint failed ({kind})"
+        sentence = f"{what}: the model endpoint is not reachable"
+    elif isinstance(error, httpx.TimeoutException):
+        sentence = f"{what}: the model endpoint did not answer in time"
+    elif isinstance(error, httpx.HTTPStatusError):
+        sentence = f"{what}: the model endpoint answered HTTP {error.response.status_code}"
+    else:
+        sentence = f"{what}: the request to the model endpoint failed"
+    log.warning("%s (%s)", sentence, type(error).__name__)
+    return sentence
 
 
 class ContextOverflow(ProviderError):

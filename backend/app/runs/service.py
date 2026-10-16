@@ -228,6 +228,11 @@ def bound_to(provider: ModelProvider, frozen: FrozenOptions) -> ModelProvider:
     return bind(frozen.decoding) if bind is not None else provider
 
 
+def _counted(count: int, noun: str) -> str:
+    """A count and its noun in the number it takes: "1 page", "16 sections" (blind contract stress test: "1 pages")."""
+    return f"{count} {noun}{'' if count == 1 else 's'}"
+
+
 @verification_pass()  # what is worked out about each text is kept for this pass only (verify/spans.py)
 def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
     run = session.get(Run, run_id)
@@ -240,8 +245,8 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         document = run.document
         sections = list(document.sections)
         guidance_text = run.guidance.text if run.guidance else None
-        pages = f"{document.pages} pages · " if document.pages else ""
-        _note_stage(session, run, "reading", f"{pages}{len(sections)} sections", output_hash=sha256_text("\x1f".join(s.text for s in sections)))
+        pages = f"{_counted(document.pages, 'page')} · " if document.pages else ""
+        _note_stage(session, run, "reading", f"{pages}{_counted(len(sections), 'section')}", output_hash=sha256_text("\x1f".join(s.text for s in sections)))
 
         _set_stage(session, run, "finding_evidence", input_hash=sha256_text(f"{run.question}\x1f{run.guidance_sha256 or ''}"))
         chosen, retrieval_mode, linked_because = _retrieve(sections, run.question, guidance_text, frozen)
@@ -272,7 +277,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             # sentence says what the retriever did, not why: on an agreement of two sections BM25 scores every section
             # at zero or below although both contain the question's words, and "no section matched the question's
             # words" was untrue there.
-            f"{len(chosen) - len(linked_because)} candidate section{'s' if len(chosen) - len(linked_because) != 1 else ''}"
+            _counted(len(chosen) - len(linked_because), "candidate section")
             + (f" and {len(linked_because)} the contract points to from them" if linked_because else "")
             if retrieval_mode != "opening_fallback"
             else f"retrieval ranked no section for this question; the opening {len(chosen)} of {len(sections)} were read instead",
@@ -485,10 +490,10 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
     except ProviderError as error:
         log.exception("run %s failed at the provider", run_id)
         _fail(session, run, str(error), "provider_error")
-    except Exception as error:
+    except Exception:
         log.exception("run %s failed", run_id)
-        # The exception's text is in the log above; the reader is told what happened, not what was raised.
-        _fail(session, run, f"The server failed while answering this question ({type(error).__name__}). Ask the question again.", "internal_error")
+        # The exception, its class included, is in the log above; the reader is told what happened, not what was raised.
+        _fail(session, run, "The server failed while answering this question. Ask the question again.", "internal_error")
 
 
 def _fail(session: Session, run: Run, error: str, reason: RunReasonName) -> None:

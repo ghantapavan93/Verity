@@ -97,7 +97,9 @@ RECORDED: dict[str, str] = {
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
     # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.
-    "retrieval-v2": "a1760f8ea511f569",
+    # Re-recorded 2026-10-16 (blind contract stress test): the embedding call's failure sentence no longer carries the
+    # exception's class, which goes to the log; which sections are handed over is unchanged.
+    "retrieval-v2": "511493e129148842",
 }
 
 

@@ -3,7 +3,9 @@
 Found by the journey audit (2026-10-09): with the model offline a visitor read "Ollama request failed: [WinError
 10061] No connection could be made …", and an internal error printed the exception as raised. Raw exception text can
 carry the model endpoint's address (which health deliberately never publishes), file paths and OS detail. The
-invariant: a provider or internal failure recorded on a run names what failed and the error's class, never its text.
+invariant: a provider or internal failure recorded on a run names what failed, never its text. Since the blind contract
+stress test (2026-10-16) never its class either ("… not reachable (ConnectError)" reached visitors): the class is
+written to the log beside the sentence (test_visitor_wording).
 """
 
 from __future__ import annotations
@@ -54,7 +56,7 @@ def test_a_model_failure_names_what_failed_and_not_its_text(error: Exception, wo
     with pytest.raises(ProviderError) as raised:
         OllamaProvider().generate_json("system", "user", {})
     message = str(raised.value)
-    assert words in message and type(error).__name__ in message, message
+    assert words in message and type(error).__name__ not in message, message
     for leak in ("WinError", "10061", "example.invalid", "/api/chat"):
         assert leak not in message, (leak, message)
 
@@ -70,6 +72,6 @@ def test_an_internal_failure_on_a_run_says_so_without_the_exception_text(client:
     monkeypatch.setattr(run_service, "decide", broken)
     run = upload_and_ask(client, "What law governs this agreement?", with_guidance=False)["run"]
     assert run["stage"] == "failed" and run["reason"] == "internal_error"
-    assert "RuntimeError" in run["error"] and "Ask the question again" in run["error"], run["error"]
+    assert "RuntimeError" not in run["error"] and "Ask the question again" in run["error"], run["error"]
     for leak in ("Verity", "public-data", "WinError", ".part"):
         assert leak not in run["error"], (leak, run["error"])

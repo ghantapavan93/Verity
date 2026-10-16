@@ -114,7 +114,7 @@ class OllamaProvider:
         except (httpx.HTTPError, ValueError, ProviderError) as error:  # ProviderError: a redirect refused (_send)
             # The endpoint's address stays in the server log; /api/health is public and never names it.
             log.warning("model endpoint %s not reachable: %s", self.base_url, type(error).__name__)
-            return False, f"the model endpoint is not reachable ({type(error).__name__})"
+            return False, "the model endpoint is not reachable"
         names = [m.get("name", "") for m in models]
         if self.model not in names and f"{self.model}:latest" not in names:
             return False, f"model {self.model} is not pulled (have: {', '.join(names) or 'none'})"
@@ -133,7 +133,8 @@ class OllamaProvider:
             # request only once a container has started, a minute or more on Modal (cloud readiness review, 2026-10-12).
             problem = self._build_problem(self._tags(self.timeout_s))
         except (httpx.HTTPError, ValueError) as error:
-            raise ProviderError(f"the model endpoint could not confirm its build ({type(error).__name__})") from error
+            log.warning("model build check failed: %s", type(error).__name__)
+            raise ProviderError("the model endpoint could not confirm its build") from error
         if problem:
             raise ProviderError(problem)
 
