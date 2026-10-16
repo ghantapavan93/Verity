@@ -118,7 +118,8 @@ def test_the_model_is_reachable_from_the_api_only_and_writes_no_core() -> None:
     for service in ("api", "ollama", "web", "caddy", "tunnel"):
         assert "network_mode" not in _service(service), service  # sharing another service's network would undo the fence
     gpu = COMPOSE.with_name("compose.gpu.yml").read_text(encoding="utf-8")
-    assert not re.search(r"^\s*(network_mode|networks|ports):", gpu, re.M), "the GPU file adds a device, nothing else"
+    # The GPU file adds a device to the model and nothing else: one service, one key.
+    assert re.findall(r"^  (\w+):", gpu, re.M) == ["ollama"] and re.findall(r"^    (\w+):", gpu, re.M) == ["deploy"], gpu
 
 
 def test_the_deployment_says_the_model_is_on_this_server() -> None:

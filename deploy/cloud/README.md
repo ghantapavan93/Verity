@@ -5,7 +5,7 @@ public demo `deploy/README.md` describes: anyone may enter, each browser in a wo
 everything in it seven days after the first visit. Everything runs on one Hetzner server: the interface, the API, the
 SQLite store, the uploaded documents and the model (Ollama serving the pinned Qwen3 8B build); Cloudflare carries the
 public name and HTTPS through a tunnel. Not deployed yet: the public name still reaches the workstation, and a staging
-host of 2026-10-13 ran this stack with the model elsewhere. `HETZNER.md` is the host's runbook, the cutover included.
+host of 2026-10-13 ran this stack's interface, API and store, with the model elsewhere. `HETZNER.md` is the host's runbook, the cutover included.
 Every step that creates a resource, spends money, changes DNS or changes who can enter is the owner's to take.
 
 ## Layout
@@ -25,7 +25,8 @@ Rejected: Kubernetes, Postgres, Redis, queues; Vercel in front (a 300 s function
 (5-minute idle, 15-minute cap); a model on two shared vCPUs (650–1,000 s a run, over the 600 s timeout, 2026-10-12); a
 serverless GPU elsewhere (Modal, staged 2026-10-13: 95–168 s to wake, the text of every question sent to a second
 company, and a bill per second; dropped 2026-10-16 for one host); Cloudflare's proxy in front of a Caddy host (below).
-A model on eight dedicated cores and a GPU server are both measured in HETZNER.md before either is bought.
+Neither server has been measured: the AX42 is measured once rented, against a go/no-go, and the GEX45 not at all
+(HETZNER.md, The server).
 
 The production host has no inbound port for visitors: its edge is a Cloudflare Tunnel connector (the `tunnel` profile), as
 on the workstation (`HETZNER.md`). A host with its own public address can use Caddy instead (below).
@@ -87,6 +88,9 @@ cd /opt/verity && sha256sum contract-state.json          # cff26179f199…; anyt
 gunzip -c verity-images-<sha>.tar.gz | docker load
 cp env.example .env && chmod 600 .env                     # fill in, VERITY_SITE and VERITY_STORE included (HETZNER.md, Stores); make the secret with the line in env.example
 sed -i '/^VERITY_TAG=/d' .env && echo VERITY_TAG=<sha> >> .env   # the archive's tag; compose refuses to start without it
+docker compose up -d ollama                              # the model, once per host, before anything asks it (HETZNER.md, The model)
+docker compose exec ollama ollama pull qwen3:8b
+docker compose exec ollama ollama list                   # ID must begin 500a1f067a9f; anything else: stop
 # First boot: Let's Encrypt staging until the name resolves and 80/443 answer, then production.
 VERITY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory docker compose up -d
 docker compose up -d --force-recreate caddy
@@ -132,9 +136,9 @@ contract's words can reach is covered:
 | Uploaded originals, memos | Unlinked after the commit (their blocks stay on the disk until overwritten or trimmed); an hourly sweep removes any file no row names, abandoned memo drafts included | same, and `test_the_sweep_removes_a_memo_draft_a_killed_process_left` |
 | Upload spools | `/tmp` is in memory (`tmpfs`), never on disk; there is no swap to page it out to | `compose.yml`; `swapon --show` |
 | Core dumps | Off for the API and the model (`ulimits: core: 0`) | `compose.yml`, `test_compose_release.py` |
-| Logs | Ids, stages and durations, never a contract's words; SQL errors without their values; rotated at 3 × 10 MB | `test_ordinary_logs_carry_ids…`, `test_an_error_the_store_raises…`; no marker in any log after the rehearsal |
+| Logs | Ids, stages and durations, never a contract's words; SQL errors without their values; rotated at 3 × 10 MB | `test_ordinary_logs_carry_ids…`, `test_an_error_the_store_raises…`; no marker in any log after the 2026-10-12 rehearsal, before the model's container |
 | Backups, snapshots, archives | **None.** No backup volume, no cron, host backups off, no snapshot of the volume | this file |
-| The model (`ollama` on this host) | Each question, any guidance, the contract's file name and the sections retrieval chose for the question (the opening ones when it ranks none) go to the Ollama container over the compose network and nowhere else. Ollama keeps no request bodies and logs none; its volume holds only the model's public weights | `compose.yml` (no port published); the first screen says the model runs on the Verity server |
+| The model (`ollama` on this host) | Each question, any guidance, the contract's file name and the sections retrieval chose for the question (the opening ones when it ranks none) go to the Ollama container over the model network and nowhere else. Ollama is not known to keep or log request bodies; its log is read for a contract's marker on the server (HETZNER.md, What only the server can show); its volume holds only the model's public weights | `compose.yml` (no port published); the first screen says the model runs on the Verity server |
 
 A backup of the public store would hold visitors' contracts past the promise unless it were deleted before the
 earliest workspace it holds ends, which can be minutes after it is taken. The store holds nothing older than seven days
@@ -146,13 +150,13 @@ server's two disks are a RAID 1 pair (HETZNER.md), so one failed disk loses noth
 
 | Failure | What brings it back | Rehearsed |
 |---|---|---|
-| A container exits | `restart: unless-stopped` | yes |
-| The API runs but stops answering | `liveness.py`: after its first minute, three failed probes in a row (about ninety seconds) kill the server, and the container restarts | yes: frozen, back in 145 s, by the restart policy |
-| The API restarts mid-run | A run whose stage row names the stopped process is failed at start (`hostname: verity-api` keeps the owner's name stable). A run created in the instant before the restart, before its first stage row, names no process: it stays `reading`, and the same question is handed that run, until a read after the staleness bound (four 600 s model timeouts plus a minute, 41 minutes) fails it (war room F-25) | yes, for a run with a stage row; the run with none was reproduced by the war room, not rehearsed |
-| The host reboots | Docker starts the stack (`restart: unless-stopped`); the store and the model's weights are on their volumes; the first question after a start waits for the model to load | partly: every container stopped and started, the store intact; a Docker daemon restart was not rehearsed |
+| A container exits | `restart: unless-stopped` | yes (2026-10-12, the layout before the model's container) |
+| The API runs but stops answering | `liveness.py`: after its first minute, three failed probes in a row (about ninety seconds) kill the server, and the container restarts | yes: frozen, back in 145 s, by the restart policy (2026-10-12, the layout before the model's container) |
+| The API restarts mid-run | A run whose stage row names the stopped process is failed at start (`hostname: verity-api` keeps the owner's name stable). A run created in the instant before the restart, before its first stage row, names no process: it stays `reading`, and the same question is handed that run, until a read after the staleness bound (four 600 s model timeouts plus a minute, 41 minutes) fails it (war room F-25) | yes, for a run with a stage row; the run with none was reproduced by the war room, not rehearsed (2026-10-12, the layout before the model's container) |
+| The host reboots | Docker starts the stack (`restart: unless-stopped`); the store and the model's weights are on their volumes; the first question after a start waits for the model to load | partly: every container stopped and started, the store intact; a Docker daemon restart was not rehearsed (2026-10-12, the layout before the model's container) |
 | Ollama is down, or serves another build | The question fails with a sentence; health says the model is not reachable; nothing is answered by another build (`WORKBENCH_MODEL_DIGEST`) | yes, on Docker here (2026-10-16): the model container stopped mid-session and started again, and a pinned digest it did not serve was refused |
 | Ollama has started and is still loading the model | Health says ready (the model list answers); the first question waits for the load | partly, on Docker here (2026-10-16): the first answer after a start waited 239 s for the load (a call straight to the model container); health during the load was not checked |
-| The over-limit upload on the rehearsal's VM, beside the model | Not established | seen once on Docker here (2026-10-16): after two answers had finished, the deliberate over-limit upload got no 413 within 30 s, and the stack and then Docker stopped answering. The model had held 6.3 of the VM's 7.5 GiB right after the CPU probe, 16 minutes earlier; memory at the upload was not read. The cause is not established (memory, or the body limit, which answered 413 in the 2026-10-12 rehearsal). The AX42 has 64 GB; the over-limit upload, and the API beside an answer, are checked there (HETZNER.md) |
+| The over-limit upload on the rehearsal's VM, beside the model | Not established | seen once on Docker here (2026-10-16): after two answers had finished, the deliberate over-limit upload got no 413 within 30 s, and the stack and then Docker stopped answering. The model had held 6.3 of the VM's 7.5 GiB right after the CPU probe, about 15 minutes earlier; memory at the upload was not read. The cause is not established (memory, or the body limit, which answered 413 in the 2026-10-12 rehearsal). The AX42 has 64 GB; the over-limit upload, and the API beside an answer, are checked there (HETZNER.md) |
 | The host is lost | Rebuild: a new server as HETZNER.md says, the images built there from the release, the model fetched again and its digest checked, `.env` from where the owner keeps it (the secret), the record from ivo-experiments; the store starts empty | partly: on the same machine with the images loaded, every volume removed, healthy again in 10 s and `acceptance.mjs` 82 of 82 (2026-10-12); a new server was not |
 
 Keep the last two image archives on the build machine. `.env` is the only thing that cannot be rebuilt from the
