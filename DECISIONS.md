@@ -1473,3 +1473,27 @@ holding a pass that names an unseen section. One is kept as it is: a pass that v
 as its source, so the evidence pack reads one that code found consistent as not compared, though its reason says it was.
 Reading a chained reason by its words would let contract text quoted in the lowering sentence claim a comparison code
 never made; `basis` understates and never overstates.
+
+## 2026-10-16: one Hetzner server, the model on it
+
+The owner's decision: one main branch, one deployment, Hetzner only. No serverless GPU: the model runs on the same host
+as the interface, the API, the store and the uploaded documents; Cloudflare keeps the name, HTTPS and the tunnel. The
+kit staged on 2026-10-13 put the model on Modal, which woke in 95-168 s, sent every question's text to a second company
+and billed by the second. `deploy/cloud` now runs Ollama 0.40.4 (pinned by digest) as a compose service on the compose
+network only, with the weights in their own volume and the model kept loaded; `WORKBENCH_MODEL_DIGEST` keeps every
+answer on the workstation's build (qwen3:8b, 500a1f067a9f, Q4_K_M), which is not changed, re-quantised or swapped.
+`compose.gpu.yml` adds a GPU for a host that has one. `modal_ollama.py` and the DigitalOcean and Modal plan
+(`CLOUD-READINESS.md`) are removed; their history stays in git. ORACLE.md, the staging host's runbook, is now
+HETZNER.md: the server, the model, releases, stores, the cutover, what only the server can show, and the cost.
+
+The server, for the measured load: an answer reads about 1,900 tokens and writes about 270 (p90 2,300 and 440; the 76
+real answers of the blind stress test), one at a time. A dedicated AX42 (8 Zen 4 cores, 64 GB, two NVMe in RAID 1,
+about €97 a month) runs it on its CPU; the go/no-go is an answer's p90 within 120 s, measured on the rented machine
+before anything moves. Missed, a GEX45 (24 GB GPU, about €214 a month) runs the same build on its GPU, expected in
+seconds and not measured here. Rejected: a Cloud VM (the dedicated-vCPU line unavailable and dearer after Hetzner's
+2026 increases; two shared vCPUs took 650-1,000 s).
+Prices are as reported on 2026-10-16 and are read again in Hetzner's console before ordering.
+
+No visitor data moves. The production host opens a store of its own, empty; visitors start again there, and the
+workstation's store keeps nothing past its seven days. The way back is the tunnel record's target, edited back to the
+workstation's tunnel, which keeps running until the move is no longer wanted.

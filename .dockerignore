@@ -17,5 +17,5 @@ backend/.ruff_cache
 **/.env
 **/.env*
 deploy/cloud/.env
-# The Cloudflare Tunnel's credentials (ORACLE.md): whoever holds them can serve the site's traffic.
+# The Cloudflare Tunnel's credentials (HETZNER.md): whoever holds them can serve the site's traffic.
 deploy/cloud/tunnel.json

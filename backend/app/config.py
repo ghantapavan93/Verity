@@ -58,7 +58,7 @@ class Settings(BaseModel):
     # not a question follows.
     model_wakeups_per_day: int = int(os.environ.get("WORKBENCH_MODEL_WAKEUPS_PER_DAY", "10") or "0")
     # Seconds after the model last answered or woke during which it is taken to be awake still. Below the endpoint's own
-    # idle window (deploy/cloud/modal_ollama.py, scaledown_window 300 s), so a model that has gone is never taken for awake.
+    # idle window (300 s on the serverless host staged on 2026-10-13), so a model that has gone is never taken for awake.
     model_awake_s: int = int(os.environ.get("WORKBENCH_MODEL_AWAKE_S", "240") or "0")
     # The same decoding settings that produced schema-valid output across 250 calls in A1-lite.
     temperature: float = 0.0

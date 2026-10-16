@@ -1,22 +1,51 @@
-# Verity on one small VM behind a Cloudflare Tunnel (Hetzner CAX11, staging since 2026-10-13)
+# Verity on one Hetzner server behind a Cloudflare Tunnel, the model on the same host
 
-The same compose stack as README.md, on a host with no inbound port for visitors: the edge is the `tunnel` profile (a
-cloudflared connector, as on the workstation) instead of Caddy. The model is the Modal endpoint of README.md
-(modal_ollama.py). Everything README.md says about the store, retention, recovery and spend holds here; this file says
-only what differs. The file keeps its first name: it was written for Oracle Always Free, which on 2026-10-13 had no A1
-capacity in any availability domain for any size (Oracle's Compute Capacity Report API), so the host is a Hetzner VM.
+The compose stack of README.md on one host with no inbound port for visitors: the edge is the `tunnel` profile (a
+cloudflared connector, as on the workstation), and the model is the `ollama` service beside the API. Everything
+README.md says about the store, retention, recovery and limits holds here; this file says what is particular to the
+host: the server, the model, releases, stores, the cutover and the cost. Nothing here has been bought or run yet for
+production; a staging VM of 2026-10-13 (below) ran the same stack with the model elsewhere.
 
-## The VM
+## The server
 
-- Hetzner Cloud CAX11 in hel1 (Helsinki): Arm64, 2 vCPU, 4 GB, 40 GB, Ubuntu 24.04, about $7 a month with its IPv4
-  address, billed by the hour; the x86 CX23 was unavailable. No backups (a copy of the store holds visitors' contracts past the deletion the
-  first screen promises), no volumes, no swap.
-- A Hetzner Cloud Firewall on the server: inbound TCP 22 and ICMP only. Nothing serves on 80 or 443: visitors reach the
-  stack through the tunnel, which dials out. Outbound open (Cloudflare, Docker Hub, Modal, Ubuntu updates).
+Chosen for the measured load (DECISIONS.md, 2026-10-16): an answer reads about 1,900 tokens of contract and writes
+about 270 (p90 2,300 and 440, the most 880; 76 real answers of the blind stress test), one answer at a time.
+
+- **Recommended: a dedicated AX42** (Germany): AMD Ryzen 7 PRO 8700GE, 8 cores with AVX-512, 64 GB DDR5, two 512 GB
+  NVMe. CPU only. Install Ubuntu 24.04 with Hetzner's `installimage`, the two disks as software RAID 1. The model runs
+  on the CPU; its speed on this machine is the first thing measured once it is rented (below, What only the server can
+  show), against the go/no-go of an answer's p90 within 120 s.
+- **If the AX42 misses that bound: a dedicated GEX45** (Helsinki): NVIDIA RTX PRO 4000 Blackwell, 24 GB, the same
+  model in GPU memory, with `compose.gpu.yml`, the NVIDIA driver and the NVIDIA Container Toolkit. An answer is then
+  expected to take seconds (not measured here), and two or more could run at once (OLLAMA_NUM_PARALLEL and
+  WORKBENCH_MODEL_CONCURRENCY raised together, measured first).
+- Not a Hetzner Cloud VM: the dedicated-vCPU line (CCX) was shown as unavailable on 2026-10-16, and its price after the
+  2026 increases was above an AX42's; a shared VM of 2 vCPUs took 650-1,000 s an answer (README.md).
+- No backups (a copy of the store holds visitors' contracts past the deletion the first screen promises), no swap.
+- A firewall on the server (`ufw default deny incoming`, `ufw allow from <owner address> to any port 22`), or Hetzner's
+  Robot firewall with the same rule: nothing serves on 80 or 443, since visitors reach the stack through the tunnel,
+  which dials out. Outbound open (Cloudflare, Docker Hub, the Ollama registry, Ubuntu updates).
 - SSH by key only: `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `PermitRootLogin prohibit-password`
   in `/etc/ssh/sshd_config.d/99-verity.conf`. `unattended-upgrades` on.
-- Measured on staging: 520-740 MB in use of 3.8 GB with the stack up; the full API suite (Dockerfile.api `test` stage)
-  passes natively on Arm64, the four timing-bound tests included.
+- The staging VM of 2026-10-13 (Hetzner Cloud CAX11, Arm64, 2 vCPU, 4 GB) cannot hold the model (it needs about 6 GB
+  with its context): it stays a staging host for the pages until the owner removes it.
+
+## The model
+
+The weights live in the `verity-models` volume, fetched once per host and checked against the pinned digest before the
+host serves anyone:
+
+```bash
+cd /opt/verity/current/deploy/cloud
+docker compose --env-file /opt/verity/shared/.env up -d ollama
+docker compose --env-file /opt/verity/shared/.env exec ollama ollama pull qwen3:8b
+docker compose --env-file /opt/verity/shared/.env exec ollama ollama list   # ID must begin 500a1f067a9f; anything else: stop
+```
+
+If the registry's `qwen3:8b` has moved to another build, do not serve it: copy the workstation's blobs for the pinned
+manifest into the volume instead (`docker cp` of `manifests/registry.ollama.ai/library/qwen3/8b` and the blobs it names),
+and check the ID again. The API refuses to answer with any other build in either case (`WORKBENCH_MODEL_DIGEST`). A
+first question after Ollama starts waits for the model to load into memory (`OLLAMA_KEEP_ALIVE=-1` keeps it there).
 
 ## The tunnel
 
@@ -24,15 +53,15 @@ One tunnel per host, never shared: Cloudflare sends each request to the nearest 
 host's connector would put a second store behind the same name. On a machine with `cloudflared tunnel login` done:
 
 ```bash
-cloudflared tunnel create verity-oracle                    # writes <id>.json beside cert.pem; keep it like a password
-cloudflared tunnel route dns verity-oracle verity-staging.example.com
+cloudflared tunnel create verity-hetzner                   # writes <id>.json beside cert.pem; keep it like a password
+cloudflared tunnel route dns verity-hetzner verity-next.example.com   # a name of its own for acceptance, before any cutover
 ```
 
 `route dns` creates a CNAME to `<id>.cfargotunnel.com` and refuses a name that already has a record. Moving an existing
 name to this host is an edit of that record's target (below). The connector runs over HTTP/2 (compose.yml): over QUIC
 every connection of the staging host dropped together for three minutes and a request was answered 502.
 
-## Releases, on the VM
+## Releases, on the server
 
 A release is the committed source of one commit, unpacked once into a directory of its own and never edited:
 `/opt/verity/releases/<full sha>`. What belongs to the host and outlives releases lives beside them in
@@ -41,17 +70,17 @@ link to the release that runs. Until 2026-10-13 each archive was unpacked over `
 nothing, so a file a commit deleted stayed in the next build's context, and `.env` and the tunnel credential sat inside
 the source tree (release integration, 2026-10-13).
 
-Native, from the commit under test, which need not be pushed. On the build machine, the archive holds exactly the
-commit, and never a secret:
+The public name serves only a commit that is on main and passed the release gate; the acceptance name may serve a
+candidate first. On the build machine, the archive holds exactly the commit, and never a secret:
 
 ```bash
 SHA=$(git rev-parse <commit>)                                   # the full commit: names the directory, the archive and the label
 git archive --format=tar.gz -o verity-$SHA.tar.gz $SHA          # committed files only: no .env, no store, no build output
 tar -tzf verity-$SHA.tar.gz | grep -E '(^|/)(\.env[^/]*|tunnel\.json|[^/]*\.db)$' && echo STOP   # must print nothing
-scp verity-$SHA.tar.gz root@<vm>:/opt/verity/archives/
+scp verity-$SHA.tar.gz root@<server>:/opt/verity/archives/
 ```
 
-On the VM, first time only (`apt-get install -y docker.io docker-compose-v2` before it):
+On the server, first time only (`apt-get install -y docker.io docker-compose-v2` before it):
 
 ```bash
 install -d -m 700 /opt/verity /opt/verity/shared /opt/verity/releases /opt/verity/archives
@@ -158,14 +187,34 @@ stands in front.
 - **Moving it back (rollback):** edit the same record's target back to the old tunnel. Keep the old origin running, with
   its connector up, until the move back is no longer wanted.
 
+## What only the server can show (before any cutover)
+
+On the acceptance name (The tunnel), with the release's images and the pinned model, before the public name moves:
+
+1. **The model's speed on this host.** The blind stress test's fifteen questions, DOCX and PDF, timed from question to
+   answer, and the first answer after Ollama starts. Go: p90 within 120 s on the AX42. Otherwise the GEX45.
+2. **HTTPS and browsers.** Through the tunnel, in Chromium and in Safari/WebKit: the `__Host-` session survives a reload,
+   a question is answered and its evidence opens, the evidence pack saves as `evidence-<run>.zip`, the memo's `.docx`
+   opens, a phone shows one pane at a time.
+3. **Two visitors at once.** Two browsers on two addresses ask together: one answers, the other waits its turn and then
+   answers; neither can read the other's runs; the per-address limit reads Cf-Connecting-Ip.
+4. **The acceptance script** (`acceptance.mjs`, with `BASE` the acceptance name and `SHA` the release) on the real model,
+   then fresh PDF and DOCX uploads asked about, the amendment challenge, /break and /state.
+5. **Recovery on the host.** Each container restarted, Ollama stopped and started, a reboot: the stack returns, the store
+   intact, the model loaded again.
+6. **Provenance.** `docker image inspect` labels of both images name the release's full commit, which is on main, and the
+   Runs page names the same commit.
+
 ## Cost
 
-The VM: about $7 a month. Modal: billed per second while a GPU container runs, from the workspace's credits; its usage
-limit, set at the credits, stops the endpoint before anything is charged to a card. Measured on staging: a cold start
-95-168 s, about $0.05 a question with wake-ups and idle tails, warm questions a few seconds of GPU.
+One monthly price; nothing is billed per question. List prices as reported on 2026-10-16, excluding VAT, to be read
+again in Hetzner's Robot before ordering (Hetzner raised prices twice in 2026):
 
-A reader who adds a contract or starts a question wakes the model ahead of it (WORKBENCH_MODEL_WAKEUP; opening one from a
-link or a recorded run wakes nothing): a cold start and five idle minutes after the last answer, about $0.12, answered or
-not, at most WORKBENCH_MODEL_WAKEUPS_PER_DAY (10) a day and three an hour per address. A month of the worst case, every
-wake-up and every one of the 15 questions on its own cold start, is more than the $30 usage limit; the limit is then the
-stop: answers pause until the month renews, nothing is charged, and the pages, /break and /state keep working.
+| | Monthly | One-time setup | Notes |
+|---|---|---|---|
+| AX42 (recommended) | €97.30 | €49 | Germany; a primary IPv4 address may be charged on top |
+| GEX45 (if the CPU misses the bound) | €214 | €209 | Helsinki |
+| Staging CAX11 of 2026-10-13 | about $7 | none | already running; the owner removes it once it is not wanted |
+| Cloudflare (DNS, tunnel) | free | none | the existing zone |
+
+No backups are bought (README.md: backups and retention). A dedicated server is billed by the month, not by the hour.

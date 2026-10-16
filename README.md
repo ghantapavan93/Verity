@@ -12,7 +12,9 @@ It has three parts that share one rule, that a claim is kept only with the sourc
   question. A small open model (Qwen3 8B, one pinned build) answers from the sections retrieval chose. On the public
   site today the application, the visitors' store and the model all run on one machine, the owner's workstation, with
   Ollama on its own GPU, reached through a Cloudflare Tunnel: nothing a visitor adds is sent to a model host anywhere
-  else, and the site answers only while that machine is on. On your own machine it runs through Ollama at no cost. Code looks
+  else, and the site answers only while that machine is on. The same stack on one Hetzner server, the model included, is
+  kept in `deploy/cloud` (its runbook `HETZNER.md`) and is not live yet. On your own machine it runs through Ollama at no
+  cost. Code looks
   for every quoted passage in the document's own text and withholds a finding whose quote it cannot find. Where the
   guidance states a rule code can compare, a notice period against a minimum for example, code reports a shortfall
   itself, and a pass stays the model's view with code's note on whether the day counts are consistent; everywhere else

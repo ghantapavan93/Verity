@@ -1,5 +1,7 @@
-# Verity on one Linux VM: Caddy (TLS, routing), the interface and the API. Only Caddy publishes ports; the API and the
-# interface are reachable only through it. Run from this directory: `docker compose up -d` (README.md).
+# Verity on one Linux host: the edge (a Cloudflare Tunnel connector, or Caddy), the interface, the API and the model
+# (Ollama). Only Caddy publishes ports; the API, the interface and the model are reachable only on the compose network.
+# Run from this directory: `docker compose up -d` (README.md, HETZNER.md). On a host with an NVIDIA GPU add
+# compose.gpu.yml (HETZNER.md, The model).
 name: verity
 
 # Every container's log rotates (json-file, 10 MB, three files): unrotated logs fill the disk, and a full disk makes
@@ -20,14 +22,14 @@ services:
       args:
         VERITY_BUILD_SHA: ${VERITY_BUILD_SHA:-}
     # Required: a missing tag once fell back to `local`, a stale build kept on the host (war room F-16, 2026-10-13).
-    image: verity-api:${VERITY_TAG:?set VERITY_TAG in .env to the release to run (ORACLE.md, Build)}
+    image: verity-api:${VERITY_TAG:?set VERITY_TAG in .env to the release to run (HETZNER.md, Build)}
     pull_policy: never
     # A stable name across restarts and redeploys: a stage row records the host, pid and start time of the process
     # running it, so runs the previous container left in flight are recovered at once (app/runs/owner.py).
     hostname: verity-api
     # The server is not pid 1, so the health check can end a server that stops answering (liveness.py).
     init: true
-    # The host's configuration lives outside the release's source (ORACLE.md, Releases): VERITY_SHARED names it, and
+    # The host's configuration lives outside the release's source (HETZNER.md, Releases): VERITY_SHARED names it, and
     # a release directory is replaced whole, never edited. Unset, it is this folder, as on a single checkout.
     env_file: ${VERITY_SHARED:-.}/.env
     environment:
@@ -45,7 +47,8 @@ services:
     # once used 121 MiB of it (rehearsal, 2026-10-12); the bound costs memory only when used.
     tmpfs:
       - /tmp:size=512m,mode=1777
-    # What the API may take of the 4 GB host, its reading processes and the /tmp spool above included. Past it the
+    # What the API may take of the host, its reading processes and the /tmp spool above included (sized on the 4 GB
+    # staging host, 2026-10-12; beside the model it also keeps a reading from taking the model's memory). Past it the
     # kernel kills a process inside this container, the largest, which is most likely a reading (refused as 413), never
     # one of the host's. Two readings at once, each ended past 768 MB (app/ingest/bounded.py), the API (112 MB at start,
     # a few hundred under work) with the two files being read, its fork server and a full spool (384 MiB, api/body_limit.py)
@@ -60,6 +63,29 @@ services:
       - ALL
     restart: unless-stopped
     logging: *logging
+    depends_on:
+      - ollama
+
+  # The model, on this host: Ollama serving the pinned build (qwen3:8b, digest 500a1f067a9f, Q4_K_M), the one the
+  # workstation serves; WORKBENCH_MODEL_DIGEST in .env makes every answer check it first, so another build fails the run
+  # instead of answering. The weights live in their own volume, fetched once and checked (HETZNER.md, The model). No port
+  # is published: only the API, on the compose network, reaches it. A question, its guidance and the sections retrieval
+  # chose go to this container and nowhere else; Ollama does not log request bodies.
+  ollama:
+    image: ollama/ollama:0.40.4@sha256:926d40fd6eeeebd346b5c358a63de2a10ec995371cd93dd22f1843200694b1a6
+    hostname: verity-ollama
+    environment:
+      # One answer at a time, as the API asks (WORKBENCH_MODEL_CONCURRENCY=1), and the model kept in memory, so no reader
+      # waits for it to load after the first question since the container started.
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: "-1"
+    volumes:
+      - verity-models:/root/.ollama
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging: *logging
 
   web:
     build:
@@ -68,7 +94,7 @@ services:
       args:
         NEXT_PUBLIC_BUILD_SHA: ${VERITY_BUILD_SHA:-}
         VERITY_BUILD_SHA: ${VERITY_BUILD_SHA:-}
-    image: verity-web:${VERITY_TAG:?set VERITY_TAG in .env to the release to run (ORACLE.md, Build)}
+    image: verity-web:${VERITY_TAG:?set VERITY_TAG in .env to the release to run (HETZNER.md, Build)}
     pull_policy: never
     security_opt:
       - no-new-privileges:true
@@ -129,8 +155,10 @@ services:
 # promises (README: backups and retention).
 volumes:
   # The store, named by the host's role and required: a staging store must never become a production one by being
-  # left in place (release integration, 2026-10-13). An existing store keeps its name in .env (ORACLE.md, Stores).
+  # left in place (release integration, 2026-10-13). An existing store keeps its name in .env (HETZNER.md, Stores).
   verity-data:
-    name: ${VERITY_STORE:?set VERITY_STORE in .env to this host's store (ORACLE.md, Stores)}
+    name: ${VERITY_STORE:?set VERITY_STORE in .env to this host's store (HETZNER.md, Stores)}
+  # The model's weights: public, the same on every host, kept across releases (a release never re-fetches them).
+  verity-models:
   caddy-data:
   caddy-config:

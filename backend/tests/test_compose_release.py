@@ -46,7 +46,7 @@ def test_the_runbook_builds_saves_and_runs_the_tagged_release() -> None:
 
 
 DOCKERFILES = [COMPOSE.with_name("Dockerfile.api"), COMPOSE.with_name("Dockerfile.web")]
-ORACLE = COMPOSE.with_name("ORACLE.md")
+ORACLE = COMPOSE.with_name("HETZNER.md")
 
 
 def test_the_store_is_named_by_the_host_and_required() -> None:
