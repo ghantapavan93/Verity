@@ -95,3 +95,32 @@ def test_every_compose_command_on_the_released_host_reads_the_shared_configurati
     assert schema_check.startswith("VERITY_TAG=$TAG "), "the first release's .env has no tag yet"
     assert "mode=ro" in runbook, "a check of the store must never create one"
     assert "--env-file /opt/verity/shared/.env" in README.read_text(encoding="utf-8")
+
+
+def _service(name: str) -> str:
+    """The service's block of compose.yml, as text: from its name to the next service or top-level key."""
+    text = COMPOSE.read_text(encoding="utf-8")
+    start = text.index(f"\n  {name}:\n")
+    end = re.search(r"\n  [a-z]+:\n|\n[a-z]+:", text[start + 1 :])
+    return text[start : start + 1 + end.start()] if end else text[start:]
+
+
+def test_the_model_is_reachable_from_the_api_only_and_writes_no_core() -> None:
+    """The model holds questions and contracts' sections in memory (review of the Hetzner kit, 2026-10-16): it publishes
+    no port, joins only the model network, which only the API also joins, writes no core file and keeps no capability."""
+    model = _service("ollama")
+    assert "ports:" not in model
+    assert re.search(r"networks:\n\s+- model\n", model) and "- default" not in model
+    assert re.search(r"ulimits:\n\s+core: 0", model) and re.search(r"cap_drop:\n\s+- ALL", model)
+    assert re.search(r"networks:\n\s+- default\n\s+- model\n", _service("api"))
+    for other in ("web", "caddy", "tunnel"):
+        assert "- model" not in _service(other), other
+
+
+def test_the_deployment_says_the_model_is_on_this_server() -> None:
+    """Its address is a container name, not loopback: unsaid, the interface would tell visitors their text goes to a
+    hosted model that sleeps."""
+    env = ENV_EXAMPLE.read_text(encoding="utf-8")
+    assert re.search(r"^WORKBENCH_OLLAMA_URL=http://ollama:11434$", env, re.M)
+    assert re.search(r"^WORKBENCH_MODEL_ON_SERVER=1$", env, re.M)
+    assert not re.search(r"^WORKBENCH_MODEL_HOST=\S", env, re.M)

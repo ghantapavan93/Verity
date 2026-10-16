@@ -63,14 +63,20 @@ services:
       - ALL
     restart: unless-stopped
     logging: *logging
+    # The compose network the edge and the interface share, and the model's, which only the API joins.
+    networks:
+      - default
+      - model
     depends_on:
       - ollama
 
   # The model, on this host: Ollama serving the pinned build (qwen3:8b, digest 500a1f067a9f, Q4_K_M), the one the
   # workstation serves; WORKBENCH_MODEL_DIGEST in .env makes every answer check it first, so another build fails the run
   # instead of answering. The weights live in their own volume, fetched once and checked (HETZNER.md, The model). No port
-  # is published: only the API, on the compose network, reaches it. A question, its guidance and the sections retrieval
-  # chose go to this container and nowhere else; Ollama does not log request bodies.
+  # is published, and it sits on a network of its own that only the API joins: the edge and the interface cannot reach
+  # it. A question, its guidance and the sections retrieval chose go to this container and nowhere else; Ollama does not
+  # log request bodies. No memory bound: on the 64 GB host the model, about 7.5 GB with its 16k context, is the main
+  # tenant, and the API's own bound keeps a reading from taking its memory.
   ollama:
     image: ollama/ollama:0.40.4@sha256:926d40fd6eeeebd346b5c358a63de2a10ec995371cd93dd22f1843200694b1a6
     hostname: verity-ollama
@@ -82,8 +88,15 @@ services:
       OLLAMA_KEEP_ALIVE: "-1"
     volumes:
       - verity-models:/root/.ollama
+    networks:
+      - model
+    # No core file: the model holds the question and the contract's sections in memory.
+    ulimits:
+      core: 0
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     logging: *logging
 
@@ -150,6 +163,11 @@ services:
     depends_on:
       - api
       - web
+
+# The model's network: the API and the model only. Not internal, so the model container can fetch its weights once
+# (HETZNER.md, The model); nothing on it publishes a port.
+networks:
+  model: {}
 
 # No volume for backups: a copy of the public store holds visitors' contracts past the deletion the first screen
 # promises (README: backups and retention).

@@ -28,19 +28,32 @@ def probes(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> list[int]:
 
 
 @pytest.mark.parametrize(
-    ("url", "label", "location", "host"),
+    ("url", "label", "on_server", "location", "host"),
     [
-        ("http://localhost:11434", "", "server", ""),
-        ("http://127.0.0.1:11434", "", "server", ""),
-        ("https://verity--ollama.modal.run", "a Modal GPU in the US", "hosted", "a Modal GPU in the US"),
-        ("http://host.docker.internal:11434", "", "hosted", ""),
+        ("http://localhost:11434", "", False, "server", ""),
+        ("http://127.0.0.1:11434", "", False, "server", ""),
+        ("https://verity--ollama.modal.run", "a Modal GPU in the US", False, "hosted", "a Modal GPU in the US"),
+        ("http://host.docker.internal:11434", "", False, "hosted", ""),
+        # The Hetzner layout: the model is another container on this machine, and the deployment says so (env.example).
+        ("http://ollama:11434", "", True, "server", ""),
+        # Control: a name that is not loopback counts as elsewhere unless the deployment says otherwise (review, 2026-10-16:
+        # the kit first left it unsaid, and the interface would have told visitors their text went to a hosted GPU).
+        ("http://ollama:11434", "", False, "hosted", ""),
     ],
 )
-def test_health_says_where_the_model_runs(client: TestClient, monkeypatch: pytest.MonkeyPatch, url: str, label: str, location: str, host: str) -> None:
+def test_health_says_where_the_model_runs(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, url: str, label: str, on_server: bool, location: str, host: str
+) -> None:
     monkeypatch.setattr(config.settings, "ollama_url", url)
     monkeypatch.setattr(config.settings, "model_host", label)
+    monkeypatch.setattr(config.settings, "model_on_server", on_server)
     body = client.get("/api/health").json()
     assert (body["modelLocation"], body["modelHost"]) == (location, host)
+
+
+def test_a_model_said_to_be_on_the_server_and_elsewhere_stops_the_start() -> None:
+    with pytest.raises(ValueError, match="two places for the model"):
+        config.Settings(model_on_server=True, model_host="a GPU service in the US")
 
 
 def test_an_anonymous_visitor_never_wakes_the_model(client: TestClient, monkeypatch: pytest.MonkeyPatch, probes: list[int]) -> None:

@@ -12,13 +12,16 @@ Chosen for the measured load (DECISIONS.md, 2026-10-16): an answer reads about 1
 about 270 (p90 2,300 and 440, the most 880; 76 real answers of the blind stress test), one answer at a time.
 
 - **Recommended: a dedicated AX42** (Germany): AMD Ryzen 7 PRO 8700GE, 8 cores with AVX-512, 64 GB DDR5, two 512 GB
-  NVMe. CPU only. Install Ubuntu 24.04 with Hetzner's `installimage`, the two disks as software RAID 1. The model runs
+  NVMe. CPU only. Install Ubuntu 24.04 with Hetzner's `installimage`, the two disks as software RAID 1, and delete the
+  swap partition its default layout carries (`PART swap …`): no swap, below. The model runs
   on the CPU; its speed on this machine is the first thing measured once it is rented (below, What only the server can
   show), against the go/no-go of an answer's p90 within 120 s.
 - **If the AX42 misses that bound: a dedicated GEX45** (Helsinki): NVIDIA RTX PRO 4000 Blackwell, 24 GB, the same
   model in GPU memory, with `compose.gpu.yml`, the NVIDIA driver and the NVIDIA Container Toolkit. An answer is then
   expected to take seconds (not measured here), and two or more could run at once (OLLAMA_NUM_PARALLEL and
-  WORKBENCH_MODEL_CONCURRENCY raised together, measured first).
+  WORKBENCH_MODEL_CONCURRENCY raised together, measured first). Put `COMPOSE_FILE=compose.yml:compose.gpu.yml` in
+  `/opt/verity/shared/.env` (env.example): every compose command then reads the GPU file, a rollback and a cutover
+  included; without it the model is recreated on the CPU without a word.
 - Not a Hetzner Cloud VM: the dedicated-vCPU line (CCX) was shown as unavailable on 2026-10-16, and its price after the
   2026 increases was above an AX42's; a shared VM of 2 vCPUs took 650-1,000 s an answer (README.md).
 - No backups (a copy of the store holds visitors' contracts past the deletion the first screen promises), no swap.
@@ -27,25 +30,39 @@ about 270 (p90 2,300 and 440, the most 880; 76 real answers of the blind stress 
   which dials out. Outbound open (Cloudflare, Docker Hub, the Ollama registry, Ubuntu updates).
 - SSH by key only: `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `PermitRootLogin prohibit-password`
   in `/etc/ssh/sshd_config.d/99-verity.conf`. `unattended-upgrades` on.
-- The staging VM of 2026-10-13 (Hetzner Cloud CAX11, Arm64, 2 vCPU, 4 GB) cannot hold the model (it needs about 6 GB
-  with its context): it stays a staging host for the pages until the owner removes it.
+- The staging VM of 2026-10-13 (Hetzner Cloud CAX11, Arm64, 2 vCPU, 4 GB) cannot hold the model (about 7.5 GB with its
+  16k context: 5.2 GB of weights, about 2.3 GB of cache): it stays a staging host for the pages until the owner removes it.
 
 ## The model
 
 The weights live in the `verity-models` volume, fetched once per host and checked against the pinned digest before the
-host serves anyone:
+host serves anyone. Once, after the first release is unpacked and `VERITY_TAG` is in `/opt/verity/shared/.env`
+(Releases, below: compose checks the whole file, so the tag must be set even to start the model alone), and before the
+`up` that starts the API:
 
 ```bash
-cd /opt/verity/current/deploy/cloud
+cd /opt/verity/releases/<full sha>/deploy/cloud
 docker compose --env-file /opt/verity/shared/.env up -d ollama
 docker compose --env-file /opt/verity/shared/.env exec ollama ollama pull qwen3:8b
 docker compose --env-file /opt/verity/shared/.env exec ollama ollama list   # ID must begin 500a1f067a9f; anything else: stop
 ```
 
-If the registry's `qwen3:8b` has moved to another build, do not serve it: copy the workstation's blobs for the pinned
-manifest into the volume instead (`docker cp` of `manifests/registry.ollama.ai/library/qwen3/8b` and the blobs it names),
-and check the ID again. The API refuses to answer with any other build in either case (`WORKBENCH_MODEL_DIGEST`). A
-first question after Ollama starts waits for the model to load into memory (`OLLAMA_KEEP_ALIVE=-1` keeps it there).
+On 2026-10-16 the registry's manifest for `qwen3:8b` hashed to 500a1f067a9f, the workstation's build. If it has moved,
+do not serve it: copy the workstation's files for the pinned manifest instead. From the workstation's Ollama directory
+(`~/.ollama/models`), copy `manifests/registry.ollama.ai/library/qwen3/8b` and each blob it names (`blobs/sha256-<hex>`,
+the config and four layers) to `~/qwen3/` on the server, keeping their paths, then, in the release's `deploy/cloud`:
+
+```bash
+docker compose --env-file /opt/verity/shared/.env exec ollama mkdir -p /root/.ollama/models/blobs /root/.ollama/models/manifests/registry.ollama.ai/library/qwen3
+for f in manifests/registry.ollama.ai/library/qwen3/8b $(cd ~/qwen3 && echo blobs/sha256-*); do   # the paths under ~/qwen3
+  docker compose --env-file /opt/verity/shared/.env cp ~/qwen3/$f ollama:/root/.ollama/models/$f
+done
+docker compose --env-file /opt/verity/shared/.env exec ollama sh -c 'cd /root/.ollama/models/blobs && for b in sha256-*; do [ "sha256-$(sha256sum $b | cut -d" " -f1)" = "$b" ] || echo "STOP: $b"; done'
+docker compose --env-file /opt/verity/shared/.env exec ollama ollama list   # ID must begin 500a1f067a9f
+```
+
+The API refuses to answer with any other build in either case (`WORKBENCH_MODEL_DIGEST`). A first
+question after Ollama starts waits for the model to load into memory (`OLLAMA_KEEP_ALIVE=-1` keeps it there).
 
 ## The tunnel
 
@@ -141,7 +158,9 @@ included (the owner's pause, logs, `down`), runs in `/opt/verity/current/deploy/
 
 The store is a Docker volume named in `.env` (`VERITY_STORE`), required by compose.yml. A role has its own store: the
 staging host of 2026-10-13 keeps the volume it already has, `VERITY_STORE=verity_verity-data`; serving the public name
-(below) is a new store, `VERITY_STORE=verity_production`, empty, which the API creates on its first start. Changing role
+(below) is a new store, `VERITY_STORE=verity_production`, empty, which the API creates on its first start. The new
+host's acceptance, on its own name before any cutover, runs on a store of its own, `VERITY_STORE=verity_acceptance`, which
+holds only the acceptance visitors' data. Changing role
 never moves, copies or deletes a store; the staging store stays on the disk until it is deliberately removed, by the
 owner, as the visitor data it is. A visitor's data is never migrated between stores.
 
@@ -185,7 +204,9 @@ stands in front.
   no store is moved. From the `.env` change on, the API refuses changes sent from the staging name's pages (it checks
   the Origin header), so check through the new name once it moves.
 - **Moving it back (rollback):** edit the same record's target back to the old tunnel. Keep the old origin running, with
-  its connector up, until the move back is no longer wanted.
+  its connector up, until the move back is no longer wanted. A store's retention runs only while its API runs: keep the
+  origin that no longer serves the name running seven days more, and its visitors' workspaces end as promised; stop it
+  sooner and what its store still holds is the owner's to delete.
 
 ## What only the server can show (before any cutover)
 

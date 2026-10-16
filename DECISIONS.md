@@ -1488,12 +1488,15 @@ HETZNER.md: the server, the model, releases, stores, the cutover, what only the 
 
 The server, for the measured load: an answer reads about 1,900 tokens and writes about 270 (p90 2,300 and 440; the 76
 real answers of the blind stress test), one at a time. A dedicated AX42 (8 Zen 4 cores, 64 GB, two NVMe in RAID 1,
-about €97 a month) runs it on its CPU; the go/no-go is an answer's p90 within 120 s, measured on the rented machine
+about €97 a month) is expected to run it on its CPU; the go/no-go is an answer's p90 within 120 s, measured on the rented machine
 before anything moves. Missed, a GEX45 (24 GB GPU, about €214 a month) runs the same build on its GPU, expected in
 seconds and not measured here. Rejected: a Cloud VM (the dedicated-vCPU line unavailable and dearer after Hetzner's
 2026 increases; two shared vCPUs took 650-1,000 s).
 Prices are as reported on 2026-10-16 and are read again in Hetzner's console before ordering.
 
 No visitor data moves. The production host opens a store of its own, empty; visitors start again there, and the
-workstation's store keeps nothing past its seven days. The way back is the tunnel record's target, edited back to the
-workstation's tunnel, which keeps running until the move is no longer wanted.
+workstation's API, kept running for the way back, still ends its visitors' workspaces after their seven days; stopped,
+what its store holds is the owner's to delete. The way back is the tunnel record's target, edited back to the
+workstation's tunnel, which keeps running until the move is no longer wanted. The interface says the model is on the
+server because the deployment says so (`WORKBENCH_MODEL_ON_SERVER=1`): its address is a container name, and any address
+but loopback otherwise counts as elsewhere.

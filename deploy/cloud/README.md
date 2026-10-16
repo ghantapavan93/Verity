@@ -70,7 +70,7 @@ mkdir -p /opt/verity && chmod 700 /opt/verity
 
 Ubuntu's own `docker.io` and `docker-compose-v2`, not Docker's repository: one source, updated by unattended-upgrades.
 No swap: an upload or a SQLite temporary file held in memory could be paged out to a disk no retention pass reaches.
-The memory to plan for: the model holds about 6 GB with its context, and the rest of the stack, under the stress case
+The memory to plan for: the model holds about 7.5 GB with its 16k context, and the rest of the stack, under the stress case
 rehearsed (four 25 MB uploads at once), took 1.29 GiB (below); each further large upload at the same moment adds
 about 260 MiB. An AX42's 64 GB holds all of it with no swap.
 
@@ -131,7 +131,7 @@ contract's words can reach is covered:
 | SQLite's temporary files | Written under `TMPDIR=/tmp`, in memory; without it SQLite uses `/var/tmp`, on disk | a spilled sort in the image opened `/tmp/etilqs_…`; without the setting, `/var/tmp/etilqs_…` |
 | Uploaded originals, memos | Unlinked after the commit (their blocks stay on the disk until overwritten or trimmed); an hourly sweep removes any file no row names, abandoned memo drafts included | same, and `test_the_sweep_removes_a_memo_draft_a_killed_process_left` |
 | Upload spools | `/tmp` is in memory (`tmpfs`), never on disk; there is no swap to page it out to | `compose.yml`; `swapon --show` |
-| Core dumps | Off for the API (`ulimits: core: 0`) | `compose.yml` |
+| Core dumps | Off for the API and the model (`ulimits: core: 0`) | `compose.yml`, `test_compose_release.py` |
 | Logs | Ids, stages and durations, never a contract's words; SQL errors without their values; rotated at 3 × 10 MB | `test_ordinary_logs_carry_ids…`, `test_an_error_the_store_raises…`; no marker in any log after the rehearsal |
 | Backups, snapshots, archives | **None.** No backup volume, no cron, host backups off, no snapshot of the volume | this file |
 | The model (`ollama` on this host) | Each question, any guidance, the contract's file name and the sections retrieval chose for the question (the opening ones when it ranks none) go to the Ollama container over the compose network and nowhere else. Ollama keeps no request bodies and logs none; its volume holds only the model's public weights | `compose.yml` (no port published); the first screen says the model runs on the Verity server |
@@ -150,7 +150,8 @@ server's two disks are a RAID 1 pair (HETZNER.md), so one failed disk loses noth
 | The API runs but stops answering | `liveness.py`: after its first minute, three failed probes in a row (about ninety seconds) kill the server, and the container restarts | yes: frozen, back in 145 s, by the restart policy |
 | The API restarts mid-run | A run whose stage row names the stopped process is failed at start (`hostname: verity-api` keeps the owner's name stable). A run created in the instant before the restart, before its first stage row, names no process: it stays `reading`, and the same question is handed that run, until a read after the staleness bound (four 600 s model timeouts plus a minute, 41 minutes) fails it (war room F-25) | yes, for a run with a stage row; the run with none was reproduced by the war room, not rehearsed |
 | The host reboots | Docker starts the stack (`restart: unless-stopped`); the store and the model's weights are on their volumes; the first question after a start waits for the model to load | partly: every container stopped and started, the store intact; a Docker daemon restart was not rehearsed |
-| Ollama is down, still loading, or serves another build | The question fails with a sentence; health says the model is not reachable; nothing is answered by another build (`WORKBENCH_MODEL_DIGEST`) | yes (2026-10-16: the model container stopped mid-session) |
+| Ollama is down, or serves another build | The question fails with a sentence; health says the model is not reachable; nothing is answered by another build (`WORKBENCH_MODEL_DIGEST`) | yes, on Docker here (2026-10-16): the model container stopped mid-session and started again, and a pinned digest it did not serve was refused |
+| Ollama has started and is still loading the model | Health says ready (the model list answers); the first question waits for the load | no: the rehearsal's Docker VM (7.5 GiB) could not hold the model with its context, so its answers came from the workstation's Ollama |
 | The host is lost | Rebuild: a new server as HETZNER.md says, the images built there from the release, the model fetched again and its digest checked, `.env` from where the owner keeps it (the secret), the record from ivo-experiments; the store starts empty | partly: on the same machine with the images loaded, every volume removed, healthy again in 10 s and `acceptance.mjs` 82 of 82 (2026-10-12); a new server was not |
 
 Keep the last two image archives on the build machine. `.env` is the only thing that cannot be rebuilt from the
@@ -210,4 +211,5 @@ and every other request waited 30 s; a memo draft could outlive a killed process
 words into the log; SQLite's temporary files and a swap file could each have put a contract's words on the disk.
 
 Not rehearsed then: public DNS and Let's Encrypt, a phone on the real hostname, a new host. The model was then planned
-on a serverless GPU; the layout above, with the model on the same host, is rehearsed below.
+on a serverless GPU. The layout above, with the model on the same host, was rehearsed on this workstation's Docker on
+2026-10-16 (Recovery, above); its answers came from the workstation's Ollama, as the model did not fit the VM.

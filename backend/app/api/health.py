@@ -38,9 +38,10 @@ LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 
 
 def model_location() -> tuple[Literal["server", "hosted"], str]:
-    """("server", "") when the model URL is this machine's loopback; ("hosted", label) for anywhere else."""
+    """("server", "") when the model is on this machine: its URL is this machine's loopback, or the deployment says the
+    endpoint is another container here (WORKBENCH_MODEL_ON_SERVER); ("hosted", label) for anywhere else."""
     host = (urlsplit(settings.ollama_url).hostname or "").lower()
-    return ("server", "") if host in LOOPBACK else ("hosted", settings.model_host)
+    return ("server", "") if host in LOOPBACK or settings.model_on_server else ("hosted", settings.model_host)
 
 
 @router.get("/health", response_model=HealthOut)

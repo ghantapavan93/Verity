@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 # Ollama's own default bind, as an address: "localhost" can resolve to ::1 first, and where the server listens on IPv4
@@ -40,9 +40,14 @@ class Settings(BaseModel):
     # The model build the deployment names (an Ollama digest prefix, e.g. 500a1f067a9f for qwen3:8b Q4_K_M). Set, every
     # answer is preceded by a check that the endpoint's tag is that build; a run against another build fails with the reason.
     model_digest: str = os.environ.get("WORKBENCH_MODEL_DIGEST", "").strip().lower()
-    # Where a model on another machine runs, in words a reader can weigh ("a Modal GPU in the US"); shown wherever the
+    # Where a model on another machine runs, in words a reader can weigh ("a GPU service in the US"); shown wherever the
     # interface says where a contract's text goes. Empty for a model on the server itself.
     model_host: str = os.environ.get("WORKBENCH_MODEL_HOST", "").strip()
+    # Set where the model endpoint is another container on this same machine (deploy/cloud: http://ollama:11434), an
+    # address that is not this process's loopback: the interface then says a contract's text stays on this server, and
+    # never that a hosted model sleeps. Unset, any address but loopback counts as elsewhere, the safe reading for a claim
+    # about where a contract's words go.
+    model_on_server: bool = os.environ.get("WORKBENCH_MODEL_ON_SERVER", "").strip().lower() in ("1", "true", "yes")
     # A ceiling on the readers' new runs per UTC day, all workspaces together: the model's daily spend has a bound. It is
     # shared, so one reader can still reach it; the per-reader bound is 20 starts in 10 minutes (api/access.py). 0 is no
     # ceiling. Curated runs (scripts) are not counted (application.start_run).
@@ -123,6 +128,12 @@ class Settings(BaseModel):
     # Optional: the contract-state.json the contract-state experiment exports (a recording of measured arrivals), for
     # the Runs surface. Read as a file; nothing of the experiment's code runs here.
     contract_state: Path | None = Path(os.environ["WORKBENCH_CONTRACT_STATE"]) if os.environ.get("WORKBENCH_CONTRACT_STATE") else None
+
+    @model_validator(mode="after")
+    def _one_place_for_the_model(self) -> Settings:
+        if self.model_on_server and self.model_host:
+            raise ValueError("WORKBENCH_MODEL_ON_SERVER and WORKBENCH_MODEL_HOST name two places for the model; set one")
+        return self
 
     @property
     def sqlite_url(self) -> str:
