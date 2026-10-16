@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, model_validator
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+# A compose service name, as WORKBENCH_MODEL_ON_SERVER admits one (Settings._one_place_for_the_model).
+SERVICE_NAME = re.compile(r"[a-z][a-z0-9_-]{0,62}")
 # Ollama's own default bind, as an address: "localhost" can resolve to ::1 first, and where the server listens on IPv4
 # only every request waits for the IPv6 attempt to fail (about two seconds on Windows, measured 2026-10-11).
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
@@ -134,12 +137,12 @@ class Settings(BaseModel):
     def _one_place_for_the_model(self) -> Settings:
         if self.model_on_server and self.model_host:
             raise ValueError("WORKBENCH_MODEL_ON_SERVER and WORKBENCH_MODEL_HOST name two places for the model; set one")
-        # "On this server" means loopback, or another container here reached by its service name: one name, no dot or
-        # colon, not a number. A domain or an IP (v4, v6 or decimal) is a machine elsewhere, and the interface would say
-        # otherwise; host.docker.internal is refused too, as the Docker host is not the container's own machine to say
-        # so of. A bare name that is a machine on the network passes: the flag is the deployment's word for that.
+        # "On this server" means loopback, or another container here reached by its service name: one ASCII name that
+        # starts with a letter (SERVICE_NAME). Anything else, a domain, an IP in any spelling (dotted, IPv6, decimal, hex),
+        # a name with non-ASCII letters or host.docker.internal, may be a machine elsewhere, and the interface would say
+        # otherwise. A bare name that is a machine on the network passes: the flag is the deployment's word for that.
         host = (urlsplit(self.ollama_url).hostname or "").lower()
-        local = host in ("localhost", "127.0.0.1", "::1") or (host != "" and "." not in host and ":" not in host and not host.isdigit())
+        local = host in ("localhost", "127.0.0.1", "::1") or SERVICE_NAME.fullmatch(host) is not None
         if self.model_on_server and not local:
             raise ValueError(
                 f"WORKBENCH_MODEL_ON_SERVER is for a container on this machine, reached by its service name; {host or 'no host'} is an address elsewhere"

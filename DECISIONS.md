@@ -1490,7 +1490,7 @@ The server, for the measured load: an answer reads about 1,900 tokens and writes
 real answers of the blind stress test), one at a time. A dedicated AX42 (8 Zen 4 cores, 64 GB, two NVMe in RAID 1, about
 €97 a month) is expected to run it on its CPU; the go/no-go is an answer's p90 within 120 s, measured on the rented
 machine before anything moves. The same container on the workstation's CPU (Ryzen 9 5900HX, DDR4) read 19.9 tokens a
-second and wrote 5.6, at least 144 s for the median answer and 194 s for the p90: the AX42 should do better, and even at
+second and wrote 5.6, about 144 s for the median answer and 194 s for the p90 (one short probe): the AX42 should do better, and even at
 the bound it answers more slowly than the workstation's GPU today (a median 34.5 s). Missed, a GEX45 (24 GB GPU, about
 €214 a month) runs the same build on its GPU, expected in seconds and not measured here. Rejected: a Cloud VM (the
 dedicated-vCPU line unavailable and dearer after Hetzner's 2026 increases; two shared vCPUs took 650-1,000 s).
@@ -1503,5 +1503,5 @@ workstation's tunnel, which keeps running until the move is no longer wanted. Th
 server because the deployment says so (`WORKBENCH_MODEL_ON_SERVER=1`): its address is a container name, and any address
 but loopback otherwise counts as elsewhere. Rehearsed on the workstation's Docker the same day (deploy/cloud/README.md):
 the model's container, health, the build check and acceptance held; the run stopped when the stack stopped
-answering at its over-limit upload (the cause not established), before recovery, retention and the kit's files, which
+answering at its over-limit upload (the cause not established), before the rest of recovery, retention and the kit's files, which
 come first on the server.
