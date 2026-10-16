@@ -1474,12 +1474,21 @@ as its source, so the evidence pack reads one that code found consistent as not 
 Reading a chained reason by its words would let contract text quoted in the lowering sentence claim a comparison code
 never made; `basis` understates and never overstates.
 
-*The first screen, after the release.* Once 6574514 was live, its first screen still said "Who holds a right, or whether
-a condition was left out, code does not check": true until v14, an understatement since. It now says that code lowers a
-pass whose quote drops a condition its own sentence states, and that conditions elsewhere in the contract, and who holds
-a right, code does not check. The class is held in `test_docs_claims.py`: no page, README or document a reader is given
-may deny a check `runs/status.py` performs (a condition left out of the quote's sentence; one value given to every
-party), with a control that the old sentence is caught and its repair is not. It failed on that sentence alone.
+*The first screen and the README, after the release.* Once 6574514 was live, its first screen said "Who holds a right,
+or whether a condition was left out, code does not check", and the README that it "stays a person's call": true until
+v14, an understatement since. Both now say what v14 checks and no more: a pass is lowered when its quote's sentence, up
+to a full stop or semicolon, carries an "unless", "except", "subject to" or another `CARVE_OUT` word outside the quoted
+words and the answer does not repeat what follows it; whether the answer carries every condition stays unchecked. The
+first repair said "a condition its own sentence states", which its review rejected: a condition opened by "if", "in the
+event that" or "upon", a proviso after a semicolon and a second condition in the sentence all keep the pass, and an
+answer sharing two of the condition's words ("during the Initial Term") counts as stating it. That review also found
+the README's sentence, which the first version of the test missed because it matched one sentence's word order. The
+class is held in `test_docs_claims.py`: no page, README or document a reader is given may leave to a person a check the
+run performs (a condition left out of the quote's sentence; one value given to every party), in any of the ways these
+pages say so ("code does not check", "not checked by code", "a person's call", a list under a "Not checked" heading),
+unless it is scoped to more than the check covers (every condition, another clause). Its control holds both old
+sentences, eight other wordings, the repaired sentences and the limits still true (/break's "every condition and
+exception"). It failed on the README alone, the landing having been repaired first.
 
 ## 2026-10-16: one Hetzner server, the model on it
 

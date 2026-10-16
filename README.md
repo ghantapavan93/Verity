@@ -29,7 +29,9 @@ It has three parts that share one rule, that a claim is kept only with the sourc
   derived facts one arriving contract changes. The workbench does not run its engine.
 
 Code verifies that each quoted passage stands in the document's own text; it does not verify legal interpretation. What
-a clause means, who holds a right, or whether a condition was left out, stays a person's call.
+a clause means, who holds a right, and whether an answer carries every condition stay a person's call. Code sees one
+case of the last: it lowers a pass to review when its quote's sentence, up to a full stop or semicolon, carries an
+"unless", "except", "subject to" or the like outside the quoted words, and the answer does not repeat what follows it.
 
 ![The evidence drawer on a recorded run: what the model proposed, what the source says, what code decided, what a person decided](docs/img/evidence-drawer.png)
 

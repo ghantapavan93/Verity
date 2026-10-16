@@ -330,9 +330,9 @@ export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place
     },
     {
       head: "It does not pass a clause on its own.",
-      // Since policy-v14 code does check one kind of left-out condition: the quote's own sentence (runs/status.py,
-      // check_conditions). The sentence said it did not until 2026-10-16 (tests/test_docs_claims.py holds the class).
-      text: "A pass is the model's proposal. Code lowers it to review when the evidence shown does not establish it, or when the quote drops a condition its own sentence states and the answer does not. Who holds a right, and conditions elsewhere in the contract, code does not check.",
+      // Since policy-v14 code checks one kind of left-out condition: one its quote's sentence opens with a CARVE_OUT word
+      // (runs/status.py, check_conditions). This said code did not until 2026-10-16 (tests/test_docs_claims.py).
+      text: "A pass is the model's proposal. Code lowers it to review when the evidence shown does not establish it, or when the quote's sentence, up to a full stop or semicolon, carries an “unless”, “except”, “subject to” or the like outside the quoted words, and the answer does not repeat what follows it. Whether the answer carries every condition, and who holds a right, code does not check.",
     },
     {
       head: "It does not hide a miss.",
