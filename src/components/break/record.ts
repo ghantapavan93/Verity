@@ -193,8 +193,14 @@ export function charDiff(left: string, right: string): { same: boolean; left: Di
   const kept = commonItems(a, b);
   return {
     same: left === right,
-    left: joinPieces(a, kept.left.map((k) => !k)),
-    right: joinPieces(b, kept.right.map((k) => !k)),
+    left: joinPieces(
+      a,
+      kept.left.map((k) => !k),
+    ),
+    right: joinPieces(
+      b,
+      kept.right.map((k) => !k),
+    ),
   };
 }
 

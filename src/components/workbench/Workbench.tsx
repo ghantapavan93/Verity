@@ -68,8 +68,7 @@ const READY_PAUSE_MS = 450;
 
 /** What was refused or failed: a file not added, or a record that could not be opened. */
 type Notice = { kind: "refused"; name: string | null; reason: string } | { kind: "failed"; text: string };
-const noticeText = (notice: Notice | null): string | null =>
-  notice === null ? null : notice.kind === "refused" ? refusal(notice) : notice.text;
+const noticeText = (notice: Notice | null): string | null => (notice === null ? null : notice.kind === "refused" ? refusal(notice) : notice.text);
 
 // The run the first screen offers as a finished review, set at build time for a deployment whose store holds it
 // (the Phase 1 proof run, docs/DEMO-PROOF.md), and that run or none (landing/proofRun.ts); otherwise the latest complete run with findings.
@@ -647,7 +646,11 @@ function WorkbenchSurface() {
                     />
                   )}
                   {view === "findings" && (
-                    <FindingsView notice={noticeText(notice)} onOpen={(record) => void openRun(record.runId, record.id)} onStart={() => void loadSample("amended")} />
+                    <FindingsView
+                      notice={noticeText(notice)}
+                      onOpen={(record) => void openRun(record.runId, record.id)}
+                      onStart={() => void loadSample("amended")}
+                    />
                   )}
                   {view === "runs" && <RunsView notice={noticeText(notice)} currentRunId={run?.id ?? null} onOpenRun={(id) => void openRun(id)} />}
                 </motion.div>
