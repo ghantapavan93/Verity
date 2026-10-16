@@ -11,8 +11,9 @@ the model's pass.
 The invariant: a pass may not rest on a verified quote whose own sentence, outside the quoted words, carries a condition
 or an exception (`policy.proof.CARVE_OUT`: except, unless, subject to, provided that, notwithstanding, other than, …)
 that the answer does not state. Read from the stored section text around the located span, before or after it, never
-across a sentence end. The answer states the condition when it carries a condition word and a word of the condition
-itself ("except during the first 60 days"). Which condition governs, and whether it applies here, stays a reading.
+across a sentence end. The answer states the condition when it carries words of the condition's own, two or all it
+has, the condition word aside ("except during the first 60 days"): a condition word alone may name another condition.
+Which condition governs, and whether it applies here, stays a reading.
 
 Not lowered (controls): a quote that includes the condition; a condition in another sentence; a bare "if"; an answer
 that states the condition; a status other than a pass.

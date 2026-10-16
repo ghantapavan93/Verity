@@ -14,7 +14,8 @@ A line with no page number escaped that rule (war room F-04, 2026-10-13): a PDF 
 the top of every page made each a section, so §7 ended "shall not exceed the fees paid in the" and its exception, "except
 for breach of Section 9", sat in a section of its own that retrieval never handed over. The invariant, for a format with
 pages: a line printed the same on most pages (three at least) is the page's furniture, not a part of the document. It is
-text where it stands, never a heading, and never splits a clause. Header or footer, with digits or without, a stamp
+never a heading and never splits a clause; since reader v15 (2026-10-16) a PDF's is left out of the text and counted
+in the coverage as left out, and a text with no pages keeps its running line where it stands. Header or footer, with digits or without, a stamp
 ("CONFIDENTIAL", "DRAFT") or a company name. Controls: the document's own heading printed once at its head, a structural
 line (an exhibit's pages), a numbered clause heading, a line on a minority of pages, and a format with no pages.
 """

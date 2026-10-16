@@ -1435,8 +1435,13 @@ PDFs; every left-out line read: page numbers ("Page 3 of 35", "- 3 -"), running 
 
 *Interface (U1): a refused file left the reader where they were.* A file refused while a contract was open sent the
 reader to the first screen's top, the contract gone, the refusal 896 px down a 900 px window (968 of 812 on a phone). It
-now returns to the view it was added from with the refusal there, as an alert. A browser flow at both widths, red on the
-old interface for exactly that reason.
+now returns to the view it was added from with the refusal there, as an alert. That first repair showed it on Documents
+only: the candidate's review found a sample refused from Findings shown nowhere, and a refusal on Documents outliving a
+newer failure, because two states were kept and one was always shown before the other. The workbench now keeps one
+notice, the latest, and every view it can leave the reader on shows it; Findings and Runs announce it as Documents does.
+Browser flows: a file refused on Documents and a sample refused on Findings, at both widths, and a newer failure taking a
+refusal's place and the reverse; red on the old interface for Findings and the stale refusal, the Documents flows the
+control.
 
 *Wording (U2, U3).* The reading stage printed "1 pages"; counts now take their noun's number. A visitor read "… the model
 endpoint is not reachable (ConnectError)", on the answer and on the public /api/health. Since the journey audit
@@ -1446,5 +1451,11 @@ internal failure, an engineering record's detail). retrieval-v2's fingerprint wa
 sentence; what retrieval hands over is unchanged.
 
 Checks run: the backend suite (2,176 pass, 1 skip), ruff, ruff format, mypy over the gate's scope, import contracts; the
-interface's 290 unit tests, eslint, tsc; the 40 browser flows on a fresh store (two failed on a store my earlier runs had
-filled, the known accumulation, and passed fresh). Not done: a release gate on a commit; nothing is committed.
+interface's 290 unit tests, eslint, tsc; the 40 browser flows on a fresh store (two failed on a store earlier local runs
+had filled, the known accumulation, and passed fresh). The release gate then passed on the committed application, 5cedb49,
+and its review approved it with five notes. Four are repaired: U1's class (above), stale comments and test names, a
+reason that lowercased the answer's party names (it now quotes the answer's words), and no test through the API still
+holding a pass that names an unseen section. One is kept as it is: a pass that v14 lowers has code's position check
+as its source, so the evidence pack reads one that code found consistent as not compared, though its reason says it was.
+Reading a chained reason by its words would let contract text quoted in the lowering sentence claim a comparison code
+never made; `basis` understates and never overstates.

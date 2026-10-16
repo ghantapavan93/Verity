@@ -81,8 +81,9 @@ RECORDED: dict[str, str] = {
     "policy-v13": "9e5f78fbbf5ead56",
     # policy-v14, 2026-10-16 (the blind contract stress test): one value given to every party where the passages give
     # several, and a quote whose own sentence carries a condition the answer leaves out, are needs review set by code.
-    # v13 is committed, so this is a bump.
-    "policy-v14": "d2fe4f2e149755f1",
+    # v13 is committed, so this is a bump. Re-recorded the same day for a reworded reason (the answer's party phrase
+    # quoted, not lowercased).
+    "policy-v14": "51c5b04897ada0cf",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
     # v8, 2026-10-13: no span begins or ends inside a number; a number's sign is part of its value (F-03). Re-recorded the

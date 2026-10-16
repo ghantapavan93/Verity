@@ -523,7 +523,8 @@ def page_edge_furniture(lines: Sequence[str], pages: Sequence[int]) -> EdgeFurni
 
 
 def build_sections(blocks: list[Block], title: str = "") -> list[ParsedSection]:
-    # A running header or footer is text where it stands: never a heading, and never deleted (it was printed).
+    # A running header or footer is never a heading. In a text with no pages it stays text where it stands; a PDF's page
+    # furniture is left out before this, and counted as left out (readers.read_pdf, reader v15).
     running = running_lines(blocks, title)
     blocks = [Block("text", b.text) if i in running else b for i, b in enumerate(blocks)]
     sections: list[ParsedSection] = []

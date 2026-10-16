@@ -340,7 +340,7 @@ def ask(client: TestClient, monkeypatch: pytest.MonkeyPatch, lead: str, with_gui
     return detail
 
 
-def test_through_the_run_a_clause_subject_to_an_unseen_section_is_the_models_view(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_through_the_run_a_clause_subject_to_an_unseen_section_says_what_the_model_never_read(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     plain = ask(client, monkeypatch, lead="")
     finding = plain["findings"][0]
     assert (finding["status"], finding["statusSource"]) == ("pass", "model_hint"), finding

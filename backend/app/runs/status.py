@@ -558,7 +558,8 @@ def check_values(
             "needs_review",
             "position_check",
             _with_earlier(
-                f"the answer gives {given} to {uniform[0].phrase.lower()}; its passages state {values}{more}, and none gives {given} to every party", decision
+                f"the answer gives {given} to every party (“{uniform[0].phrase}”); its passages state {values}{more}, and none gives {given} to every party",
+                decision,
             ),
         )
     beyond_question = set(unquoted_values(conclusion, quotes, [question or "", guidance or ""], clause_numbers))

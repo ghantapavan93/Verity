@@ -24,6 +24,7 @@ from app import config
 from app.analysis.schema import StatusHint
 from app.policy.durations import observed_fact, parse_rule
 from app.policy.proof import unseen_reason
+from app.providers.base import Generation
 from app.runs.status import basis, decide
 from tests.test_pass_gate import ROADS, TOPIC
 
@@ -86,25 +87,69 @@ Customer may not terminate for convenience during the first year of the Term.
 """
 
 
-def test_every_surface_says_a_pass_rests_on_a_section_the_model_never_read(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Only the termination section is ranked; since retrieval-v2 the two sections it names first (§7, §8) are handed after
-    # it (runs.links, two at most), and §9, the one that bears on the answer, is still never read.
+UNSEEN_9 = "the sentence points at §9, which was not handed to the model"
+SUBJECT_TO = "Subject to Sections 7, 8 and 9, "
+
+
+def ask_pointing_away(client: TestClient, monkeypatch: pytest.MonkeyPatch, quote: str | None = None) -> str:
+    """The run over CONTRACT_POINTING_AWAY, its model quoting ``quote`` (the fake provider's own choice when None). Only
+    the termination section is ranked; since retrieval-v2 the two sections it names first (§7, §8) are handed after it
+    (runs.links, two at most), and §9, the one that bears on the answer, is still never read."""
     monkeypatch.setattr(config.settings, "retrieval_k", 1)
+    if quote is not None:
+
+        def answer(system: str, user: str, schema: dict[str, object]) -> Generation:
+            label = next(line.split("]")[0][1:] for line in user.splitlines() if line.startswith("[sec_") and "Termination for Convenience" in line)
+            finding = {
+                "topic": "Termination for convenience",
+                "conclusion": "Customer may terminate for convenience on fifteen days' written notice.",
+                "status_hint": "pass",
+                "evidence": [{"section_id": label, "quote": quote}],
+                "guidance_reference": None,
+                "observed": "15 days' written notice",
+                "required": None,
+                "suggested_position": None,
+            }
+            payload = {"findings": [finding], "insufficient_evidence": False, "note": None}
+            return Generation(text=json.dumps(payload), input_tokens=10, output_tokens=10, latency_ms=1.0, model="fake-1")
+
+        monkeypatch.setattr(client.provider, "generate_json", answer)
     uploaded = client.post("/api/documents", files={"file": ("pointing.txt", CONTRACT_POINTING_AWAY.encode("utf-8"), "text/plain")})
     assert uploaded.status_code == 201, uploaded.text
     started = client.post(
         "/api/runs", json={"documentId": uploaded.json()["id"], "guidanceId": None, "question": "What notice period applies to termination for convenience?"}
     )
     assert started.status_code == 202, started.text
-    run_id = started.json()["id"]
+    run_id: str = started.json()["id"]
+    return run_id
+
+
+def test_every_surface_says_a_pass_rests_on_a_section_the_model_never_read(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Quoted whole, "Subject to Sections 7, 8 and 9" included, the sentence leaves nothing out: the pass stands, the
+    model's, and every surface says what it rests on that the model never read (review of the policy-v14 repairs,
+    2026-10-16: no test through the API still held a pass that names an unseen section)."""
+    sentence = next(line for line in CONTRACT_POINTING_AWAY.splitlines() if line.startswith(SUBJECT_TO))
+    run_id = ask_pointing_away(client, monkeypatch, quote=sentence)
     finding = client.get(f"/api/runs/{run_id}/detail").json()["findings"][0]
-    expected = "the sentence points at §9, which was not handed to the model"
+    assert (finding["status"], finding["statusSource"], finding["statusReason"]) == ("pass", "model_hint", UNSEEN_9), finding
+    assert finding["codeCompared"] is False and finding["unseenReason"] == UNSEEN_9, finding
+    assert_every_surface_names(client, run_id, finding)
+
+
+def test_every_surface_says_a_lowered_pass_rests_on_a_section_the_model_never_read(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     # Since policy-v14 the quote's leaving out its sentence's "Subject to Sections 7, 8 and 9" lowers the pass
     # (test_left_out_conditions); the lowered status still says, on every surface, what the model never read.
+    run_id = ask_pointing_away(client, monkeypatch)
+    finding = client.get(f"/api/runs/{run_id}/detail").json()["findings"][0]
     assert (finding["status"], finding["statusSource"]) == ("needs_review", "position_check"), finding
-    assert finding["statusReason"] == f"the quote leaves out of its sentence “Subject to Sections 7, 8 and 9”, and the answer does not state it; {expected}"
-    assert finding["codeCompared"] is False and finding["unseenReason"] == expected, finding
+    assert finding["statusReason"] == f"the quote leaves out of its sentence “Subject to Sections 7, 8 and 9”, and the answer does not state it; {UNSEEN_9}"
+    assert finding["codeCompared"] is False and finding["unseenReason"] == UNSEEN_9, finding
+    assert_every_surface_names(client, run_id, finding)
 
+
+def assert_every_surface_names(client: TestClient, run_id: str, finding: dict[str, object]) -> None:
+    """The memo, as HTML and as Word, and the evidence pack say what the finding's status was set without."""
+    expected = UNSEEN_9
     memo = client.post("/api/memos", json={"runId": run_id}).json()
     html = client.get(f"/api/memos/{memo['id']}/html").text
     assert "Not shown to the model." in html and expected in html

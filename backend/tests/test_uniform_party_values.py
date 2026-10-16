@@ -102,7 +102,7 @@ def test_the_pass_is_lowered_with_codes_reason_and_other_statuses_are_left_alone
     lowered = check_values(PASS, DOCX_ANSWER, [NON_RENEWAL], QUESTION, None)
     assert (lowered.status, lowered.source) == ("needs_review", "position_check")
     assert lowered.reason == (
-        "the answer gives 45 calendar days to each party; its passages state forty-five (45) calendar days, sixty (60) calendar days, "
+        "the answer gives 45 calendar days to every party (“Each party”); its passages state forty-five (45) calendar days, sixty (60) calendar days, "
         "and none gives 45 calendar days to every party"
     )
     review = Decision("needs_review", "position_check", "earlier reason")
