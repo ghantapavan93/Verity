@@ -1385,3 +1385,66 @@ the contract-state record is absent; it now says what /state says, with the inst
 The gate on that tree failed once on `test_admission`'s ordering test, which formed its queue with 5 ms sleeps: on a
 loaded machine the held call finished before the queue formed. The test now holds the slot until the queue it checks has
 formed, read from the controller; it passed 20 runs in four parallel loops.
+
+## 2026-10-16: the blind contract stress test, policy-v14 and reader v15
+
+Pavan's blind kit (a synthetic agreement as DOCX and PDF, its future-dated amendment, an unrelated agreement, a scan and
+a file that is not a PDF; 15 questions with an oracle sealed until every answer was recorded) was run against 3ecc630
+through the browser with qwen3:8b. Integrity and isolation held on every run. Six defects, each reproduced red first and
+fixed where its rule lives (the test's report and replays are kept outside the repository).
+
+*policy-v14 (1): one value for every party.* "Each party must give … 45 calendar days" stood as the model's pass over a
+quote in which the Customer gives 45 days and the Provider 60; code had said which of the two values the answer used, as
+a disclosure only. Invariant: a pass may not give one value to every party where its passages state several of that kind
+and none gives it to every party. Each statement of the answer is read on its own (the PDF's "Each party … 45 … Provider
+… 60" contradicts itself and is caught by its first sentence). `values.uniform_party_choices`, in `check_values`.
+
+*policy-v14 (2): a condition left out of the quote.* "Customer may terminate … on 30 days' notice" stood over a quote
+that began after its sentence's "Except for the first sixty (60) calendar days of the Initial Term,". Invariant: a pass
+may not rest on a verified quote whose own sentence carries a condition outside the quoted words that the answer does not
+state (two of the condition's own words). `left_out_condition`, `check_conditions`. A lowered pass keeps the reason it
+had, so a pass "Subject to Sections 6, 7 and 8, …" whose §8 was never handed over is now needs review and still says so
+on every surface; the war room tests that kept it the model's pass were rewritten to v14. Measured over the passes
+recorded in 69 local QA and lab stores (the live stores' copies excluded): 3,723 passes, 997 distinct; v14 lowers 35
+(2 one value, 33 a left-out condition; 3 of them v6 lowers anyway). Read by hand: in 21 the left-out words bear on the
+answer ("provided that Executive executes … a general release", "except that Provider may terminate immediately",
+"Subject to Clause 43 (Disputes)"), in 11 they do not ("subject to withholding as legally required"), 3 are boilerplate
+("Subject to the other provisions of this Agreement"). A false one costs a correct answer shown as needs review with the
+left-out words in its reason; no status is raised. The first version lowered 54: it took "However," for a condition,
+missed a sentence that ends inside quotation marks (the kit's Amendment One quotes the replaced clause), and asked the
+answer for a condition word ("exceptions to the cap, including indemnification obligations …" states one); each was
+corrected in the primitive and the replay rerun.
+
+*Reader v15 (1): a schedule's heading.* The PDF read "Schedule A. Service Level and Credits" as body text, so Schedule
+A sat inside §13 and its credit table was cited as "§13.3 No Penalty for Non-Renewal". In plain text and PDF a line naming
+a part of the agreement by kind, mark and, after a full stop, colon or dash, a title is a heading, labelled as Word's
+("Schedule A"). The first version also took the mark alone and a mark followed by words: replayed, 1,937 of 5,984 corpus
+texts changed, among them EDGAR exhibits printing "Exhibit 10.1" on every page, each now a heading splitting the clause a
+page break fell in (the war room's F-04 by another route), and contents lines ("Schedule 2.5Fees", "… the Lenders7").
+The rule as kept changes 272 texts (4.5%), every added heading sampled a schedule's or exhibit's title, 3 PDFs and no
+DOCX; the EDGAR running line is a regression test.
+
+*Reader v15 (2): a PDF's page furniture.* Since v12 a line printed on most pages was text where it stood ("nothing printed
+is deleted"), so the kit's header sat inside §3, §11 and §13 and in the model's input, and broke the sentence a page
+break fell in. A Word file's headers and footers are left out and counted; a PDF's now are too: a line printed the same,
+or with a rising page number, at the top or foot (two lines) of at least three pages and of most pages is left out of
+the sections and counted in the coverage, which names the lines. The document's own heading printed at the head of its
+first page stays. This reverses v12's rule for PDFs; the bytes stay in the store and the pack. Measured: 30 of 70 corpus
+PDFs; every left-out line read: page numbers ("Page 3 of 35", "- 3 -"), running headers and footers, EDGAR's
+"* Confidential treatment requested", and filler in three synthetic stress files. No clause text.
+
+*Interface (U1): a refused file left the reader where they were.* A file refused while a contract was open sent the
+reader to the first screen's top, the contract gone, the refusal 896 px down a 900 px window (968 of 812 on a phone). It
+now returns to the view it was added from with the refusal there, as an alert. A browser flow at both widths, red on the
+old interface for exactly that reason.
+
+*Wording (U2, U3).* The reading stage printed "1 pages"; counts now take their noun's number. A visitor read "… the model
+endpoint is not reachable (ConnectError)", on the answer and on the public /api/health. Since the journey audit
+(2026-10-09) a failure named what failed and the error's class; the class now goes to the log beside the sentence, in
+every message composed from an exception that a visitor can read (the model call, health, the build check, embedding, an
+internal failure, an engineering record's detail). retrieval-v2's fingerprint was re-recorded for the embedding
+sentence; what retrieval hands over is unchanged.
+
+Checks run: the backend suite (2,176 pass, 1 skip), ruff, ruff format, mypy over the gate's scope, import contracts; the
+interface's 290 unit tests, eslint, tsc; the 40 browser flows on a fresh store (two failed on a store my earlier runs had
+filled, the known accumulation, and passed fresh). Not done: a release gate on a commit; nothing is committed.
