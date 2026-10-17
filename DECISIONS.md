@@ -1534,3 +1534,63 @@ but loopback otherwise counts as elsewhere. Rehearsed on the workstation's Docke
 the model's container, health, the build check and acceptance held; the run stopped when the stack stopped
 answering at its over-limit upload (the cause not established), before the rest of recovery, retention and the kit's files, which
 come first on the server.
+
+## 2026-10-17: policy-v15, an instrument's marked number is not a value
+
+The landing's amendment challenge (the amended sample and its ready question) was answered on the live site three times
+on 2026-10-16, each "ninety (90) days … §7.2 of the Agreement, which was amended by Amendment No. 1 to specify the
+notice period", and each set to needs review with the reason "the evidence shown does not establish 1: no verified quote
+or guidance states it". The 1 is the amendment's number. Re-decided from the recorded answer and quotes, with no model
+call, the reason came back the same. Invariant: the number of an instrument or a document named with a mark ("Amendment
+No. 1", "Change Order #7", "Contract No. 98-1234") is not an answer value. The pointer reading knew sections, schedules,
+exhibits and their kin, not these names; and runs.relations, which reads an answer against a replaced clause and its
+replacement, read "Amendment No. 1" as 1, so an answer quoting only the replaced clause could be told it states the
+replacement's "one (1) month" and keep its pass.
+
+`values._IDENTIFIERS` reads such a name: an instrument's or a document's word in any case, then on the same line "No."
+with its full stop or "#", then the number read whole, however long or joined by hyphens. Every number of the name
+carries its own mark ("Amendment No. 1 and No. 2"), so a count after one, however joined, stays the answer's ("Under
+Amendment No. 1, 2 renewals"). What code can tell is a value is never the name's number: one before a unit, a magnitude
+or a percent sign, a bracketed restatement between ("No. 30 (thirty) days", "No. 2 million"), a date ("No. 1 March
+2026", "No. 2024-01-15"), money ("No. USD 10,000"), and a grouped number ("No. 1,500 additional units"). "Number" is no
+mark: after a plural it is the verb ("the licences number 250"). The value check, the choices and the reader's own text
+read through `_without_pointers`, v14's pointer reading plus these names; runs.relations reads through
+`_without_identifiers`, these names only, and so still reads section pointers as values, as it has since policy-v11. The
+guidance and the question are read like the answer, so a marked name's number in them is no longer a value they state:
+an answer stating it ("2 renewals" beside guidance naming "Amendment No. 2") can newly be lowered. The uniform-party
+check splits statements as v14 did (a first version split after setting names aside, joined "… Amendment No. 1 (60 days
+for the Provider)" into one statement and kept a pass v14 lowered; the final review caught it).
+v14's pointer reading is otherwise unchanged, except that the whitespace runs that could share a run are possessive: they
+split a long one quadratically, 7 s for one read of 20,000 spaces of guidance after "Section 1," (as a review measured),
+now milliseconds. A quote is still read whole.
+
+Five broader designs were tried first, each rejected by a fresh review for values hidden or identifiers read that v14 did
+not: unmarked instrument numbers, ranges, lists after instruments, a date rule, a heading rule and "Number" as a mark
+each moved v14's edge somewhere else ("Under Amendment No. 1, 2 renewals", "Section 9.1 and 30 Business Days", "Under
+Change Orders 4 and 5, 2 engineers", "the licences number 250"). So this one is checked against v14 directly. A
+differential fuzz (outside the repository, with the replay) builds 48,440 sentences, each an identifier and a value of
+known role (section pointers in lists, pairs and ranges, marked and unmarked instruments in the singular and plural, after
+determiners, values right after a mark, "number" as a verb, in twenty-three shapes with commas, "and", spaced, unspaced
+and glued separators, line breaks and no-break spaces), and reads each with v14 and v15 in both readings. v15 hides no
+value v14 read, shows none differently, and reads no identifier v14 did not; it reads an identifier in 10,908 of the
+check's sentences against v14's 16,167, and in 22,829 of relations' against 28,437. A bare count right after "No." is the
+name's number by design ("Amendment No. 2 renewals") and is not drawn there. Held in the repository by a property (a
+marked name added to an answer changes no value code reads, in the three readings), the recorded answer end to end, a
+relations case each way, the uniform-party case, and controls, each review's cases among them. Replayed over the 4,979
+findings with a verified quote in 69 local QA and lab stores (62 hold one; the live stores' copies excluded): 10 change
+(1 distinct), a correct answer ("sixty (60) days … because Amendment No. 1 replaced the ninety (90) days") that v14
+lowered for the 1 and that keeps the model's pass now. No relation note (82 findings have recorded relations, 35 a note),
+disclosed choice or uniform-party check changes, and nothing is newly lowered.
+
+Not fixed, and said so. With the false reason gone, the challenge's wrong answer (the replaced 90 days, quoted beside the
+replacement) is no longer needs review: code says what it sees as a concern, "the answer quotes the new wording of clause
+7.2 … but the value it gives as the contract's includes one only the replaced wording states", and since policy-v11 that
+case is a concern, never a status. Still read as values, as under v14: an unmarked number ("Amendment 2", where a count
+can stand in the same place), one after "Number", a "Nos." list ("Amendments Nos. 1 and 2"), a grouped number ("Patent
+No. 7,123,456"), "№ 1", a year naming an instrument. A number joined by an en dash or a slash keeps its first part as the
+name and its last as a value ("Contract No. 2024/123" states 123; v14 read 2024 and 123).
+Section pointers keep v14's gaps (a bare count after a list's comma is read as a pointer). And one answer v14 lowered only for
+the false reason now passes: the uniform-party check splits statements at "No." as v14 does, so "Each party, under
+Amendment No. 1, must give 45 days' notice" over a Customer 45 and a Provider 60 is not read as one statement (a test
+pins it; joining it would let "… Amendment No. 1 (60 days for the Provider)" pass instead). Recorded runs keep the status
+and reason they were decided with; the "Numbers" row beside them, read when shown, no longer lists the 1.

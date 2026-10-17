@@ -84,6 +84,11 @@ RECORDED: dict[str, str] = {
     # v13 is committed, so this is a bump. Re-recorded the same day for a reworded reason (the answer's party phrase
     # quoted, not lowercased).
     "policy-v14": "51c5b04897ada0cf",
+    # policy-v15, 2026-10-17 (the amendment challenge): the number of an instrument named with a mark ("Amendment No.
+    # 1") is not a value the answer states, in the value check and in runs.relations. v14 is committed, so this is a bump.
+    # Re-recorded the same day, before any release: five fresh reviews rejected broader readings; this one marks names only
+    # and keeps v14's section pointers (DECISIONS.md).
+    "policy-v15": "fdbe664659bd28b0",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
     # v8, 2026-10-13: no span begins or ends inside a number; a number's sign is part of its value (F-03). Re-recorded the

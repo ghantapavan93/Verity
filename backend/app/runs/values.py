@@ -6,7 +6,8 @@ Values are compared by value, not by spelling: "thirty (30) days", "30 days" and
 "$1,500,000", "USD 1.5 million" another, "January 1, 2024" and "1st day of January, 2024" a third. A date is one value
 and is shown as written, never as a loose day number. The answer is read for the values it states: dates, digits,
 money, percentages, and number words before a unit ("two years"); what points rather than states ("§6.4", "Sections 2,
-11, and 13", "Exhibit No. 10.1", "regulation 72(9)", "sec_7", an enumerator "(2)") is set aside. A quote is read whole,
+11, and 13", "Exhibit No. 10.1", "regulation 72(9)", "sec_7", an enumerator "(2)"), and the number of an instrument
+("Amendment No. 1", "Change Order #7"), is set aside. A quote is read whole,
 every number word included, so nothing it states is missed. Text the caller passes as the reader's own counts as
 stated: the guidance, which an answer is compared with. The question is not passed since policy-v6: it is what was
 asked, and an answer that repeats its figure has repeated a premise, not quoted the contract.
@@ -73,11 +74,50 @@ _POINTER_WORDS = (
     r"sections?|subsections?|clauses?|articles?|schedules?|exhibits?|attachments?|riders?|addend(?:um|a)|appendix|appendices"
     r"|annex(?:es|ures?)?|paragraphs?|parts?|chapters?|items?|regulations?|rules?"
 )
-# Where an answer points rather than states.
+# An instrument or a document named by a number that a mark sets out: "Amendment No. 1", "Change Order #7", "Contract
+# No. 98-1234". The number is its name, not a value (the amendment challenge, 2026-10-17: "Amendment No. 1" was reported
+# as the value 1). Only the mark makes it one: "Amendment 2 renewals" may be a count, so an unmarked number stays a value,
+# as before, and so does one after "Number", which after a plural is the verb ("the licences number 250", review of
+# policy-v15).
+_NUMBERED_NAMES = (
+    r"amendments?|supplements?|modifications?|restatements?|side\s+letters?|statements?\s+of\s+work|sows?|orders?"
+    r"|(?:change|work|purchase|task|service|sales)\s+orders?|order\s+forms?|contracts?|agreements?|invoices?|patents?"
+    r"|polic(?:y|ies)|leases?|certificates?|licen[cs]es?|registrations?|accounts?"
+)
+# A name, its mark and its number stand on one line: "the Agreement\n\n# 2 renewals" is a heading and a count.
+_SPACE = r"[^\S\r\n\x0b\x0c\x85\N{LINE SEPARATOR}\N{PARAGRAPH SEPARATOR}]"
+# "No." with its full stop ("no 30-day period" is a negation), or "#".
+_NO = rf"(?:no\.{_SPACE}*+|#{_SPACE}*+)"
+# The marked number read whole, however long or joined by hyphens ("4500012345", "98-1234"). A value is never one: a
+# grouped number ("Amendment No. 1,500 additional units"), a date ("No. 1 March 2026", "No. 2024-01-15") and a currency
+# ("No. USD 10,000") are read as before, and a number that a comma cuts ("7,12") is no name.
+_MONTH_WORD = (
+    r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?"
+)
+_MARKED_ID = (
+    r"(?!\d{1,4}(?:-\d{1,2}-|/\d{1,2}/|\.\d{1,2}\.|\N{EN DASH}\d{1,2}\N{EN DASH}|\N{EM DASH}\d{1,2}\N{EM DASH})\d{1,4}\b"
+    rf"|\d{{1,2}}(?:st|nd|rd|th)?\s+(?:day\s+of\s+)?{_MONTH_WORD}(?!\w)|(?:USD|EUR|GBP|CHF|CAD|AUD)\b)"
+    r"(?>(?-i:[\dA-Z][\dA-Z-]{0,23})(?![\dA-Za-z]|,\d)(?:\.\d{1,6}){0,6}(?:\([a-z0-9]{1,4}\)){0,4}(?![\dA-Za-z]|[.,]\d))"
+)
+# A number before a unit, a magnitude or a percent sign, with any restatement in brackets between, is a quantity, never
+# a name: "Amendment No. 30 (thirty) days", "Amendment No. 2 million".
+_NOT_A_NAME = rf"(?![\s-]*+(?:\([^()]{{1,40}}\)[\s-]*+)?(?:%|{_UNIT}|(?:thousand|million|billion|trillion|USD|EUR|GBP|CHF|CAD|AUD)\b))"
+_JOIN = rf"{_SPACE}*+(?:,{_SPACE}*+(?:(?:and|or|to|through)\b{_SPACE}*+|&{_SPACE}*+)?|(?:(?:and|or|to|through)\b|&){_SPACE}*+)"
+# Each number of the name carries its own mark ("Amendment No. 1 and No. 2"), so a count after it, however joined, is the
+# answer's: "Under Amendment No. 1, 2 renewals". "Amendments Nos. 1 and 2" is read as before, its numbers as values: after
+# "Nos." a bare count cannot be told from one more number.
+_IDENTIFIERS = re.compile(
+    rf"\b(?:{_NUMBERED_NAMES}){_SPACE}++{_NO}{_MARKED_ID}{_NOT_A_NAME}(?:{_JOIN}{_NO}{_MARKED_ID}{_NOT_A_NAME})*+",
+    re.IGNORECASE,
+)
+# Where an answer points rather than states: v14's reading of provisions, whitespace taken possessively (two runs that
+# could share it split a long one quadratically: 7 s for one read of 20,000 spaces after "Section 1,", review of
+# policy-v15), and the marked names above.
 _POINTERS = re.compile(
     # A list of pointers runs on ("Sections 1, 2 and 3") but never over a quantity: "Under Section 4.2, 90 days" (bug hunt).
-    rf"(?:§§?\s*|\b(?:{_POINTER_WORDS})\s+(?:no\.?\s*|number\s+)?){_REF}"
-    rf"(?:\s*(?:,\s*(?:and|or)?|and|or|to|through|&)\s*{_REF}(?![\s-]*(?:%|{_UNIT}))){{0,40}}"
+    rf"(?:§§?\s*+|\b(?:{_POINTER_WORDS})\s++(?:no\.?\s*+|number\s++)?){_REF}"
+    rf"(?:\s*+(?:,\s*+(?:and|or)?|and|or|to|through|&)\s*+{_REF}(?![\s-]*(?:%|{_UNIT}))){{0,40}}"
+    rf"|{_IDENTIFIERS.pattern}"
     r"|\bsec_\d+(?:[.,]\d+)*|\(part \d+\)|\(\s*\d{1,2}\s*\)|(?<!\d)\.\d+",
     re.IGNORECASE,
 )
@@ -278,8 +318,16 @@ def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int, 
 
 
 def _without_pointers(text: str) -> str:
-    """The text with what points blanked: "Under Section 10" in a question names no value (review R1, 2026-10-09)."""
+    """The text with what points blanked, to spaces so offsets still index it as written: "Under Section 10" in a
+    question names no value (review R1, 2026-10-09), nor "Amendment No. 1" in an answer. The value check, the choices
+    and the reader's own text read through it; a quote is read whole."""
     return _POINTERS.sub(lambda m: " " * len(m.group(0)), text)
+
+
+def _without_identifiers(text: str) -> str:
+    """The text with only the marked names blanked ("Amendment No. 1"): how runs.relations reads an answer, which has
+    read section pointers as values since policy-v11 and still does."""
+    return _IDENTIFIERS.sub(lambda m: " " * len(m.group(0)), text)
 
 
 def _keys(text: str) -> set[str]:
@@ -298,8 +346,10 @@ def _kinds_of(text: str, *, words_need_a_unit: bool) -> dict[str, set[str]]:
 
 def stated_values(text: str | None, *, answer: bool = False) -> set[str]:
     """The values ``text`` states, each as its comparable key ("n:45", "d:2027-12-27"): the reading every check here
-    shares. In an answer (``answer``) a number word counts only before a unit, as `_stated` reads one."""
-    return {key for key, *_ in _stated(text or "", words_need_a_unit=answer)}
+    shares. In an answer (``answer``) a marked name's number is set aside ("Amendment No. 1" states no value) and a
+    number word counts only before a unit, as `_stated` reads one."""
+    text = text or ""
+    return {key for key, *_ in _stated(_without_identifiers(text) if answer else text, words_need_a_unit=answer)}
 
 
 def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = (), clause_numbers: Iterable[str] = ()) -> list[str]:
@@ -315,15 +365,14 @@ def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Ite
     heading); a whole number is not set aside this way, since "6 Machines" is a value even where a clause 6 exists."""
     if not answer:
         return []
+    sources = (*quotes, *(_without_pointers(text) for text in readers_text))
     given: dict[str, set[str]] = {}
-    for text in (*quotes, *(_without_pointers(text) for text in readers_text)):
+    for text in sources:
         for key, kinds in _kinds_of(text, words_need_a_unit=False).items():
             given.setdefault(key, set()).update(kinds)
     # The same values in their kind's base unit ("t:months:12" for "one year" and for "twelve (12) months").
-    sources = (*quotes, *(_without_pointers(text) for text in readers_text))
     given_kinded = {key for text in sources for _, _, key, _, _, _ in _kinded(text, words_need_a_unit=False)}
-    # Pointers are blanked to spaces, not removed, so offsets still index the answer as written.
-    blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
+    blanked = _without_pointers(answer)
     kinded_answer = _kinded(blanked, words_need_a_unit=True)
     group_at = {start: group for _, group, _, _, start, _ in kinded_answer}
     base_key_at = {start: key for _, _, key, _, start, _ in kinded_answer}
@@ -474,7 +523,7 @@ class _Offer:
 
 def _choices(answer: str, offer: _Offer) -> list[tuple[ValueChoice, set[str]]]:
     """The answer's choices among what the passages offer, each with the keys of the values the answer used."""
-    blanked = _POINTERS.sub(lambda m: " " * len(m.group(0)), answer)
+    blanked = _without_pointers(answer)
     used: dict[str, tuple[ChoiceKind, dict[str, str]]] = {}
     for kind, group, key, number, start, end in _kinded(blanked, words_need_a_unit=True):
         if key in offer.standard_kinded or number in offer.standard_plain or key not in offer.offered.get(group, {}):

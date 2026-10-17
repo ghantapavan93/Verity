@@ -120,7 +120,12 @@ from .values import frame_times, redaction_given_as_value, uniform_party_choices
 # 45, the Provider 60): `check_values`, `values.uniform_party_choices`. (2) A verified quote whose own sentence carries a
 # condition outside the quoted words ("Except for the first sixty (60) calendar days of the Initial Term, …") that the
 # answer does not state: `check_conditions`, `left_out_condition`. Replay over recorded passes: DECISIONS.md.
-POLICY_VERSION = "policy-v14"
+# policy-v15 (2026-10-17, the amendment challenge): the number of an instrument or a document named with a mark
+# ("Amendment No. 1", "Change Order #7") is not a value the answer states: `check_values` no longer lowers a pass for
+# it, and runs.relations no longer counts it as a value of a replaced clause or its replacement. Each number of the
+# name carries its own mark, so a count after one stays the answer's. The guidance and the question are read the same
+# way, so an answer stating a number they name only as a marked name's can newly be lowered. Against v14: DECISIONS.md.
+POLICY_VERSION = "policy-v15"
 
 
 @dataclass(frozen=True)

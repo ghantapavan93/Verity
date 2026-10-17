@@ -315,7 +315,7 @@ H4_Q5_QUOTE = ["Seller may dispute the Closing Statement by written notice to Bu
 
 
 def test_calendar_days_against_business_days_is_no_pass() -> None:
-    assert POLICY_VERSION == "policy-v14"  # v11 to v14 keep this v9/v10 decision
+    assert POLICY_VERSION == "policy-v15"  # v11 to v15 keep this v9/v10 decision
     decision = decide("pass", "thirty (30) days", "at least thirty (30) Business Days", True, True, H4_Q5_QUOTE, H4_Q5_GUIDANCE, "Dispute Period")
     assert (decision.status, decision.source) == ("needs_review", "position_check")
     assert "calendar days cannot be compared with business days" in decision.reason and "not established" in decision.reason
@@ -503,5 +503,5 @@ def test_the_stage_a_answers_are_untouched_by_this_repair() -> None:
     from app.runs.versions import SEMANTIC_VERSIONS
 
     # policy-v11 (2026-10-14) keeps every v10 decision and adds the contract's own replacement statements (runs.relations).
-    assert SEMANTIC_VERSIONS["verifier_version"] == "v10" and SEMANTIC_VERSIONS["policy_version"] == "policy-v14"
+    assert SEMANTIC_VERSIONS["verifier_version"] == "v10" and SEMANTIC_VERSIONS["policy_version"] == "policy-v15"
     assert json.dumps(SEMANTIC_VERSIONS, sort_keys=True)
