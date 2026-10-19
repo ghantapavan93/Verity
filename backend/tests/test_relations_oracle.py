@@ -67,16 +67,17 @@ class OracleModel:
 def label_of(finding: dict[str, Any]) -> str:
     """The oracle's label for what the product recorded: the relation notes, and the status code set from them."""
     effects = {note["effect"] for note in finding["relations"]}
-    if "replaced" in effects:
+    if effects & {"replaced", "old_value"}:  # since policy-v16 an old_value note sets the status too
         assert (finding["status"], finding["statusSource"], finding["decidedBy"]) == ("needs_review", "position_check", "code")
+    if "replaced" in effects:
         assert all(span["verified"] for span in finding["spans"]), "a replaced quote stays verified"
         return "needs_review_replaced"
     if "scoped" in effects:
         return "scoped_concern"
     if "precedence" in effects:
         return "precedence_concern"
-    # Concerns the oracle has no label for (a time the question names, an answer quoting the replacement with only the
-    # replaced values) are never read as context: a decision that raised one fails against the oracle's label.
+    # What the oracle has no label for (a time the question names; an answer quoting the replacement with only the replaced
+    # values, which since policy-v16 lowers a pass) is never read as context: a decision that raised one fails its label.
     for effect in ("dated", "old_value"):
         if effect in effects:
             return f"{effect}_concern"

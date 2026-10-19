@@ -114,6 +114,7 @@ def account_of(finding: Finding, clause_numbers: frozenset[str] = frozenset()) -
     concerns += [_choice_sentence(choice) for choice in choices]
     # What the contract's own replacement and precedence statements mean for it, as recorded with the run (policy-v11): a
     # limit code cannot apply, a ranking of the parts quoted, a time the question names, or an answer that quotes the
-    # replacement and states only the replaced values, is a concern (relations.CONCERNS). A full replacement set the status.
-    concerns += [f"code: {note.sentence}" for note in notes_of(finding) if note.effect in CONCERNS]
+    # replacement and states only the replaced values, is a concern (relations.CONCERNS). A note that set the status is its
+    # reason, or opens it, shown once (since policy-v16 an old_value note can be either, by when its run was decided).
+    concerns += [f"code: {note.sentence}" for note in notes_of(finding) if note.effect in CONCERNS and note.sentence not in reason]
     return Account(finding.status, decided_by, tuple(concerns), tuple(unquoted), tuple(choices))

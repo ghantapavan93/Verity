@@ -89,6 +89,9 @@ RECORDED: dict[str, str] = {
     # Re-recorded the same day, before any release: five fresh reviews rejected broader readings; this one marks names only
     # and keeps v14's section pointers (DECISIONS.md).
     "policy-v15": "fdbe664659bd28b0",
+    # policy-v16, 2026-10-17 (the owner's decision on the amendment challenge): an answer quoting the replacement with only
+    # the replaced values (relations' old_value) is needs review set by code. v15 is committed and pushed, so this is a bump.
+    "policy-v16": "c185473f506d484f",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
     # v8, 2026-10-13: no span begins or ends inside a number; a number's sign is part of its value (F-03). Re-recorded the

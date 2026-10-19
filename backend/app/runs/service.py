@@ -49,6 +49,7 @@ from .status import (
     Decision,
     Grounds,
     check_conditions,
+    check_old_value,
     check_references,
     check_replaced,
     check_values,
@@ -430,6 +431,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 quoted = [(span.section_id, span.start, span.end) for span in spans if span.verified and span.section_id]
                 notes[ordinal] = tuple(assess(relations, quoted, answer, run.question, parts, label_handles(item.observed, labels)))
                 decision = check_replaced(decision, next((n.sentence for n in notes[ordinal] if n.effect == "replaced"), None))
+                decision = check_old_value(decision, next((n.sentence for n in notes[ordinal] if n.effect == "old_value"), None))
             verified_any = verified_any or all_verified
             if not all_verified:
                 withheld_count += 1

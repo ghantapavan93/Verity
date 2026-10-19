@@ -87,9 +87,10 @@ README_TXT = """Evidence pack for one Contract Workbench run.
                     review          a person's decision, when one was recorded; nothing else is a person's
                     relations       what the contract's own replacement and precedence statements mean for it, in
                                     code's words, by index into relations.json: "replaced" (quotes text the
-                                    contract replaced in full, not the replacement; code set the status); "scoped",
-                                    "precedence", "dated" (the question names a time) or "old_value" (quotes the
-                                    replacement, states only replaced values): a concern code cannot resolve; "context"
+                                    contract replaced in full, not the replacement; code set the status);
+                                    "old_value" (quotes the replacement, states only replaced values; since
+                                    policy-v16 code lowers a pass for it, else a concern); "scoped", "precedence" or "dated" (the
+                                    question names a time): a concern code cannot resolve; "context"
   relations.json  the replacement and precedence statements the run located (policy-v11), each end with its offsets
                   into sections.json; verify.py checks every one. A located statement is a fact about the text, not
                   a ruling on its legal effect. Absent for a run recorded before policy-v11

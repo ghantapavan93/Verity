@@ -78,8 +78,11 @@ def test_the_amendment_challenge_answer_is_not_told_it_states_the_amendments_num
     assert all(span["verified"] for span in finding["spans"])
     assert finding["unquotedValues"] == []
     assert not [c for c in [finding["statusReason"] or "", *finding["concerns"]] if "establish 1" in c or "states 1," in c]
-    # What code does see stays: the answer quotes the replacement and gives only the replaced wording's value.
-    assert [note["effect"] for note in finding["relations"]] == ["old_value"]
+    # What code does see: the answer quotes the replacement and gives only the replaced wording's value. Since policy-v16
+    # (the owner's decision, 2026-10-17) that is needs review set by code, with code's sentence as the reason.
+    (note,) = finding["relations"]
+    assert note["effect"] == "old_value"
+    assert (finding["status"], finding["statusSource"], finding["statusReason"]) == ("needs_review", "position_check", note["sentence"])
 
 
 def _supply(replaced: str, replacement: str) -> bytes:
@@ -284,7 +287,7 @@ def test_a_quote_is_still_read_whole() -> None:
     """Only the answer and the reader's own text set a name aside: a quote's every number counts as stated, so a quote
     that names "Amendment No. 1" still states 1 (a value it may be cited for is never missed)."""
     assert stated_values("This Amendment No. 1 changes Section 7.2.") == {"n:1", "n:7.2"}
-    assert stated_values("This Amendment No. 1 changes Section 7.2.", answer=True) == {"n:7.2"}  # runs.relations: as v14
+    assert stated_values("This Amendment No. 1 changes Section 7.2.", answer=True) == set()  # runs.relations, since v16
 
 
 HOSTILE = [("Amendment No. 1 and ", 1_000), ("Order #1-", 1_500), ("Contract No. 1-1-1-1 ", 600), ("Patent No. 1,000,", 900)]

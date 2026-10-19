@@ -125,8 +125,6 @@ def test_control_asked_about_the_original_agreement_the_same_quote_raises_nothin
     [
         # The run's date is not the time a question names: the same quote of the replaced clause, asked about June 2025.
         ("What notice did renewal need in June 2025?", (OLD,), "dated", "the question names a time (“June 2025”)"),
-        # Quoting the replacement is not following it: the answer quotes both and states only the replaced periods.
-        ("When must the distributor give notice to renew?", (OLD, NEW), "old_value", "one only the replaced wording states"),
     ],
 )
 def test_a_concern_code_cannot_resolve_is_one_account_on_every_surface_and_never_codes_status(
@@ -148,6 +146,35 @@ def test_a_concern_code_cannot_resolve_is_one_account_on_every_surface_and_never
     packed = json.loads((tmp_path / "findings.json").read_text(encoding="utf-8"))[0]
     assert packed["relations"] == [{"relation": 0, "effect": effect, "sentence": note["sentence"]}]
     assert f"code: {note['sentence']}" in packed["concerns"]
+
+
+def test_quoting_the_replacement_with_only_the_replaced_values_is_code_status_on_every_surface(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Policy-v16 (the owner's decision on the amendment challenge, 2026-10-17): quoting the replacement is not following
+    it. An answer that quotes both and states only the replaced periods is needs review set by code, with code's sentence
+    as the reason on every surface and once among the concerns; until v16 it was a concern beside the model's pass."""
+    detail = _ask(client, "When must the distributor give notice to renew?", monkeypatch, (OLD, NEW))
+    finding = detail["findings"][0]
+    (note,) = finding["relations"]
+    assert note["effect"] == "old_value" and "one only the replaced wording states" in note["sentence"]
+    assert (finding["status"], finding["statusSource"], finding["decidedBy"], finding["statusReason"]) == (
+        "needs_review",
+        "position_check",
+        "code",
+        note["sentence"],
+    )
+    assert all(span["verified"] for span in finding["spans"])
+    listed = next(f for f in client.get("/api/findings").json() if f["id"] == finding["id"])
+    assert listed["flagged"] is True and listed["concerns"].count(f"code: {note['sentence']}") == 1
+    for text in _memo(client, detail["id"]):
+        assert "Why flagged." in text and note["sentence"] in text and "No automated check flagged" not in text
+    pack = client.get(f"/api/runs/{detail['id']}/evidence-pack")
+    with zipfile.ZipFile(io.BytesIO(pack.content)) as archive:
+        archive.extractall(tmp_path)
+    packed = json.loads((tmp_path / "findings.json").read_text(encoding="utf-8"))[0]
+    assert packed["relations"] == [{"relation": 0, "effect": "old_value", "sentence": note["sentence"]}]
+    assert packed["concerns"].count(f"code: {note['sentence']}") == 1
 
 
 @pytest.mark.parametrize(("start", "effective"), [("March 2025", "2025-03-01, March 2025"), ("September 18, 2025", "2025-09-18, September 18, 2025")])

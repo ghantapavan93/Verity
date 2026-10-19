@@ -121,6 +121,19 @@ _POINTERS = re.compile(
     r"|\bsec_\d+(?:[.,]\d+)*|\(part \d+\)|\(\s*\d{1,2}\s*\)|(?<!\d)\.\d+",
     re.IGNORECASE,
 )
+# What names a provision or an instrument: runs.relations' reading of an answer and of a clause's wordings (policy-v16).
+# A plural opens a list, as v14 reads one ("Sections 7.2 and 7.3", review of policy-v16); one name takes its own number
+# only, so a count after its comma stays ("Under clause 1.2, 3 delivery trucks", review of policy-v15).
+_PLURAL_POINTER_WORDS = (
+    r"sections|subsections|clauses|articles|schedules|exhibits|attachments|riders|addenda|appendices|annex(?:es|ures)"
+    r"|paragraphs|parts|chapters|items|regulations|rules"
+)
+_NAMES = re.compile(
+    rf"(?:§§\s*+|\b(?:{_PLURAL_POINTER_WORDS})\s++(?:nos?\.?\s*+|numbers?\s++)?){_REF}"
+    rf"(?:\s*+(?:,\s*+(?:and|or)?|and|or|to|through|&)\s*+{_REF}(?![\s-]*(?:%|{_UNIT}))){{0,40}}"
+    rf"|(?:§\s*+|\b(?:{_POINTER_WORDS})\s++(?:no\.?\s*+|number\s++)?){_REF}|{_IDENTIFIERS.pattern}|\bsec_\d+(?:[.,]\d+)*",
+    re.IGNORECASE,
+)
 
 
 # No contract states a value of more digits than this; a longer run is set aside, so arithmetic on it can neither
@@ -324,10 +337,11 @@ def _without_pointers(text: str) -> str:
     return _POINTERS.sub(lambda m: " " * len(m.group(0)), text)
 
 
-def _without_identifiers(text: str) -> str:
-    """The text with only the marked names blanked ("Amendment No. 1"): how runs.relations reads an answer, which has
-    read section pointers as values since policy-v11 and still does."""
-    return _IDENTIFIERS.sub(lambda m: " " * len(m.group(0)), text)
+def _without_names(text: str) -> str:
+    """The text with what names a provision or an instrument blanked, each pointer's own number only ("clause 1.2",
+    "Amendment No. 1"): how runs.relations reads an answer. A list's further numbers stay, so "Under clause 1.2, 3
+    delivery trucks" keeps its 3 (review of policy-v15); "clause 1.2" is no value of either wording (review of policy-v16)."""
+    return _NAMES.sub(lambda m: " " * len(m.group(0)), text)
 
 
 def _keys(text: str) -> set[str]:
@@ -344,12 +358,18 @@ def _kinds_of(text: str, *, words_need_a_unit: bool) -> dict[str, set[str]]:
     return kinds
 
 
+def wording_values(text: str | None) -> set[str]:
+    """The values a contract's wording states, what names a provision or an instrument set aside: runs.relations compares
+    a replaced clause with its replacement so (policy-v16). "… notice under Section 7.3" names 7.3 and states none."""
+    return {key for key, *_ in _stated(_without_names(text or ""), words_need_a_unit=False)}
+
+
 def stated_values(text: str | None, *, answer: bool = False) -> set[str]:
     """The values ``text`` states, each as its comparable key ("n:45", "d:2027-12-27"): the reading every check here
-    shares. In an answer (``answer``) a marked name's number is set aside ("Amendment No. 1" states no value) and a
-    number word counts only before a unit, as `_stated` reads one."""
+    shares. In an answer (``answer``) what names a provision or an instrument is set aside, a pointer's own number only
+    ("clause 1.2", "Amendment No. 1" state no value), and a number word counts only before a unit, as `_stated` reads one."""
     text = text or ""
-    return {key for key, *_ in _stated(_without_identifiers(text) if answer else text, words_need_a_unit=answer)}
+    return {key for key, *_ in _stated(_without_names(text) if answer else text, words_need_a_unit=answer)}
 
 
 def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = (), clause_numbers: Iterable[str] = ()) -> list[str]:

@@ -1594,3 +1594,32 @@ the false reason now passes: the uniform-party check splits statements at "No." 
 Amendment No. 1, must give 45 days' notice" over a Customer 45 and a Provider 60 is not read as one statement (a test
 pins it; joining it would let "… Amendment No. 1 (60 days for the Provider)" pass instead). Recorded runs keep the status
 and reason they were decided with; the "Numbers" row beside them, read when shown, no longer lists the 1.
+
+## 2026-10-17: policy-v16, quoting the replacement is not following it
+
+The owner's decision after policy-v15. With v15's false reason gone, the amendment challenge's wrong answer ("ninety (90)
+days", the replaced value, over quotes of both the replaced clause 7.2 and its replacement) stood as the model's pass:
+since policy-v11 an answer that quotes the replacement but states only values the replaced wording states (relations'
+`old_value`) was a concern beside the status. `status.check_old_value` now lowers such a pass to needs review set by
+code, with code's sentence as the reason, for the same questions as "replaced" (the agreement as it stands, or no time
+named; a replacement in full). Only a pass: a status code computed on the quoted replacement, such as a shortfall against
+the guidance, rests on the text in force and stays, the sentence a concern beside it. The account shows a note that set
+the status once, as the reason; a run decided before v16 keeps its status, and its old_value note is still a concern.
+
+A fresh review rejected the first version, and both repairs are in the rule. It promoted old_value through
+`check_replaced`, which overwrote a shortfall code had computed on the replacement. And relations read a clause number as
+a value: "1.2" opened the replaced clause but not the quoted replacement, and the answer's "clause 1.2" counted as a value
+only the replaced wording states, so "Under clause 1.2 as amended, 90 days' notice, delivered by courier", a correct
+answer, was lowered with a false sentence. Now a clause's number is its name, not a value of either wording: the number
+a wording opens with, unless it is a quantity ("5 Business Days' notice"), and every number a pointer names. Relations
+reads both wordings and the answer with what names a provision or an instrument set aside (`values.wording_values`,
+`stated_values(answer=True)`): a plural reads its list as v14 does ("Sections 7.2 and 7.3"), one name its own number
+only, so a count after its comma stays ("Under clause 1.2, 3 delivery trucks"). A second review found the list and the
+pointer inside a wording ("… notice under Section 7.3"), a leading quantity taken for the clause number, and a lowered
+pass losing its earlier reason ("points at §9, which was not handed to the model"), now kept. The oracle still
+matches its 82 decisions. Code still does not read prose: an answer naming a removed value ("the amendment removed the
+12-month minimum") states the replaced wording's value; the value check lowers that one already, as under v15.
+
+Replayed over the 4,979 findings with a verified quote in 69 local QA and lab stores: 82 have recorded relations, 35 of
+them a note (context, replaced, dated, limits), none an old_value note, and no note changes under the new reading; no
+recorded decision changes. The live challenge's runs, outside those stores, are the case it is for.

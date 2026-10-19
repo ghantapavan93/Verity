@@ -12,8 +12,9 @@ statement whose words a reader can check, and records where each is:
 A mention is not a statement: "subject to", "notwithstanding", "as amended from time to time", "remains unchanged", an
 exception, a definition or a cross-reference records nothing here (they stay ordinary context). A located statement is
 a fact about the text, not a ruling on its legal effect. `assess` says what follows for one finding; the status rule
-(runs.status.check_replaced) acts on one case only: a question about the agreement as it stands, answered from text
-the contract replaced in full, without the replacement. The first-visitor acceptance test (2026-10-14) is why: the
+(runs.status.check_replaced) acts on a question about the agreement as it stands, answered from text the contract
+replaced in full, without the replacement; since policy-v16 `check_old_value` lowers a pass that quotes the replacement
+but states only values the replaced wording states. The first-visitor acceptance test (2026-10-14) is why: the
 local model answered a renewal question from a clause an amendment had deleted and replaced, and nothing said so. "As it
 stands" is the run's date only for a question that names no time; one that names a time ("in June 2025") is not placed
 against a replacement's start, and raises a concern.
@@ -30,13 +31,14 @@ from typing import Literal, Protocol
 
 from ..ingest.sections import clause_openings
 from .status import REFERENCE
-from .values import NOT_A_QUANTITY, date_spans, stated_values
+from .values import NOT_A_QUANTITY, date_spans, stated_values, wording_values
 
 RelationKind = Literal["replaces", "precedence"]
 Effect = Literal["replaced", "scoped", "precedence", "dated", "old_value", "context"]
 Perspective = Literal["historical", "dated", "current", "unstated"]
 # What code raises against a finding and cannot resolve (runs.account): a limit, a ranking, a time the question names, an
-# answer that quotes the replacement and states only the replaced values. "replaced" sets the status; "context" is none.
+# answer that quotes the replacement and states only the replaced values, where it did not lower a pass (policy-v16:
+# runs.status.check_old_value). "replaced" sets the status; "context" is none.
 CONCERNS: frozenset[Effect] = frozenset({"scoped", "precedence", "dated", "old_value"})
 
 # A provision named, then the verb that replaces it: "clause 3.2 of the Agreement is deleted in its entirety and …".
@@ -438,6 +440,12 @@ def _inside(span: tuple[str, int, int], passage: Passage | None) -> bool:
     return passage is not None and section_id == passage.section_id and start < passage.end and end > passage.start
 
 
+def _without_number(text: str, number: str | None) -> str:
+    """``text`` without the clause number it opens with, when it opens with ``number`` and that is no quantity ("5 Business
+    Days' notice …" keeps its 5)."""
+    return re.sub(rf"^\s*{re.escape(number)}(?!\d|\.\d){NOT_A_QUANTITY}", "", text, flags=re.IGNORECASE) if number else text
+
+
 def _excerpt(text: str, limit: int = 180) -> str:
     text = " ".join(text.split())
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
@@ -485,8 +493,12 @@ def assess(
         # What code sees in the answer, and no more: whether it quotes the replacement, and the values it states that only
         # one side states (one both state, such as an unchanged "45 days", shows nothing either way). Neither says which
         # wording the answer applies: an answer can quote the replacement and conclude from the replaced wording.
-        new_values = stated_values(relation.replacement.text) if relation.replacement else set()
-        old_values = stated_values(relation.replaced.text) if relation.replaced else set()
+        # A clause's number is its name, not a value of either wording: the number a wording opens with ("1.2 Either party
+        # …" against a replacement quoted without it) and every number a pointer names ("… under Section 7.3"), read alike
+        # in the answer (review of policy-v16: "Under clause 1.2 as amended, 90 days" and "Under Sections 7.2 and 7.3" were
+        # told they state a value only the replaced wording states).
+        new_values = wording_values(_without_number(relation.replacement.text, relation.target)) if relation.replacement else set()
+        old_values = wording_values(_without_number(relation.replaced.text, relation.target)) if relation.replaced else set()
         only_new, only_old = new_values - old_values, old_values - new_values
         # The model's stance is its own stated value when that names one of the values the two texts differ in: an answer
         # can mention both ("30 days; the amendment's 60 days does not apply") while its stated value is the replaced one.

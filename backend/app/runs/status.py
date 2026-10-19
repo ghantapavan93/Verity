@@ -125,7 +125,13 @@ from .values import frame_times, redaction_given_as_value, uniform_party_choices
 # it, and runs.relations no longer counts it as a value of a replaced clause or its replacement. Each number of the
 # name carries its own mark, so a count after one stays the answer's. The guidance and the question are read the same
 # way, so an answer stating a number they name only as a marked name's can newly be lowered. Against v14: DECISIONS.md.
-POLICY_VERSION = "policy-v15"
+# policy-v16 (2026-10-17, the owner's decision on the amendment challenge): an answer to a question about the agreement
+# as it stands that quotes the replacement but states only values the replaced wording states (relations' old_value) is no
+# pass: `check_old_value` lowers it to needs review set by code. v11 to v15 kept it a concern beside the model's pass, so
+# with v15's false reason gone the challenge's wrong "ninety (90) days" stood as a pass. A status code computed on the
+# replacement stays. Relations no longer takes a clause's number for a value: the number a wording opens with is its
+# name, and an answer's pointers ("clause 1.2") and marked names are set aside, each pointer's own number only.
+POLICY_VERSION = "policy-v16"
 
 
 @dataclass(frozen=True)
@@ -498,6 +504,16 @@ def check_replaced(decision: Decision, replaced: str | None) -> Decision:
     if replaced is None or decision.status == "unresolved":
         return decision
     return Decision("needs_review", "position_check", replaced)
+
+
+def check_old_value(decision: Decision, old_value: str | None) -> Decision:
+    """A pass whose answer, to a question about the agreement as it stands, quotes the replacement but states only values
+    the replaced wording states is needs review set by code (policy-v16), with ``old_value``, the sentence runs.relations
+    wrote. Only a pass: a status code computed on the quoted replacement, such as a shortfall against the guidance, rests
+    on the text in force and stays, the sentence a concern beside it (review of policy-v16). The pass's own reason is kept."""
+    if old_value is None or decision.status != "pass":
+        return decision
+    return Decision("needs_review", "position_check", _with_earlier(old_value, decision))
 
 
 def check_references(

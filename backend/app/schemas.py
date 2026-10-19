@@ -174,8 +174,9 @@ class RelationOut(ApiModel):
 class RelationNoteOut(ApiModel):
     """What one recorded relation means for one finding: "replaced" (the answer quotes text replaced in full and neither
     quotes the replacement nor states a value only it states, for a question about the agreement as it stands; code set
-    the status), "scoped", "precedence", "dated" (the question names a time) or "old_value" (the answer quotes the
-    replacement and states only the replaced values): a concern code cannot resolve; or "context" (nothing to resolve)."""
+    the status); "old_value" (the answer quotes the replacement and states only the replaced values; since policy-v16 code
+    lowers a pass for it, and beside any other status, or on a run decided before v16, it is a concern); "scoped",
+    "precedence" or "dated" (the question names a time): a concern code cannot resolve; or "context" (nothing to resolve)."""
 
     effect: Literal["replaced", "scoped", "precedence", "dated", "old_value", "context"]
     sentence: str
