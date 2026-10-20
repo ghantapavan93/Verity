@@ -34,6 +34,7 @@ export function StageList({
   reduceMotion,
   modelPlace = null,
   modelSleeps = false,
+  ahead = null,
 }: {
   current: RunStage;
   details: Partial<Record<RunStage, string>>;
@@ -43,6 +44,8 @@ export function StageList({
   modelPlace?: string | null;
   /** A hosted model that sleeps when idle (HealthOut.modelLocation "hosted"): the wait can include waking it. */
   modelSleeps?: boolean;
+  /** Runs the API says are ahead of this one on the model (RunOut.ahead); null when it has not said. */
+  ahead?: number | null;
 }) {
   const index = (STAGE_ORDER as readonly string[]).indexOf(current);
   const shown = index >= 0 ? STAGE_ORDER.slice(0, index + 1) : STAGE_ORDER;
@@ -70,10 +73,13 @@ export function StageList({
       {current === "checking" && (
         <p className={styles.stageNote}>
           {modelPlace ? `The model runs on ${modelPlace}. ` : ""}
-          {modelSleeps
-            ? // Measured on Modal, 2026-10-13: 95-168 s from asleep to the first token; awake, a run's p95 was 14.5 s.
-              "It sleeps when no one has asked for a few minutes, and waking it adds one and a half to three minutes to the first answer; awake, most answers take under half a minute. The stages above are the API's own."
-            : "Most answers take under two minutes; the stages above are the API's own."}
+          {ahead !== null && ahead > 0
+            ? // Under load the sentence below was the only one, while thirty questions were ahead (audit, 2026-10-19).
+              `The model answers one question at a time: ${ahead === 1 ? "one question is" : `${ahead} questions are`} ahead of this one. The stages above are the API's own.`
+            : modelSleeps
+              ? // Measured on Modal, 2026-10-13: 95-168 s from asleep to the first token; awake, a run's p95 was 14.5 s.
+                "It sleeps when no one has asked for a few minutes, and waking it adds one and a half to three minutes to the first answer; awake, most answers take under half a minute. The stages above are the API's own."
+              : "Most answers take under two minutes; the stages above are the API's own."}
         </p>
       )}
     </>

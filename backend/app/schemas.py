@@ -271,6 +271,9 @@ class RunOut(ApiModel):
     # The contract's replacement and precedence statements this run recorded (runs.relations); null on a run recorded
     # before policy-v11, which is shown as recorded and never re-derived.
     relations: list[RelationOut] | None = None
+    # While the run is being answered: how many runs started before it are still being answered, on the one model that
+    # answers one at a time. Read when the run is read, so it falls as the queue moves; null once the run has ended.
+    ahead: int | None = None
 
 
 class RunSummary(ApiModel):

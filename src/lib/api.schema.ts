@@ -1955,6 +1955,8 @@ export interface components {
         };
         /** RunDetail */
         RunDetail: {
+            /** Ahead */
+            ahead?: number | null;
             /** Candidates */
             candidates: components["schemas"]["CandidateOut"][];
             /** Createdat */
@@ -2103,6 +2105,8 @@ export interface components {
         };
         /** RunOut */
         RunOut: {
+            /** Ahead */
+            ahead?: number | null;
             /** Error */
             error: string | null;
             /** Findings */

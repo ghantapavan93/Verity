@@ -33,7 +33,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from ..config import settings
 from ..db import write_locked
-from ..errors import AccessRequired, TooManyRequests, WorkbenchError
+from ..errors import AccessRequired, Busy, TooManyRequests, WorkbenchError
 from ..models import TERMINAL_STAGES, DocumentAccess, Run, VisitorWorkspace, as_utc, utcnow
 from .workspace import PUBLIC_PREFIX, is_public
 
@@ -130,6 +130,21 @@ def run_quotas(workspace: str | None) -> tuple[Quota, ...]:
                 lambda session: _runs(session, Run.workspace_id == workspace, Run.stage.notin_(TERMINAL_STAGES)),
                 lambda: TooManyRequests(
                     f"This demo workspace has {in_flight} questions being answered. Ask the next one when an answer arrives.", retry_after=30
+                ),
+            )
+        )
+        # Every visitor's together: the per-workspace bound above still let thirty visitors queue sixty questions, the
+        # last of them half an hour from an answer, with nothing to say so (backend audit, 2026-10-19). Past the bound a
+        # question is refused at once and says why; a retry passes when an answer arrives.
+        waiting = settings.public_max_runs_in_flight
+        quotas.append(
+            Quota(
+                waiting,
+                lambda session: _runs(session, Run.workspace_id.like(f"{PUBLIC_PREFIX}%"), Run.stage.notin_(TERMINAL_STAGES)),
+                lambda: Busy(
+                    f"{waiting} visitors' questions are being answered, the most this demo queues: the model answers one at a time. "
+                    "Nothing was started; ask again in a minute or two.",
+                    retry_after=60,
                 ),
             )
         )

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createRun, errorMessage, followRun } from "@/lib/api";
 import { STAGE_ORDER, type RunStage, type RunView } from "@/lib/types";
 
@@ -48,11 +48,18 @@ function reduce(state: FollowerState, action: Action): FollowerState {
       return state.phase === "starting" ? { phase: "not_started", question: state.question, hasGuidance: state.hasGuidance, error: action.error } : state;
     case "stage": {
       if ((state.phase !== "following" && state.phase !== "loading_record") || state.run.id !== action.runId) return state;
+      const order = STAGE_ORDER as readonly string[];
       const details =
-        action.detail && (STAGE_ORDER as readonly string[]).includes(action.stage) ? { ...state.details, [action.stage]: action.detail } : state.details;
+        action.detail && order.includes(action.stage) && state.details[action.stage] !== action.detail
+          ? { ...state.details, [action.stage]: action.detail }
+          : state.details;
       // The terminal stage is not applied from the event: the record that carries the findings is fetched next.
       if (TERMINAL.includes(action.stage)) return { phase: "loading_record", run: state.run, stage: state.stage, details, error: null };
-      return { phase: "following", run: state.run, stage: action.stage, details, error: null };
+      // A run's stages only move forward, and a poll repeats every stage the run has passed: an earlier stage keeps the
+      // current one, and an event that changes nothing keeps the state itself, so a poll of an unchanged run renders nothing.
+      const stage = order.indexOf(action.stage) < order.indexOf(state.stage) ? state.stage : action.stage;
+      if (state.phase === "following" && stage === state.stage && details === state.details) return state;
+      return { phase: "following", run: state.run, stage, details, error: null };
     }
     case "record":
       if ((state.phase === "following" || state.phase === "loading_record" || state.phase === "disconnected") && state.run.id !== action.run.id) return state;
@@ -88,6 +95,8 @@ export function useRunFollower() {
   // shown or cleared). A claim alone does not change it: an open that claims and then fails has put nothing on screen.
   const screen = useRef(0);
   const stopFollowing = useRef<(() => void) | null>(null);
+  // How many runs are ahead of the followed one on the model, as the API last said; null when it has not said.
+  const [ahead, setAhead] = useState<number | null>(null);
   // Each question asked and each run shown is a newer intent. A caller that must wait before it can show a run
   // claims one first and shows nothing if another came after it: the newest intent owns the screen.
   const intent = useRef(0);
@@ -108,11 +117,13 @@ export function useRunFollower() {
   const attach = useCallback(
     (runId: string) => {
       stop();
+      setAhead(null);
       stopFollowing.current = followRun(
         runId,
         (stage, detail) => dispatch({ type: "stage", runId, stage, detail }),
         (finished) => dispatch({ type: "record", run: finished }),
         (message) => dispatch({ type: "stream_error", runId, error: message }),
+        setAhead,
       );
     },
     [stop],
@@ -191,7 +202,21 @@ export function useRunFollower() {
   const pending = state.phase === "starting" || state.phase === "not_started" ? { question: state.question, hasGuidance: state.hasGuidance } : null;
   const stageDetails: StageDetails = "details" in state ? state.details : {};
 
-  return { state, run, pending, runError: state.error, stageDetails, ask, show, refresh, claim, stop, resume, setRunError };
+  return {
+    state,
+    run,
+    pending,
+    runError: state.error,
+    stageDetails,
+    ahead: state.phase === "following" ? ahead : null,
+    ask,
+    show,
+    refresh,
+    claim,
+    stop,
+    resume,
+    setRunError,
+  };
 }
 
 export type RunController = ReturnType<typeof useRunFollower>;

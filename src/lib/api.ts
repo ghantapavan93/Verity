@@ -292,28 +292,48 @@ export function absolute(url: string): string {
 }
 
 const POLL_FAILURES_BEFORE_GIVING_UP = 5;
+// A poll every 3 s while the run moves; each poll that finds nothing new doubles the wait, up to 12 s. A run queued
+// behind others for minutes was asked for its whole record every 3 s by every page that followed it (audit, 2026-10-19).
+export const POLL_MS = 3000;
+export const POLL_MAX_MS = 12000;
 
 /**
  * Follow a run's stages. Uses the SSE stream, and falls back to polling if the stream drops; polling
- * retries a few times before it reports, because the run's record outlives any one request.
- * `onDone` receives the final run once, after the terminal stage.
+ * retries a few times before it reports, because the run's record outlives any one request, and waits while the
+ * page is hidden: the run goes on without it, and the page asks again when it is shown.
+ * `onDone` receives the final run once, after the terminal stage. `onAhead` receives how many runs are ahead of
+ * this one on the model, as the stream or the record says it.
  */
 export function followRun(
   id: string,
   onStage: (stage: RunStage, detail?: string | null) => void,
   onDone: (run: RunView) => void,
   onError: (message: string) => void,
+  onAhead?: (ahead: number | null) => void,
 ): () => void {
   let finished = false;
   let source: EventSource | null = null;
   let pollTimer: number | null = null;
   let failures = 0; // consecutive poll failures; the record is truth, so a blip is retried before anyone is told
+  let delay = POLL_MS;
+  let seen = "";
+
+  const onShown = () => {
+    if (document.visibilityState !== "visible") return;
+    document.removeEventListener("visibilitychange", onShown);
+    void poll();
+  };
+
+  const stopPolling = () => {
+    if (pollTimer) window.clearTimeout(pollTimer);
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onShown);
+  };
 
   const finish = async () => {
     if (finished) return;
     finished = true;
     source?.close();
-    if (pollTimer) window.clearTimeout(pollTimer);
+    stopPolling();
     try {
       onDone(await getRun(id));
     } catch (error) {
@@ -321,27 +341,39 @@ export function followRun(
     }
   };
 
+  const next = (wait: number) => {
+    pollTimer = window.setTimeout(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") document.addEventListener("visibilitychange", onShown);
+      else void poll();
+    }, wait);
+  };
+
   const poll = async () => {
     if (finished) return;
     try {
       const run = await getRunDetail(id);
+      if (finished) return; // stopped while the record was on its way: it is no longer this page's to show
       for (const row of run.stages) onStage(row.stage, row.detail);
       onStage(run.stage);
+      onAhead?.(run.ahead ?? null);
       if (run.stage === "complete" || run.stage === "unresolved" || run.stage === "failed") {
         await finish();
         return;
       }
+      const now = `${run.stages.length}:${run.stage}:${run.ahead ?? ""}`;
+      delay = now === seen ? Math.min(POLL_MAX_MS, delay * 2) : POLL_MS;
+      seen = now;
     } catch (error) {
       failures += 1;
       if (failures >= POLL_FAILURES_BEFORE_GIVING_UP) {
         onError(error instanceof Error ? error.message : String(error));
         return;
       }
-      pollTimer = window.setTimeout(poll, 3000);
+      next(POLL_MS);
       return;
     }
     failures = 0;
-    pollTimer = window.setTimeout(poll, 3000);
+    next(delay);
   };
 
   if (typeof EventSource !== "undefined") {
@@ -354,6 +386,9 @@ export function followRun(
       };
       onStage(data.stage, data.detail);
       if (data.final) void finish();
+    });
+    source.addEventListener("queue", (event) => {
+      onAhead?.((JSON.parse((event as MessageEvent).data) as { ahead: number | null }).ahead);
     });
     // The server's own `event: error` (an unknown run) carries data; the browser's transport error does not.
     source.addEventListener("error", (event) => {
@@ -380,6 +415,6 @@ export function followRun(
   return () => {
     finished = true;
     source?.close();
-    if (pollTimer) window.clearTimeout(pollTimer);
+    stopPolling();
   };
 }

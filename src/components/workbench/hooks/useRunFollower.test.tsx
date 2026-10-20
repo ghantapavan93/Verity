@@ -49,7 +49,7 @@ function runView(overrides: Partial<RunView> = {}): RunView {
 function callbacks() {
   const call = api.followRun.mock.calls.at(-1);
   if (!call) throw new Error("followRun was not called");
-  return { onStage: call[1], onDone: call[2], onError: call[3] };
+  return { onStage: call[1], onDone: call[2], onError: call[3], onAhead: call[4] ?? (() => {}) };
 }
 
 describe("useRunFollower", () => {
@@ -67,7 +67,7 @@ describe("useRunFollower", () => {
     await act(() => result.current.ask("doc1", null, "What notice is needed to terminate for convenience?"));
 
     expect(api.createRun).toHaveBeenCalledWith({ documentId: "doc1", guidanceId: null, question: "What notice is needed to terminate for convenience?" });
-    expect(api.followRun).toHaveBeenCalledWith("run1", expect.any(Function), expect.any(Function), expect.any(Function));
+    expect(api.followRun).toHaveBeenCalledWith("run1", expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function));
     expect(result.current.state.phase).toBe("following");
     expect(result.current.run?.id).toBe("run1");
     expect(result.current.run?.stage).toBe("reading");
@@ -156,7 +156,7 @@ describe("useRunFollower", () => {
     api.followRun.mockReturnValueOnce(vi.fn());
     act(() => result.current.resume());
     expect(result.current.state.phase).toBe("following");
-    expect(api.followRun).toHaveBeenLastCalledWith("run2", expect.any(Function), expect.any(Function), expect.any(Function));
+    expect(api.followRun).toHaveBeenLastCalledWith("run2", expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function));
   });
 
   it("follows a run in flight that was loaded from the record, and shows a finished one as it is", () => {
@@ -165,7 +165,7 @@ describe("useRunFollower", () => {
 
     act(() => result.current.show(runView({ id: "run3", stage: "checking" })));
     expect(result.current.state.phase).toBe("following");
-    expect(api.followRun).toHaveBeenCalledWith("run3", expect.any(Function), expect.any(Function), expect.any(Function));
+    expect(api.followRun).toHaveBeenCalledWith("run3", expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function));
 
     act(() => result.current.show(runView({ id: "run4", stage: "complete" })));
     expect(result.current.state.phase).toBe("finished");
@@ -369,5 +369,42 @@ describe("the screen's owner, not its phase (re-review probes, 2026-10-13)", () 
     expect(result.current.runError).toBeNull();
     expect(result.current.pending?.question).toBe("Which law governs?");
     expect(acceptedA).toBe(true); // nothing to put back into contract B's composer
+  });
+
+  it("says how many runs are ahead while the run is followed, and nothing once it has finished", async () => {
+    api.createRun.mockResolvedValue(runView());
+    api.followRun.mockReturnValue(vi.fn());
+    const { result } = renderHook(() => useRunFollower());
+    await act(() => result.current.ask("doc1", null, "What notice is needed?"));
+    expect(result.current.ahead).toBeNull();
+    act(() => callbacks().onAhead(3));
+    expect(result.current.ahead).toBe(3);
+    act(() => callbacks().onDone(runView({ stage: "complete" })));
+    expect(result.current.ahead).toBeNull(); // control: a finished run is ahead of nothing and behind nothing
+  });
+
+  it("keeps the same state when a poll repeats stages the run has passed, and never moves a stage back", async () => {
+    api.createRun.mockResolvedValue(runView());
+    api.followRun.mockReturnValue(vi.fn());
+    const { result } = renderHook(() => useRunFollower());
+    await act(() => result.current.ask("doc1", null, "What notice is needed?"));
+    act(() => {
+      callbacks().onStage("reading", "4 sections");
+      callbacks().onStage("finding_evidence", "6 candidate sections");
+      callbacks().onStage("checking", "against the question");
+    });
+    const settled = result.current.state;
+    act(() => {
+      // what a poll hands over: every stored stage again, then the run's own
+      callbacks().onStage("reading", "4 sections");
+      callbacks().onStage("finding_evidence", "6 candidate sections");
+      callbacks().onStage("checking", "against the question");
+      callbacks().onStage("checking");
+    });
+    expect(result.current.state).toBe(settled);
+    act(() => callbacks().onStage("reading"));
+    expect(result.current.run?.stage).toBe("checking");
+    act(() => callbacks().onStage("verifying", "1 quote"));
+    expect(result.current.run?.stage).toBe("verifying"); // control: a stage that moves forward is applied
   });
 });

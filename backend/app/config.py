@@ -122,6 +122,9 @@ class Settings(BaseModel):
     anonymous_max_runs_per_day: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_RUNS_PER_DAY", "30"))
     # Questions one anonymous workspace may have being answered at once: the model's queue is shared (quotas.run_quotas).
     anonymous_max_runs_in_flight: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_RUNS_IN_FLIGHT", "2"))
+    # Questions every anonymous workspace together may have being answered at once: the model's queue, bounded. At about
+    # half a minute an answer, eight is a wait of four minutes; the ninth visitor is told at once rather than queued.
+    public_max_runs_in_flight: int = int(os.environ.get("WORKBENCH_PUBLIC_MAX_RUNS_IN_FLIGHT", "8"))
     anonymous_max_uploads_per_day: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_UPLOADS_PER_DAY", "300"))
     # Free space the public store keeps: below it new uploads and writes are paused, reading still works (2 GiB).
     public_min_free_bytes: int = int(os.environ.get("WORKBENCH_PUBLIC_MIN_FREE_BYTES", str(2 * 1024**3)))

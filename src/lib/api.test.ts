@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiBase, health, unreachable } from "./api";
+import { POLL_MAX_MS, POLL_MS, apiBase, followRun, health, unreachable } from "./api";
 
 /** Behind Cloudflare Access an expired sign-in answers a request for data with a sign-in page, status 200. */
 describe("a page in place of data", () => {
@@ -64,5 +64,75 @@ describe("where the interface finds the API", () => {
 
   it("says the site's own API is unreachable, never an empty address", () => {
     expect(unreachable("")).toMatch(/^The workbench API on this site is not reachable\./);
+  });
+});
+
+/** A run followed by polling (the stream dropped, or the browser has none) asks less while nothing changes. */
+describe("following a run by polling", () => {
+  const detail = (stage: string, ahead: number | null) =>
+    new Response(JSON.stringify({ id: "run1", stage, ahead, stages: [{ stage: "reading", detail: "4 sections" }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  let visibility: DocumentVisibilityState = "visible";
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    visibility = "visible";
+  });
+
+  function polled(answers: () => Response) {
+    vi.useFakeTimers();
+    vi.stubGlobal("EventSource", undefined);
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+    const fetch = vi.fn(async () => answers());
+    vi.stubGlobal("fetch", fetch);
+    const ahead: (number | null)[] = [];
+    const stop = followRun(
+      "run1",
+      () => {},
+      () => {},
+      () => {},
+      (n) => ahead.push(n),
+    );
+    return { fetch, ahead, stop };
+  }
+
+  it("waits longer after each poll that finds nothing new, up to its ceiling, and passes on the queue", async () => {
+    const { fetch, ahead, stop } = polled(() => detail("checking", 2));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(ahead).toEqual([2]);
+    const waits = [POLL_MS, POLL_MS * 2, POLL_MS * 4, POLL_MAX_MS, POLL_MAX_MS];
+    for (const [i, wait] of waits.entries()) {
+      await vi.advanceTimersByTimeAsync(wait - 1);
+      expect(fetch).toHaveBeenCalledTimes(i + 1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetch).toHaveBeenCalledTimes(i + 2);
+    }
+    stop();
+  });
+
+  it("control: a poll that finds the run moved asks again at the first pace", async () => {
+    let ahead = 5;
+    const { fetch, stop } = polled(() => detail("checking", ahead--));
+    await vi.advanceTimersByTimeAsync(0);
+    for (let i = 0; i < 4; i++) await vi.advanceTimersByTimeAsync(POLL_MS);
+    expect(fetch).toHaveBeenCalledTimes(5);
+    stop();
+  });
+
+  it("asks nothing while the page is hidden, and asks at once when it is shown", async () => {
+    const { fetch, stop } = polled(() => detail("checking", 1));
+    await vi.advanceTimersByTimeAsync(0);
+    visibility = "hidden";
+    await vi.advanceTimersByTimeAsync(POLL_MAX_MS * 10);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    stop();
   });
 });

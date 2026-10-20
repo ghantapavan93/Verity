@@ -8,7 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, object_session, selectinload
 
 from ..application.clause_location import ClauseLocator
 from ..application.create_memo import review_head
@@ -120,6 +121,16 @@ def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> Findi
     )
 
 
+def runs_ahead(run: Run) -> int | None:
+    """How many runs started before this one are still being answered; None once it has ended. Every reader's runs
+    count, a batch's included: they wait for the same model. Under load the page said only "most answers take under two
+    minutes" while thirty questions were ahead (backend audit, 2026-10-19)."""
+    session = object_session(run)
+    if run.stage in TERMINAL or session is None:
+        return None
+    return session.scalar(select(func.count(Run.id)).where(Run.stage.notin_(sorted(TERMINAL)), Run.created_at < run.created_at, Run.id != run.id)) or 0
+
+
 def run_out(run: Run, locator: ClauseLocator | None = None) -> RunOut:
     # Unresolved findings are kept on the run but not shown as answers. The document's sections are read only for a run
     # with findings to place: the page asks for a run every few seconds while it is working, and every ask read the whole
@@ -148,6 +159,7 @@ def run_out(run: Run, locator: ClauseLocator | None = None) -> RunOut:
         retrieval_mode=run.retrieval_mode,
         sections_requested=json.loads(run.options_json or "{}").get("retrieval_k"),
         relations=[relation_out(r) for r in load(run.relations_json).relations] if run.relations_json else None,
+        ahead=runs_ahead(run),
     )
 
 
@@ -321,13 +333,15 @@ def _sse(event: str, data: dict[str, object], event_id: int | None = None) -> st
     return f"{head}event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def _ended_in_the_record(run_id: str) -> str | None:
-    """The terminal stage of a run that another writer ended: a batch runner or staleness recovery in another
-    process, whose events never reach this process's bus. Read at every heartbeat so no stream outlives its run
-    (found while tracing, 2026-09-29)."""
+def _in_the_record(run_id: str) -> tuple[str | None, int | None]:
+    """The terminal stage of a run that another writer ended (a batch runner or staleness recovery in another process,
+    whose events never reach this process's bus) and, while it has not ended, how many runs are ahead of it. Read at
+    every heartbeat, so no stream outlives its run (found while tracing, 2026-09-29) and a wait says where it stands."""
     with SessionLocal() as session:
         run = session.get(Run, run_id)
-    return run.stage if run is not None and run.stage in TERMINAL else None
+        if run is None or run.stage in TERMINAL:
+            return (run.stage if run is not None else None), None
+        return None, runs_ahead(run)
 
 
 @router.get("/{run_id}/events")
@@ -357,15 +371,17 @@ async def run_events(run_id: str, request: Request) -> StreamingResponse:
                 if run.stage in TERMINAL:
                     yield _sse("stage", {"runId": run_id, "stage": run.stage, "final": True})
                     return
+                yield _sse("queue", {"runId": run_id, "ahead": runs_ahead(run)})
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)
                 except TimeoutError:
-                    ended = _ended_in_the_record(run_id)
+                    # Read off the event loop: a store held by a long write would otherwise hold every stream and request.
+                    ended, ahead = await asyncio.to_thread(_in_the_record, run_id)
                     if ended is not None:
                         yield _sse("stage", {"runId": run_id, "stage": ended, "final": True})
                         return
-                    yield ": keep-alive\n\n"
+                    yield _sse("queue", {"runId": run_id, "ahead": ahead})  # the heartbeat itself: the stream carries a line
                     continue
                 final = event.stage in TERMINAL
                 yield _sse("stage", {"runId": run_id, "stage": event.stage, "detail": event.detail, "final": final})

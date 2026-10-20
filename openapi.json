@@ -3432,6 +3432,17 @@
       },
       "RunDetail": {
         "properties": {
+          "ahead": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ahead"
+          },
           "candidates": {
             "items": {
               "$ref": "#/components/schemas/CandidateOut"
@@ -3952,6 +3963,17 @@
       },
       "RunOut": {
         "properties": {
+          "ahead": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ahead"
+          },
           "error": {
             "anyOf": [
               {

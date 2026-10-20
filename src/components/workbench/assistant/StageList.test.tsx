@@ -24,4 +24,20 @@ describe("what the wait for the model can hold", () => {
     expect(note()).toContain("Most answers take under two minutes");
     expect(note()).not.toMatch(/sleep|wak/i);
   });
+
+  it("a question behind others says how many are ahead of it, in place of the usual time", () => {
+    render(<StageList current="checking" details={{}} checkingLabel="Checking" reduceMotion modelPlace="the Verity server" ahead={3} />);
+    expect(note()).toContain("The model answers one question at a time: 3 questions are ahead of this one.");
+    expect(note()).not.toContain("under two minutes");
+  });
+
+  it("one question ahead is said as one", () => {
+    render(<StageList current="checking" details={{}} checkingLabel="Checking" reduceMotion ahead={1} />);
+    expect(note()).toContain("one question is ahead of this one");
+  });
+
+  it("control: nothing ahead keeps the usual sentence", () => {
+    render(<StageList current="checking" details={{}} checkingLabel="Checking" reduceMotion ahead={0} />);
+    expect(note()).toContain("Most answers take under two minutes");
+  });
 });

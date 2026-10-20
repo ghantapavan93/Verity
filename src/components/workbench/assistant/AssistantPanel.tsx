@@ -103,7 +103,7 @@ export function AssistantPanel({
   reduceMotion: boolean;
 }) {
   const { morph, quick } = transitions(reduceMotion);
-  const { run, pending, runError, stageDetails } = runs;
+  const { run, pending, runError, stageDetails, ahead } = runs;
   // The shortcut as this keyboard writes it. The server render says Ctrl; the client reads the platform once.
   const apple = useSyncExternalStore(noSubscription, isApplePlatform, () => false);
   // A run being created shows as reading; a run in flight shows the API's stage; a run that could not start shows its error.
@@ -188,6 +188,7 @@ export function AssistantPanel({
                     reduceMotion={reduceMotion}
                     modelPlace={modelPlace}
                     modelSleeps={modelSleeps}
+                    ahead={ahead}
                   />
                 </motion.div>
               ) : run && run.stage === "complete" && run.findings.length > 0 ? (
