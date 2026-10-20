@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import threading
 from collections import OrderedDict
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from ..ingest.sections import clause_label_in, stated_clause_numbers
 from ..models import EvidenceSpan, Section
@@ -54,3 +57,29 @@ class ClauseLocator:
         if not span.verified or span.section_id not in self._index or span.start < 0:
             return None
         return clause_label_in(self._rows, self._index[span.section_id], span.start)
+
+
+def clause_numbers_by_document(session: Session, document_ids: Iterable[str]) -> dict[str, frozenset[str]]:
+    """The clause numbers of each document, as ClauseLocator(document.sections).clause_numbers gives them. A reading is
+    found by its section ids alone, in one query for every document; a document's text is read only when its reading is
+    not cached, one document at a time. The findings list read every listed document's sections in full, text and all,
+    to find numbers the cache already held (backend audit, 2026-10-19)."""
+    ids = sorted(set(document_ids))
+    if not ids:
+        return {}
+    readings: dict[str, list[str]] = {document_id: [] for document_id in ids}
+    rows = select(Section.document_id, Section.id).where(Section.document_id.in_(ids)).order_by(Section.document_id, Section.ordinal)
+    for document_id, section_id in session.execute(rows):
+        readings[document_id].append(section_id)
+    numbers: dict[str, frozenset[str]] = {}
+    for document_id, reading in readings.items():
+        key = tuple(reading)
+        with _clause_numbers_lock:
+            cached = _clause_numbers.get(key)
+            if cached is not None:
+                _clause_numbers.move_to_end(key)
+        if cached is None:
+            text = select(Section.number, Section.heading, Section.text).where(Section.document_id == document_id).order_by(Section.ordinal)
+            cached = _document_clause_numbers(key, [(n, h, t) for n, h, t in session.execute(text)])
+        numbers[document_id] = cached
+    return numbers

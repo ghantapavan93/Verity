@@ -71,11 +71,12 @@ def _clause_numbers(section: Readable) -> set[str]:
     return numbers
 
 
-@lru_cache(maxsize=64)
-def _definitions(texts: tuple[str, ...]) -> dict[str, int]:
-    """Each defined term, with the first section that defines it."""
+def _definitions(sections: Sequence[Readable]) -> dict[str, int]:
+    """Each defined term, with the first section that defines it. Read once for a run's seeds, not kept between runs: a
+    cache keyed by the texts held 64 whole contracts in memory to save 30 ms against a model call of seconds (a 3.4 MB
+    filing, backend audit, 2026-10-19)."""
     found: dict[str, int] = {}
-    for index, text in enumerate(texts):
+    for index, text in enumerate(s.text for s in sections):
         for match in _DEFINES.finditer(text):
             term = match.group(1).strip()
             if term and term not in found:
@@ -133,9 +134,16 @@ def _resolve(reference: str, sections: Sequence[Readable], owner: int, opened: d
     return [max(parents)[1]] if parents else []
 
 
-def links_of(sections: Sequence[Readable], seed: int, amending: list[list[list[str]]] | None = None, opened: dict[str, list[int]] | None = None) -> list[Link]:
+def links_of(
+    sections: Sequence[Readable],
+    seed: int,
+    amending: list[list[list[str]]] | None = None,
+    opened: dict[str, list[int]] | None = None,
+    defined: dict[str, int] | None = None,
+) -> list[Link]:
     """Every link from one section, in the order found: amendments of it, definitions it uses, what it cites.
-    ``amending`` and ``opened`` are `_amending(sections)` and `_opened(sections)`, when the caller has them already."""
+    ``amending``, ``opened`` and ``defined`` are `_amending`, `_opened` and `_definitions` of the sections, when the caller
+    has them already."""
     found: list[Link] = []
     own = sections[seed]
     mine = _clause_numbers(own)
@@ -146,7 +154,7 @@ def links_of(sections: Sequence[Readable], seed: int, amending: list[list[list[s
             if named := next((r for r in named_in_sentence if r in mine), None):
                 found.append(Link(index, "amendment", seed, f"§{named}"))
                 break
-    defined = _definitions(tuple(s.text for s in sections))
+    defined = defined if defined is not None else _definitions(sections)
     used = sorted((at, term) for term, where in defined.items() if where != seed and (at := _uses(own.text, term)) is not None)
     found += [Link(defined[term], "definition", seed, term) for _, term in used]
     cited = references(own.text)
@@ -165,11 +173,12 @@ def linked(sections: Sequence[Readable], ranked: Sequence[int], window: int) -> 
     ``MAX_LINKS``, and only while the handed text stays within ``len(ranked)`` full windows."""
     candidates: list[tuple[tuple[int, int, int], Link]] = []
     amending = _amending(sections)
+    defined = _definitions(sections)
     opened: dict[str, list[int]] | None = None
     for rank, seed in enumerate(ranked[:SEEDS]):
         if opened is None and references(sections[seed].text):
             opened = _opened(sections)
-        candidates += [((_PRIORITY[link.kind], rank, order), link) for order, link in enumerate(links_of(sections, seed, amending, opened))]
+        candidates += [((_PRIORITY[link.kind], rank, order), link) for order, link in enumerate(links_of(sections, seed, amending, opened, defined))]
     chosen: list[Link] = []
     used = sum(min(len(sections[i].text), window) for i in ranked)
     budget = len(ranked) * window

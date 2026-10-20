@@ -108,7 +108,9 @@ RECORDED: dict[str, str] = {
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.
     # Re-recorded 2026-10-16 (blind contract stress test): the embedding call's failure sentence no longer carries the
     # exception's class, which goes to the log; which sections are handed over is unchanged.
-    "retrieval-v2": "511493e129148842",
+    # Re-recorded 2026-10-19 (backend audit): a run's defined terms are read once for its seeds and no longer cached
+    # between runs; old and new gave the same links on 580 cases over 150 EDGAR contracts.
+    "retrieval-v2": "4829c7d19f9a7ba3",
 }
 
 

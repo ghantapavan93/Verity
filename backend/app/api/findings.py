@@ -5,14 +5,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from ..application.clause_location import ClauseLocator
+from ..application.clause_location import clause_numbers_by_document
 from ..application.review_finding import latest_review_id, review_finding, review_out
 from ..application.workspace import require_finding, require_own_run, visible_runs
 from ..db import get_session
 from ..document_names import run_document_name
-from ..models import Document, EvidenceSpan, Finding, Run, iso
+from ..models import Document, EvidenceSpan, Finding, Run, Section, iso
 from ..runs.account import account_of
 from ..schemas import FindingRecord, FindingReviewOut, ReviewIn
 from .access import current_workspace
@@ -45,6 +45,9 @@ def list_findings(
     workspace: str = Depends(current_workspace),
 ) -> list[FindingRecord]:
     """Findings of the runs this workspace may read: its own and the curated ones."""
+    # A fixed number of queries whatever the number listed: each finding asked again for its spans, their sections, its
+    # reviews, its run's guidance and its document's name, five queries a row and 2,252 for a full list (backend audit,
+    # 2026-10-19).
     statement = (
         select(Finding, Run, Document)
         .join(Run, Finding.run_id == Run.id)
@@ -52,17 +55,26 @@ def list_findings(
         .where(Run.stage == "complete", Finding.status != "unresolved", visible_runs(workspace))
         .order_by(Run.created_at.desc(), Finding.ordinal)
         .limit(500)
+        .options(
+            # A cited section's number and heading name the citation; its text, up to a whole contract, is not read.
+            selectinload(Finding.spans).selectinload(EvidenceSpan.section).load_only(Section.number, Section.heading),
+            selectinload(Finding.reviews),
+            # Held by the run, so the value check's session.get finds it rather than reading it again (runs.account).
+            selectinload(Run.guidance),
+        )
     )
     if document_id:
         statement = statement.where(Run.document_id == document_id)
+    rows = session.execute(statement).all()
+    clause_numbers = clause_numbers_by_document(session, (document.id for _, _, document in rows))
+    names: dict[tuple[str | None, str], str] = {}  # one lookup per workspace and document, however many rows share them
     records: list[FindingRecord] = []
-    clause_numbers: dict[str, frozenset[str]] = {}  # by document: read once, however many of its findings are listed
-    for finding, run, document in session.execute(statement).all():
-        if document.id not in clause_numbers:
-            clause_numbers[document.id] = ClauseLocator(document.sections).clause_numbers
+    for finding, run, document in rows:
         account = account_of(finding, clause_numbers[document.id] if finding.status != "missing" else frozenset())
-        verified = session.scalar(select(EvidenceSpan.id).where(EvidenceSpan.finding_id == finding.id, EvidenceSpan.verified.is_(True)).limit(1))
-        count = sum(1 for s in finding.spans if s.verified) if verified else 0
+        count = sum(1 for s in finding.spans if s.verified)
+        name_key = (run.workspace_id, document.id)
+        if name_key not in names:
+            names[name_key] = run_document_name(run)
         citations: list[str] = []
         for span in finding.spans:
             if not span.verified or span.section is None:
@@ -76,7 +88,7 @@ def list_findings(
                 run_id=run.id,
                 shared=run.workspace_id is None,
                 document_id=document.id,
-                document_name=run_document_name(run),
+                document_name=names[name_key],
                 question=run.question,
                 topic=finding.topic,
                 status=finding.status,

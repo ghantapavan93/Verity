@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..application.clause_location import ClauseLocator
 from ..application.create_memo import review_head
@@ -121,8 +121,11 @@ def finding_out(finding: Finding, locator: ClauseLocator | None = None) -> Findi
 
 
 def run_out(run: Run, locator: ClauseLocator | None = None) -> RunOut:
-    # Unresolved findings are kept on the run but not shown as answers.
-    locator = locator or ClauseLocator(run.document.sections)
+    # Unresolved findings are kept on the run but not shown as answers. The document's sections are read only for a run
+    # with findings to place: the page asks for a run every few seconds while it is working, and every ask read the whole
+    # contract to place findings it did not have yet (backend audit, 2026-10-19).
+    if locator is None and run.findings:
+        locator = ClauseLocator(run.document.sections)
     shown = [finding_out(f, locator) for f in run.findings if f.status != "unresolved"] if run.stage == "complete" else []
     return RunOut(
         id=run.id,
@@ -191,7 +194,7 @@ def run_detail(run: Run) -> RunDetail:
     )
 
 
-def run_summary(run: Run) -> RunSummary:
+def run_summary(run: Run, document_name: str | None = None) -> RunSummary:
     shown = [f for f in run.findings if f.status != "unresolved"] if run.stage == "complete" else []
     return RunSummary(
         id=run.id,
@@ -207,7 +210,7 @@ def run_summary(run: Run) -> RunSummary:
         outcomes=dict(Counter(f.status for f in shown)),
         has_guidance=run.guidance_id is not None,
         document_id=run.document_id,
-        document_name=run_document_name(run),
+        document_name=run_document_name(run) if document_name is None else document_name,
         created_at=iso(run.created_at) or "",
     )
 
@@ -265,8 +268,21 @@ def create_run(
 def list_runs(session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> list[RunSummary]:
     """This workspace's runs and the curated ones, newest first, the latest 200."""
     recover_interrupted_runs(session)
-    runs = session.query(Run).filter(visible_runs(workspace)).order_by(Run.created_at.desc()).limit(200).all()
-    return [run_summary(r) for r in runs]
+    # A fixed number of queries for the list: each run asked again for its findings and its document's name (backend
+    # audit, 2026-10-19). A summary counts its findings by status, so only that column of them is read.
+    runs = (
+        session.query(Run)
+        .filter(visible_runs(workspace))
+        .order_by(Run.created_at.desc())
+        .limit(200)
+        .options(selectinload(Run.findings).load_only(Finding.run_id, Finding.status), selectinload(Run.document))
+        .all()
+    )
+    names: dict[tuple[str | None, str], str] = {}
+    for run in runs:
+        if (run.workspace_id, run.document_id) not in names:
+            names[(run.workspace_id, run.document_id)] = run_document_name(run)
+    return [run_summary(r, names[(r.workspace_id, r.document_id)]) for r in runs]
 
 
 @router.get("/{run_id}", response_model=RunOut)

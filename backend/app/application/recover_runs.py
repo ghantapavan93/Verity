@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -41,8 +42,15 @@ def recover_interrupted_runs(session: Session, stale_after_s: float | None = Non
     limit = timedelta(seconds=stale_after_seconds() if stale_after_s is None else stale_after_s)
     now = utcnow()
     recovered = 0
-    for run in session.query(Run).filter(Run.stage.notin_(sorted(TERMINAL))).all():
-        latest = session.query(RunStage).filter_by(run_id=run.id).order_by(RunStage.id.desc()).first()
+    open_runs = session.query(Run).filter(Run.stage.notin_(sorted(TERMINAL))).all()
+    if not open_runs:
+        return 0
+    # Every open run's latest stage row in one query: this runs on every read of a run, and asked once per open run, so
+    # a queue of thirty made every poll of every page thirty-one queries (backend audit, 2026-10-19).
+    latest_ids = select(func.max(RunStage.id)).where(RunStage.run_id.in_([run.id for run in open_runs])).group_by(RunStage.run_id)
+    latest_of = {row.run_id: row for row in session.query(RunStage).filter(RunStage.id.in_(latest_ids))}
+    for run in open_runs:
+        latest = latest_of.get(run.id)
         started = as_utc(latest.at) if latest is not None else as_utc(run.created_at)
         gone = latest is not None and owner_is_gone(latest.owner)
         if not gone and now - started < limit:
