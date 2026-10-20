@@ -25,15 +25,17 @@ describe("what the wait for the model can hold", () => {
     expect(note()).not.toMatch(/sleep|wak/i);
   });
 
-  it("a question behind others says how many are ahead of it, in place of the usual time", () => {
+  it("a question asked behind others says how many asked before it are still being answered, in place of the usual time", () => {
     render(<StageList current="checking" details={{}} checkingLabel="Checking" reduceMotion modelPlace="the Verity server" ahead={3} />);
-    expect(note()).toContain("The model answers one question at a time: 3 questions are ahead of this one.");
+    expect(note()).toContain(
+      "The model runs on the Verity server. It answers one question at a time, and 3 questions asked before this one are still being answered.",
+    );
     expect(note()).not.toContain("under two minutes");
   });
 
   it("one question ahead is said as one", () => {
     render(<StageList current="checking" details={{}} checkingLabel="Checking" reduceMotion ahead={1} />);
-    expect(note()).toContain("one question is ahead of this one");
+    expect(note()).toContain("The model answers one question at a time, and one question asked before this one is still being answered.");
   });
 
   it("control: nothing ahead keeps the usual sentence", () => {
