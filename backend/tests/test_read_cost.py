@@ -71,10 +71,11 @@ def test_control_the_counter_sees_the_list_queries(client: TestClient) -> None:
     assert any("FROM findings" in statement for statement in sent)
 
 
-def test_a_run_still_working_is_read_without_its_contract(client: TestClient) -> None:
+@pytest.mark.parametrize("view", ["", "/detail"])  # /detail is what a page whose stream dropped polls
+def test_a_run_still_working_is_read_without_its_contract(client: TestClient, view: str) -> None:
     run_id = _run_in_flight(client, "Is there an arbitration clause?")
     with statements() as sent:
-        assert client.get(f"/api/runs/{run_id}").json()["stage"] == "checking"
+        assert client.get(f"/api/runs/{run_id}{view}").json()["stage"] == "checking"
     assert not [statement for statement in sent if "FROM sections" in statement]
 
 

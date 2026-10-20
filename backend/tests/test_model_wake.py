@@ -272,3 +272,16 @@ def test_one_address_has_a_share_of_the_days_wake_ups_counted_only_when_one_star
         states.append(visitor.post("/api/model/wake").json()["state"])
         settle(waker)
     assert states == ["waking", "waking", "waking", "limit", "limit"] and wakes.count == 3
+
+
+def test_a_full_visitor_queue_wakes_nothing_and_is_not_an_error(route: tuple[TestClient, ModelWaker, Wakes], monkeypatch: pytest.MonkeyPatch) -> None:
+    # The visitors' queue bound refuses with Busy, not TooManyRequests: until the fresh review of 2026-10-19 the wake
+    # answered it with a 503 on every upload and question, each logged as a refusal.
+    client, _, wakes = route
+    visitor, _ = arrive(client)
+    monkeypatch.setattr(config.settings, "public_max_runs_in_flight", 0)
+    assert visitor.post("/api/model/wake").json() == {"state": "limit"}
+    monkeypatch.setattr(config.settings, "public_max_runs_in_flight", 8)  # control: with room in the queue it wakes
+    assert visitor.post("/api/model/wake").json() == {"state": "waking"}
+    settle(model_api.waker)
+    assert wakes.count == 1

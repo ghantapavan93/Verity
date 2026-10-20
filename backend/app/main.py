@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request, Response
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -18,7 +19,7 @@ from sqlalchemy import text
 
 from . import db as db_module
 from .api import access, batches, documents, engineering, findings, guidance, health, memos, model, runs, trust
-from .api.body_limit import BodyLimitMiddleware
+from .api.body_limit import BodyLimitMiddleware, BodyRefused
 from .application import trust_run
 from .application.recover_runs import recover_interrupted_runs
 from .application.retention import purge_expired_workspaces, sweep_orphaned_files
@@ -138,6 +139,14 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
             log.warning("refused path=%s status=%d kind=%s detail=%s", request.url.path, error.status_code, type(error).__name__, error)
         return JSONResponse({"detail": str(error)}, status_code=error.status_code, headers=headers)
 
+    @app.exception_handler(BodyRefused)
+    async def body_refused(request: Request, error: BodyRefused) -> Response:
+        # A body refused while FastAPI reads it (a full spool, for one) reaches here, not the door's own answer; it is
+        # logged the same way (fresh review, 2026-10-19: a SpoolFull 503 met there left no line).
+        if error.status_code in (429, 503):
+            log.warning("refused path=%s status=%d kind=%s detail=%s", request.url.path, error.status_code, type(error).__name__, error.detail)
+        return await http_exception_handler(request, error)
+
     @app.middleware("http")
     async def request_log(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         # A caller's own id is kept only when it is one: an unchecked header wrote whole forged lines into the log
@@ -145,7 +154,15 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         offered = request.headers.get("x-request-id", "")
         request_id = offered if _REQUEST_ID.fullmatch(offered) else uuid.uuid4().hex[:12]
         started = time.perf_counter()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # An unhandled error rises through here and the server answers 500 after this middleware: with uvicorn's
+            # access log off (deploy/supervise.ps1), this line is the only one that says which request it was. The
+            # traceback is the server's own line, so it is not repeated (fresh review, 2026-10-19).
+            duration_ms = (time.perf_counter() - started) * 1000
+            log.error("request_id=%s method=%s path=%s status=500 duration_ms=%.0f", request_id, request.method, request.url.path, duration_ms)
+            raise
         # For a streamed response this is the time to first byte, not the life of the stream.
         duration_ms = (time.perf_counter() - started) * 1000
         response.headers["X-Request-ID"] = request_id

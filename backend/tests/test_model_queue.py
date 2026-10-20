@@ -12,6 +12,7 @@ import asyncio
 import json
 import threading
 import time
+from collections.abc import Callable
 
 import pytest
 from fastapi.testclient import TestClient
@@ -114,26 +115,35 @@ def _queued_behind(run_id: str) -> str:
         return behind.id
 
 
-async def _first_queue_event(run_id: str) -> dict[str, object]:
+async def _queue_events(run_id: str, count: int, between: Callable[[], None] = lambda: None) -> list[dict[str, object]]:
+    """The first ``count`` queue events of the run's stream; ``between`` runs after the first."""
     bus.bind_loop(asyncio.get_running_loop())
     request = Request({"type": "http", "method": "GET", "path": f"/api/runs/{run_id}/events", "headers": [], "query_string": b""})
     response = await runs_api.run_events(run_id, request)
+    seen: list[dict[str, object]] = []
     async for chunk in response.body_iterator:
         text = chunk if isinstance(chunk, str) else bytes(chunk).decode("utf-8")
         if text.startswith("event: queue"):
-            payload: dict[str, object] = json.loads(text.split("data: ", 1)[1])
-            return payload
-    raise AssertionError("the stream ended without saying where the run stands")
+            seen.append(json.loads(text.split("data: ", 1)[1]))
+            if len(seen) == count:
+                return seen
+            if len(seen) == 1:
+                between()
+    raise AssertionError(f"the stream ended after {len(seen)} queue event(s)")
 
 
-def test_the_stream_says_how_many_are_ahead_at_once_and_at_every_heartbeat(client: TestClient) -> None:
+def test_the_stream_says_how_many_are_ahead_at_once_and_at_every_heartbeat(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(runs_api, "HEARTBEAT_SECONDS", 0.05)
     first = _run_in_flight(client, "Is there an arbitration clause?")
     behind = _queued_behind(first)
-    assert asyncio.run(asyncio.wait_for(_first_queue_event(behind), timeout=10)) == {"runId": behind, "ahead": 1}
-    assert asyncio.run(asyncio.wait_for(_first_queue_event(first), timeout=10)) == {"runId": first, "ahead": 0}
-    assert runs_api._in_the_record(behind) == (None, 1)  # what each heartbeat reads
-    with SessionLocal() as session:
-        session.execute(text("UPDATE runs SET stage = 'failed', reason = 'internal_error', error = 'ended elsewhere' WHERE id = :id"), {"id": first})
-        session.commit()
-    assert runs_api._in_the_record(behind) == (None, 0)  # the queue moved
-    assert runs_api._in_the_record(first) == ("failed", None)  # control: an ended run ends the stream instead
+    assert asyncio.run(asyncio.wait_for(_queue_events(first, 1), timeout=10)) == [{"runId": first, "ahead": 0}]
+
+    def first_answered() -> None:
+        with SessionLocal() as session:
+            session.execute(text("UPDATE runs SET stage = 'failed', reason = 'internal_error', error = 'ended elsewhere' WHERE id = :id"), {"id": first})
+            session.commit()
+
+    # At once one run is ahead; at a heartbeat after it ended, none: the count is read again, not kept.
+    events = asyncio.run(asyncio.wait_for(_queue_events(behind, 2, first_answered), timeout=10))
+    assert events == [{"runId": behind, "ahead": 1}, {"runId": behind, "ahead": 0}]
+    assert runs_api._in_the_record(first) == ("failed", None)  # control: an ended run ends its stream instead

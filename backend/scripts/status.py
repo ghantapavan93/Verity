@@ -24,7 +24,7 @@ import httpx
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
-from sqlalchemy import create_engine, func, select  # noqa: E402
+from sqlalchemy import Engine, create_engine, func, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app.api.health import MIN_FREE_BYTES  # noqa: E402
@@ -36,6 +36,14 @@ TIMEOUT_S = 5.0
 # (application/recover_runs.stale_after_seconds), and only on a read of runs or a restart.
 STUCK_AFTER = timedelta(minutes=15)
 LAST_LINE_BYTES = 4096
+# The public site's ceiling on new runs a day, as deploy/supervise.ps1 sets it inside the API's own process; the
+# operator's shell does not have it (a test holds the two equal).
+PUBLIC_MAX_RUNS_PER_DAY = 200
+
+
+def read_only(database: Path) -> Engine:
+    """The store, opened so that no statement through it can write (SQLite's mode=ro)."""
+    return create_engine(f"sqlite:///file:{database.as_posix()}?mode=ro&uri=true")
 
 
 def line(name: str, ok: bool, detail: str) -> bool:
@@ -86,10 +94,10 @@ def check_disk(data_dir: Path, public: bool) -> bool:
     return line("disk", free >= floor, f"{free / gib:.1f} GiB free; writes pause below {floor / gib:.2f} GiB")
 
 
-def check_runs(database: Path) -> bool:
+def check_runs(database: Path, ceiling: int) -> bool:
     if not database.exists():
         return line("runs", False, f"no store at {database}")
-    engine = create_engine(f"sqlite:///file:{database.as_posix()}?mode=ro&uri=true")
+    engine = read_only(database)
     now = datetime.now(UTC)
     day = datetime(now.year, now.month, now.day, tzinfo=UTC)
     with Session(engine) as session:
@@ -102,7 +110,6 @@ def check_runs(database: Path) -> bool:
         ).all()
     engine.dispose()
     since = [now - as_utc(latest or created) for created, latest in open_runs]
-    ceiling = settings.max_runs_per_day
     budget = f"{today} of {ceiling} today" if ceiling else f"{today} today (no daily ceiling set)"
     stuck = [age for age in since if age > STUCK_AFTER]
     oldest = f", oldest without progress {int(max(since).total_seconds() // 60)} min" if since else ""
@@ -151,12 +158,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--public", action="store_true", help="the store is the public demo's: its own disk floor")
     parser.add_argument("--metrics", default="http://127.0.0.1:20241", help="cloudflared's metrics address")
     parser.add_argument("--logs", type=Path, default=BACKEND / "data" / "logs" / "deploy")
+    parser.add_argument("--max-runs-per-day", type=int, default=None, help="the day's ceiling; --public uses the public site's")
     args = parser.parse_args(argv)
+    ceiling = PUBLIC_MAX_RUNS_PER_DAY if args.public else settings.max_runs_per_day
     results = [
         check_api(args.api.rstrip("/")),
         check_model(),
         check_disk(args.data_dir, args.public),
-        check_runs(args.data_dir / "workbench.db"),
+        check_runs(args.data_dir / "workbench.db", args.max_runs_per_day if args.max_runs_per_day is not None else ceiling),
         check_tunnel(args.metrics.rstrip("/")),
         check_supervisor(args.logs, "api"),
         check_supervisor(args.logs, "web"),

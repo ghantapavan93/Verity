@@ -164,7 +164,9 @@ def run_out(run: Run, locator: ClauseLocator | None = None) -> RunOut:
 
 
 def run_detail(run: Run) -> RunDetail:
-    locator = ClauseLocator(run.document.sections)
+    # As in run_out: no findings, nothing to place. A page whose stream dropped polls this every few seconds while the run
+    # works, and every poll read the whole contract (fresh review, 2026-10-19).
+    locator = ClauseLocator(run.document.sections) if run.findings else None
     base = run_out(run, locator).model_dump(by_alias=False)
     base["findings"] = [finding_out(f, locator) for f in run.findings]
     spans = [s for f in run.findings for s in f.spans]
@@ -371,7 +373,12 @@ async def run_events(run_id: str, request: Request) -> StreamingResponse:
                 if run.stage in TERMINAL:
                     yield _sse("stage", {"runId": run_id, "stage": run.stage, "final": True})
                     return
-                yield _sse("queue", {"runId": run_id, "ahead": runs_ahead(run)})
+            # Off the event loop, as at every heartbeat: the count reads every open run.
+            ended, ahead = await asyncio.to_thread(_in_the_record, run_id)
+            if ended is not None:  # ended between the replay and this read
+                yield _sse("stage", {"runId": run_id, "stage": ended, "final": True})
+                return
+            yield _sse("queue", {"runId": run_id, "ahead": ahead})
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)

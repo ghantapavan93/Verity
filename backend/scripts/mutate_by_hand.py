@@ -108,8 +108,8 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant(
         "M17 the event stream never re-reads the record",
         RUNS_API,
-        "                    ended = _ended_in_the_record(run_id)\n",
-        "                    ended = None\n",
+        "                    ended, ahead = await asyncio.to_thread(_in_the_record, run_id)\n",
+        "                    ended, ahead = None, 0\n",
     ),
     Mutant(
         "M18 staleness recovery tells no open stream",

@@ -13,8 +13,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from app.db import SessionLocal
+from tests.support import upload_and_ask
 from tests.test_run_endings import _run_in_flight
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -30,21 +32,36 @@ def test_a_run_that_has_not_moved_for_a_quarter_of_an_hour_is_a_problem(client: 
     with SessionLocal() as session:
         session.execute(text("UPDATE runs SET created_at = datetime('now', '-20 minutes') WHERE id = :id"), {"id": run_id})
         session.commit()
-    assert status.check_runs(tmp_path / "test.db") is False
+    assert status.check_runs(tmp_path / "test.db", 200) is False
     assert "1 open, oldest without progress 20 min; 1 without progress for over 15 min" in capsys.readouterr().out
 
 
 def test_control_a_run_that_just_started_is_not(client: TestClient, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _run_in_flight(client, "Is there an arbitration clause?")
-    assert status.check_runs(tmp_path / "test.db") is True
+    assert status.check_runs(tmp_path / "test.db", 200) is True
     assert "1 open, oldest without progress 0 min" in capsys.readouterr().out
 
 
-def test_the_store_is_opened_read_only(client: TestClient, tmp_path: Path) -> None:
+def test_the_store_is_opened_so_that_nothing_can_write(client: TestClient, tmp_path: Path) -> None:
     _run_in_flight(client, "Is there an arbitration clause?")
-    before = (tmp_path / "test.db").stat().st_mtime_ns
-    status.check_runs(tmp_path / "test.db")
-    assert (tmp_path / "test.db").stat().st_mtime_ns == before
+    engine = status.read_only(tmp_path / "test.db")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT COUNT(*) FROM runs")).scalar() == 2
+        with pytest.raises(OperationalError, match="readonly"):
+            connection.execute(text("UPDATE runs SET question = 'changed'"))
+    engine.dispose()
+
+
+def test_the_public_ceiling_is_the_one_the_deployment_sets() -> None:
+    supervise = (BACKEND.parent / "deploy" / "supervise.ps1").read_text(encoding="utf-8")
+    assert f'$env:WORKBENCH_MAX_RUNS_PER_DAY = "{status.PUBLIC_MAX_RUNS_PER_DAY}"' in supervise
+
+
+def test_a_spent_day_is_a_problem(client: TestClient, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    upload_and_ask(client, "What notice applies to termination for convenience?")  # a reader's run: counted
+    assert status.check_runs(tmp_path / "test.db", 2) is True  # control: one of two
+    assert status.check_runs(tmp_path / "test.db", 1) is False
+    assert "1 of 1 today" in capsys.readouterr().out
 
 
 def test_a_supervisor_log_is_read_once_and_let_go(tmp_path: Path) -> None:

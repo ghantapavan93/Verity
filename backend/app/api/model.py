@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session as DbSession
 from ..application.quotas import refuse_if_spent, run_quotas
 from ..application.wake_model import waker
 from ..db import get_session
-from ..errors import TooManyRequests
+from ..errors import Busy, TooManyRequests
 from ..schemas import ModelWakeOut
 from . import access
 
@@ -30,7 +30,7 @@ def wake(request: Request, session: DbSession = Depends(get_session)) -> ModelWa
         return ModelWakeOut(state="off")
     try:
         refuse_if_spent(session, run_quotas(access.current_workspace(request)))
-    except TooManyRequests:
+    except (TooManyRequests, Busy):  # Busy: the visitors' queue is full (quotas.run_quotas); a wake would wait behind it
         return ModelWakeOut(state="limit")
     address = access.client_address(request)
     return ModelWakeOut(state=waker.request(allow=lambda: address_wakes.take(address) is None))

@@ -15,6 +15,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api import body_limit
+from app.api.body_limit import SpoolFull
 from app.errors import Busy, TooManyRequests
 from app.providers.ollama import OllamaProvider
 from tests.support import upload_and_ask
@@ -93,3 +95,37 @@ def test_control_a_model_server_that_is_down_is_named_not_raised(monkeypatch: py
 
     monkeypatch.setattr(provider, "_send", down)
     assert provider.describe_build() == "model endpoint not reachable at start (ConnectError)"
+
+
+def test_an_unhandled_error_still_leaves_a_request_line(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
+    # uvicorn's access log is off in the deployment, so this line is the only one naming the request (fresh review).
+    def broken() -> None:
+        raise RuntimeError("a bug")
+
+    client.app.add_api_route("/api/test-broken", broken)  # type: ignore[attr-defined]
+    quiet = TestClient(client.app, raise_server_exceptions=False)
+    with caplog.at_level(logging.INFO, logger="app"):
+        assert quiet.get("/api/test-broken").status_code == 500
+    (line,) = _lines(caplog, "path=/api/test-broken")
+    assert "status=500" in line and "request_id=" in line
+
+
+def test_a_body_refused_while_it_is_read_names_its_kind(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
+    def spool_full() -> None:
+        raise SpoolFull()
+
+    client.app.add_api_route("/api/test-spool", spool_full, methods=["POST"])  # type: ignore[attr-defined]
+    with caplog.at_level(logging.WARNING, logger="app"):
+        response = client.post("/api/test-spool")
+    assert response.status_code == 503 and response.headers["retry-after"] == "5"
+    (line,) = _lines(caplog, "refused path=/api/test-spool")
+    assert "kind=SpoolFull" in line
+
+
+def test_an_upload_refused_at_the_door_names_what_refused(client: TestClient, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(body_limit, "_gate_refusal", lambda scope: TooManyRequests("This demo workspace already holds 10 contracts.", 3600))
+    with caplog.at_level(logging.WARNING, logger="app"):
+        response = client.post("/api/documents", files={"file": ("agreement.txt", b"Terms.", "text/plain")})
+    assert response.status_code == 429
+    (line,) = _lines(caplog, "refused path=/api/documents")
+    assert "kind=TooManyRequests" in line and "kind=body_limit" not in line

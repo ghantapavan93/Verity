@@ -131,19 +131,20 @@ class BodyLimitMiddleware:
         if declared.isdigit() and int(declared) > limit:
             await _answer(send, 413, detail)  # refused unread
             return
+        path = scope["path"]
         upload = limit == UPLOAD_REQUEST_LIMIT
         if upload:
             # The gate may look the session's workspace up in the store: off the event loop, like the route's own.
             refusal = await to_thread.run_sync(_gate_refusal, scope)
             if refusal is not None:
-                await _answer(send, refusal.status_code, str(refusal))  # refused unread
+                await _answer(send, refusal.status_code, str(refusal), kind=type(refusal).__name__, path=path)  # refused unread
                 return
             network = access.client_network(Request(scope))
             if _uploads_from.get(network, 0) >= UPLOADS_PER_NETWORK:
-                await _answer(send, 503, NETWORK_BUSY, retry_after=5)
+                await _answer(send, 503, NETWORK_BUSY, retry_after=5, kind="UploadsPerNetwork", path=path)
                 return
             if declared.isdigit() and _spool_held + int(declared) > SPOOL_BUDGET:
-                await _answer(send, 503, UPLOADS_BUSY, retry_after=5)  # what it says it will send does not fit: refused unread
+                await _answer(send, 503, UPLOADS_BUSY, retry_after=5, kind="SpoolFull", path=path)  # what it says it will send does not fit: refused unread
                 return
             _uploads_from[network] = _uploads_from.get(network, 0) + 1
         received = 0
@@ -193,7 +194,7 @@ class BodyLimitMiddleware:
         except BodyRefused as refused:
             # A route that reads its body itself, outside FastAPI's parsing, lets the refusal reach here.
             if not started:
-                await _answer(send, refused.status_code, str(refused.detail), refused.retry_after)
+                await _answer(send, refused.status_code, str(refused.detail), refused.retry_after, kind=type(refused).__name__, path=path)
         finally:
             if upload:
                 _spool_held -= held
@@ -203,9 +204,10 @@ class BodyLimitMiddleware:
                     _uploads_from[network] -= 1
 
 
-async def _answer(send: Send, status: int, detail: str, retry_after: int | None = None) -> None:
+async def _answer(send: Send, status: int, detail: str, retry_after: int | None = None, *, kind: str = "body_limit", path: str = "") -> None:
     if status in (429, 503):
-        log.warning("refused status=%d kind=body_limit detail=%s", status, detail)
+        # The same line as the API's own refusals (main.workbench_error), so one grep counts every limit by its name.
+        log.warning("refused path=%s status=%d kind=%s detail=%s", path, status, kind, detail)
     body = json.dumps({"detail": detail}, separators=(",", ":")).encode()
     headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()), (b"connection", b"close")]
     if retry_after is not None:
