@@ -215,7 +215,13 @@ async function listGoneContract(page: Page, delayMs = 0): Promise<() => boolean>
   let answered = false;
   await page.route("**/api/documents", async (route) => {
     if (route.request().method() !== "GET") return route.continue();
-    const listed = await (await route.fetch()).json();
+    // The page drops a list request a newer one replaces; reading a dropped one's answer threw "Response has been
+    // disposed" and failed the flow (release gate, 2026-10-19). A dropped request needs no answer.
+    const listed = await route
+      .fetch()
+      .then((response) => response.json())
+      .catch(() => null);
+    if (listed === null) return;
     await route.fulfill({ json: [{ ...listed[0], id: "gone", name: "gone-contract.txt" }, ...listed] });
   });
   await page.route("**/api/documents/gone", async (route) => {
