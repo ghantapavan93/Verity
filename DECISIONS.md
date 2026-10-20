@@ -1682,6 +1682,12 @@ changed code, smallest first:
   one read-only line per part; `docs/TROUBLESHOOTING.md` maps symptoms to log lines. ADR 0003 (LangGraph) and 0004
   (hybrid retrieval) now state that they were not, and partly, adopted.
 
+A fresh-context review of the branch found the stream-dropped poll (`/detail`) still reading the whole contract, the
+model wake answering a full queue with a 503, an unhandled 500 left without a request line once uvicorn's access log
+was off, refusals at the upload door logged under one kind, and status.py's day ceiling read from the wrong process;
+each is fixed with a test. The release gate's one failure was a browser flow reading a request the page had dropped
+("Response has been disposed"), a harness race seen once before; the flow now leaves such a request alone.
+
 Left, with reasons: an index on `runs.stage` (no measurement says the scan costs anything at this size); the event
 stream's drops through the tunnel (pages fall back to polling, which now costs less; the cause is its own task); moving
 the release checklist out of the README (its claims are tested where they are); CI (the repository token lacks the

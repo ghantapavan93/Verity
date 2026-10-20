@@ -25,7 +25,7 @@ All under `backend/data/logs/deploy` on the machine that serves the site.
 | File | Written by | What its lines say |
 |---|---|---|
 | `api.supervisor.log`, `web.supervisor.log` | `deploy/supervise.ps1` | each start; each exit with its code and run time, and the last line the server wrote to its error output; missed health probes and `answering again`; a supervisor that ended without a record (Windows shut down or signed out) with the machine's boot time; old output removed |
-| `api.<stamp>.err.log` | the API (`app/main.py`, Python logging) | one line per request (`request_id`, `path`, `status`, `duration_ms`; the health probe is left out); `refused path=… status=… kind=… detail=…` for every 429 and 503; a run's stages (`run_id=… stage=… reason=…`); the model's time apart from the queue's (`model_ms=… queue_ms=… queue_depth=…`); `model_build server_version=… model=… build=…` at start; `recovered_runs=…` |
+| `api.<stamp>.err.log` | the API (`app/main.py`, Python logging) | one line per request (`request_id`, `path`, `status`, `duration_ms`; the health probe is left out); `refused path=… status=… kind=… detail=…` for every 429 and 503, the upload door's included (`kind=SpoolFull`, `kind=UploadsPerNetwork`, the quota's class); a `status=500` request line for an unhandled error, its traceback beside it; a run's stages (`run_id=… stage=… reason=…`); the model's time apart from the queue's (`model_ms=… queue_ms=… queue_depth=…`); `model_build server_version=… model=… build=…` at start; `recovered_runs=…` |
 | `api.<stamp>.out.log` | uvicorn | nothing in normal running: its access log is off (the request line above replaces it) |
 | `web.<stamp>.*.log` | `next start` | the interface server's own output |
 
