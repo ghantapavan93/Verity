@@ -11,6 +11,7 @@ error preference against a file locked the same way, and keep a control that sho
 from __future__ import annotations
 
 import ctypes
+import os
 import re
 import shutil
 import socket
@@ -160,3 +161,77 @@ def test_only_the_stop_file_ends_the_supervisor(tmp_path: Path) -> None:
     finally:
         if supervisor.poll() is None:
             supervisor.kill()
+
+
+# What the supervisor writes about an end it did not see, an exit it did, and the files it keeps (ops audit, 2026-10-19).
+
+
+def run_function(name: str, body: str, logs: Path, tag: str = "t") -> subprocess.CompletedProcess[str]:
+    script = SUPERVISE.read_text(encoding="utf-8")
+    prelude = f"$ErrorActionPreference = 'Stop'\n$logs = '{logs}'\n$Tag = '{tag}'\n$supervisorLog = '{logs / (tag + '.supervisor.log')}'\n$LOG_KEEP_DAYS = 14\n"
+    command = prelude + function_source(script, name) + "\n" + body
+    return subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", command], capture_output=True, text=True, timeout=60)
+
+
+def aged(path: Path, days: float) -> Path:
+    path.write_text("x", encoding="ascii")
+    then = time.time() - days * 86400
+    os.utime(path, (then, then))
+    return path
+
+
+def test_old_output_of_this_server_is_removed_and_nothing_else(tmp_path: Path) -> None:
+    old = [aged(tmp_path / "t.20260901-000000.out.log", 15), aged(tmp_path / "t.20260901-000000.err.log", 15)]
+    kept = [
+        aged(tmp_path / "t.20261006-000000.out.log", 13),  # inside the fourteen days
+        aged(tmp_path / "t.supervisor.log", 40),  # the supervisor's own record
+        aged(tmp_path / "web.20260901-000000.out.log", 40),  # the other server's
+        aged(tmp_path / "t.20260901-000000.out.log.bak", 40),  # not a stamped output file
+    ]
+    result = run_function("Remove-OldLogs", "Remove-OldLogs", tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "2"
+    assert not [path for path in old if path.exists()]
+    assert all(path.exists() for path in kept)
+
+
+def test_an_end_with_no_record_is_named_with_its_last_line(tmp_path: Path) -> None:
+    (tmp_path / "t.supervisor.log").write_text("2026-10-18T22:00:00 started api pid 7 (output t.x.out.log)\n", encoding="utf-8")
+    result = run_function("Get-UnrecordedEnd", "Get-UnrecordedEnd", tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert "ended without a record" in result.stdout and "Windows last started" in result.stdout
+    assert result.stdout.rstrip().endswith("started api pid 7 (output t.x.out.log)")
+
+
+RECORDED_ENDS = ["stop file present; supervisor exiting", "stop file present; not restarting", "supervisor not started: stop file present (x)"]
+
+
+@pytest.mark.parametrize("last", [*RECORDED_ENDS, None])
+def test_control_an_end_the_supervisor_recorded_is_not_named(tmp_path: Path, last: str | None) -> None:
+    if last is not None:
+        (tmp_path / "t.supervisor.log").write_text(f"2026-10-18T22:00:00 started api pid 7\n2026-10-18T23:00:00 {last}\n", encoding="utf-8")
+    result = run_function("Get-UnrecordedEnd", '$end = Get-UnrecordedEnd\n"[$end]"', tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "[]"
+
+
+@pytest.mark.parametrize(("code", "meaning"), [(1073807364, "0x40010004: ended by Windows"), (0, ""), (1, "")])
+def test_an_exit_code_windows_chose_is_translated(tmp_path: Path, code: int, meaning: str) -> None:
+    result = run_function("Get-ExitMeaning", f'"[$(Get-ExitMeaning {code})]"', tmp_path)
+    assert result.returncode == 0, result.stderr
+    said = result.stdout.strip()
+    assert (meaning in said) if meaning else said == "[]"
+
+
+def test_an_exit_carries_the_last_line_the_server_wrote(tmp_path: Path) -> None:
+    err = tmp_path / "t.err.log"
+    err.write_text("INFO started\nTraceback (most recent call last):\nRuntimeError: no access secret\n\n  \n", encoding="utf-8")
+    long = tmp_path / "t.long.log"
+    long.write_text("x" * 1000 + "\n", encoding="utf-8")
+    body = f"\"[$(Get-LastLine '{err}')]\"\n\"[$(Get-LastLine '{long}')]\"\n\"[$(Get-LastLine '{tmp_path / 'missing.log'}')]\""
+    result = run_function("Get-LastLine", body, tmp_path)
+    assert result.returncode == 0, result.stderr
+    named, cut, missing = result.stdout.splitlines()
+    assert named == "[RuntimeError: no access secret]"
+    assert cut == "[" + "x" * 300 + "...]"
+    assert missing == "[]"

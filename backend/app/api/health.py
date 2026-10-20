@@ -29,7 +29,10 @@ def storage_problem() -> str | None:
     for path in (data_dir, data_dir / "workbench.db", data_dir / "documents", data_dir / "memos"):
         if path.exists() and not os.access(path, os.W_OK):
             return "storage is read-only: uploads and runs cannot be recorded"
-    if shutil.disk_usage(data_dir).free < MIN_FREE_BYTES:
+    # One threshold with the refusal: a public store pauses writes below its own floor (access.refuse_if_disk_low), and
+    # health said ok between 256 MiB and that floor while every upload was refused (ops audit, 2026-10-19).
+    floor = settings.public_min_free_bytes if settings.anonymous_sessions else MIN_FREE_BYTES
+    if shutil.disk_usage(data_dir).free < floor:
         return "storage is nearly full: uploads and runs may not be recorded"
     return None
 

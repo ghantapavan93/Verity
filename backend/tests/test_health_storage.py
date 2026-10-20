@@ -39,3 +39,15 @@ def test_a_model_that_does_not_answer_is_the_fault_named_and_the_store_is_not(cl
     monkeypatch.setattr(client.provider, "healthy", lambda: (False, "the model endpoint is not reachable (ConnectError)"))
     body = client.get("/api/health").json()
     assert body["ok"] is False and body["fault"] == "model"
+
+
+@pytest.mark.parametrize(("public", "healthy"), [(True, False), (False, True)])
+def test_health_and_the_write_refusal_share_one_floor(client: TestClient, monkeypatch: pytest.MonkeyPatch, public: bool, healthy: bool) -> None:
+    """Ops audit, 2026-10-19: a public store refuses uploads below its 2 GiB floor (access.refuse_if_disk_low), and health
+    said ok between 256 MiB and that floor. With 1 GiB free a public store is not healthy; an owner's store still is."""
+    from app import config
+
+    monkeypatch.setattr(config.settings, "anonymous_sessions", public)
+    monkeypatch.setattr(shutil, "disk_usage", lambda _path: Usage(10**12, 10**12 - 2**30, 2**30))
+    body = client.get("/api/health").json()
+    assert body["ok"] is healthy and (body["fault"] == "store") is not healthy

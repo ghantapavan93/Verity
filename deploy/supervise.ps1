@@ -8,7 +8,8 @@
   backend/data/logs/deploy; every start, exit (with its code and how long the server ran) and restart delay goes to
   <name>.supervisor.log. A server that exits is started again after a delay that doubles from 5 s to 60 s while it
   keeps dying within a minute, and falls back to 5 s once it has run for a minute. A stop file
-  (<name>.stop, written by deploy/down.ps1) ends the supervisor instead of restarting.
+  (<name>.stop, written by deploy/down.ps1) ends the supervisor instead of restarting. Each start removes the server's
+  stamped output older than 14 days; an exit's log line carries the last line the server wrote to its error output.
 
   On 2026-10-01 the API process ended silently at 02:37 with no log line and no event in Windows' logs; this is the
   smallest thing that turns such an exit into a recorded restart. Deployment only: nothing in the application changes.
@@ -52,7 +53,48 @@ function Write-Line([string]$message) {
   if (Write-Record { [IO.File]::AppendAllText($supervisorLog, $line + [Environment]::NewLine) }) { $script:droppedLines = 0 } else { $script:droppedLines++ }
 }
 
+# A supervisor ended by Windows (a shutdown, a sign-out, an update's restart) or by ending its task writes nothing: the
+# log stopped on a start or probe line and the next line was a supervisor starting again, with nothing to say the
+# machine had gone down (ops audit, 2026-10-19). A log whose last line is not one of the supervisor's own endings says so.
+function Get-UnrecordedEnd {
+  if (-not (Test-Path $supervisorLog)) { return $null }
+  try { $last = Get-Content -LiteralPath $supervisorLog -Tail 1 -Encoding UTF8 -ErrorAction Stop } catch { return $null }
+  if (-not $last -or $last -match "supervisor exiting|not restarting|supervisor not started") { return $null }
+  try { $boot = (Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).LastBootUpTime.ToString("o") } catch { $boot = "unknown" }
+  return "the previous supervisor ended without a record (Windows shut down or signed out, or its task was ended); Windows last started $boot; its last line: $last"
+}
+
+# Exit codes the server does not choose: the server's own log just stops, and the code is the only record of why.
+function Get-ExitMeaning($code) {
+  if ($code -eq 1073807364) { return " (0x40010004: ended by Windows at shutdown or sign-out)" }
+  return ""
+}
+
+# The last line a server wrote to a file before it ended, cut to a line's length: the reason an exit happened is
+# usually there (a traceback's last line, a refusal to start), and before this it had to be found by hand.
+function Get-LastLine([string]$path) {
+  try { $line = Get-Content -LiteralPath $path -Tail 20 -Encoding UTF8 -ErrorAction Stop | Where-Object { $_.Trim() } | Select-Object -Last 1 } catch { return "" }
+  $line = "$line".Trim()
+  if ($line.Length -gt 300) { $line = $line.Substring(0, 300) + "..." }
+  return $line
+}
+
+# Each start writes two files of its own and nothing removed them (ops audit, 2026-10-19). Every start removes this
+# server's stamped output older than LOG_KEEP_DAYS; the supervisor's own log and the other server's files are kept.
+$LOG_KEEP_DAYS = 14
+function Remove-OldLogs {
+  $cutoff = (Get-Date).AddDays(-$LOG_KEEP_DAYS)
+  $own = "^$([regex]::Escape($Tag))\.\d{8}-\d{6}\.(out|err)\.log$"
+  $removed = 0
+  foreach ($file in @(Get-ChildItem -LiteralPath $logs -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $own -and $_.LastWriteTime -lt $cutoff })) {
+    try { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop; $removed++ } catch { }
+  }
+  return $removed
+}
+
 if (Test-Path $stopFile) { Write-Line "supervisor not started: stop file present ($stopFile); remove it to allow restarts"; exit 0 }
+$unrecorded = Get-UnrecordedEnd
+if ($unrecorded) { Write-Line $unrecorded }
 Write-Line "supervisor started for $Name on port $Port (pid $PID)"
 
 $HEALTH_EVERY_SECONDS = 30
@@ -67,6 +109,8 @@ while ($true) {
   if (Test-Path $stopFile) { Write-Line "stop file present; supervisor exiting"; break }
   $process = $null
   try {
+    $removed = Remove-OldLogs
+    if ($removed -gt 0) { Write-Line "removed $removed $Tag output file(s) older than $LOG_KEEP_DAYS days" }
     $stamp = (Get-Date).ToString("yyyyMMdd-HHmmss")
     $out = Join-Path $logs "$Tag.$stamp.out.log"
     $err = Join-Path $logs "$Tag.$stamp.err.log"
@@ -99,8 +143,10 @@ while ($true) {
       # Not Windows' default proactor loop, which closes its listening socket when an accept fails with WinError 64 (a
       # client resetting mid-handshake): 18 silent-API restarts in 27 hours. Nor the selector loop, capped at 512 sockets.
       # app.serving retries an accept the client caused to fail (backend/tests/test_accept_resets.py).
+      # No uvicorn access log: the API's own request line (app/main.py) has the id, path, status and time, and leaves
+      # out the health probe this loop sends every 30 s, which was most of the output file (ops audit, 2026-10-19).
       $process = Start-Process -FilePath (Join-Path $backend ".venv\Scripts\python.exe") `
-        -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$Port", "--loop", "app.serving:ResilientProactorEventLoop" `
+        -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$Port", "--loop", "app.serving:ResilientProactorEventLoop", "--no-access-log" `
         -WorkingDirectory $backend -RedirectStandardOutput $out -RedirectStandardError $err -WindowStyle Hidden -PassThru
     } else {
       # A deploy interrupted between its two renames can leave no .next: finish or undo it before starting (swap-build.ps1).
@@ -130,7 +176,11 @@ while ($true) {
       if (((Get-Date) - $began).TotalSeconds -lt $HEALTH_GRACE_SECONDS) { continue }
       if (Test-Path $stopFile) { continue }  # a stop is under way (deploy/down.ps1): it ends the server; the watchdog must not race it
       try { $answered = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 $probe).StatusCode -eq 200 } catch { $answered = $false }
-      if ($answered) { $misses = 0; continue }
+      if ($answered) {
+        if ($misses -gt 0) { Write-Line "$Name pid $($process.Id) answering again after $misses missed probe(s)" }
+        $misses = 0
+        continue
+      }
       $misses++
       Write-Line "$Name pid $($process.Id) did not answer $probe ($misses of $HEALTH_MISSES)"
       if ($misses -ge $HEALTH_MISSES) {
@@ -141,7 +191,9 @@ while ($true) {
       }
     }
     $ran = [int]((Get-Date) - $began).TotalSeconds
-    Write-Line "exited $Name pid $($process.Id) code $($process.ExitCode) after $ran s"
+    Write-Line "exited $Name pid $($process.Id) code $($process.ExitCode)$(Get-ExitMeaning $process.ExitCode) after $ran s"
+    $lastLine = Get-LastLine $err
+    if ($lastLine) { Write-Line "last line of $Tag.$stamp.err.log: $lastLine" }
     Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
     if (Test-Path $stopFile) { Write-Line "stop file present; not restarting"; break }
     Write-Line "restarting $Name in $backoff s"
