@@ -65,7 +65,7 @@ def review_finding(
         try:
             session.execute(text("BEGIN IMMEDIATE"))
         except OperationalError as error:
-            # SQLite waits five seconds for the lock, then says "database is locked": a 500 until the triage review.
+            # SQLite waits for the lock (db.make_engine: 30 s), then says "database is locked": a 500 until the triage review.
             session.rollback()
             if "locked" not in str(error):
                 raise

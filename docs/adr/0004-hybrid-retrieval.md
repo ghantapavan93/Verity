@@ -1,5 +1,9 @@
 # ADR 0004: Retrieval is lexical first, vectors second, fused
 
+**Status, 2026-10-19: partly adopted.** BM25 serves the deployed site (`WORKBENCH_RETRIEVAL=bm25`, `deploy/supervise.ps1`).
+The fused mode is `backend/app/retrieval/hybrid.py`, behind `WORKBENCH_RETRIEVAL=hybrid`, with embeddings asked of
+Ollama at run time; there is no pgvector. Measured in `docs/RETRIEVAL.md`.
+
 ## Context
 
 Contracts are full of exact phrases ("fifteen (15) days' written notice", "terminate for

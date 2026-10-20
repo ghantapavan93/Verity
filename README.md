@@ -57,6 +57,18 @@ The research is a recorded experiment on real SEC exhibits: when one contract ar
 provably need not, each with a certificate. On the held-out set its relationship audit met the precision gate (1.00)
 and missed the recall gate (0.836 against 0.85); the page shows the misses.
 
+## Reading it in ten minutes
+
+| Read | To see |
+|---|---|
+| `backend/app/runs/service.py` | one run, stage by stage, and where each ending is decided |
+| `backend/app/verify/spans.py` | how a quote is found in the document's own text, or not |
+| `backend/app/runs/status.py` | the policy: when code, not the model, sets a status |
+| `backend/app/providers/admission.py`, `backend/app/application/quotas.py` | one model, one queue, bounded and counted |
+| `backend/tests/test_read_cost.py`, `backend/tests/test_model_queue.py` | the scaling invariants as tests: a read costs fixed queries, a full queue says so at once |
+| `DECISIONS.md` | each decision as it was taken, with what was rejected |
+| `docs/TROUBLESHOOTING.md`, `backend/scripts/status.py` | how the live site is operated: one command, then a table of symptoms |
+
 ## One run, as recorded
 
 The run in the picture is real and is walked through in [`docs/DEMO-PROOF.md`](docs/DEMO-PROOF.md):
@@ -232,7 +244,7 @@ the interface says so when it is loaded.
 - `docs/DESIGN.md`: problem contract, domain model, invariants, architecture, the three
   surfaces, failure semantics, the first slice, what is not built.
 - `docs/adr/`: local model behind a provider interface; citations verified by code; LangGraph
-  only for the stateful flow; hybrid retrieval.
+  for the stateful flow (not adopted); hybrid retrieval (partly adopted). Each says its status.
 - `DECISIONS.md`: each decision as it was taken.
 
 The three killed experiments that shaped this product live in the `ivo-experiments`

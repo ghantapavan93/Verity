@@ -1,5 +1,9 @@
 # ADR 0003: LangGraph orchestrates the review flow, and nothing else
 
+**Status, 2026-10-19: not adopted.** The flow is a plain sequence of stages in `backend/app/runs/service.py`, and no
+LangGraph dependency exists; the module says it will be added when the flow needs what it offers (resumable state). This
+record is kept as the decision the code did not need.
+
 ## Context
 
 The review flow has genuine state and branches: scope identification, retrieval, analysis,

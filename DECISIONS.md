@@ -1,5 +1,31 @@
 # Decisions log
 
+Each decision as it was taken, newest last:
+
+- [2026-09-28: the pivot](#2026-09-28-the-pivot)
+- [2026-09-28: visual system decided by three coded shells first](#2026-09-28-visual-system-decided-by-three-coded-shells-first)
+- [2026-09-28: C frozen; A and B discarded](#2026-09-28-c-frozen-a-and-b-discarded)
+- [2026-09-28: earn each dependency](#2026-09-28-earn-each-dependency)
+- [2026-09-28: the slice is real](#2026-09-28-the-slice-is-real)
+- [2026-09-28: Findings and Runs as views in one shell](#2026-09-28-findings-and-runs-as-views-in-one-shell)
+- [2026-09-28: the product bar, from the second review Pavan adopted](#2026-09-28-the-product-bar-from-the-second-review-pavan-adopted)
+- [2026-09-28: the constitution, adopted with its audit](#2026-09-28-the-constitution-adopted-with-its-audit)
+- [2026-09-28: five additions after the external review, in order](#2026-09-28-five-additions-after-the-external-review-in-order)
+- [2026-09-28: the six-block external review, first pass](#2026-09-28-the-six-block-external-review-first-pass)
+- [2026-09-28: the role-specific audit, P0 and P1](#2026-09-28-the-role-specific-audit-p0-and-p1)
+- [2026-10-14: two evidence-integrity blockers closed (verifier v9, reader v13)](#2026-10-14-two-evidence-integrity-blockers-closed-verifier-v9-reader-v13)
+- [2026-10-14: after the legal pilot, five release defects repaired (verifier v10, reader v14, policy-v9, the memo)](#2026-10-14-after-the-legal-pilot-five-release-defects-repaired-verifier-v10-reader-v14-policy-v9-the-memo)
+- [2026-10-14: the product mission (policy-v10, retrieval-v2, one account of each finding, a revision asked again)](#2026-10-14-the-product-mission-policy-v10-retrieval-v2-one-account-of-each-finding-a-revision-asked-again)
+- [2026-10-14: the first-visitor acceptance test (three repairs, inside the unreleased candidate)](#2026-10-14-the-first-visitor-acceptance-test-three-repairs-inside-the-unreleased-candidate)
+- [2026-10-14: policy-v11, the contract's own statements about its provisions (the intent-first mission)](#2026-10-14-policy-v11-the-contracts-own-statements-about-its-provisions-the-intent-first-mission)
+- [2026-10-15: policy-v12, the time a question asks at is not a premise](#2026-10-15-policy-v12-the-time-a-question-asks-at-is-not-a-premise)
+- [2026-10-15: policy-v13, run identity by reached starts, and section handles kept honest](#2026-10-15-policy-v13-run-identity-by-reached-starts-and-section-handles-kept-honest)
+- [2026-10-16: the blind contract stress test, policy-v14 and reader v15](#2026-10-16-the-blind-contract-stress-test-policy-v14-and-reader-v15)
+- [2026-10-16: one Hetzner server, the model on it](#2026-10-16-one-hetzner-server-the-model-on-it)
+- [2026-10-17: policy-v15, an instrument's marked number is not a value](#2026-10-17-policy-v15-an-instruments-marked-number-is-not-a-value)
+- [2026-10-17: policy-v16, quoting the replacement is not following it](#2026-10-17-policy-v16-quoting-the-replacement-is-not-following-it)
+- [2026-10-19: operating it under load, after a deep audit](#2026-10-19-operating-it-under-load-after-a-deep-audit)
+
 ## 2026-09-28: the pivot
 Three experiments killed three product ideas, and the results page records that. The next
 step is not a fourth idea: it is a working full-stack Contract Intelligence Workbench whose
@@ -1623,3 +1649,40 @@ matches its 82 decisions. Code still does not read prose: an answer naming a rem
 Replayed over the 4,979 findings with a verified quote in 69 local QA and lab stores: 82 have recorded relations, 35 of
 them a note (context, replaced, dated, limits), none an old_value note, and no note changes under the new reading; no
 recorded decision changes. The live challenge's runs, outside those stores, are the case it is for.
+
+## 2026-10-19: operating it under load, after a deep audit
+
+An audit of the live system asked what an operator, a reviewer and a burst of visitors would meet. The answers that
+changed code, smallest first:
+
+- **What a log line says.** A run's ending names its reason (`reason=citations_unverified`), every 429 and 503 names the
+  limit that refused (`refused … kind=Busy`), the model's time is logged apart from the queue's, and each start logs the
+  model server's version and the model's build: an Ollama self-update had changed answers with no line saying so.
+- **What the supervisor records.** An end Windows chose (shutdown, sign-out; exit code 0x40010004) is named, at the
+  exit or on the next start with the boot time; an exit carries the server's last error line; a recovered probe is
+  logged; output files older than 14 days are removed; uvicorn's access log is off (the API's own request line has more
+  and leaves the health probe out). Health and the write refusal share one disk floor: health said ok between 256 MiB
+  and the public 2 GiB while every upload was refused.
+- **What a read costs.** The findings list took five queries a row (2,252 for a full list) and the runs list two; every
+  read of a run asked once per open run whether it had stalled; the page's poll of a working run read the whole
+  contract. Lists eager-load, the stall check is one query, clause numbers are found by their reading's section ids with
+  the text read only on a cache miss, and a working run reads no sections. Responses were compared before and after,
+  identical but for ids and timings. The definitions cache in `runs/links.py`, which held up to 64 whole contracts to
+  save 30 ms against a model call of seconds, is gone; old and new gave the same links on 580 cases over 150 EDGAR
+  contracts, so retrieval-v2's fingerprint was re-recorded, not bumped.
+- **The model's queue is bounded.** Each visitor could have two questions in flight; nothing bounded all of them. Past
+  eight a question is refused at once (503, Retry-After 60, nothing started). Rejected: a queue without a bound but with
+  a position (the thirtieth visitor waits half an hour), and a scheduler product (one GPU; nothing measured asks for it).
+- **A waiting run says what it waits behind.** `RunOut.ahead` counts runs asked earlier and not yet answered, on every
+  read and every stream heartbeat. It is not the admission position: the admission controller does not know runs, and a
+  later question on a shorter contract can reach the model first, so the page says what is counted ("questions asked
+  before this one are still being answered"), not "ahead". Polling slows from 3 s to 12 s while nothing changes and stops
+  while the tab is hidden.
+- **What a reviewer and an operator open first.** The README has a ten-minute reading path; `scripts/status.py` gives
+  one read-only line per part; `docs/TROUBLESHOOTING.md` maps symptoms to log lines. ADR 0003 (LangGraph) and 0004
+  (hybrid retrieval) now state that they were not, and partly, adopted.
+
+Left, with reasons: an index on `runs.stage` (no measurement says the scan costs anything at this size); the event
+stream's drops through the tunnel (pages fall back to polling, which now costs less; the cause is its own task); moving
+the release checklist out of the README (its claims are tested where they are); CI (the repository token lacks the
+workflow scope, the owner's step).
