@@ -21,7 +21,7 @@ vi.mock("@/lib/api", () => ({
   isConflict: (error: unknown) => error instanceof Error && (error as Error & { status?: number }).status === 409,
 }));
 
-import { FindingsView } from "./FindingsView";
+import { FindingsView, forAttention } from "./FindingsView";
 
 function record(id: string, topic: string, review: FindingRecord["review"], latestReviewId: number): FindingRecord {
   return {
@@ -89,6 +89,19 @@ describe("FindingsView", () => {
 });
 
 describe("FindingsView: what needs a person comes first", () => {
+  it("lists an answer code has concerns about before a plain answer, and after a needs-review finding", () => {
+    const plain = { ...record("p", "Payment terms", null, 0), status: "pass", flagged: false } as FindingRecord;
+    const concerned = { ...record("c", "Liability cap", null, 0), status: "pass", flagged: true } as FindingRecord;
+    const review = { ...record("r", "Renewal notice", null, 0), flagged: false } as FindingRecord;
+    expect(forAttention([plain, concerned, review]).map((r) => r.id)).toEqual(["r", "c", "p"]);
+  });
+
+  it("control: a decided answer with concerns still waits behind every undecided one", () => {
+    const plain = { ...record("p", "Payment terms", null, 0), status: "pass", flagged: false } as FindingRecord;
+    const decided = { ...record("d", "Liability cap", CONFIRMED, 1), status: "pass", flagged: true } as FindingRecord;
+    expect(forAttention([decided, plain]).map((r) => r.id)).toEqual(["p", "d"]);
+  });
+
   it("lists a finding that needs review before an answer within the same contract, whatever order the API gave", async () => {
     const answered = { ...record("f3", "Payment terms", null, 0), status: "pass", statusSource: "model_hint" } as FindingRecord;
     const flagged = record("f4", "Renewal notice", null, 0);

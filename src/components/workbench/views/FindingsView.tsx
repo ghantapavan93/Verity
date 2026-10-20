@@ -28,15 +28,16 @@ const VERB: Record<ReviewVerdict, string> = { confirmed: "Confirm", dismissed: "
  * each row carries the person's decision as the API recorded it, and the controls to record one.
  */
 /**
- * What needs a person first, within each document: undecided needs review, then other undecided answers, then decided
- * ones (a needs-review finding someone decided has had its person). Documents keep the API's order, newest run first,
+ * What needs a person first, within each document: undecided needs review, then undecided answers code has concerns
+ * about (FindingRecord.flagged: before 2026-10-19 they sat among the plain answers), then other undecided answers, then
+ * decided ones (a needs-review finding someone decided has had its person). Documents keep the API's order, newest run first,
  * and a stable sort keeps it inside each rank. Read once, when the list loads: a row decided here stays where it is,
  * under the reader's hand, until the list is read again (a live re-sort moved it away from the click).
  */
 export function forAttention(rows: FindingRecord[]): FindingRecord[] {
   const documents = new Map<string, number>();
   for (const r of rows) if (!documents.has(r.documentId)) documents.set(r.documentId, documents.size);
-  const rank = (r: FindingRecord) => (r.review ? 2 : r.status === "needs_review" ? 0 : 1);
+  const rank = (r: FindingRecord) => (r.review ? 3 : r.status === "needs_review" ? 0 : r.flagged ? 1 : 2);
   return [...rows].sort((a, b) => (documents.get(a.documentId) ?? 0) - (documents.get(b.documentId) ?? 0) || rank(a) - rank(b));
 }
 

@@ -25,7 +25,6 @@ import type {
   RunSummary,
   RunView,
   TrustDiffView,
-  TrustManifestView,
 } from "./types";
 
 export type { GuidanceRecord, Health, MemoRecord } from "./types";
@@ -151,11 +150,6 @@ export function recordSupersedes(documentId: string, previousDocumentId: string)
     headers: JSON_HEADERS,
     body: JSON.stringify({ previousDocumentId }),
   });
-}
-
-/** What each finding of a finished run stands on. Derived from the record by the API; nothing is stored or changed. */
-export function getRunTrust(runId: string): Promise<TrustManifestView> {
-  return request<TrustManifestView>(`/api/runs/${runId}/trust`);
 }
 
 /** What a later version of the document does to a run's findings. The run is not changed by asking. */
