@@ -30,6 +30,7 @@ ninth network got in 0 of 18 times). Taking the spool now takes sending it: hund
 from __future__ import annotations
 
 import json
+import logging
 
 from anyio import current_time, fail_after, to_thread
 from starlette.exceptions import HTTPException
@@ -39,6 +40,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from ..application.ingest_document import MAX_UPLOAD_BYTES
 from ..errors import WorkbenchError
 from . import access
+
+log = logging.getLogger(__name__)
 
 UPLOAD_PATH = "/api/documents"
 # The 25 MB file and room for its form, as Caddy's request_body max_size (deploy/cloud/Caddyfile, 26 MiB).
@@ -201,6 +204,8 @@ class BodyLimitMiddleware:
 
 
 async def _answer(send: Send, status: int, detail: str, retry_after: int | None = None) -> None:
+    if status in (429, 503):
+        log.warning("refused status=%d kind=body_limit detail=%s", status, detail)
     body = json.dumps({"detail": detail}, separators=(",", ":")).encode()
     headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()), (b"connection", b"close")]
     if retry_after is not None:

@@ -68,6 +68,15 @@ async def _retain_hourly() -> None:
         await asyncio.sleep(3600)
 
 
+async def _log_model_build(provider: ModelProvider) -> None:
+    """One line at start naming the model server's version and the model's build, read off the event loop: a model
+    server that is down or slow never holds the API's start."""
+    inner = getattr(provider, "inner", provider)
+    describe = getattr(inner, "describe_build", None)
+    if describe is not None:
+        log.info("model_build %s", await asyncio.to_thread(describe))
+
+
 # The same set as deploy/cloud/Caddyfile and next.config.ts, so the policy does not depend on the edge.
 SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000",
@@ -92,9 +101,11 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
             log.warning("recovered_runs=%d marked failed after restart", recovered)
         bus.bind_loop(asyncio.get_running_loop())
         app.state.provider = provider or make_provider()
+        build_line = asyncio.create_task(_log_model_build(app.state.provider))
         # The public demo store deletes ended visitor workspaces: once now, then hourly (application/retention.py).
         retention = asyncio.create_task(_retain_hourly()) if settings.anonymous_sessions else None
         yield
+        build_line.cancel()
         if retention is not None:
             retention.cancel()
         bounded.release_handoff_dir()
@@ -102,8 +113,9 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
     access.check_configuration()
     app = FastAPI(title="Contract Workbench", version="0.1.0", lifespan=lifespan)
     # Responses over 1 KB go out compressed; Starlette leaves text/event-stream alone, so the live
-    # run stream is unaffected. Lighthouse found the document JSON going out raw.
-    app.add_middleware(GZipMiddleware, minimum_size=1024)
+    # run stream is unaffected. Lighthouse found the document JSON going out raw. Level 6, not Starlette's 9: on the event
+    # loop, a 10 MB document took 128 ms at 9 and 81 ms at 6, for 0.8% more bytes (backend audit, 2026-10-19).
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
     # Every body is bounded before its route, gate or parser reads it (api/body_limit.py). Inside CORS and the request
     # log, so a refusal carries their headers like any other answer.
     app.add_middleware(BodyLimitMiddleware)
@@ -118,9 +130,12 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
     )
 
     @app.exception_handler(WorkbenchError)
-    async def workbench_error(_request: Request, error: WorkbenchError) -> JSONResponse:
+    async def workbench_error(request: Request, error: WorkbenchError) -> JSONResponse:
         retry_after = getattr(error, "retry_after", None)
         headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
+        if error.status_code in (429, 503):
+            # Five limits answer 429 and three conditions 503; the request line alone cannot say which one refused.
+            log.warning("refused path=%s status=%d kind=%s detail=%s", request.url.path, error.status_code, type(error).__name__, error)
         return JSONResponse({"detail": str(error)}, status_code=error.status_code, headers=headers)
 
     @app.middleware("http")

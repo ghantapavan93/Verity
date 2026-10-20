@@ -105,14 +105,17 @@ def _set_stage(
     session.add(row)
     session.commit()
     if previous is not None:
+        # A run's last line says why it ended (`reason=`): "unresolved" for an unverified quote and for no evidence, and
+        # "failed" for a provider error and for output that is not the schema, read the same without it (ops audit).
         log.info(
-            "run_id=%s document_id=%s stage=%s after=%s duration_ms=%.0f status=%s",
+            "run_id=%s document_id=%s stage=%s after=%s duration_ms=%.0f status=%s%s",
             run.id,
             run.document_id,
             stage,
             previous.stage,
             previous.duration_ms or 0,
             previous.status,
+            f" reason={run.reason}" if stage in TERMINAL_STAGES and run.reason else "",
         )
     else:
         log.info("run_id=%s document_id=%s stage=%s", run.id, run.document_id, stage)
@@ -313,6 +316,17 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
         admitted = getattr(provider, "last", None)
         if admitted is not None and admitted.queue_wait_ms >= 1000:
             answered += f" · queued {admitted.queue_wait_ms / 1000:.0f} s behind {admitted.queue_depth_at_arrival + 1}"
+        # The checking stage's time is the queue and the model together; this line splits them, so a day's p50 and p95 of
+        # each is one grep away.
+        log.info(
+            "run_id=%s model_ms=%.0f queue_ms=%.0f queue_depth=%d attempts=%d rounds=%d",
+            run.id,
+            result.generation.latency_ms or 0,
+            admitted.queue_wait_ms if admitted is not None else 0,
+            admitted.queue_depth_at_arrival if admitted is not None else 0,
+            result.attempts,
+            result.rounds,
+        )
         _note_stage(session, run, "checking", answered, output_hash=sha256_text(result.generation.text), attempt=result.attempts, rounds=result.rounds)
 
         if result.proposal is None:

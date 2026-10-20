@@ -123,6 +123,18 @@ class OllamaProvider:
             return False, problem
         return True, f"{self.model} ready"
 
+    def describe_build(self) -> str:
+        """The server's version and the model's build, logged at start: Ollama updates itself, and an update or a pull
+        changed answers with no line in Verity's log saying so (ops audit, 2026-10-19)."""
+        try:
+            version = self._send("GET", f"{self.base_url}/api/version", HEALTH_PROBE_TIMEOUT_S).json().get("version", "unknown")
+            models = self._tags(HEALTH_PROBE_TIMEOUT_S)
+        except (httpx.HTTPError, ValueError, ProviderError) as error:
+            return f"model endpoint not reachable at start ({type(error).__name__})"
+        found = next((m for m in models if m.get("name") in (self.model, f"{self.model}:latest")), None)
+        build = str((found or {}).get("digest", "")).lower()[:12] or "not pulled"
+        return f"server_version={version} model={self.model} build={build}"
+
     def _check_build(self) -> None:
         """Before an answer, when a build is pinned: the endpoint can change under a long-lived process (a serverless
         container replaced, a tag pulled again), so it is asked each time, not once."""
