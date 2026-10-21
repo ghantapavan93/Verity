@@ -66,6 +66,7 @@ and missed the recall gate (0.836 against 0.85); the page shows the misses.
 | `backend/app/runs/status.py` | the policy: when code, not the model, sets a status |
 | `backend/app/providers/admission.py`, `backend/app/application/quotas.py` | one model, one queue, bounded and counted |
 | `backend/tests/test_read_cost.py`, `backend/tests/test_model_queue.py` | the scaling invariants as tests: a read costs fixed queries, a full queue says so at once |
+| `docs/CASEBOOK.md` | six failures traced to what the machine was doing: what located each, the mechanism, the fix and its test; the sixth still open |
 | `DECISIONS.md` | each decision as it was taken, with what was rejected |
 | `docs/TROUBLESHOOTING.md`, `backend/scripts/status.py` | how the live site is operated: one command, then a table of symptoms |
 
