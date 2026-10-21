@@ -27,7 +27,7 @@ _clock = time.monotonic
 # Hops a request may take on the endpoint's own host (Modal's 303 to the waiting URL is one).
 MAX_REDIRECTS = 5
 
-# Sent with every request that loads or uses the model, so a wake-up and an answer load it the same way. A prompt larger
+# Sent with every request to the chat model, a wake-up included, so a wake-up and an answer load it the same way. A prompt larger
 # than the context window is refused, never cut. Left to its default the server drops text to make room and answers
 # anyway: asked for a notice period stated at the start of a prompt of 20,695 tokens, it evaluated 8,194 of them and
 # answered "30 days" where the text said 47, with nothing in the response to say so (measured against Ollama 0.35.0,

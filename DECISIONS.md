@@ -1703,7 +1703,7 @@ computing it. It reuses the longest prefix it holds, in the slot and in an 8 GiB
 1 quote (8c66f45e); on 0.40.6 the reverse. Each fix alone failed: the RAM cache off still left the slot's prefix (2026-10-19);
 a one-token raw call before the answer still let the RAM cache restore the prefix (`f_sim = 0.328`). A raw call without
 `truncate: false` and `shift: false` reloaded the model on 0.40.7, which looks like a fix and is a cold start; the
-wake-up sent such a call, and now sends both (`NEVER_CUT`, one constant for every request). Not decided: both
+wake-up sent such a call, and now sends both (`NEVER_CUT`, one constant for every request to the chat model). Not decided: both
 together (an Ollama setting, a restart and a one-token call per answer), or a cold load per answer (about 9 s). A per-run
 record of the engine was written and dropped before release: Ollama's upgrade log and the API's start line already date
 each engine (not a pull under a running API without a pinned digest), and the probe added two calls inside the model's admission slot. `docs/CASEBOOK.md`, case 6.
@@ -1711,4 +1711,4 @@ each engine (not a pull under a running API without a pinned digest), and the pr
 ## 2026-10-21: a casebook
 
 Six failures, each traced to what the machine was doing, with the test that guards it where one exists
-(`docs/CASEBOOK.md`), each claim checked against the repository by a fresh review before it was committed.
+(`docs/CASEBOOK.md`). A fresh review checked each claim against the repository; its corrections are in the commit after.
