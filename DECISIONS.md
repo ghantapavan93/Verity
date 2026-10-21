@@ -27,6 +27,7 @@ Each decision as it was taken, newest last:
 - [2026-10-19: operating it under load, after a deep audit](#2026-10-19-operating-it-under-load-after-a-deep-audit)
 - [2026-10-21: an answer depends on the model server's prompt cache (measured, open)](#2026-10-21-an-answer-depends-on-the-model-servers-prompt-cache-measured-open)
 - [2026-10-21: a casebook](#2026-10-21-a-casebook)
+- [2026-10-21: every answer computed from its first token](#2026-10-21-every-answer-computed-from-its-first-token)
 
 ## 2026-09-28: the pivot
 Three experiments killed three product ideas, and the results page records that. The next
@@ -1712,3 +1713,17 @@ each engine (not a pull under a running API without a pinned digest), and the pr
 
 Six failures, each traced to what the machine was doing, with the test that guards it where one exists
 (`docs/CASEBOOK.md`). A fresh review checked each claim against the repository; its corrections are in the commit after.
+
+## 2026-10-21: every answer computed from its first token
+
+Approved by the owner the same day: test the two measures together, and ship them if they hold. Ollama now runs with
+`LLAMA_ARG_CACHE_RAM=0` (a user environment variable, then Ollama restarted: 16 s), and before every answer, inside the
+model's admission slot, Verity sends a one-token raw prompt with the answer's own load settings
+(`OllamaProvider._start_clean`). Measured on the serving machine with the recorded convenience (c6f8e6af) and liability
+(312e14a1) inputs: in the order c, l, c, l and in the order l, c, l, every answer started at token 0 and each input gave
+one answer (7b6a0862; 0bd04c15), with no model reload. The control, the same settings without the one-token prompt:
+convenience asked after liability started at token 620 and gave 8c66f45e. Rejected: a cold load per answer (about 9 s
+each, and the model's wake-up would be wasted). Cost: about 620 more prompt tokens per answer. The cloud kit sets the same
+variable, not measured on its image. `scripts/status.py` reports the server's cache on a `cache` line; the deployment
+README says how to set it. Not changed: the prompt, decoding options, policy, verifier and retrieval, so no run's
+identity moves; answers after this are the ones a cold model gives.

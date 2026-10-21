@@ -1,8 +1,7 @@
 # Casebook
 
 Six failures, each traced to what the machine was doing. Each entry says where the failure surfaced, what was seen,
-what located it, the mechanism, the fix, and the test that guards it where one exists. Five are fixed. The sixth is
-measured and still open.
+what located it, the mechanism, the fix, and the test that guards it where one exists. All six are fixed.
 
 ## 1. The API was running and accepted no one (live)
 
@@ -77,7 +76,7 @@ measured and still open.
 - **Test.** `backend/tests/test_read_cost.py` checks that 2 rows and 12 cost the same, and that a working run reads no
   sections. It fails on the old code.
 
-## 6. Temperature 0, two answers (live, open)
+## 6. Temperature 0, two answers (live)
 
 - **Seen.** One recorded input (liability question, hash 312e14a1, seed 42, temperature 0) sometimes gave a verified
   answer. Other times it gave a quote that joined two sentences and was withheld.
@@ -102,6 +101,20 @@ measured and still open.
   - The host-RAM cache at 0: the slot still reused its last prompt and started at 620.
   - A one-token raw call before each answer: the slot then shares no prefix, but the RAM cache restored the 620-token
     prefix (`f_sim = 0.328`).
-- **Open.** Both together are expected to start every prompt at token 0, but this is not tested. It needs:
-  - a code change: the one-token call, inside the model's admission slot, before every answer;
-  - an Ollama setting and a restart on the serving machine, which is the owner's decision.
+- **Fix.** Both together:
+  - Ollama runs with `LLAMA_ARG_CACHE_RAM=0` (`deploy/README.md`);
+  - before every answer, inside the model's admission slot, Verity sends a one-token raw prompt with the answer's own
+    load settings (`OllamaProvider._start_clean`). Raw, so no chat template opens it; its first token is never the
+    answer's.
+
+  Measured on the serving machine on 2026-10-21, with the recorded convenience and liability inputs:
+  - convenience, liability, convenience, liability: every answer started at token 0, and each input gave one answer
+    (7b6a0862; 0bd04c15);
+  - in the other order, liability, convenience, liability: the same answers;
+  - control, same settings without the one-token prompt: convenience asked after liability started at 620 and gave
+    8c66f45e.
+
+  Cost: the whole prompt is computed every time, about 620 more tokens. `scripts/status.py` reports the server's cache
+  on its `cache` line.
+- **Test.** `backend/tests/test_model_from_token_zero.py` holds what Verity sends: the one-token prompt before each
+  answer, with the answer's load settings. The server's behaviour is the measurement above, not a test.
