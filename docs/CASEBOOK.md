@@ -6,8 +6,8 @@ measured and still open.
 
 ## 1. The API was running and accepted no one (live)
 
-- **Seen.** Between 2026-10-09 and 2026-10-11 the supervisor restarted a silent API 18 times. Each time the process
-  was up, and the site answered 502.
+- **Seen.** On 2026-10-09 the public site answered 502 for 33 minutes while the API process stayed up. By 2026-10-11 the
+  supervisor had restarted a silent API 18 times, about a minute of failed requests each.
 - **Located.** The API's log ended on an asyncio accept error, WinError 64, while the process stayed up.
 - **Mechanism.** On Windows, CPython's proactor event loop closes its listening socket when one `AcceptEx` fails. A
   client that resets mid-handshake fails it with `ERROR_NETNAME_DELETED` (WinError 64). After that every connection
@@ -37,9 +37,12 @@ measured and still open.
 - **Located.** The server's own count: it evaluated 8,194 of the 20,695 tokens (Ollama 0.35.0).
 - **Mechanism.** Left to its default, the server drops tokens to make the prompt fit and answers anyway. Nothing in
   the response says it did.
-- **Fix.** Each request sends `truncate: false` and `shift: false`. The server's refusal becomes a `ContextOverflow`
-  that names both token counts.
-- **Test.** `backend/tests/test_model_saw.py`, the model server is told not to cut the prompt.
+- **Fix.** Each request sends `truncate: false` and `shift: false` (`NEVER_CUT`). The wake-up sends them too: they are
+  also load settings, and on 0.40.7 a request without them loaded the model with context shift, so the next answer
+  loaded it again. The server's refusal becomes a `ContextOverflow` that names both token counts.
+- **Test.**
+  - `backend/tests/test_model_saw.py`: the model server is told not to cut the prompt.
+  - `backend/tests/test_model_wake.py`: a wake-up loads the model with the settings an answer uses.
 
 ## 4. Concurrent questions drained the connection pool (load envelope, then cloud rehearsal)
 
@@ -52,10 +55,10 @@ measured and still open.
   connection for its whole life, including the wait for the one model.
 - **Fix.** The store uses no pool (`NullPool`, `backend/app/db.py`). Each connection is opened when needed and closed
   after.
-- **Test.** `backend/tests/test_db_concurrency.py` holds fifteen connections and shows another request is still
-  served.
+- **Test.** `backend/tests/test_db_concurrency.py` holds fifteen connections and shows a sixteenth still opens.
 - **Same envelope, a second failure.** Staleness recovery declared runs dead while they waited for the model. The
-  window is now four model timeouts plus a minute. No test fails if the window shrinks; the load envelope is the check.
+  window is now four model timeouts plus a minute. No test fails if the window shrinks; only the 2026-09-29 load
+  envelope measured it, and nothing re-checks it.
 
 ## 5. Queries grew with every row (audit)
 

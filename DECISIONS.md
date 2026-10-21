@@ -1701,16 +1701,14 @@ One recorded input at seed 42 and temperature 0 gives different answers dependin
 computing it. It reuses the longest prefix it holds, in the slot and in an 8 GiB host-RAM prompt cache. Measured on Ollama
 0.40.7 with the convenience question's input: from token 0, 3 quotes (7b6a0862); from token 620, after another question,
 1 quote (8c66f45e); on 0.40.6 the reverse. Each fix alone failed: the RAM cache off still left the slot's prefix (2026-10-19);
-a one-token raw call before the answer still let the RAM cache restore the prefix (`f_sim = 0.328`). A call without
-`truncate: false` and `shift: false` reloads the model, which looks like a fix and is a cold start. Not decided: both
+a one-token raw call before the answer still let the RAM cache restore the prefix (`f_sim = 0.328`). A raw call without
+`truncate: false` and `shift: false` reloaded the model on 0.40.7, which looks like a fix and is a cold start; the
+wake-up sent such a call, and now sends both (`NEVER_CUT`, one constant for every request). Not decided: both
 together (an Ollama setting, a restart and a one-token call per answer), or a cold load per answer (about 9 s). A per-run
 record of the engine was written and dropped before release: Ollama's upgrade log and the API's start line already date
-each engine, and the probe added two calls inside the model's admission slot. `docs/CASEBOOK.md`, case 6.
+each engine (not a pull under a running API without a pinned digest), and the probe added two calls inside the model's admission slot. `docs/CASEBOOK.md`, case 6.
 
 ## 2026-10-21: a casebook
 
 Six failures, each traced to what the machine was doing, with the test that guards it where one exists
-(`docs/CASEBOOK.md`). A fresh review checked every claim against the repository; five were wrong in the first draft (a
-hang that was a refusal, two tests that guard a later fix, a number from outside the repository, a probe called a live
-failure) and were corrected before commit.
-
+(`docs/CASEBOOK.md`), each claim checked against the repository by a fresh review before it was committed.
