@@ -20,6 +20,7 @@ status, the source and the sentence that were recorded, and those are what is sh
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 
 from pydantic import ValidationError
@@ -270,8 +271,11 @@ def explain_run(session: Session, run_id: str) -> RunExplanation:
     )
 
 
+_QUEUED = re.compile(r"queued \d+ s behind \d+")
+
+
 def _queue_note(checking: RunStage | None) -> str | None:
-    """The admission wait the checking stage recorded in its detail ("queued 12 s behind 3"), if any."""
-    if checking is None or not checking.detail or "queued" not in checking.detail:
-        return None
-    return checking.detail.split("·", 1)[-1].strip() if "·" in checking.detail else checking.detail
+    """The admission wait the checking stage recorded in its detail ("queued 12 s behind 3"), if any. Read by its own
+    words: everything after the first "·" was taken, which named a retried answer's "attempt 2" as part of its wait."""
+    found = _QUEUED.search(checking.detail) if checking is not None and checking.detail else None
+    return found.group(0) if found else None

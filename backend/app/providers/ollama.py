@@ -27,6 +27,15 @@ _clock = time.monotonic
 # Hops a request may take on the endpoint's own host (Modal's 303 to the waiting URL is one).
 MAX_REDIRECTS = 5
 
+# Sent with every request that loads or uses the model, so a wake-up and an answer load it the same way. A prompt larger
+# than the context window is refused, never cut. Left to its default the server drops text to make room and answers
+# anyway: asked for a notice period stated at the start of a prompt of 20,695 tokens, it evaluated 8,194 of them and
+# answered "30 days" where the text said 47, with nothing in the response to say so (measured against Ollama 0.35.0,
+# 2026-10-02). `shift` is the same rule for the answer: it may not push the prompt out of the window while it is being
+# written. Both are also load settings: on 0.40.7 a request without them started llama-server with --context-shift, and
+# the next answer loaded the model again (2026-10-21).
+NEVER_CUT = {"truncate": False, "shift": False}
+
 
 def last_answer() -> float | None:
     return _last_answer
@@ -155,7 +164,7 @@ class OllamaProvider:
         context window is part of what Ollama loads, so a model woken with any other would be loaded again by the first
         answer. One token is asked for, so the first answer does not pay the GPU's own first-call cost either."""
         self._check_build()  # starts a sleeping endpoint, and confirms the pinned build as an answer would
-        payload = {"model": self.model, "prompt": "ok", "stream": False, "think": False, "options": {**self.options(), "num_predict": 1}}
+        payload = {"model": self.model, "prompt": "ok", "stream": False, "think": False, **NEVER_CUT, "options": {**self.options(), "num_predict": 1}}
         try:
             response = self._send("POST", f"{self.base_url}/api/generate", self.timeout_s, payload)
             response.raise_for_status()
@@ -170,13 +179,7 @@ class OllamaProvider:
             "format": schema,
             "stream": False,
             "think": False,
-            # A prompt larger than the context window is refused, never cut. Left to its default the server drops
-            # text to make room and answers anyway: asked for a notice period stated at the start of a prompt of
-            # 20,695 tokens, it evaluated 8,194 of them and answered "30 days" where the text said 47, with nothing
-            # in the response to say so (measured against Ollama 0.35.0, 2026-10-02). `shift` is the same rule for
-            # the answer: it may not push the prompt out of the window while it is being written.
-            "truncate": False,
-            "shift": False,
+            **NEVER_CUT,
             "options": self.options(),
         }
         self._check_build()

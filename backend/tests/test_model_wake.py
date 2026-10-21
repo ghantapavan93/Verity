@@ -182,6 +182,9 @@ def test_a_wake_up_loads_the_model_with_the_settings_an_answer_uses(endpoint: En
     # The context window, seed and temperature are what Ollama loads the model with: the same, or the answer reloads it.
     assert {k: v for k, v in wake["options"].items() if k != "num_predict"} == chat["options"] == provider.options()
     assert wake["options"]["num_predict"] == 1 and wake["model"] == chat["model"] and wake["think"] is False
+    # So are truncate and shift: on Ollama 0.40.7 a request without them started llama-server with --context-shift, and
+    # the answer that followed loaded the model again (measured 2026-10-21, docs/CASEBOOK.md case 6).
+    assert (wake.get("truncate"), wake.get("shift")) == (chat["truncate"], chat["shift"]) == (False, False)
     assert wake_headers == config.settings.ollama_headers
     assert len(endpoint.gets) == 2  # the pinned build is confirmed before the wake-up, as before every answer
     assert ollama_module.last_answer() is not None

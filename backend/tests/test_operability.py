@@ -17,7 +17,9 @@ from fastapi.testclient import TestClient
 
 from app.api import body_limit
 from app.api.body_limit import SpoolFull
+from app.application.explain_run import _queue_note
 from app.errors import Busy, TooManyRequests
+from app.models import RunStage
 from app.providers.ollama import OllamaProvider
 from tests.support import upload_and_ask
 from tests.test_relations_oracle import OracleModel
@@ -129,3 +131,18 @@ def test_an_upload_refused_at_the_door_names_what_refused(client: TestClient, ca
     assert response.status_code == 429
     (line,) = _lines(caplog, "refused path=/api/documents")
     assert "kind=TooManyRequests" in line and "kind=body_limit" not in line
+
+
+@pytest.mark.parametrize(
+    ("detail", "note"),
+    [
+        ("model answered in 41 s · queued 12 s behind 3", "queued 12 s behind 3"),
+        ("model answered in 69 s · attempt 2 · queued 12 s behind 3", "queued 12 s behind 3"),
+        ("model answered in 69 s · attempt 2 · after a rejected first answer · queued 5 s behind 1", "queued 5 s behind 1"),
+        ("model answered in 41 s · attempt 2", None),  # control: no wait, no note
+    ],
+)
+def test_the_explanation_names_the_queue_wait_and_nothing_else(detail: str, note: str | None) -> None:
+    # The explanation took everything after the first "·", so a retried answer showed "attempt 2 · queued 12 s behind 3"
+    # as its queue wait (fresh review, 2026-10-21).
+    assert _queue_note(RunStage(stage="checking", detail=detail)) == note
