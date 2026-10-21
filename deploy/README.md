@@ -130,7 +130,8 @@ powershell -ExecutionPolicy Bypass -File deploy\up.ps1 -Local # the same without
 `backend/data/logs/deploy/`, waits until both the API and the interface answer, and records the
 process ids for `down.ps1`. Ollama must already be running with `qwen3:8b` pulled; the API's health
 line says so. Ollama's host-RAM prompt cache must be off: set the user environment variable
-`LLAMA_ARG_CACHE_RAM=0`, then quit Ollama and start it again. With the cache on, an answer depends on what was asked
+`LLAMA_ARG_CACHE_RAM=0`, then quit Ollama and start it again. Leave `OLLAMA_NUM_PARALLEL` unset or 1: the fix also
+needs the one slot the server runs by default. With the cache on, an answer depends on what was asked
 before it (`docs/CASEBOOK.md`, case 6). `backend/scripts/status.py` reports it on its `cache` line. The machine must stay awake for as long as the link is live (power settings, or the
 desktop app's keep-awake).
 

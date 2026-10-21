@@ -1,7 +1,8 @@
 # Casebook
 
 Six failures, each traced to what the machine was doing. Each entry says where the failure surfaced, what was seen,
-what located it, the mechanism, the fix, and the test that guards it where one exists. All six are fixed.
+what located it, the mechanism, the fix, and the test that guards it where one exists. All six are fixed; the sixth holds only while the model server
+runs with the setting its fix needs.
 
 ## 1. The API was running and accepted no one (live)
 
@@ -114,7 +115,8 @@ what located it, the mechanism, the fix, and the test that guards it where one e
   - control, same settings without the one-token prompt: convenience asked after liability started at 620 and gave
     8c66f45e.
 
-  Cost: the whole prompt is computed every time, about 620 more tokens. `scripts/status.py` reports the server's cache
-  on its `cache` line.
+  Cost: at least the shared prefix, about 620 tokens, is computed again for every answer, and the whole prompt on a
+  retry. It holds only while Ollama runs with the setting and one slot, one answer at a time: nothing in the API checks
+  that; `scripts/status.py` reports the server's cache on its `cache` line.
 - **Test.** `backend/tests/test_model_from_token_zero.py` holds what Verity sends: the one-token prompt before each
   answer, with the answer's load settings. The server's behaviour is the measurement above, not a test.

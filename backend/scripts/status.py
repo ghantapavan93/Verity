@@ -144,7 +144,6 @@ def last_line(path: Path) -> str:
 
 
 OLLAMA_LOG = Path(os.environ.get("LOCALAPPDATA", "")) / "Ollama" / "server.log"
-CACHE_LOG_BYTES = 1024 * 1024
 
 
 def check_cache(server_log: Path) -> bool:
@@ -152,14 +151,14 @@ def check_cache(server_log: Path) -> bool:
     on what was asked before it (docs/CASEBOOK.md, case 6): the deployment turns it off (deploy/README.md)."""
     if not server_log.exists():
         return line("cache", True, f"not checked: no model server log at {server_log}")
-    with server_log.open("rb") as handle:
-        handle.seek(0, 2)
-        handle.seek(max(0, handle.tell() - CACHE_LOG_BYTES))
-        tail = handle.read().decode("utf-8", errors="replace")
-    said = [text for text in tail.splitlines() if "prompt cache is" in text]
-    if not said:
+    last = ""
+    with server_log.open("rb") as handle:  # read once, a line at a time, and closed
+        for raw in handle:
+            if b"prompt cache is" in raw:
+                last = raw.decode("utf-8", errors="replace")
+    if not last:
         return line("cache", True, "not checked: the model has not been loaded since the server started")
-    if "prompt cache is disabled" in said[-1]:
+    if "prompt cache is disabled" in last:
         return line("cache", True, "host-RAM prompt cache off at the last model load")
     return line("cache", False, "host-RAM prompt cache on: answers depend on what was asked before; set LLAMA_ARG_CACHE_RAM=0 and restart Ollama")
 

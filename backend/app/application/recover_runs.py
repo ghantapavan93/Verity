@@ -32,8 +32,10 @@ STALE_MARGIN_S = 60.0
 
 def stale_after_seconds() -> float:
     # A legitimate run can span four model calls without writing progress: one transport retry and one
-    # corrected retry, each up to the model timeout. Declaring it dead earlier freed its fingerprint while it
-    # was alive (independent review, 2026-09-29). The window is the worst legitimate case plus a minute.
+    # corrected retry, each up to the model timeout. Each call is now two requests (a one-token clean start, then the
+    # answer: providers.ollama), but the first computes one token and the second waits on the same loaded model.
+    # Declaring it dead earlier freed its fingerprint while it was alive (independent review, 2026-09-29). The window is
+    # the worst legitimate case plus a minute.
     return settings.model_timeout_s * MAX_MODEL_CALLS_PER_RUN + STALE_MARGIN_S
 
 

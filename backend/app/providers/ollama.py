@@ -178,7 +178,10 @@ class OllamaProvider:
         recorded input gave two answers by what was asked before it: on Ollama 0.40.7 the convenience question gave 3
         quotes from token 0 and 1 quote from token 620 (docs/CASEBOOK.md, case 6). Raw, so no chat template opens it, and
         sent with the answer's own load settings, or the server would load the model again. It works only with the
-        server's host-RAM prompt cache off (LLAMA_ARG_CACHE_RAM=0), which would otherwise restore the prefix."""
+        server's host-RAM prompt cache off (LLAMA_ARG_CACHE_RAM=0), which would otherwise restore the prefix, and with the one
+        slot the server runs by default (OLLAMA_NUM_PARALLEL=1) used by one request at a time (WORKBENCH_MODEL_CONCURRENCY=1,
+        the admission slot this call and the answer share): with two slots the answer is given the one whose prompt is
+        most like its own."""
         payload = {"model": self.model, "prompt": "x", "raw": True, "stream": False, **NEVER_CUT, "options": {**self.options(), "num_predict": 1}}
         try:
             response = self._send("POST", f"{self.base_url}/api/generate", self.timeout_s, payload)
@@ -197,8 +200,9 @@ class OllamaProvider:
             "options": self.options(),
         }
         self._check_build()
-        self._start_clean()
+        # Timed from the clean start: when the model is not loaded, that call is the one that loads it.
         started = time.perf_counter()
+        self._start_clean()
         try:
             # Modal answers a request still running after 150 s with a 303 to a URL that waits for the result; following
             # it is how that platform's documented contract is kept (cloud readiness review, 2026-10-12). A server on the
