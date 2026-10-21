@@ -13,6 +13,7 @@ says what to do about each.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 from datetime import UTC, datetime, timedelta
@@ -142,6 +143,27 @@ def last_line(path: Path) -> str:
     return lines[-1].strip() if lines else ""
 
 
+OLLAMA_LOG = Path(os.environ.get("LOCALAPPDATA", "")) / "Ollama" / "server.log"
+CACHE_LOG_BYTES = 1024 * 1024
+
+
+def check_cache(server_log: Path) -> bool:
+    """Whether the model server keeps a host-RAM prompt cache, as its last model load logged it. With one, an answer depends
+    on what was asked before it (docs/CASEBOOK.md, case 6): the deployment turns it off (deploy/README.md)."""
+    if not server_log.exists():
+        return line("cache", True, f"not checked: no model server log at {server_log}")
+    with server_log.open("rb") as handle:
+        handle.seek(0, 2)
+        handle.seek(max(0, handle.tell() - CACHE_LOG_BYTES))
+        tail = handle.read().decode("utf-8", errors="replace")
+    said = [text for text in tail.splitlines() if "prompt cache is" in text]
+    if not said:
+        return line("cache", True, "not checked: the model has not been loaded since the server started")
+    if "prompt cache is disabled" in said[-1]:
+        return line("cache", True, "host-RAM prompt cache off at the last model load")
+    return line("cache", False, "host-RAM prompt cache on: answers depend on what was asked before; set LLAMA_ARG_CACHE_RAM=0 and restart Ollama")
+
+
 def check_supervisor(logs: Path, tag: str) -> bool:
     path = logs / f"{tag}.supervisor.log"
     if not path.exists():
@@ -158,12 +180,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--public", action="store_true", help="the store is the public demo's: its own disk floor")
     parser.add_argument("--metrics", default="http://127.0.0.1:20241", help="cloudflared's metrics address")
     parser.add_argument("--logs", type=Path, default=BACKEND / "data" / "logs" / "deploy")
+    parser.add_argument("--ollama-log", type=Path, default=OLLAMA_LOG, help="the model server's log, for its prompt cache")
     parser.add_argument("--max-runs-per-day", type=int, default=None, help="the day's ceiling; --public uses the public site's")
     args = parser.parse_args(argv)
     ceiling = PUBLIC_MAX_RUNS_PER_DAY if args.public else settings.max_runs_per_day
     results = [
         check_api(args.api.rstrip("/")),
         check_model(),
+        check_cache(args.ollama_log),
         check_disk(args.data_dir, args.public),
         check_runs(args.data_dir / "workbench.db", args.max_runs_per_day if args.max_runs_per_day is not None else ceiling),
         check_tunnel(args.metrics.rstrip("/")),

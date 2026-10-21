@@ -66,7 +66,7 @@ def test_every_call_to_the_model_endpoint_carries_its_credentials(endpoint: Endp
     provider.healthy()
     provider.generate_json("system", "user", {"type": "object"})
     hybrid.ollama_embed(["a clause"])
-    assert {url.rsplit("/", 1)[1] for url, _ in endpoint.calls} == {"tags", "chat", "embed"}
+    assert {url.rsplit("/", 1)[1] for url, _ in endpoint.calls} == {"tags", "generate", "chat", "embed"}  # generate: the clean start
     assert all(sent == HEADERS for _, sent in endpoint.calls)
 
 
@@ -108,7 +108,7 @@ def test_controls_the_pinned_build_answers_and_no_pin_checks_nothing(endpoint: E
     monkeypatch.setattr(config.settings, "model_digest", "")
     endpoint.calls.clear()
     OllamaProvider().generate_json("system", "user", {"type": "object"})
-    assert [url.rsplit("/", 1)[1] for url, _ in endpoint.calls] == ["chat"]
+    assert [url.rsplit("/", 1)[1] for url, _ in endpoint.calls] == ["generate", "chat"]  # the clean start, the answer; no build check
 
 
 class ServerlessEndpoint(http.server.ThreadingHTTPServer):

@@ -77,3 +77,19 @@ def test_a_supervisor_that_stopped_is_a_problem(tmp_path: Path, capsys: pytest.C
     assert status.check_supervisor(tmp_path, "api") is False
     assert status.check_supervisor(tmp_path, "web") is True  # control: one that is running
     assert "supervisor exiting" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("logged", "ok"),
+    [("srv    load_model: prompt cache is enabled, size limit: 8192 MiB", False), ("srv    load_model: prompt cache is disabled - use", True)],
+)
+def test_a_model_server_keeping_a_prompt_cache_is_a_problem(tmp_path: Path, logged: str, ok: bool) -> None:
+    log = tmp_path / "server.log"
+    lines = ["srv    load_model: prompt cache is enabled, size limit: 8192 MiB", "later lines", logged, "slot ..."]
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    assert status.check_cache(log) is ok  # the last load decides
+
+
+def test_control_a_server_log_that_is_absent_is_not_checked_rather_than_failed(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert status.check_cache(tmp_path / "missing.log") is True
+    assert "not checked" in capsys.readouterr().out

@@ -177,7 +177,8 @@ def test_a_wake_up_loads_the_model_with_the_settings_an_answer_uses(endpoint: En
     provider = OllamaProvider()
     provider.wake()
     provider.generate_json("system", "user", {"type": "object"})
-    (wake_url, wake, wake_headers), (chat_url, chat, _) = endpoint.posts
+    # The wake-up, the answer's clean start (test_model_from_token_zero.py), the answer.
+    (wake_url, wake, wake_headers), _, (chat_url, chat, _) = endpoint.posts
     assert wake_url.endswith("/api/generate") and chat_url.endswith("/api/chat")
     # The context window, seed and temperature are what Ollama loads the model with: the same, or the answer reloads it.
     assert {k: v for k, v in wake["options"].items() if k != "num_predict"} == chat["options"] == provider.options()

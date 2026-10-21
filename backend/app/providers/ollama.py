@@ -172,6 +172,20 @@ class OllamaProvider:
             raise ProviderError(failed_call("The model could not be woken", error)) from error
         _heard()
 
+    def _start_clean(self) -> None:
+        """Leave the server's one slot holding a prompt that shares no token with the next, so the answer that follows is
+        computed from its own first token. The server starts a prompt from the longest prefix it already holds, and one
+        recorded input gave two answers by what was asked before it: on Ollama 0.40.7 the convenience question gave 3
+        quotes from token 0 and 1 quote from token 620 (docs/CASEBOOK.md, case 6). Raw, so no chat template opens it, and
+        sent with the answer's own load settings, or the server would load the model again. It works only with the
+        server's host-RAM prompt cache off (LLAMA_ARG_CACHE_RAM=0), which would otherwise restore the prefix."""
+        payload = {"model": self.model, "prompt": "x", "raw": True, "stream": False, **NEVER_CUT, "options": {**self.options(), "num_predict": 1}}
+        try:
+            response = self._send("POST", f"{self.base_url}/api/generate", self.timeout_s, payload)
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise ProviderError(failed_call("The model could not be prepared for the answer", error)) from error
+
     def generate_json(self, system: str, user: str, schema: dict[str, Any]) -> Generation:
         payload = {
             "model": self.model,
@@ -183,6 +197,7 @@ class OllamaProvider:
             "options": self.options(),
         }
         self._check_build()
+        self._start_clean()
         started = time.perf_counter()
         try:
             # Modal answers a request still running after 150 s with a 303 to a URL that waits for the result; following

@@ -86,6 +86,9 @@ services:
       OLLAMA_NUM_PARALLEL: "1"
       OLLAMA_MAX_LOADED_MODELS: "1"
       OLLAMA_KEEP_ALIVE: "-1"
+      # No host-RAM prompt cache: with it, an answer depends on what was asked before it (docs/CASEBOOK.md, case 6).
+      # Measured on the workstation's Ollama 0.40.7, not on this image.
+      LLAMA_ARG_CACHE_RAM: "0"
     volumes:
       - verity-models:/root/.ollama
     networks:

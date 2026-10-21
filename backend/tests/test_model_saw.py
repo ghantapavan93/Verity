@@ -34,6 +34,8 @@ def test_the_model_server_is_told_not_to_cut_the_prompt_and_its_refusal_is_a_con
     sent: list[dict[str, Any]] = []
 
     def refuse(url: str, json: dict[str, Any], timeout: float, headers: dict[str, str] | None = None, follow_redirects: bool = False) -> httpx.Response:
+        if url.endswith("/api/generate"):  # the clean start before the answer (test_model_from_token_zero.py)
+            return httpx.Response(200, json={"response": ""}, request=httpx.Request("POST", url))
         sent.append(json)
         return httpx.Response(400, text=REFUSAL, request=httpx.Request("POST", url))
 
@@ -46,13 +48,12 @@ def test_the_model_server_is_told_not_to_cut_the_prompt_and_its_refusal_is_a_con
 
 
 def test_any_other_refusal_stays_an_ordinary_provider_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        httpx,
-        "post",
-        lambda url, json, timeout, headers=None, follow_redirects=False: httpx.Response(
-            400, text='{"error":"model not found"}', request=httpx.Request("POST", url)
-        ),
-    )
+    def refuse(url: str, json: dict[str, Any], timeout: float, headers: dict[str, str] | None = None, follow_redirects: bool = False) -> httpx.Response:
+        if url.endswith("/api/generate"):  # the clean start before the answer is let through
+            return httpx.Response(200, json={"response": ""}, request=httpx.Request("POST", url))
+        return httpx.Response(400, text='{"error":"model not found"}', request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", refuse)
     with pytest.raises(ProviderError) as failed:
         OllamaProvider().generate_json("system", "user", ANALYSIS_SCHEMA)
     assert not isinstance(failed.value, ContextOverflow)
