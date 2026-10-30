@@ -85,8 +85,30 @@ def _text_bearing(members: list[bytes], minimum: int = 1) -> int:
     return sum(1 for data in members if len(_strip_tags(data.decode("utf-8", "replace")).strip()) >= minimum)
 
 
-def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs: int, style_hidden_runs: int = 0) -> list[PartCoverage]:
-    """The coverage of the accepted-view DOCX reading. ``body_xml`` is the serialised w:body the reader walked."""
+@dataclass(frozen=True)
+class DocxWalkCounts:
+    """What the DOCX walk itself met (reader v16), so that these parts are reported from what was read, not from a
+    pattern over the body's XML: a control the walk never entered had been reported "read" (stress test, 2026-10-30)."""
+
+    tables: int = 0
+    content_controls: int = 0
+    form_fields: int = 0  # legacy check boxes and drop-downs, read as ☒/☐ and as their chosen entry
+    fields_balanced: bool = True
+    bound_read: int = 0
+    bound_unknown: int = 0
+    symbols: int = 0
+    unknown_symbols: int = 0
+    text_boxes: int = 0
+    drawn: int = 0  # pictures, shapes without text and embedded objects
+    invisible_runs: int = 0
+    unread: tuple[tuple[str, int], ...] = ()
+
+
+def docx_coverage(
+    data: bytes, body_xml: str, tracked_changes: int, hidden_runs: int, style_hidden_runs: int = 0, walked: DocxWalkCounts | None = None
+) -> list[PartCoverage]:
+    """The coverage of the accepted-view DOCX reading. ``body_xml`` is the serialised w:body the reader walked;
+    ``walked`` what the walk met, which decides the tables, content controls, fields and embedded objects reported."""
     with zipfile.ZipFile(io.BytesIO(data)) as package:
         names = set(package.namelist())
 
@@ -120,10 +142,27 @@ def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs:
     real_endnotes = sum(len(re.findall(r'<w:endnote\b[^>]*w:id="[1-9]\d*"', part.decode("utf-8", "replace"))) for part in endnotes)
     real_comments = sum(len(re.findall(r"<w:comment\b", part.decode("utf-8", "replace"))) for part in comments)
 
+    if walked is not None:
+        tables, controls = walked.tables, walked.content_controls
+        drawn = max(len(embeddings), walked.drawn)
+        fields_part = (
+            counted("fields", fields, Status.PARTIAL, FIELDS_NOTE)
+            if walked.fields_balanced
+            else PartCoverage(
+                "fields", Status.UNKNOWN, fields, "the file's field marks do not balance, so all text inside its fields is read, instructions included"
+            )
+        )
+    else:
+        controls, drawn = block_controls + inline_controls, len(embeddings)
+        fields_part = counted("fields", fields, Status.PARTIAL, "the cached result of a field is read; its instruction is not evaluated")
     return [
         PartCoverage("main_body", Status.READ, note="paragraphs and tables of the body, in document order"),
         counted(
-            "tables", tables, Status.READ, "rows as text, cells joined with ' | '; nested tables inside their cell; merged cells once; deleted rows skipped"
+            "tables",
+            tables,
+            Status.READ,
+            "rows as text, one slot per grid column joined with ' | ' (an empty cell kept empty, a merged cell in its first column); "
+            "nested tables inside their cell; deleted rows skipped",
         ),
         counted("tracked_insertions", insertions, Status.ACCEPTED, "kept, as Word shows them once every change is accepted"),
         counted("tracked_deletions", deletions, Status.EXCLUDED, "left out; a deleted paragraph mark joins its paragraphs"),
@@ -140,16 +179,59 @@ def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs:
         counted("footnotes", real_footnotes, Status.OMITTED, "footnote text is not read; the reference marks are not in the sections"),
         counted("endnotes", real_endnotes, Status.OMITTED, "endnote text is not read"),
         counted("comments", real_comments, Status.OMITTED, "comments are not read"),
-        counted("content_controls", block_controls + inline_controls, Status.READ, "controls are read through their content, block-level and inline alike"),
-        counted("fields", fields, Status.PARTIAL, "the cached result of a field is read; its instruction is not evaluated"),
+        counted("content_controls", controls, Status.READ, "controls are read through their content, block-level, row, cell and inline alike"),
+        fields_part,
         counted("automatic_numbering", numbered, Status.OMITTED, "numbers Word generates are not rendered; headings are numbered from their outline level"),
-        counted("embedded_objects", len(embeddings), Status.OMITTED, "embedded objects and drawings are not read"),
+        counted("embedded_objects", drawn, Status.OMITTED, "embedded objects, pictures, charts and shapes without text are not read"),
         counted("external_chunks", alt_chunks, Status.OMITTED, "content imported by reference (altChunk) is not read"),
     ] + (
         [PartCoverage("tracked_changes_total", Status.ACCEPTED, tracked_changes, "revisions the file carried, all resolved to the accepted view")]
         if tracked_changes
         else []
     )
+
+
+FIELDS_NOTE = (
+    "the result a field displays is read, never its instruction or text inside it; a check box is read as ☒ or ☐ and a "
+    "drop-down as its chosen entry; no field is evaluated"
+)
+
+
+def docx_more_coverage(walked: DocxWalkCounts) -> list[PartCoverage]:
+    """The parts of a DOCX reading beyond PARTS (reader v16), each reported only when the file has it."""
+    more: list[PartCoverage] = []
+    if walked.text_boxes:
+        more.append(PartCoverage("text_boxes", Status.READ, walked.text_boxes, "each text box is read once, as text after the paragraph it is anchored in"))
+    if walked.symbols:
+        more.append(
+            PartCoverage("symbols", Status.PARTIAL, walked.unknown_symbols, "symbols in a font this reader does not know are read as �")
+            if walked.unknown_symbols
+            else PartCoverage("symbols", Status.READ, walked.symbols, "symbols (w:sym, Symbol and Wingdings text) are read as the glyphs those fonts draw")
+        )
+    if walked.bound_read or walked.bound_unknown:
+        more.append(
+            PartCoverage(
+                "bound_controls",
+                Status.PARTIAL if walked.bound_unknown else Status.READ,
+                walked.bound_unknown or walked.bound_read,
+                "controls whose bound value is shown through a format this reader does not apply are read as �"
+                if walked.bound_unknown
+                else "controls bound to a part of the package are read as the bound value Word displays",
+            )
+        )
+    if walked.invisible_runs:
+        more.append(
+            PartCoverage(
+                "invisible_text",
+                Status.EXCLUDED,
+                walked.invisible_runs,
+                "runs Word draws so that they cannot be seen (white with nothing shaded beneath, 1 pt or smaller) are left out",
+            )
+        )
+    if walked.unread:
+        kinds = ", ".join(f"{kind} ({count})" for kind, count in walked.unread)
+        more.append(PartCoverage("other_content", Status.OMITTED, sum(c for _, c in walked.unread), f"displayed content this reader does not render: {kinds}"))
+    return more
 
 
 MAX_NAMED_LINES = 3

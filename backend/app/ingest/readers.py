@@ -27,9 +27,23 @@ from docx.text.paragraph import Paragraph
 from lxml import etree
 from pypdf import PdfReader
 
-from .coverage import PartCoverage, Status, docx_coverage, pdf_coverage, txt_coverage
+from .coverage import DocxWalkCounts, PartCoverage, Status, docx_coverage, docx_more_coverage, pdf_coverage, txt_coverage
 from .invisible import remove_format_characters, visible_text
 from .sections import HEADING_NUMBER, MAX_TOP_STEP, Block, continues_numbering, looks_like_heading, page_edge_furniture
+from .word_display import (
+    ALTERNATE,
+    CHOICE,
+    FALLBACK,
+    REPLACEMENT,
+    Bindings,
+    Compatibility,
+    Fields,
+    fields_balance,
+    in_symbol_font,
+    namespace_of,
+    symbol_font,
+    symbol_text,
+)
 
 log = logging.getLogger(__name__)
 
@@ -70,6 +84,8 @@ class ReadResult:
     coverage: list[PartCoverage] = field(default_factory=list)
     # Invisible format characters removed from the text (ingest.invisible), counted so the reading can say so.
     format_characters: int = 0
+    # Parts a reading accounts for beyond coverage.PARTS (reader v16), reported after them only when the file has any.
+    more_coverage: list[PartCoverage] = field(default_factory=list)
 
 
 PDF_SIGNATURE = b"%PDF-"
@@ -129,6 +145,7 @@ def read(filename: str, data: bytes) -> ReadResult:
             else "no invisible format characters",
         )
     )
+    result.coverage.extend(result.more_coverage)
     return result
 
 
@@ -173,6 +190,42 @@ _SDT = qn("w:sdt")
 _SDT_CONTENT = qn("w:sdtContent")
 _ROW = qn("w:tr")
 _CELL = qn("w:tc")
+_CUSTOM_XML = qn("w:customXml")
+_VAL = qn("w:val")
+_SIZE = qn("w:sz")
+_COLOUR = qn("w:color")
+_SHADING = qn("w:shd")
+_HIGHLIGHT = qn("w:highlight")
+_FIELD_CHAR = qn("w:fldChar")
+_SYM = qn("w:sym")
+_MATH = "http://schemas.openxmlformats.org/officeDocument/2006/math"
+_MATH_TEXT = f"{{{_MATH}}}t"
+# Reader v16: what a run holds that Word draws as a picture or a box, what it holds that Word never displays, the
+# containers a paragraph's runs may sit in, and the direction controls Word holds for w:bdo and w:dir.
+_DRAWINGS = frozenset({qn("w:drawing"), qn("w:pict"), qn("w:object")})
+_NOT_DISPLAYED = frozenset(
+    qn(f"w:{tag}")
+    for tag in (
+        "rPr",
+        "instrText",
+        "delText",
+        "delInstrText",
+        "footnoteReference",
+        "endnoteReference",
+        "footnoteRef",
+        "endnoteRef",
+        "commentReference",
+        "annotationRef",
+        "lastRenderedPageBreak",
+        "softHyphen",
+        "separator",
+        "continuationSeparator",
+    )
+)
+_INLINE_CONTAINERS = frozenset(qn(f"w:{tag}") for tag in ("ins", "moveTo", "hyperlink", "smartTag", "customXml", "fldSimple", "sdtContent"))
+_DIRECTIONS = {qn("w:bdo"): {"rtl": "‮", "ltr": "‭"}, qn("w:dir"): {"rtl": "‫", "ltr": "‪"}}
+# Elements of a table, a row or the body that hold no text of their own.
+_STRUCTURE = frozenset(qn(f"w:{tag}") for tag in ("tblPr", "tblGrid", "trPr", "tblPrEx", "tcPr", "sectPr"))
 # A title or a heading is a line, not a page: a paragraph longer than this becomes body text under a shortened heading,
 # so a 100,000-character paragraph no longer rides into every prompt whole as the section's name (sweep, 2026-10-01).
 MAX_TITLE_CHARS = 200
@@ -180,13 +233,56 @@ MAX_TITLE_CHARS = 200
 
 @dataclass
 class _Walk:
-    """What the walk over a DOCX body left out, and the styles that decide what is hidden."""
+    """What the walk over a DOCX body met and left out, and what decides what Word displays (reader v16: markup
+    compatibility, fields, data-bound controls, symbols, text drawn so it cannot be seen; ingest/word_display.py)."""
 
     styles: _Styles
+    compat: Compatibility
+    bindings: Bindings
     hidden_runs: int = 0
     # Runs hidden only through a style (a character style named Hidden, a paragraph style whose runs vanish) or
     # through w:specVanish; counted apart so the coverage report can say which door was closed.
     style_hidden_runs: int = 0
+    fields: Fields = field(default_factory=Fields)
+    # Runs Word draws so that they cannot be seen: white with nothing shaded beneath, or 1 pt or smaller. Read until
+    # v16, so a quote of them verified (DECISIONS 2026-10-30, open item one).
+    invisible_runs: int = 0
+    page_shaded: bool = False  # the document has a background of its own, on which white text may be seen
+    symbols: int = 0
+    unknown_symbols: int = 0
+    # Text boxes met in the paragraph being read: each is read once, as blocks after that paragraph, never inside its
+    # sentence. Until v16 none was read and coverage said nothing.
+    boxes: list[etree._Element] = field(default_factory=list)
+    text_boxes: int = 0
+    drawn: int = 0  # pictures, shapes without text and embedded objects
+    controls: int = 0
+    tables: int = 0
+    unread: dict[str, int] = field(default_factory=dict)  # displayed content the walk does not render, by kind
+
+    def skip(self, element: etree._Element) -> None:
+        """An element the walk does not render: counted, by its name, when it holds text Word would display."""
+        if any(node.text and node.text.strip() for node in element.iter(_TEXT, _MATH_TEXT)):
+            kind = "equations" if namespace_of(element.tag) == _MATH else etree.QName(element).localname
+            self.unread[kind] = self.unread.get(kind, 0) + 1
+
+    def symbol(self, mark: etree._Element) -> str:
+        code = mark.get(qn("w:char")) or ""
+        try:
+            shown, known = symbol_text(mark.get(qn("w:font")), int(code, 16))
+        except ValueError:
+            shown, known = REPLACEMENT, False
+        self.symbols += 1
+        self.unknown_symbols += not known
+        return shown
+
+    def draw(self, drawing: etree._Element) -> None:
+        """A drawing, a VML picture or an embedded object in a run: its text boxes are kept to be read after the
+        paragraph, once each (a box inside another is read with it); one without text is counted as drawn."""
+        boxes = [box for box in drawing.iter(_TEXT_BOX) if not _inside_box(box, drawing)]
+        if boxes:
+            self.boxes.extend(boxes)
+        else:
+            self.drawn += 1
 
 
 _STYLE_DEPTH = 12
@@ -200,10 +296,14 @@ class _Styles:
     def __init__(self, styles: etree._Element | None) -> None:
         self._based_on: dict[str, str | None] = {}
         self._hidden: dict[str, bool | None] = {}
+        self._run_properties: dict[str, etree._Element | None] = {}
+        self._paragraph_properties: dict[str, etree._Element | None] = {}
         self.default_hidden = False
+        self.defaults: etree._Element | None = None
         if styles is None:
             return
         defaults = styles.find(f"{qn('w:docDefaults')}/{qn('w:rPrDefault')}/{qn('w:rPr')}")
+        self.defaults = defaults
         self.default_hidden = _vanish_state(defaults) is True
         for style in styles.iterfind(qn("w:style")):
             style_id = style.get(qn("w:styleId"))
@@ -212,6 +312,8 @@ class _Styles:
             based = style.find(qn("w:basedOn"))
             self._based_on[style_id] = based.get(qn("w:val")) if based is not None else None
             self._hidden[style_id] = _vanish_state(style.find(qn("w:rPr")))
+            self._run_properties[style_id] = style.find(qn("w:rPr"))
+            self._paragraph_properties[style_id] = style.find(qn("w:pPr"))
 
     def hides(self, style_id: str | None) -> bool | None:
         """True or False when a style in the chain says; None when none does."""
@@ -220,6 +322,20 @@ class _Styles:
             state = self._hidden.get(style_id)
             if state is not None:
                 return state
+            style_id = self._based_on.get(style_id)
+            seen += 1
+        return None
+
+    def stated(self, style_id: str | None, tag: str, paragraph: bool = False) -> etree._Element | None:
+        """The first ``tag`` a style's chain states in its run properties (or, with ``paragraph``, its paragraph
+        properties): w:color, w:sz, w:shd, w:highlight (reader v16)."""
+        bags = self._paragraph_properties if paragraph else self._run_properties
+        seen = 0
+        while style_id and seen < _STYLE_DEPTH:
+            bag = bags.get(style_id)
+            found = bag.find(tag) if bag is not None else None
+            if found is not None:
+                return found
             style_id = self._based_on.get(style_id)
             seen += 1
         return None
@@ -264,42 +380,171 @@ def _hidden_by(run: etree._Element, paragraph_hides: bool, styles: _Styles) -> s
     return None
 
 
-def _run_text(run: etree._Element) -> str:
-    """Visible text of one run: w:t, tabs and breaks. Field codes, deleted text and drawings carry none."""
+@dataclass(frozen=True)
+class _Look:
+    """What a paragraph decides for the runs in it: whether its style hides them, its style (for their colour and size),
+    and whether something may be shaded beneath them (its own shading or its style's, a table cell, a text box)."""
+
+    hides: bool = False
+    style_id: str | None = None
+    shaded: bool = False
+
+
+def _look(paragraph: etree._Element, styles: _Styles) -> _Look:
+    properties = paragraph.find(qn("w:pPr"))
+    style_id = _style_id(properties, "w:pStyle")
+    own = properties.find(_SHADING) if properties is not None else None
+    shading = own if own is not None else styles.stated(style_id, _SHADING, paragraph=True)
+    beneath = next((a for a in paragraph.iterancestors(_CELL, _TEXT_BOX)), None) is not None
+    return _Look(_paragraph_hides(paragraph, styles), style_id, beneath or _shades(shading))
+
+
+# Text of this size or smaller is a line, not a word: 2 half-points (1 pt). The stress test hid "thirty (30)" at half a point.
+MAX_INVISIBLE_HALF_POINTS = 2
+
+
+def _shades(mark: etree._Element | None) -> bool:
+    """Whether a w:shd or w:highlight puts a colour other than white beneath the text."""
+    if mark is None:
+        return False
+    if mark.tag == _HIGHLIGHT:
+        return (mark.get(_VAL) or "none") != "none"
+    return (mark.get(qn("w:fill")) or "auto").upper() not in ("AUTO", "FFFFFF") or (mark.get(_VAL) or "clear") not in ("clear", "nil")
+
+
+def _invisible(run: etree._Element, look: _Look, walk: _Walk) -> str | None:
+    """How Word draws this run so that it cannot be seen, if it does: "tiny" at 1 pt or less, "white" in white with
+    nothing shaded beneath (its own shading or highlight, its paragraph's, a table cell's, a text box's or the page's,
+    each of which is taken to show it). Each property is Word's: the run's own, then its character style's chain, then its
+    paragraph style's, then the document's defaults; a theme colour is read by the value Word stores beside it."""
+    properties = run.find(qn("w:rPr"))
+    character_style = _style_id(properties, "w:rStyle")
+
+    def stated(tag: str) -> etree._Element | None:
+        for found in (
+            properties.find(tag) if properties is not None else None,
+            walk.styles.stated(character_style, tag),
+            walk.styles.stated(look.style_id, tag),
+            walk.styles.defaults.find(tag) if walk.styles.defaults is not None else None,
+        ):
+            if found is not None:
+                return found
+        return None
+
+    size = stated(_SIZE)
+    if size is not None and _int_or(size.get(_VAL), MAX_INVISIBLE_HALF_POINTS + 1) <= MAX_INVISIBLE_HALF_POINTS:
+        return "tiny"
+    colour = stated(_COLOUR)
+    if colour is None or (colour.get(_VAL) or "").upper() != "FFFFFF" or look.shaded or walk.page_shaded:
+        return None
+    if _shades(stated(_SHADING)) or _shades(stated(_HIGHLIGHT)):
+        return None
+    return "white"
+
+
+def _run_text(run: etree._Element, walk: _Walk, shown: bool = True) -> str:
+    """Displayed text of one run: w:t (in a symbol font, the glyphs that font draws), tabs and breaks, a w:sym's glyph,
+    a form field's box or entry at its end, and nothing while a field's instruction is open (reader v16). A run that is
+    not ``shown`` still moves the field state, as Word's hidden field marks do. Drawings hand their text boxes to the
+    walk; deleted text and instructions carry none."""
+    properties = run.find(qn("w:rPr"))
+    fonts = properties.find(qn("w:rFonts")) if properties is not None else None
+    table = symbol_font(fonts.get(qn("w:ascii")) or fonts.get(qn("w:hAnsi"))) if fonts is not None else None
     parts: list[str] = []
-    for child in run:
-        if child.tag == _TEXT:
-            parts.append(child.text or "")
-        elif child.tag in _RUN_BREAKS:
-            parts.append(_RUN_BREAKS[child.tag])
+    for child in walk.compat.children(run):
+        tag = child.tag
+        if tag == _FIELD_CHAR:
+            drawn = walk.fields.mark(child)
+            if shown:
+                parts.append(drawn)
+        elif not shown or not walk.fields.showing or tag in _NOT_DISPLAYED:
+            continue
+        elif tag == _TEXT:
+            text = child.text or ""
+            if table is not None:
+                text, unknown = in_symbol_font(text, table)
+                walk.symbols += 1
+                walk.unknown_symbols += unknown
+            parts.append(text)
+        elif tag in _RUN_BREAKS:
+            parts.append(_RUN_BREAKS[tag])
+        elif tag == _SYM:
+            parts.append(walk.symbol(child))
+        elif tag in _DRAWINGS:
+            walk.draw(child)
+        else:
+            walk.skip(child)
     return "".join(parts)
 
 
-def accepted_text(element: etree._Element, walk: _Walk, paragraph_hides: bool | None = None) -> str:
+def accepted_text(element: etree._Element, walk: _Walk, look: _Look | None = None) -> str:
     """Text of a paragraph, as Word shows it with all changes accepted.
 
-    Runs are collected in document order through every container that can hold them (w:ins,
-    w:moveTo, w:hyperlink, w:fldSimple, w:smartTag, w:sdtContent, w:customXml); deleted and
-    moved-away containers and hidden runs are left out, whether hidden by their own properties or by a style.
+    Runs are collected in document order through every container Word renders (w:ins, w:moveTo, w:hyperlink,
+    w:fldSimple, w:smartTag, w:sdtContent, w:customXml, w:bdo, w:dir), with markup compatibility applied (one branch of
+    an mc:AlternateContent, an ignorable element Word does not know left out); deleted and moved-away containers,
+    hidden runs and runs drawn so they cannot be seen are left out. A direction override (w:bdo) or embedding (w:dir) is
+    written as the control characters Word holds for it, which the reading then removes and counts, as it does in a
+    text file. Any other element is not read, and counted when it holds text (reader v16: until then every element
+    with children was read as a container, both branches of an mc:AlternateContent among them).
     """
-    if paragraph_hides is None:
-        paragraph_hides = element.tag == _PARAGRAPH and _paragraph_hides(element, walk.styles)
+    if look is None:
+        look = _look(element, walk.styles) if element.tag == _PARAGRAPH else _Look()
     parts: list[str] = []
-    for child in element:
+    for child in walk.compat.children(element):
         tag = child.tag
         if tag in _DELETED or tag in _PROPERTIES:
             continue
         if tag == _RUN:
-            hidden = _hidden_by(child, paragraph_hides, walk.styles)
+            hidden = _hidden_by(child, look.hides, walk.styles)
+            if hidden is None and _has_text(child) and (invisible := _invisible(child, look, walk)):
+                walk.invisible_runs += 1
+                _run_text(child, walk, shown=False)
+                parts.append(" " if invisible == "white" else "")  # white text still takes its width on the line
+                continue
             if hidden == "run":
                 walk.hidden_runs += 1
             elif hidden == "style":
                 walk.style_hidden_runs += 1
-            else:
-                parts.append(_run_text(child))
-        elif len(child):
-            parts.append(accepted_text(child, walk, paragraph_hides))
+            parts.append(_run_text(child, walk, shown=hidden is None))
+        elif tag == _SDT:
+            parts.append(_control_text(child, walk, look))
+        elif tag in _DIRECTIONS:
+            opening = _DIRECTIONS[tag].get(child.get(_VAL) or "", "")
+            inner = accepted_text(child, walk, look)
+            parts.append(f"{opening}{inner}‬" if opening and inner else inner)
+        elif tag in _INLINE_CONTAINERS:
+            parts.append(accepted_text(child, walk, look))
+        else:
+            walk.skip(child)
     return "".join(parts)
+
+
+def _control_text(control: etree._Element, walk: _Walk, look: _Look) -> str:
+    """An inline content control's displayed text: its content, or what its data binding displays (word_display.Bindings)."""
+    walk.controls += 1
+    content = control.find(_SDT_CONTENT)
+    cached = accepted_text(content, walk, look) if content is not None else ""
+    bound = walk.bindings.shown(control.find(qn("w:sdtPr")), cached)
+    return cached if bound is None else bound
+
+
+def _has_text(run: etree._Element) -> bool:
+    return any(node.text and node.text.strip() for node in run.iter(_TEXT))
+
+
+def _inside_box(box: etree._Element, drawing: etree._Element) -> bool:
+    """Whether a text box sits inside another text box below ``drawing``: it is read with that one."""
+    parent = box.getparent()
+    while parent is not None and parent is not drawing:
+        if parent.tag == _TEXT_BOX:
+            return True
+        parent = parent.getparent()
+    return False
+
+
+def _plain_text(element: etree._Element) -> str:
+    return "".join(node.text or "" for node in element.iter(_TEXT))
 
 
 def _set_apart(paragraph: Paragraph) -> bool:
@@ -694,7 +939,11 @@ def read_docx(data: bytes) -> ReadResult:
         styles_element: etree._Element | None = document.styles.element
     except (KeyError, AttributeError):  # a package without a styles part: nothing hides through a style
         styles_element = None
-    walk = _Walk(styles=_Styles(styles_element))
+    compat = Compatibility(document.element)
+    walk = _Walk(styles=_Styles(styles_element), compat=compat, bindings=Bindings(_bindable_parts(data)))
+    walk.fields.enabled = fields_balance(_field_marks(body, compat))
+    background = document.element.find(qn("w:background"))
+    walk.page_shaded = background is not None and (background.get(qn("w:color")) or "FFFFFF").upper() not in ("FFFFFF", "AUTO")
     numbering = _Numbering(document)
     printed = numbering.printed_numbers(document, body)
     # A DOCX whose headings carry no heading style (manual numbers, bold paragraphs, list numbering) had no heading at all:
@@ -724,40 +973,88 @@ def read_docx(data: bytes) -> ReadResult:
             title = shorten_title(text)
         blocks.append(Block("text", text))
 
+    def wrapped(container: etree._Element) -> list[etree._Element]:
+        """The children of a table, a row, a cell or the body as Word renders them: markup compatibility applied, and a
+        content control (its content) or a w:customXml around them entered as the children it wraps (reader v16: a
+        block w:customXml, and a control or a w:customXml around a row's cells, were skipped while coverage said read)."""
+        out: list[etree._Element] = []
+        for child in compat.children(container):
+            if child.tag == _SDT:
+                walk.controls += 1
+                content = child.find(_SDT_CONTENT)
+                if content is not None:
+                    out.extend(wrapped(content))
+            elif child.tag == _CUSTOM_XML:
+                out.extend(wrapped(child))
+            else:
+                out.append(child)
+        return out
+
     def cell_text(cell: etree._Element) -> str:
         """A cell's paragraphs, the rows of any table nested in it, and the content of any control in it."""
         parts: list[str] = []
-        for child in cell.iterchildren():
+        for child in wrapped(cell):
             if child.tag == _PARAGRAPH:
                 parts.append(accepted_text(child, walk).strip())
             elif child.tag == _TABLE:
                 parts.extend(table_rows(child))
-            elif child.tag == _SDT:
-                content = child.find(_SDT_CONTENT)
-                if content is not None:
-                    parts.append(cell_text(content))
+            elif child.tag not in _STRUCTURE:
+                walk.skip(child)
         return " ".join(part for part in parts if part)
 
+    def row_slots(row: etree._Element) -> list[str]:
+        """A row's text, one slot per grid column (reader v16): w:gridBefore's columns empty, each cell's text in the
+        slot of its first column and empty slots for the rest of its span, a vertical or horizontal merge's
+        continuation empty, as Word shows it; an empty cell empty and a value repeated across cells repeated; trailing
+        empty slots dropped. Until v16 a row kept only cells whose text was new in it, so every value after an empty
+        cell or a repeated one moved into the column before ("Licence fee | $100,000 | $150,000" under Year 1 | Year 2
+        | Year 3, the Year 2 fee read as $150,000), a dedup that python-docx's row.cells had needed and an XML walk did
+        not (stress test, 2026-10-30)."""
+        properties = row.find(qn("w:trPr"))
+        before = properties.find(qn("w:gridBefore")) if properties is not None else None
+        slots = [""] * _int_or(before.get(_VAL) if before is not None else None, 0)
+        for cell in wrapped(row):
+            if cell.tag != _CELL:
+                if cell.tag not in _STRUCTURE:
+                    walk.skip(cell)
+                continue
+            cell_properties = cell.find(qn("w:tcPr"))
+            span = cell_properties.find(qn("w:gridSpan")) if cell_properties is not None else None
+            width = max(1, _int_or(span.get(_VAL) if span is not None else None, 1))
+            merged = [cell_properties.find(qn(f"w:{tag}")) if cell_properties is not None else None for tag in ("vMerge", "hMerge")]
+            continued = any(m is not None and (m.get(_VAL) or "continue") != "restart" for m in merged)
+            text = "" if continued else cell_text(cell)
+            slots.extend([text] + [""] * (width - 1))
+        while slots and not slots[-1]:
+            slots.pop()
+        return slots
+
     def table_rows(table: etree._Element) -> list[str]:
-        """Each row as its cells joined with ' | ': a merged cell once, a deleted row not at all, a row inside a
+        """Each row as its grid's slots joined with ' | ' (`row_slots`), a deleted row not at all, a row inside a
         content control like any other. Nested tables were dropped before 2026-10-01; coverage said they were read."""
+        walk.tables += 1
         rows: list[str] = []
-        for child in table.iterchildren():
-            if child.tag == _SDT:
-                content = child.find(_SDT_CONTENT)
-                if content is not None:
-                    rows.extend(table_rows(content))
+        for child in wrapped(table):
+            if child.tag != _ROW:
+                if child.tag not in _STRUCTURE:
+                    walk.skip(child)
                 continue
-            if child.tag != _ROW or child.find(_DELETED_ROW) is not None:
+            if child.find(_DELETED_ROW) is not None:
                 continue
-            cells: list[str] = []
-            for cell in child.iterchildren(_CELL):
-                text = cell_text(cell)
-                if text and text not in cells:  # a horizontally merged cell is one cell; a vertical continuation is empty
-                    cells.append(text)
-            if cells:
-                rows.append(" | ".join(cells))
+            slots = row_slots(child)
+            if any(slots):
+                rows.append(" | ".join(slots))
         return rows
+
+    def read_boxes() -> None:
+        """The text boxes met in the paragraph or table just read, each read once as blocks of its own, with fields of
+        its own (a text box is a story of its own in Word)."""
+        pending, walk.boxes = walk.boxes, []
+        for box in pending:
+            walk.text_boxes += 1
+            outer, walk.fields.open = walk.fields.open, []
+            walk_container(box)
+            walk.fields.open = outer
 
     def _unstyled_heading_level(text: str, number: str | None, after_text: bool) -> int:
         """The level of a paragraph read as a plain heading line in a document with no heading style, or 0: a numbered
@@ -802,10 +1099,24 @@ def read_docx(data: bytes) -> ReadResult:
 
     def walk_container(container: etree._Element) -> None:
         """Paragraphs and tables in document order, entering block-level content controls (w:sdt), which wrap a
-        heading, a clause or a whole table and were skipped before 2026-10-01 while coverage called them read."""
+        heading, a clause or a whole table and were skipped before 2026-10-01 while coverage called them read, and
+        block-level w:customXml (reader v16). A control bound to a part of the package is read as the value Word
+        displays for it (word_display.Bindings). The text boxes a paragraph or a table holds are read after it."""
         nonlocal carry, last_number
-        for child in container.iterchildren():
-            if child.tag == _PARAGRAPH:
+        for child in compat.children(container):
+            if child.tag == _SDT:
+                walk.controls += 1
+                content = child.find(_SDT_CONTENT)
+                bound = walk.bindings.shown(child.find(qn("w:sdtPr")), _plain_text(content) if content is not None else "")
+                if bound is not None:
+                    add(carry.strip())
+                    carry = ""
+                    add(bound)
+                elif content is not None:
+                    walk_container(content)
+            elif child.tag == _CUSTOM_XML:
+                walk_container(child)
+            elif child.tag == _PARAGRAPH:
                 text = accepted_text(child, walk)
                 if child.find(_DELETED_MARK) is not None:
                     carry += text
@@ -823,19 +1134,33 @@ def read_docx(data: bytes) -> ReadResult:
                     else:
                         level = _unstyled_heading_level(text, printed.get(child), bool(blocks))
                     add(text, level, printed.get(child) if level > 0 else None)
+                read_boxes()
             elif child.tag == _TABLE:
                 add(carry.strip())
                 carry = ""
                 for row in table_rows(child):
                     add(row)
-            elif child.tag == _SDT:
-                content = child.find(_SDT_CONTENT)
-                if content is not None:
-                    walk_container(content)
+                read_boxes()
+            elif child.tag not in _STRUCTURE:
+                walk.skip(child)
 
     walk_container(body)
     add(carry.strip())
     tracked = len(body.xpath(_REVISIONS_XPATH))
+    counts = DocxWalkCounts(
+        tables=walk.tables,
+        content_controls=walk.controls,
+        form_fields=walk.fields.forms,
+        fields_balanced=walk.fields.enabled,
+        bound_read=walk.bindings.read,
+        bound_unknown=walk.bindings.unknown,
+        symbols=walk.symbols,
+        unknown_symbols=walk.unknown_symbols,
+        text_boxes=walk.text_boxes,
+        drawn=walk.drawn,
+        invisible_runs=walk.invisible_runs,
+        unread=tuple(sorted(walk.unread.items())),
+    )
     return ReadResult(
         blocks=blocks,
         pages=_docx_pages(data),
@@ -843,8 +1168,34 @@ def read_docx(data: bytes) -> ReadResult:
         tracked_changes=tracked,
         hidden_runs=walk.hidden_runs + walk.style_hidden_runs,
         format_characters=removed,
-        coverage=docx_coverage(data, etree.tostring(body, encoding="unicode"), tracked, walk.hidden_runs, walk.style_hidden_runs),
+        coverage=docx_coverage(data, etree.tostring(body, encoding="unicode"), tracked, walk.hidden_runs, walk.style_hidden_runs, counts),
+        more_coverage=docx_more_coverage(counts),
     )
+
+
+def _bindable_parts(data: bytes) -> dict[str, bytes]:
+    """The parts a content control may be bound to: the custom XML items and their properties, and the document's core
+    and extended properties."""
+    with zipfile.ZipFile(io.BytesIO(data)) as package:
+        names = [n for n in package.namelist() if n.startswith("customXml/") or n in ("docProps/core.xml", "docProps/app.xml")]
+        return {name: package.read(name) for name in names}
+
+
+def _field_marks(body: etree._Element, compat: Compatibility) -> list[tuple[str | None, bool]]:
+    """Each w:fldChar of the body Word displays, in document order, with whether a tracked deletion removes it: not one in
+    a branch of an mc:AlternateContent Word does not display."""
+    marks: list[tuple[str | None, bool]] = []
+    for mark in body.iter(_FIELD_CHAR):
+        deleted, shown = False, True
+        for ancestor in mark.iterancestors():
+            if ancestor.tag in _DELETED:
+                deleted = True
+            elif ancestor.tag in (CHOICE, FALLBACK):
+                parent = ancestor.getparent()
+                shown = shown and parent is not None and parent.tag == ALTERNATE and compat.branch(parent) is ancestor
+        if shown:
+            marks.append((mark.get(qn("w:fldCharType")), deleted))
+    return marks
 
 
 # ---------------------------------------------------------------------------- PDF

@@ -80,7 +80,13 @@ MAX_TEXT_CHARS = 3 * 4_400_000
 # v16 (2026-10-30, the adversarial stress test): every format. A long paragraph is cut into parts only where a passage
 # ends and nothing is split (sections.split_paragraph; v15 cut at the 6,000th character inside "$350,|000,000"); an
 # invisible mark inside an ASCII number is removed ("9؜0"); a reading of more sections or text than three times the
-# largest real contract is refused in the reader's child.
+# largest real contract is refused in the reader's child. DOCX is read as Word displays it (ingest/word_display.py): one
+# branch of an mc:AlternateContent, no text inside a field's instruction, a legacy check box as ☒/☐ and a drop-down as
+# its entry, a w:sym or symbol-font text as its glyph, a data-bound control as its bound value, a w:bdo or w:dir with its
+# direction controls (removed and counted), text boxes once each after their paragraph, block w:customXml and controls
+# around cells entered; text drawn so it cannot be seen (white on nothing shaded, 1 pt or less) is left out and counted.
+# A table row has one slot per grid column, empty and repeated cells kept: v15 dropped them, so values moved columns.
+# Measured on the 31 DOCX of the corpus: tables in 19 (empty and repeated cells), check boxes in two, nothing else.
 PARSER_VERSION = "v16"
 
 
