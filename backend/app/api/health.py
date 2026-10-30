@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request
 
+from .. import db
 from ..config import settings
 from ..providers.base import ModelProvider
 from ..schemas import HealthOut
@@ -24,9 +25,12 @@ MIN_FREE_BYTES = 256 * 1024 * 1024
 
 
 def storage_problem() -> str | None:
-    """Why the store cannot take a write, or None. Read from the file system's permissions and free space, never by
-    taking a write lock: the first screen asks for health, and a check that waited on a long write would hold it up.
-    No sizes are named; the endpoint is public."""
+    """Why the store cannot take a write, or None. Read from the file system's permissions and free space, and from
+    what the engine met (db.store_fault: a damaged file, an I/O or full disk, a store the engine could not write), never
+    by taking a write lock: the first screen asks for health, and a check that waited on a long write would hold it up.
+    No sizes or error names are given; the endpoint is public."""
+    if db.store_fault() is not None:
+        return "the store failed a read or a write: uploads, runs and records may not be recorded or read"
     data_dir = settings.data_dir
     if not data_dir.is_dir():
         return "the data directory is missing: uploads and runs cannot be recorded"

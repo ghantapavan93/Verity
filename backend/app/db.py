@@ -3,10 +3,14 @@ about it: a second datastore is added when a measurement needs one."""
 
 from __future__ import annotations
 
+import threading
+import time
+import weakref
 from collections.abc import Iterator
 from contextlib import contextmanager
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.engine import ExceptionContext
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -19,6 +23,43 @@ from .errors import Busy
 
 class Base(DeclarativeBase):
     pass
+
+
+# What the engine met that the file system cannot show (stress test, 2026-10-30, ops 3: a damaged page answered 500 on
+# every read of its table while health said ok). By SQLite's error name, with when it was first met. A damaged file
+# (CORRUPT, NOTADB) is reported until the process starts again: a later commit elsewhere in a damaged file succeeds while
+# the damage stays. An I/O error, a read-only or full store, a file that cannot be opened, until the next successful
+# commit. A lost race for the write lock (BUSY, "locked") is contention, not a fault, and is not noted.
+DAMAGED = ("SQLITE_CORRUPT", "SQLITE_NOTADB")
+PASSING = ("SQLITE_IOERR", "SQLITE_READONLY", "SQLITE_FULL", "SQLITE_CANTOPEN")
+# Kept per engine, the store the process serves being `engine` below.
+_faults: weakref.WeakKeyDictionary[Engine, dict[str, float]] = weakref.WeakKeyDictionary()
+_faults_lock = threading.Lock()
+
+
+def note_store_error(error: BaseException, target: Engine | None = None) -> None:
+    name = str(getattr(error, "sqlite_errorname", "") or "")
+    if name.startswith(DAMAGED) or name.startswith(PASSING):
+        with _faults_lock:
+            _faults.setdefault(target or engine, {}).setdefault(name, time.time())
+
+
+def _committed(target: Engine) -> None:
+    with _faults_lock:
+        held = _faults.get(target)
+        if held is not None:
+            for name in [n for n in held if not n.startswith(DAMAGED)]:
+                del held[name]
+
+
+def store_faults(target: Engine | None = None) -> dict[str, float]:
+    """What the engine has met and not since seen pass, by SQLite's error name, with when it was first met."""
+    with _faults_lock:
+        return dict(_faults.get(target or engine, {}))
+
+
+def store_fault(target: Engine | None = None) -> str | None:
+    return next(iter(sorted(store_faults(target))), None)
 
 
 def make_engine(url: str | None = None) -> Engine:
@@ -47,6 +88,14 @@ def make_engine(url: str | None = None) -> Engine:
             # visitor added is gone when their workspace ends (application/retention.py; release review, 2026-10-11).
             cursor.execute("PRAGMA secure_delete=ON")
             cursor.close()
+
+        @event.listens_for(engine, "handle_error")
+        def _noted(context: ExceptionContext) -> None:
+            note_store_error(context.original_exception, engine)
+
+        @event.listens_for(engine, "commit")
+        def _cleared(_connection: object) -> None:
+            _committed(engine)
 
     return engine
 
