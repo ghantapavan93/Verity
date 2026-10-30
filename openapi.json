@@ -6193,8 +6193,20 @@
     },
     "/api/access/session": {
       "post": {
-        "description": "Exchange an invite for a session. The invite may be the bare token or the whole link it came in.",
+        "description": "Exchange an invite for a session. The invite may be the bare token or the whole link it came in.\n\nA browser holding another reader's working session keeps it, 409 and no cookie, unless the request says the person\nchose to switch (``?replace=true``). An invite in the address silently replaced the session held, on arrival and on\na change of the address, and what the reader added next went into the inviter's workspace (stress test, 2026-10-30,\nauthz 1). A session of the same reader is renewed; an expired or revoked one is no session.",
         "operationId": "enter_api_access_session_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "replace",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Replace",
+              "type": "boolean"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6898,7 +6910,7 @@
     },
     "/api/health": {
       "get": {
-        "description": "Open to everyone, because the supervisor and the page ask before anyone has entered. Past the gate it names\nthe model and its state; before it, only whether the workbench is up and that the gate is on. A store that cannot\ntake a write is not healthy, whatever the model's state. A visitor who has not entered never makes it ask the\nmodel, and a deployment whose model bills by the second can leave the model to the answer itself.",
+        "description": "Open to everyone, because the supervisor and the page ask before anyone has entered. Past the gate it names\nthe model and its state; before it, only whether the workbench is up and that the gate is on. A store that cannot\ntake a write is not healthy, whatever the model's state. A visitor who has not entered never makes it ask the\nmodel, and a deployment whose model bills by the second can leave the model to the answer itself.\n\nIt answers on the event loop and takes none of the request threads, not even for a dependency: declared `def`, it\nwaited behind them, and one visitor's 120 concurrent reads of its own run held it for 21 s, past the supervisor's\n10 s, so the probe that restarts the API measured the queue, not the process (stress test, 2026-10-30). What it\ndoes here is a check of the file system and a token's MAC; the model's probe has its own thread.",
         "operationId": "health_api_health_get",
         "responses": {
           "200": {

@@ -47,7 +47,7 @@ from ..application.quotas import document_quotas, refuse_if_spent
 from ..application.workspace import PUBLIC_PREFIX, is_public
 from ..config import settings
 from ..db import SessionLocal, get_session
-from ..errors import AccessRequired, Forbidden, InvalidInput, NotFound, Paused, TooManyRequests
+from ..errors import AccessRequired, Conflict, Forbidden, InvalidInput, NotFound, Paused, TooManyRequests
 from ..hashing import mac_sha256
 from ..models import VisitorWorkspace, as_utc, utcnow
 from ..schemas import AccessOut, InviteIn
@@ -298,8 +298,13 @@ def access(request: Request, response: Response) -> AccessOut:
 
 
 @router.post("/session", response_model=AccessOut)
-def enter(body: InviteIn, request: Request, response: Response) -> AccessOut:
-    """Exchange an invite for a session. The invite may be the bare token or the whole link it came in."""
+def enter(body: InviteIn, request: Request, response: Response, replace: bool = False) -> AccessOut:
+    """Exchange an invite for a session. The invite may be the bare token or the whole link it came in.
+
+    A browser holding another reader's working session keeps it, 409 and no cookie, unless the request says the person
+    chose to switch (``?replace=true``). An invite in the address silently replaced the session held, on arrival and on
+    a change of the address, and what the reader added next went into the inviter's workspace (stress test, 2026-10-30,
+    authz 1). A session of the same reader is renewed; an expired or revoked one is no session."""
     response.headers["Cache-Control"] = "no-store"
     if not enabled():
         return _out(None)
@@ -314,6 +319,12 @@ def enter(body: InviteIn, request: Request, response: Response) -> AccessOut:
     invited = verify(token, "verity-invite", settings.access_secret)
     if invited is None:
         raise InvalidInput("That invite is not valid, or it has expired. Ask for a new link.")
+    held = current_session(request)
+    if held is not None and _session_serves_here(held.subject) and held.subject != invited.subject and not replace:
+        raise Conflict(
+            f"This browser is already inside as {held.subject}. The link is for {invited.subject}; nothing was changed. "
+            "Switch only if you mean to work as that reader."
+        )
     lifetime = settings.access_session_days * 86400
     response.set_cookie(
         SESSION_COOKIE,
