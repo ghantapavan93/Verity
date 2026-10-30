@@ -126,7 +126,7 @@ RECORDED: dict[str, str] = {
     # definition read in every pair of quotation marks, words of construction not terms, a term used in capitals; the
     # amendments of every handed section handed with it, a linked section's included (runs.links).
     # retrieval-v3 is not committed to main, so its fingerprint is replaced, not bumped, as the branch adds to it.
-    "retrieval-v3": "ea8e8a69c0bd10b2",
+    "retrieval-v3": "1e7162826fdb5559",
 }
 
 

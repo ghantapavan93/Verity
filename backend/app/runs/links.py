@@ -53,8 +53,8 @@ _PRIORITY: dict[LinkKind, int] = {"amendment": 0, "override": 0, "amended defini
 # never does ("the Parties' and the Members' interest includes"), and a term may hold one ("‘Customer’s Data’").
 _QUOTED = (
     r"(?:[“\"](?P<double>[^”\"]{1,60})[”\"]"
-    r"|(?<!\w)‘(?P<curly>(?:[^‘’\n]|’(?=\w)){1,60}?)’(?!\w)"
-    r"|(?<![\w'])'(?P<straight>(?:[^'\n]|'(?=\w)){1,60}?)'(?!\w)"
+    r"|‘(?<!\w‘)(?P<curly>(?:[^‘’\n]|’(?=\w)){1,60}?)’(?!\w)"
+    r"|'(?<!\w')(?<!'')(?P<straight>(?:[^'\n]|'(?=\w)){1,60}?)'(?!\w)"
     r"|«\s?(?P<guillemet>[^«»\n]{1,60}?)\s?»"
     r"|„(?P<low>[^„“”\n]{1,60})[“”])"
 )
@@ -69,7 +69,9 @@ _CONSTRUCTION = frozenset(
     | {"herein", "hereof", "hereunder", "hereto", "hereby", "to the extent"}
 )
 _OPENING_QUOTE = "“\"‘'«„"
-_CAPITALS_AROUND = 80  # characters either side of a use in capitals that must read as capitals
+# A run of text printed in capitals: four words or more in a row with no lower-case letter ("IN NO EVENT SHALL EITHER
+# PARTY'S AGGREGATE LIABILITY EXCEED THE FEES PAID").
+_CAPITALS = re.compile(r"[A-Z][^\sa-z]*(?:\s+[^\sa-z]+){3,}")
 # The verbs that change another clause's text or override it, or a reference into another instrument ("Section 4.1 of
 # the Lease"), which is how an amendment names what it changes. A wider list (modify, prevail, reduced …) added no case
 # and more false links on CUAD.
@@ -94,6 +96,7 @@ _CHANGES = re.compile(
     re.IGNORECASE,
 )
 _SENTENCE = re.compile(r"(?<=[.;!?])\s+")
+_CHANGING_WORD = re.compile(r"amend|delet|replac|restat|supersed|substitut|cancel|revok", re.IGNORECASE)
 _NAMING_LINE = re.compile(r"^[ \t]*(?:Section|Clause|Article)[ \t]+(\d+(?:\.\d+)*)[ \t]+of\b", re.IGNORECASE | re.MULTILINE)
 
 
@@ -169,22 +172,23 @@ def _capitals_of(term: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![\w{_OPENING_QUOTE}]){_plural(term.upper())}\b")
 
 
-def _in_capitals(text: str, start: int, end: int) -> bool:
-    """Whether the text around a span reads as capitals: four upper-case letters or more to every lower-case one."""
-    around = text[max(0, start - _CAPITALS_AROUND) : end + _CAPITALS_AROUND]
-    return sum(ch.isupper() for ch in around) >= 4 * sum(ch.islower() for ch in around)
+def _capital_runs(text: str) -> list[tuple[int, int]]:
+    """Where the text is printed in capitals (``_CAPITALS``): read once per section, for every term it might use."""
+    return [match.span() for match in _CAPITALS.finditer(text)]
 
 
-def _uses(text: str, term: str) -> int | None:
-    """Where the text uses the term, or None. A capitalised term is also used in capitals where the text around it is
-    printed in capitals (retrieval-v3: a limitation clause in capitals used "FEES" and was never linked to "Fees"); an
-    acronym in mixed text ("the ACT standard") is not the term "Act"."""
+def _uses(text: str, term: str, capitals: list[tuple[int, int]] | None = None) -> int | None:
+    """Where the text uses the term, or None. A capitalised term is also used in capitals inside a run of text printed in
+    capitals (retrieval-v3: a limitation clause in capitals used "FEES" and was never linked to "Fees"); an acronym in
+    mixed text ("the ACT standard") is not the term "Act". ``capitals`` is `_capital_runs(text)`, when the caller has it."""
     match = _use_of(term).search(text)
     at = match.start() if match else None
     if term[:1].isupper() and not term.isupper():
-        for capitals in _capitals_of(term).finditer(text, 0, len(text) if at is None else at):
-            if _in_capitals(text, capitals.start(), capitals.end()):
-                return capitals.start()
+        for start, end in _capital_runs(text) if capitals is None else capitals:
+            if at is not None and start >= at:
+                break
+            if found := _capitals_of(term).search(text, start, end):
+                return found.start()
     return at
 
 
@@ -210,7 +214,9 @@ def _amending(sections: Sequence[Readable]) -> list[list[_Amending]]:
 
 
 def _amending_sentence(sentence: str) -> _Amending:
-    if not _CHANGES.search(sentence):
+    # The changing words are looked for first: ``_CHANGES`` reads 160 characters after every "Section" it meets, and an
+    # amending "sentence" in a filing's table runs to thousands (0.2 s of a 2.8 MB filing, 2026-10-30).
+    if not _CHANGING_WORD.search(sentence) or not _CHANGES.search(sentence):
         return _Amending(references(sentence), False, [])
     defined = [term for match in _DEFINES.finditer(sentence) if (term := _term(match, sentence))]
     named = [term for match in _NAMES_DEFINITION.finditer(sentence) if (term := (match.group(match.lastgroup or 0) or "").strip())]
@@ -312,7 +318,8 @@ def links_of(
         amendments, opened = _amendments(sections, _amending(sections), defined, stated), _opened(sections, stated)
     found = list(amendments.of.get(seed, []))
     own = sections[seed]
-    used = sorted((at, term) for term, where in defined.items() if where != seed and (at := _uses(own.text, term)) is not None)
+    capitals = _capital_runs(own.text)
+    used = sorted((at, term) for term, where in defined.items() if where != seed and (at := _uses(own.text, term, capitals)) is not None)
     for _, term in used:
         found += [Link(index, "amended definition", seed, term) for index in amendments.of_term.get(term, []) if index != seed]
         found.append(Link(defined[term], "definition", seed, term))
