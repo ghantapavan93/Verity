@@ -177,7 +177,7 @@ def reconstruct_input(session: Session, run_id: str) -> Reconstruction:
             result.problem = f"candidate section {candidate['section_id']} no longer exists"
             return result
         sections.append(SectionForPrompt(candidate["label"], section.number, section.heading, section.text))
-        result.slices.append(context_slice(candidate["label"], section, rank, window))
+        result.slices.append(context_slice(candidate["label"], section, rank, window=window))
 
     guidance_text = run.guidance.text if run.guidance else None
     result.system = prompt.system
