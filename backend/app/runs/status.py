@@ -612,10 +612,13 @@ def check_values(
     computed from quoted figures, a period stated elsewhere in the contract): code says only that the evidence shown does
     not establish it, never that it is wrong.
 
-    The guidance is a standard the reader set and the answer is compared with, so its values count as stated. The
-    question does not: it is what the reader asked, not what the contract says, and a value an answer takes from it
-    ("the Buyer's $1,000,000 cash payment") is a premise repeated, which the reason names as such. Other statuses already
-    ask a person to look, and a finding with no verified quote was decided before this."""
+    The guidance is a standard the reader set: its values support an answer that compares a quoted value with it ("90
+    days meets the 45-day minimum"), and since policy-v17 nothing else. An answer that gives the guidance's figure as the
+    contract's ("on 90 days' notice, which meets the guidance" over a quote with no period) has repeated the standard,
+    not quoted the contract (stress test, 2026-10-30). The question is not evidence either: it is what the reader asked,
+    and a value an answer takes from it ("the Buyer's $1,000,000 cash payment") is a premise repeated. The reason names
+    each as such. Other statuses already ask a person to look, and a finding with no verified quote was decided before
+    this."""
     if decision.status != "pass" or not quotes:
         return decision
     mark = redaction_given_as_value(conclusion)
@@ -626,7 +629,8 @@ def check_values(
             f"the answer gives {mark}, a redaction mark, as its value: this copy of the contract withholds the figure, so the evidence cannot establish it",
         )
     # The time the question asks at is not a figure taken from it (policy-v12): repeated, it says when the answer is for.
-    unsupported = unquoted_values(conclusion, quotes, [guidance or "", *frame_times(question)], clause_numbers)
+    frames = frame_times(question)
+    unsupported = unquoted_values(conclusion, quotes, frames, clause_numbers, standards=[guidance] if guidance else [])
     if not unsupported:
         uniform = uniform_party_choices(conclusion, quotes, [question or ""], [guidance] if guidance else [])
         if not uniform:
@@ -641,12 +645,17 @@ def check_values(
                 decision,
             ),
         )
+    # Where each came from: read again with the guidance counted as stated, and with the question too.
+    beside_guidance = set(unquoted_values(conclusion, quotes, [guidance or "", *frames], clause_numbers))
     beyond_question = set(unquoted_values(conclusion, quotes, [question or "", guidance or ""], clause_numbers))
-    from_question = [v for v in unsupported if v not in beyond_question]
+    from_guidance = [v for v in unsupported if v not in beside_guidance]
+    from_question = [v for v in unsupported if v in beside_guidance and v not in beyond_question]
     elsewhere = [v for v in unsupported if v in beyond_question]
     reasons = []
     if elsewhere:
         reasons.append(f"the evidence shown does not establish {', '.join(elsewhere)}: no verified quote or guidance states it")
     if from_question:
         reasons.append(f"{', '.join(from_question)} comes from the question, and no verified quote states it")
+    if from_guidance:
+        reasons.append(f"{', '.join(from_guidance)} comes from the guidance, and no verified quote states it")
     return Decision("needs_review", "position_check", "; ".join(reasons))

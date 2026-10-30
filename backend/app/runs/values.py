@@ -21,12 +21,13 @@ service-credit table holds both 5% and 10%).
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 from typing import Literal
 
-from ..policy.durations import NUMBER_WORDS, words_to_number
+from ..policy.durations import NUMBER_WORDS, without_unseen, words_to_number
 from ..verify.tokens import Kind, tokenize
 
 # A number in words, by policy.durations' grammar: "thirty and sixty days" states thirty and sixty, never ninety
@@ -274,7 +275,15 @@ def _blank(text: str, spans: Iterable[tuple[int, int]]) -> str:
     return "".join(chars)
 
 
-def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int, str]]:
+# Every reading below is of a text that never changes once a run is decided (a guidance, a question, a quote, an
+# answer), and every read of a finding's account repeated them: the guidance was parsed about sixteen times per finding
+# per request, so a 20,000-character playbook made a list of twenty findings take 20 s and starved the API's one process
+# (stress test, 2026-10-30: tools finding 1). Each is now read once per process, by its text, and kept immutable.
+_READINGS = 512
+
+
+@lru_cache(maxsize=_READINGS)
+def _stated(text: str, *, words_need_a_unit: bool) -> tuple[tuple[str, int, int, str], ...]:
     """(key, start, end, written) of each value ``text`` states, offsets into ``text``; ``written`` says how the value
     was written: "date", "percent", "money", "number" or "words". Dates first, then what is left. Number words count
     only before a unit when ``words_need_a_unit`` (an answer); everywhere otherwise (a quote)."""
@@ -323,9 +332,10 @@ def _stated(text: str, *, words_need_a_unit: bool) -> list[tuple[str, int, int, 
         if scale and factor is not None:
             value, end = value * factor, scale.end()
         found.append((_key(value), match.start(), end, "words"))
-    return found
+    return tuple(found)
 
 
+@lru_cache(maxsize=_READINGS)
 def _without_pointers(text: str) -> str:
     """The text with what points blanked, to spaces so offsets still index it as written: "Under Section 10" in a
     question names no value (review R1, 2026-10-09), nor "Amendment No. 1" in an answer. The value check, the choices
@@ -333,6 +343,7 @@ def _without_pointers(text: str) -> str:
     return _POINTERS.sub(lambda m: " " * len(m.group(0)), text)
 
 
+@lru_cache(maxsize=_READINGS)
 def _without_names(text: str) -> str:
     """The text with what names a provision or an instrument blanked, each pointer's own number only ("clause 1.2",
     "Amendment No. 1"): how runs.relations reads an answer. A list's further numbers stay, so "Under clause 1.2, 3
@@ -344,33 +355,64 @@ def _keys(text: str) -> set[str]:
     return {key for key, _, _, _ in _stated(text, words_need_a_unit=False)}
 
 
-def _kinds_of(text: str, *, words_need_a_unit: bool) -> dict[str, set[str]]:
+@lru_cache(maxsize=_READINGS)
+def _kinds_of(text: str, *, words_need_a_unit: bool) -> Mapping[str, frozenset[str]]:
     """For each value ``text`` states (its "n:" or "d:" key), the kinds it is stated as: a percentage, money, a duration
     in one unit family, or "plain" where code reads no kind (a number with no unit, "30 (thirty) days")."""
     group_at = {start: group for _, group, _, _, start, _ in _kinded(text, words_need_a_unit=words_need_a_unit)}
     kinds: dict[str, set[str]] = {}
     for key, start, _, _ in _stated(text, words_need_a_unit=words_need_a_unit):
         kinds.setdefault(key, set()).add(group_at.get(start, "plain"))
-    return kinds
+    return {key: frozenset(found) for key, found in kinds.items()}
+
+
+@dataclass(frozen=True)
+class _Given:
+    """What one text states, read once: each value's kinds, and the values in their kind's base unit ("t:months:12" for
+    "one year" and for "twelve (12) months")."""
+
+    kinds: Mapping[str, frozenset[str]]
+    kinded: frozenset[str]
+
+    def support(self, key: str, kind: str, base: str | None) -> bool:
+        """Whether this text states the value: the same number as the same kind or as no kind code reads, or the same
+        value in its kind's base unit."""
+        stated_as = self.kinds.get(key, frozenset())
+        return (bool(stated_as) and (kind == "plain" or kind in stated_as or "plain" in stated_as)) or (base is not None and base in self.kinded)
+
+
+@lru_cache(maxsize=_READINGS)
+def _given(text: str) -> _Given:
+    return _Given(_kinds_of(text, words_need_a_unit=False), frozenset(key for _, _, key, _, _, _ in _kinded(text, words_need_a_unit=False)))
 
 
 def wording_values(text: str | None) -> set[str]:
     """The values a contract's wording states, what names a provision or an instrument set aside: runs.relations compares
     a replaced clause with its replacement so (policy-v16). "… notice under Section 7.3" names 7.3 and states none."""
-    return {key for key, *_ in _stated(_without_names(text or ""), words_need_a_unit=False)}
+    return {key for key, *_ in _stated(_without_names(without_unseen(text or "")), words_need_a_unit=False)}
 
 
 def stated_values(text: str | None, *, answer: bool = False) -> set[str]:
     """The values ``text`` states, each as its comparable key ("n:45", "d:2027-12-27"): the reading every check here
     shares. In an answer (``answer``) what names a provision or an instrument is set aside, a pointer's own number only
     ("clause 1.2", "Amendment No. 1" state no value), and a number word counts only before a unit, as `_stated` reads one."""
-    text = text or ""
+    text = without_unseen(text or "")
     return {key for key, *_ in _stated(_without_names(text) if answer else text, words_need_a_unit=answer)}
 
 
-def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = (), clause_numbers: Iterable[str] = ()) -> list[str]:
-    """The values ``answer`` states that no quote and none of the reader's own text the caller passes (the guidance) states, each as
+def unquoted_values(
+    answer: str | None, quotes: Iterable[str], readers_text: Iterable[str] = (), clause_numbers: Iterable[str] = (), standards: Iterable[str] = ()
+) -> list[str]:
+    """The values ``answer`` states that no quote and none of the reader's own text the caller passes states, each as
     the answer writes it ("45 days", "$78,600.00", "one (1) day", "January 1, 2024"), in the answer's order, once each.
+    Every text is read without the characters a reader does not see (`policy.durations.without_unseen`).
+
+    ``readers_text`` counts as stated (the time a question asks at, `frame_times`). ``standards`` (the guidance) count
+    only where the answer compares (policy-v17, stress test 2026-10-30): a value only a standard states supports the
+    answer when the answer also states, of the same kind (a percentage, money, a duration of any unit, a date, a plain
+    number), a value a quote states. "90 days meets the 45-day minimum" over a quote of ninety days compares; "on 90
+    days' notice, which meets the guidance" over a quote with no period, or "capped at $1,000,000" over a quoted
+    $500,000, gives the guidance's own figure as the contract's, and the figure is reported.
 
     A value is quoted by the same number stated as the same kind, or stated with no kind code can read: "5%" is not
     quoted by "within 5 business days" (review, 2026-10-09: an answer of 5% over a quote whose 5 is days, beside a credit
@@ -381,25 +423,32 @@ def unquoted_values(answer: str | None, quotes: Iterable[str], readers_text: Ite
     heading); a whole number is not set aside this way, since "6 Machines" is a value even where a clause 6 exists."""
     if not answer:
         return []
-    sources = (*quotes, *(_without_pointers(text) for text in readers_text))
-    given: dict[str, set[str]] = {}
-    for text in sources:
-        for key, kinds in _kinds_of(text, words_need_a_unit=False).items():
-            given.setdefault(key, set()).update(kinds)
-    # The same values in their kind's base unit ("t:months:12" for "one year" and for "twelve (12) months").
-    given_kinded = {key for text in sources for _, _, key, _, _, _ in _kinded(text, words_need_a_unit=False)}
+    answer = without_unseen(answer)
+    quoted_in = [_given(without_unseen(text)) for text in quotes]
+    evidence = [*quoted_in, *(_given(_without_pointers(without_unseen(text))) for text in readers_text)]
+    standard = [_given(_without_pointers(without_unseen(text))) for text in standards]
     blanked = _without_pointers(answer)
     kinded_answer = _kinded(blanked, words_need_a_unit=True)
     group_at = {start: group for _, group, _, _, start, _ in kinded_answer}
     base_key_at = {start: key for _, _, key, _, start, _ in kinded_answer}
     clause_set = set(clause_numbers)
+    stated = sorted(_stated(blanked, words_need_a_unit=True), key=lambda found: found[1])
+
+    def sort_of(written: str, kind: str) -> str:
+        return "date" if written == "date" else kind.split(":")[0]
+
+    # The kinds of which the answer states a value a quote states: of those, it compares with what a standard sets.
+    compared = {
+        sort_of(written, group_at.get(start, "plain"))
+        for key, start, _, written in stated
+        if any(given.support(key, group_at.get(start, "plain"), base_key_at.get(start)) for given in quoted_in)
+    }
     shown: list[str] = []
     seen: set[tuple[str, str]] = set()
-    for key, start, end, _ in sorted(_stated(blanked, words_need_a_unit=True), key=lambda found: found[1]):
-        kind = group_at.get(start, "plain")
-        stated_as = given.get(key, set())
-        quoted = bool(stated_as) and (kind == "plain" or kind in stated_as or "plain" in stated_as)
-        quoted = quoted or base_key_at.get(start) in given_kinded
+    for key, start, end, written in stated:
+        kind, base = group_at.get(start, "plain"), base_key_at.get(start)
+        quoted = any(given.support(key, kind, base) for given in evidence)
+        quoted = quoted or (sort_of(written, kind) in compared and any(given.support(key, kind, base) for given in standard))
         pointer = kind == "plain" and "." in answer[start:end] and answer[start:end].strip() in clause_set
         if quoted or pointer or (key, kind) in seen:
             continue
@@ -460,7 +509,8 @@ class ValueChoice:
     more: int  # how many further distinct values the passages state
 
 
-def _kinded(text: str, *, words_need_a_unit: bool) -> list[tuple[ChoiceKind, str, str, str, int, int]]:
+@lru_cache(maxsize=_READINGS)
+def _kinded(text: str, *, words_need_a_unit: bool) -> tuple[tuple[ChoiceKind, str, str, str, int, int], ...]:
     """(kind, group, key, number, start, end) of each percentage, sum of money and duration ``text`` states, in its
     order, with the span covering its unit. Values compare within a group: a kind, and for a duration its unit family
     in that family's base unit. ``number`` is the value as written ("n:60" for sixty minutes, keyed 3600 seconds)."""
@@ -483,20 +533,29 @@ def _kinded(text: str, *, words_need_a_unit: bool) -> list[tuple[ChoiceKind, str
         elif word in _DURATION_FAMILIES:
             family, factor = _DURATION_FAMILIES[word]
             out.append(("duration", f"duration:{family}", f"t:{family}:{(value * factor).normalize()}", key, start, through))
-    return out
+    return tuple(out)
 
 
-def _readers_values(texts: Iterable[str]) -> tuple[set[str], set[str]]:
-    """The values the reader's own text states, pointers aside: by kind ("within 30 days" is days, not 30%; "one hour" is
-    the passages' "sixty minutes"), and as plain numbers where code reads no kind, which match any kind (bug hunt
-    rerun, 2026-10-09: the question's values were compared by bare number)."""
-    kinded: set[str] = set()
-    plain: set[str] = set()
-    for text in texts:
-        bare = _without_pointers(text)
-        kinded |= {key for _, _, key, _, _, _ in _kinded(bare, words_need_a_unit=False)}
-        plain |= {number for number, kinds in _kinds_of(bare, words_need_a_unit=False).items() if "plain" in kinds}
-    return kinded, plain
+@dataclass(frozen=True)
+class _ReadersValues:
+    """The values one text of the reader's own states, pointers aside: by kind ("within 30 days" is days, not 30%; "one
+    hour" is the passages' "sixty minutes"), and as plain numbers where code reads no kind, which match any kind (bug
+    hunt rerun, 2026-10-09: the question's values were compared by bare number)."""
+
+    kinded: frozenset[str]
+    plain: frozenset[str]
+
+    def names(self, key: str, number: str) -> bool:
+        return key in self.kinded or number in self.plain
+
+
+@lru_cache(maxsize=_READINGS)
+def _readers_values(text: str) -> _ReadersValues:
+    bare = _without_pointers(without_unseen(text))
+    return _ReadersValues(
+        frozenset(key for _, _, key, _, _, _ in _kinded(bare, words_need_a_unit=False)),
+        frozenset(number for number, kinds in _kinds_of(bare, words_need_a_unit=False).items() if "plain" in kinds),
+    )
 
 
 def value_choices(answer: str | None, quotes: Iterable[str], question: Iterable[str] = (), guidance: Iterable[str] = ()) -> list[ValueChoice]:
@@ -512,7 +571,7 @@ def value_choices(answer: str | None, quotes: Iterable[str], question: Iterable[
     beside a contract's 30 is the very conflict to show (triage and the fresh evaluation, 2026-10-09)."""
     if not answer:
         return []
-    return [choice for choice, _ in _choices(answer, _Offer.of(quotes, question, guidance))]
+    return [choice for choice, _ in _choices(without_unseen(answer), _Offer.of(quotes, question, guidance))]
 
 
 @dataclass(frozen=True)
@@ -521,20 +580,18 @@ class _Offer:
     the reader's values set aside."""
 
     offered: dict[str, dict[str, str]]
-    standard_kinded: set[str]
-    standard_plain: set[str]
+    standards: tuple[_ReadersValues, ...]  # the question's and the guidance's values, each read once (`_readers_values`)
 
     @classmethod
     def of(cls, quotes: Iterable[str], question: Iterable[str], guidance: Iterable[str]) -> _Offer:
-        asked_kinded, asked_plain = _readers_values(question)
-        guide_kinded, guide_plain = _readers_values(guidance)
+        asked = tuple(_readers_values(text) for text in question)
         # Dicts, not scans: a quote of thousands of values stays linear.
         offered: dict[str, dict[str, str]] = {}
-        for quote in quotes:
+        for quote in map(without_unseen, quotes):
             for _, group, key, number, start, end in _kinded(quote, words_need_a_unit=False):
-                if key not in asked_kinded and number not in asked_plain:
+                if not any(reader.names(key, number) for reader in asked):
                     offered.setdefault(group, {}).setdefault(key, quote[start:end].strip())
-        return cls(offered, asked_kinded | guide_kinded, asked_plain | guide_plain)
+        return cls(offered, asked + tuple(_readers_values(text) for text in guidance))
 
 
 def _choices(answer: str, offer: _Offer) -> list[tuple[ValueChoice, set[str]]]:
@@ -542,7 +599,7 @@ def _choices(answer: str, offer: _Offer) -> list[tuple[ValueChoice, set[str]]]:
     blanked = _without_pointers(answer)
     used: dict[str, tuple[ChoiceKind, dict[str, str]]] = {}
     for kind, group, key, number, start, end in _kinded(blanked, words_need_a_unit=True):
-        if key in offer.standard_kinded or number in offer.standard_plain or key not in offer.offered.get(group, {}):
+        if any(reader.names(key, number) for reader in offer.standards) or key not in offer.offered.get(group, {}):
             continue
         used.setdefault(group, (kind, {}))[1].setdefault(key, answer[start:end].strip())
     choices: list[tuple[ValueChoice, set[str]]] = []
@@ -582,7 +639,7 @@ def uniform_party_choices(answer: str | None, quotes: Iterable[str], question: I
     generalisation, whatever else the passages state. Code reads the subject's words, never who the parties are."""
     if not answer:
         return []
-    quotes = list(quotes)
+    answer, quotes = without_unseen(answer), [without_unseen(quote) for quote in quotes]
     offer = _Offer.of(quotes, question, guidance)
     general = {
         key

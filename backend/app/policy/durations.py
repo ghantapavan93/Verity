@@ -189,8 +189,19 @@ def seen(text: str) -> tuple[str, list[int] | None]:
     return "".join(kept), where
 
 
+@lru_cache(maxsize=512)
+def without_unseen(text: str) -> str:
+    """The text without the characters a reader does not see, its dashes as written: what runs.values reads, which shows
+    a value as the answer writes it ("2024–01–01") and reads its own dashes."""
+    if text.isascii():
+        return text
+    return "".join(char for char in text if char.isascii() or not (unicodedata.category(char) == "Cf" or _DEFAULT_IGNORABLE.match(char)))
+
+
+@lru_cache(maxsize=512)
 def seen_text(text: str) -> str:
-    """`seen` without the map: the text as code reads values from it."""
+    """`seen` without the map: the text as code reads values from it (read once per text: runs.values reads a run's
+    guidance for every finding)."""
     return seen(text)[0]
 
 

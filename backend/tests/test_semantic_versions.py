@@ -95,7 +95,7 @@ RECORDED: dict[str, str] = {
     # policy-v17, 2026-10-30 (the adversarial stress test): a period is read as the text writes it or not at all (ranges,
     # lists, number words, invisible characters, negations, ambiguous periods anywhere in the quotes); a range compares in
     # one unit. v16 is released, so this is a bump. Re-recorded before release as each class of the stress test is closed.
-    "policy-v17": "1e56a2c1adb4727d",
+    "policy-v17": "c02da1ae7fca2ad8",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
     # v8, 2026-10-13: no span begins or ends inside a number; a number's sign is part of its value (F-03). Re-recorded the
