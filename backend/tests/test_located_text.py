@@ -123,3 +123,37 @@ def test_a_quote_found_past_its_sections_label_reads_the_heading_it_carries() ->
     assert inside is not None and located_text(Section(ordinal=1, number="1", heading="Notice", text="Notice: eighty (180) days' written notice."), inside) == (
         "eighty (180) days' written notice"
     )
+
+
+class Stating(Spelling):
+    """Quotes §2 as written in ``quote`` and gives ``conclusion`` as its answer."""
+
+    def __init__(self, quote: str, conclusion: str) -> None:
+        super().__init__(quote)
+        self.conclusion = conclusion
+
+    def generate_json(self, system: str, user: str, schema: dict[str, Any]) -> Generation:
+        generation = super().generate_json(system, user, schema)
+        payload = json.loads(generation.text)
+        payload["findings"][0]["conclusion"] = self.conclusion
+        return Generation(text=json.dumps(payload), input_tokens=100, output_tokens=50, latency_ms=12.5, model=self.model)
+
+
+def _unquoted(client: TestClient, clause: str, quote: str, conclusion: str) -> list[str]:
+    client.app.state.provider = Stating(quote, conclusion)  # type: ignore[attr-defined]
+    document = client.post("/api/documents", files={"file": ("contract.txt", _contract(clause).encode("utf-8"), "text/plain")}).json()
+    guidance = client.post("/api/guidance", json={"text": GUIDANCE}).json()["id"]
+    started = client.post("/api/runs", json={"documentId": document["id"], "guidanceId": guidance, "question": f"{QUESTION} ({next(_ASKED)})"})
+    assert started.status_code == 202, started.text
+    finding = client.get(f"/api/runs/{started.json()['id']}/detail").json()["findings"][0]
+    assert finding["spans"][0]["verified"] is True
+    return list(finding["unquotedValues"])
+
+
+def test_the_finding_account_reads_the_located_text_and_the_guidance_as_a_standard(client: TestClient) -> None:
+    """The account shown beside a finding (runs.account) still read the model's string and counted the guidance's own
+    figure as stated, after the status checks stopped (the policy team's report, 2026-10-30)."""
+    answer = "Either party may terminate for convenience on 90 days' written notice."
+    assert _unquoted(client, NINETY, NINETY.replace("90", "9\u200b0"), answer) == []  # the contract says 90; so does the answer
+    echoed = "Either party may terminate for convenience on 30 days' written notice."
+    assert _unquoted(client, NINETY, NINETY, echoed) == ["30 days"]  # only the guidance says 30: reported

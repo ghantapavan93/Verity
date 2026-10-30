@@ -24,7 +24,9 @@ from typing import Literal
 from sqlalchemy.orm import object_session
 
 from ..models import Finding, Guidance
+from ..verify.spans import Located
 from .relations import CONCERNS, Note, load
+from .service import located_text
 from .status import basis
 from .values import ValueChoice, frame_times, unquoted_values, value_choices
 
@@ -68,16 +70,19 @@ def value_checks(finding: Finding, clause_numbers: frozenset[str] = frozenset())
     status; a run decided under policy-v6 was lowered on the same reading. A point reported as not found states none."""
     if finding.status == "missing":
         return [], []
-    quotes = [span.quote for span in finding.spans if span.verified]
+    # The contract's characters each verified quote covers, as the status checks read them (policy-v17, service.located_text):
+    # the model's string differs from them in exactly what a tier forgives (stress test, 2026-10-30).
+    quotes = [located_text(span.section, Located(span.start, span.end, span.method)) for span in finding.spans if span.verified and span.section]
     if not quotes:
         return [], []
     run = finding.run
     session = object_session(finding)
     guidance = session.get(Guidance, run.guidance_id) if session is not None and run.guidance_id else None
-    choices = value_choices(finding.shown_conclusion, quotes, [run.question], [guidance.text] if guidance else [])
-    # The time the question asks at counts as stated, as the status reads it (policy-v12, `values.frame_times`).
-    stated = [guidance.text if guidance else "", *frame_times(run.question)]
-    return unquoted_values(finding.shown_conclusion, quotes, stated, clause_numbers), list(choices)
+    standards = [guidance.text] if guidance else []
+    choices = value_choices(finding.shown_conclusion, quotes, [run.question], standards)
+    # The time the question asks at counts as stated, as the status reads it (policy-v12, `values.frame_times`); the
+    # guidance supports a comparison, never a figure given as the contract's (policy-v17, `unquoted_values`).
+    return unquoted_values(finding.shown_conclusion, quotes, frame_times(run.question), clause_numbers, standards), list(choices)
 
 
 def _choice_sentence(choice: ValueChoice) -> str:
