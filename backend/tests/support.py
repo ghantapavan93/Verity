@@ -6,8 +6,11 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
+import httpx
 from fastapi.testclient import TestClient
 
 from app.providers.base import Generation, ProviderError
@@ -28,6 +31,25 @@ This Agreement is governed by the laws of the State of Delaware.
 """
 
 GUIDANCE = "We can accept termination for convenience at 30 days' notice or more. Anything below 30 days requires review."
+
+
+@contextmanager
+def through_get_and_post(
+    method: str,
+    url: str,
+    *,
+    json: object = None,
+    timeout: object = None,
+    headers: object = None,
+    follow_redirects: bool = False,
+) -> Iterator[httpx.Response]:
+    """httpx.stream answered by whatever httpx.get and httpx.post are: the model endpoint fakes are written as those two
+    (their whole reply at once), and the provider reads every reply as a stream, its call's deadline checked as the body
+    arrives (providers/ollama.py). A test that fakes the endpoint sets httpx.stream to this as well."""
+    if method == "GET":
+        yield httpx.get(url, timeout=timeout, headers=headers, follow_redirects=follow_redirects)
+    else:
+        yield httpx.post(url, json=json, timeout=timeout, headers=headers, follow_redirects=follow_redirects)
 
 
 class FakeProvider:

@@ -22,7 +22,7 @@ from app.analysis.service import analyze, load_prompt
 from app.providers.base import ContextOverflow, Generation, ProviderError
 from app.providers.ollama import OllamaProvider
 
-from .support import upload_and_ask
+from .support import through_get_and_post, upload_and_ask
 
 REFUSAL = (
     '{"error":"{\\"error\\":{\\"code\\":400,\\"message\\":\\"request (20695 tokens) exceeds the available context size (16384 tokens), '
@@ -40,6 +40,7 @@ def test_the_model_server_is_told_not_to_cut_the_prompt_and_its_refusal_is_a_con
         return httpx.Response(400, text=REFUSAL, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(httpx, "post", refuse)
+    monkeypatch.setattr(httpx, "stream", through_get_and_post)
     with pytest.raises(ContextOverflow) as refused:
         OllamaProvider().generate_json("system", "user", ANALYSIS_SCHEMA)
     assert sent[0]["truncate"] is False and sent[0]["shift"] is False, "the server may neither cut the prompt nor shift it out while answering"
@@ -54,6 +55,7 @@ def test_any_other_refusal_stays_an_ordinary_provider_error(monkeypatch: pytest.
         return httpx.Response(400, text='{"error":"model not found"}', request=httpx.Request("POST", url))
 
     monkeypatch.setattr(httpx, "post", refuse)
+    monkeypatch.setattr(httpx, "stream", through_get_and_post)
     with pytest.raises(ProviderError) as failed:
         OllamaProvider().generate_json("system", "user", ANALYSIS_SCHEMA)
     assert not isinstance(failed.value, ContextOverflow)

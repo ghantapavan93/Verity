@@ -64,6 +64,12 @@ def run_options(model: str | None = None) -> RunOptions:
     if settings.retrieval_aliases:
         # The table's hash, so a run's candidates can be reproduced after the table changes.
         options["retrieval_aliases"] = ALIASES_SHA256[:12]
+    if settings.model_digest:
+        # The build a deployment pins is part of what answers: after the pin moved from build A to build B, the same
+        # question was handed A's run (stress test, 2026-10-30, model transport 1). Unpinned, as on the laptop, nothing is
+        # added and identities are as they were; that the unpinned build is not in the identity is said in
+        # docs/FAILURE-ENVELOPE.md.
+        options["model_digest"] = settings.model_digest[:12]
     if settings.retrieval != "bm25":
         # Only a non-default retriever enters the identity, so runs recorded under BM25 keep theirs.
         options["retrieval"] = settings.retrieval

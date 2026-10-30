@@ -27,6 +27,7 @@ from app.providers import admission
 from app.providers import ollama as ollama_module
 from app.providers.base import ProviderError
 from app.providers.ollama import OllamaProvider
+from tests.support import through_get_and_post
 from tests.test_access import ORIGIN
 from tests.test_anonymous import arrive
 
@@ -166,6 +167,7 @@ def endpoint(monkeypatch: pytest.MonkeyPatch) -> Endpoint:
     server = Endpoint()
     monkeypatch.setattr(httpx, "get", server.get)
     monkeypatch.setattr(httpx, "post", server.post)
+    monkeypatch.setattr(httpx, "stream", through_get_and_post)
     monkeypatch.setattr(config.settings, "ollama_url", "https://model.example.invalid")
     monkeypatch.setattr(config.settings, "ollama_headers", {"Modal-Key": "key-for-tests", "Modal-Secret": "secret-for-tests"})
     monkeypatch.setattr(config.settings, "model_digest", "500a1f067a9f")
@@ -178,16 +180,19 @@ def test_a_wake_up_loads_the_model_with_the_settings_an_answer_uses(endpoint: En
     provider.wake()
     provider.generate_json("system", "user", {"type": "object"})
     # The wake-up, the answer's clean start (test_model_from_token_zero.py), the answer.
-    (wake_url, wake, wake_headers), _, (chat_url, chat, _) = endpoint.posts
+    (wake_url, wake, wake_headers), (_, clean, _), (chat_url, chat, _) = endpoint.posts
     assert wake_url.endswith("/api/generate") and chat_url.endswith("/api/chat")
     # The context window, seed and temperature are what Ollama loads the model with: the same, or the answer reloads it.
     assert {k: v for k, v in wake["options"].items() if k != "num_predict"} == chat["options"] == provider.options()
-    assert wake["options"]["num_predict"] == 1 and wake["model"] == chat["model"] and wake["think"] is False
+    assert wake["options"]["num_predict"] == 1 and wake["model"] == chat["model"]
+    # And it is the answer's own clean start, raw: a templated wake-up ("ok", think off) opened with the chat template's
+    # first token, the answer's, and could land between a clean start and its answer (stress test, 2026-10-30).
+    assert wake == clean and wake["raw"] is True
     # So are truncate and shift: on Ollama 0.40.7 a request without them started llama-server with --context-shift, and
     # the answer that followed loaded the model again (measured 2026-10-21, docs/CASEBOOK.md case 6).
     assert (wake.get("truncate"), wake.get("shift")) == (chat["truncate"], chat["shift"]) == (False, False)
     assert wake_headers == config.settings.ollama_headers
-    assert len(endpoint.gets) == 2  # the pinned build is confirmed before the wake-up, as before every answer
+    assert len(endpoint.gets) == 3  # the pinned build is confirmed before the wake-up, and before and after every answer
     assert ollama_module.last_answer() is not None
 
 
