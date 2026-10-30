@@ -36,12 +36,12 @@ from ..models import (
 )
 from ..policy.durations import business_week, day_convention
 from ..providers.base import ModelProvider, ProviderError
-from ..retrieval.aliases import ALIASES_SHA256, expand_query
+from ..retrieval.aliases import ALIAS_GROUPS, ALIASES_SHA256, WORDING, _phrase_in, expand_query
 from ..retrieval.hybrid import HybridIndex, ollama_embed
-from ..retrieval.lexical import LexicalIndex
+from ..retrieval.lexical import LexicalIndex, tokenize
 from ..verify.spans import Located, locate, verification_pass
 from .events import StageEvent, bus
-from .links import because, linked
+from .links import MAX_LINKS, Readable, _amending, _amendments, _changes_of, _definitions, _stated, because, linked
 from .owner import this_process
 from .prose import label_handles, unresolved_handles
 from .relations import Note, Recorded, assess, dump, load, locate_relations, parts_of, relevant
@@ -242,6 +242,49 @@ def _retrieve(sections: list[Section], question: str, guidance: str | None, froz
     return [sections[i] for i in ranked] + [sections[link.index] for link in added], "hybrid_match" if hybrid else "lexical_match", why
 
 
+# ---------------------------------------------------------------------------- what retrieval leaves on the record
+# Links hand a handed section's amendments with it, at most links.MAX_LINKS of them: past that, an amendment of a section
+# the model read was not handed, and nothing on the run said so; and the alias table widened a run's query while the
+# record named only the table's hash (stress test, 2026-10-30, the retrieval team's report). Both are read here from what
+# retrieval used, without changing what it hands, and written on the finding-evidence stage.
+
+
+def fired_alias_groups(query: str) -> list[str]:
+    """The alias groups that widen ``query``, each by its first phrase, in table order: expand_query's own rule (a phrase
+    of the group named in the query that is not WORDING)."""
+    tokens = tokenize(query)
+    return [group[0] for group in ALIAS_GROUPS if any(_phrase_in(tokens, tokenize(name)) for name in group if name not in WORDING)]
+
+
+def amendments_left_out(sections: Sequence[Readable], handed: set[int], links_added: int) -> list[str]:
+    """The amendments of a handed section that were not handed, named with what each amends: possible only once the
+    links' places were all taken, so read only then (it reads every section's amending sentences again)."""
+    if links_added < MAX_LINKS:
+        return []
+    found = _amendments(sections, _amending(sections), _definitions(sections), _stated(sections))
+    left: dict[int, str] = {}
+    for index in sorted(handed):
+        for link in _changes_of(found, index):
+            if link.index not in handed and link.index not in left:
+                section = sections[link.index]
+                name = f"§{section.number} {section.heading}".strip() if section.number else section.heading
+                left[link.index] = f"{name} (it amends {link.by})"
+    return list(left.values())
+
+
+def _retrieval_record(sections: list[Section], chosen: list[Section], linked_because: Mapping[str, str], query: str, aliases: bool) -> str:
+    position = {section.id: index for index, section in enumerate(sections)}
+    left = amendments_left_out(sections, {position[s.id] for s in chosen}, len(linked_because))
+    noted = ""
+    if left:
+        one = len(left) == 1
+        noted += f" · {len(left)} amendment{'' if one else 's'} of a section read {'was' if one else 'were'} not handed for want of room: " + "; ".join(left)
+    fired = fired_alias_groups(query) if aliases else []
+    if fired:
+        noted += " · the query was widened by the alias groups: " + ", ".join(fired)
+    return noted
+
+
 def bound_to(provider: ModelProvider, frozen: FrozenOptions) -> ModelProvider:
     """The provider bound to the run's recorded model and decoding settings, when it is a provider that has any
     (a replayed or a test provider answers from its record and has none)."""
@@ -300,6 +343,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             # words" was untrue there.
             _counted(len(chosen) - len(linked_because), "candidate section")
             + (f" and {len(linked_because)} the contract points to from them" if linked_because else "")
+            + _retrieval_record(sections, chosen, linked_because, run.question if not guidance_text else f"{run.question} {guidance_text}", frozen.aliases)
             if retrieval_mode != "opening_fallback"
             else f"retrieval ranked no section for this question; the opening {len(chosen)} of {len(sections)} were read instead",
             output_hash=sha256_text("\x1f".join(s.id for s in chosen)),
