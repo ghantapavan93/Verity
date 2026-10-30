@@ -308,3 +308,14 @@ the remedy adopted is the interface's wording (the pass is named the model's ans
 found in the document, not to support it). Each control pass stopped part way at the API's run-start limit (20 in 10
 minutes, counting a start that hands back an existing run) and was resumed; the resumed pass was handed the runs already
 finished, same inputs, same runs.
+
+**Recording 6c replayed, 2026-10-30: no model call, and the figure every summary states.** Until this day no code
+derived the published 37 of 44: the report could not find Recording 6c, and the tool cited above for the option
+recordings, run at that commit, printed 28 of 44, every baseline missing, because the set had been relabelled for
+reader v14's numbering. Recording 6c's 44 runs (the same run ids as `research/depth_pass/results/goldens-v5.json`) and
+the model's raw output for each are committed in `backend/app/goldens/recordings/6c.json`, written from a copy of the
+store by `scripts/run_goldens.py --record`. Judged as recorded: 37 of 44, failing g08, g11, g12, g26, g30, g35 and g42.
+`scripts/run_goldens.py --replay` hands the 44 outputs back through today's reader (v15), retrieval, verifier, policy
+and judge, in a store of its own: 37 of 44, the same seven failures, g44 passing by withholding. Four of the 37 passes
+now rest on a finding code lowered to needs review (g14, g28, g38 and g43; as recorded, only g38). `tests/test_goldens.py`
+replays the file and fails when the code moves a verdict; `tests/test_docs_claims.py` holds `docs/STATUS.md` to it.

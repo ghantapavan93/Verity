@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app import db as db_module
 from app.analysis.service import load_prompt
 from app.db import SessionLocal
+from app.goldens.replay import RECORDINGS_DIR, CommittedRecording, RecordedAnswers, load_recording, outcome_counts, replay
 from app.goldens.service import (
     LOWERED_NOTE,
     Golden,
@@ -31,6 +32,7 @@ from app.goldens.service import (
 )
 from app.ingest import PARSER_VERSION, ingest
 from app.models import Document, EvidenceSpan, Finding, FindingStatusName, Run, RunReasonName, RunStageName, Section
+from app.providers.base import ProviderError
 from app.schemas import GoldenRunOut
 
 
@@ -374,3 +376,31 @@ def test_the_report_prefers_the_most_complete_recording_and_compares_only_like_w
         shown = {r.golden_id: r.run_id for r in out.prompts[0].runs if r.run_id}
         assert set(shown) == {"g02", "g13"} and shown["g02"] != later.id, "two goldens recorded together outrank one recorded later"
         assert out.compare is None
+
+
+# ----------------------------------------------------------------------------- the published figure, derived by code
+
+
+def test_recording_6c_replayed_through_the_code_in_force_is_the_figure_its_file_states(client: TestClient) -> None:
+    """The figure docs/STATUS.md publishes is Recording 6c's 44 recorded answers replayed through today's reader,
+    retrieval, verifier, policy and judge (tests/test_docs_claims.py holds the prose to the file). A change to any of
+    them that moves a golden fails here until the file is re-derived (`scripts/run_goldens.py --replay ... --write`) and
+    the prose follows (stress test EVL-2, 2026-10-30: no code derived the published 37 of 44)."""
+    recording = load_recording(RECORDINGS_DIR / "6c.json")
+    assert len(recording.answers) == 44 and recording.prompt_version == "answer-v2" and "reader v5" in recording.label
+    with SessionLocal() as session:
+        verdicts = replay(session, load_set(), recording)
+        assert outcome_counts(verdicts) == recording.replayed
+        runs = session.query(Run).all()
+        assert len(runs) == 44 and {run.provider for run in runs} == {"recorded"}, "one run per golden, every answer the recording's"
+
+
+def test_a_replay_answers_only_what_was_recorded_and_only_to_the_prompt_it_answered() -> None:
+    provider = RecordedAnswers("qwen3:8b", {"What is the term?": '{"findings": []}'})
+    assert provider.generate_json("s", "QUESTION: What is the term?\n\nLEGAL GUIDANCE: none supplied", {}).text == '{"findings": []}'
+    with pytest.raises(ProviderError, match="holds no answer"):
+        provider.generate_json("s", "QUESTION: What is the cap?\n", {})
+    recording = load_recording(RECORDINGS_DIR / "6c.json")
+    changed = CommittedRecording(**{**recording.__dict__, "prompt_hash": "0" * 64})
+    with pytest.raises(ValueError, match="is not the prompt the recording answered"):
+        replay(None, load_set(), changed)  # type: ignore[arg-type]

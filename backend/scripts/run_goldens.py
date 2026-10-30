@@ -8,6 +8,12 @@ script is safe to repeat; it prints a verdict per golden and a pass count per pr
     cd backend && .venv/Scripts/python scripts/run_goldens.py --only g01 --only g06
     cd backend && .venv/Scripts/python scripts/run_goldens.py --report             # no runs: the prompt regression report
     cd backend && .venv/Scripts/python scripts/run_goldens.py --compare-models qwen3:8b qwen3:4b   # the routing question
+    cd backend && .venv/Scripts/python scripts/run_goldens.py --record app/goldens/recordings/6c.json --prompt answer-v2
+    cd backend && .venv/Scripts/python scripts/run_goldens.py --replay app/goldens/recordings/6c.json [--write]
+
+--record writes the store's most complete recording of a prompt, the model's raw output for each golden among it, to a
+file to commit. --replay hands those outputs back through the code in force, in a temporary store of its own, and
+prints what they are worth today; --write keeps that figure in the file, where tests/test_goldens.py holds it.
 
 The kill rule that reads these numbers is in docs/GOLDENS.md; the routing rule in docs/ROUTING.md.
 """
@@ -15,19 +21,41 @@ The kill rule that reads these numbers is in docs/GOLDENS.md; the routing rule i
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
+# A replay makes runs from recorded answers under today's identity. In the store a request is answered from, one would be
+# handed back as today's answer, so a replay gets a store of its own, chosen before the app reads its settings.
+if "--replay" in sys.argv:
+    os.environ["WORKBENCH_DATA_DIR"] = tempfile.mkdtemp(prefix="goldens-replay-")
+    os.environ.pop("WORKBENCH_DATABASE_URL", None)
+
 from app.analysis.service import load_prompt  # noqa: E402
 from app.application.save_guidance import save_guidance  # noqa: E402
 from app.application.start_run import start_run  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.db import SessionLocal, init_db  # noqa: E402
-from app.goldens.service import compare_models, ensure_golden_document, judge, load_set, lowered_passes, report, run_for, task_of  # noqa: E402
+from app.goldens.replay import load_recording, outcome_counts, record, replay  # noqa: E402
+from app.goldens.service import (  # noqa: E402
+    best_recording,
+    compare_models,
+    ensure_golden_document,
+    judge,
+    load_set,
+    lowered_passes,
+    recordings,
+    report,
+    run_for,
+    sample_documents,
+    task_of,
+)
 from app.providers import make_provider  # noqa: E402
 from app.runs.service import execute_run  # noqa: E402
 
@@ -110,6 +138,40 @@ def print_model_report(prompt_version: str, base_model: str, candidate_model: st
     return 0
 
 
+def write_recording(path: Path, prompt_version: str, model: str | None) -> int:
+    golden_set = load_set()
+    with SessionLocal() as session:
+        shown = best_recording(recordings(session, sample_documents(session, golden_set), golden_set.goldens, load_prompt(prompt_version), model))
+        if shown is None:
+            print(f"no recording of {prompt_version} in this store")
+            return 1
+        data = record(shown, golden_set, path.stem)
+    path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    counts = data["as_recorded"]
+    print(f"{data['label']}: {counts['passes']} of {counts['of']} as recorded, failing {' '.join(counts['fails'])}; written {path}")
+    return 0
+
+
+def print_replay(path: Path, write: bool) -> int:
+    golden_set = load_set()
+    recording = load_recording(path)
+    init_db()
+    with SessionLocal() as session:
+        verdicts = replay(session, golden_set, recording)
+    for golden in golden_set.goldens:
+        verdict = verdicts[golden.id]
+        print(f"{golden.id} {golden.category[:12]:<12} {verdict.outcome:<7} {verdict.because}")
+    counts = outcome_counts(verdicts)
+    figure = f"{counts['passes']} of {counts['of']}, failing {' '.join(counts['fails'])}"
+    print(f"\n{recording.name} ({recording.label}) replayed through the code in force: {figure}")
+    if write:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["replayed"] = counts
+        path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+        print(f"written {path}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--prompt", action="append", help="prompt version to run (repeatable); default: the configured one")
@@ -117,8 +179,15 @@ def main() -> int:
     parser.add_argument("--model", help="model to answer with (recorded in the run's identity); default: the configured one")
     parser.add_argument("--report", action="store_true", help="print the prompt regression report from recorded runs and exit")
     parser.add_argument("--compare-models", nargs=2, metavar=("BASE", "CANDIDATE"), help="print the model comparison for --prompt (default prompt) and exit")
+    parser.add_argument("--record", type=Path, help="write the store's most complete recording of --prompt to this file, to commit, and exit")
+    parser.add_argument("--replay", type=Path, help="replay a committed recording through the code in force, in a store of its own, and exit")
+    parser.add_argument("--write", action="store_true", help="with --replay: keep the replayed figure in the recording's file")
     args = parser.parse_args()
+    if args.replay:
+        return print_replay(args.replay, args.write)
     init_db()
+    if args.record:
+        return write_recording(args.record, (args.prompt or [settings.prompt_version])[0], args.model)
     if args.report:
         return print_report()
     if args.compare_models:

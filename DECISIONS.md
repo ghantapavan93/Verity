@@ -1799,3 +1799,8 @@ disagree.
   report now reads recordings by what the runs stored and labels each with its reader, rules and options; a golden names
   its sections by text. The dead fallback in `run_for` is gone. On that store copy the report reads Recordings 3, 6c
   and 5 as published (32 of 42, 37 of 44, 38 of 44), and the routing comparison 36 of 42 against 34.
+- **The golden figure is a replay.** No code derived the "37 of 44 under the current reader" `docs/STATUS.md` stated,
+  and its "the false-premise one fails today" was false: g44 passes in every recording since 6c. Recording 6c's runs and
+  raw outputs are committed (`backend/app/goldens/recordings/6c.json`); replayed through the code in force, with no model
+  call, they give 37 of 44 with the same seven failures, four of the passes resting on a lowered finding. A test replays
+  them, and `docs/STATUS.md` states the replay's figure, held to the file.

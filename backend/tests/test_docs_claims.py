@@ -19,6 +19,7 @@ from __future__ import annotations
 import ast
 import html
 import importlib.util
+import json
 import re
 import sys
 from collections.abc import Iterator
@@ -206,6 +207,32 @@ def test_the_cuad_30_table_is_the_committed_recording_scored_by_the_scorer_in_fo
     stated = f"citation precision {figures.group(1)} (floor {figures.group(2)}) and recall {figures.group(3)} (floor {figures.group(4)})"
     assert stated in cuad, f"docs/CUAD.md should state the scored verdict's figures: {stated}"
     assert second == "verdict: fit to draft a repository review of these categories" and "so the\nclause lookup is fit to draft" in cuad
+
+
+GOLDEN_RECORDING = BACKEND / "app" / "goldens" / "recordings" / "6c.json"
+
+
+def _listed(ids: list[str]) -> str:
+    return ids[0] if len(ids) == 1 else ", ".join(ids[:-1]) + f" and {ids[-1]}"
+
+
+def test_the_golden_figure_is_the_committed_recording_replayed_by_the_code_in_force() -> None:
+    """docs/STATUS.md states the golden figure as Recording 6c's answers replayed through the code in force: the count,
+    the goldens that fail and the passes a lowered finding carries are the recording file's replayed block, which
+    tests/test_goldens.py derives by replaying it. Every other golden count STATUS states names what it was measured
+    on. STATUS said "37 of 44 under the current reader", which no code derived, and that the false-premise golden "fails
+    today", which no recording since Recording 6c shows (stress test EVL-2)."""
+    replayed = json.loads(GOLDEN_RECORDING.read_text(encoding="utf-8"))["replayed"]
+    status = " ".join(STATUS.read_text(encoding="utf-8").split())
+    figure = f"replayed through the code in force pass {replayed['passes']} of {replayed['of']}, failing {_listed(replayed['fails'])}"
+    assert figure in status, f"docs/STATUS.md should state: {figure}"
+    lowered = f"{len(replayed['lowered'])} of those {replayed['passes']} passes rest on a finding code lowered ({_listed(replayed['lowered'])})"
+    assert lowered in status, f"docs/STATUS.md should state: {lowered}"
+    for sentence in sentences(STATUS.read_text(encoding="utf-8")):
+        if re.search(r"\b\d+ of 4[24]\b", sentence):
+            assert re.search(r"Recording \w+|\bS0\b|replay", sentence), f"a golden count names no recording: {sentence[:160]}"
+        if re.search(r"false[- ]premise", sentence) and re.search(r"\bfails\b", sentence):
+            assert "g44" in replayed["fails"], f"g44 passes in the replay, and this says it fails: {sentence[:160]}"
 
 
 def _env_example() -> dict[str, str]:
