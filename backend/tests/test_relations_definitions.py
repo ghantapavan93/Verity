@@ -38,6 +38,12 @@ WORDINGS = [
     'Section 1 of the Agreement is hereby amended by deleting the definition of "Notice Period" in its entirety and replacing it with '
     f"the following: {NEW_DEFINITION}",
 ]
+# An amendment that states the definition afresh, naming no clause or naming one without a replacing verb (wave 2).
+DATED = 'This Amendment No. 1 is dated September 18, 2025 (the "Amendment Date"). '
+FRESH = [
+    f'{DATED}With effect from the Amendment Date, "Notice Period" means thirty (30) days.',
+    f'{DATED}Section 1 of the Agreement is amended so that "Notice Period" now means thirty (30) days.',
+]
 WHOLE = [
     f"Section 8 of the Agreement is hereby amended to read in its entirety as follows: {NEW_CLAUSE}",
     f"The Agreement is amended by deleting Section 8 in its entirety and inserting the following in lieu thereof: {NEW_CLAUSE}",
@@ -59,7 +65,7 @@ def _span(sections: list[SimpleNamespace], section_id: str, quote: str) -> tuple
     return section_id, start, start + len(quote)
 
 
-@pytest.mark.parametrize("statement", WORDINGS)
+@pytest.mark.parametrize("statement", WORDINGS + FRESH)
 def test_a_replaced_definition_is_the_replaced_text_and_no_other_definition_is(statement: str) -> None:
     sections = _sections(statement)
     (relation,) = [r for r in locate_relations(sections, AS_OF) if r.kind == "replaces"]
@@ -101,7 +107,7 @@ def test_control_a_mention_of_reading_is_no_replacement() -> None:
         )
 
 
-@pytest.mark.parametrize("statement", WORDINGS)
+@pytest.mark.parametrize("statement", WORDINGS + FRESH)
 def test_through_the_run_a_pass_quoting_the_replaced_definition_is_codes_review_not_its_count(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, statement: str
 ) -> None:
@@ -138,3 +144,14 @@ def test_through_the_run_a_pass_quoting_the_replaced_definition_is_codes_review_
     assert all(span["verified"] for span in finding["spans"])
     assert (finding["status"], finding["statusSource"], finding["decidedBy"]) == ("needs_review", "position_check", "code")
     assert "consistent" not in (finding["statusReason"] or "") and "replace" in finding["statusReason"]
+
+
+def test_controls_a_term_only_the_amendment_defines_or_its_quoted_new_wording_is_no_second_statement() -> None:
+    new_term = _sections(f'{DATED}"Effective Notice" means the notice given under this Amendment.')
+    assert locate_relations(new_term, AS_OF) == []
+    quoted = _sections(WORDINGS[0])
+    assert len([r for r in locate_relations(quoted, AS_OF) if r.kind == "replaces"]) == 1
+    # A body section that restates a definition is no amendment of it.
+    body = _sections("This Amendment No. 1 changes nothing.")
+    body[1] = SimpleNamespace(id="s8", number="8", heading="Termination", text=f'{CLAUSE_8} "Notice Period" means the period in Section 1.')
+    assert locate_relations(body, AS_OF) == []

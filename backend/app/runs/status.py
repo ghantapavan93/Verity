@@ -591,6 +591,16 @@ def check_old_value(decision: Decision, old_value: str | None) -> Decision:
     return Decision("needs_review", "position_check", _with_earlier(old_value, decision))
 
 
+def check_unhanded(decision: Decision, unhanded: str | None) -> Decision:
+    """A pass that quotes text a located statement changes, where the statement was not handed to the model, is needs
+    review set by code (policy-v17), with ``unhanded``, the sentence runs.relations wrote (`unhanded_amendment`): the
+    model answered from the wording before the change without seeing the change. Only a pass: any other status already
+    sends the finding to a person. The pass's own reason is kept."""
+    if unhanded is None or decision.status != "pass":
+        return decision
+    return Decision("needs_review", "position_check", _with_earlier(unhanded, decision))
+
+
 def check_references(
     decision: Decision,
     conclusion: str | None,
