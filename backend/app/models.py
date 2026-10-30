@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal, get_args
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
@@ -73,6 +73,18 @@ def utcnow() -> datetime:
 def as_utc(value: datetime) -> datetime:
     """SQLite returns naive datetimes; they were stored as UTC, so say so."""
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+# How far past this clock's reading an instant another reading wrote may be and still count as now: a clock a little
+# behind the one that wrote it (the token check, api/access.verify; a visit's start, application/retention.py).
+CLOCK_SKEW = timedelta(seconds=60)
+
+
+def issued_in_future(instant: datetime, now: datetime) -> bool:
+    """``instant`` is later than ``now`` by more than the skew: it was written by a clock that ran ahead of this reading.
+    The wall clock steps (Windows Secure Time Seeding has moved clocks by weeks), and once it is corrected no reading can
+    tell a row written while it ran ahead from a clock that stepped back after the row (stress test, 2026-10-30)."""
+    return as_utc(instant) > as_utc(now) + CLOCK_SKEW
 
 
 def iso(value: datetime | None) -> str | None:

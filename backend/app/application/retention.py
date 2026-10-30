@@ -17,7 +17,12 @@ refuses to delete one (db.immutability_triggers). This is the one, scoped except
 - an original is deleted inside the transaction that deletes the last document row naming its bytes (another visitor may
   hold the same bytes), and the sweep deletes each file it finds no row for under the lock too: decided after a commit,
   an upload could keep the file it saw and lose it a moment later. A memo is deleted by the name it was written under.
-  A sweep removes files no row names any more, so a crash cannot keep a visitor's file past its end.
+  A sweep removes files no row names any more, so a crash cannot keep a visitor's file past its end;
+- a visit that began after the clock now reads (models.issued_in_future) is counted from now, its life kept whole: the
+  wall clock ran ahead when it was made, or stepped back since. A visit made while the clock ran 30 days ahead kept its
+  end 37 days out once the clock was corrected, and lived to real day 37 (stress test, 2026-10-30, time 3). The two
+  cases cannot be told apart on the wall clock, so neither is cut short: a step back deletes nothing, and a visit lives
+  at most its days plus the time the clock ran ahead plus one pass.
 """
 
 from __future__ import annotations
@@ -38,7 +43,7 @@ from ..config import settings
 from ..db import PUBLIC_WORKSPACE_LIKE, immutability_triggers, workspace_tables
 from ..ingest.bounded import HANDOFF_PREFIX, handoff_folder
 from ..ingest.readers import SUFFIX_OF
-from ..models import TERMINAL_STAGES, utcnow
+from ..models import CLOCK_SKEW, TERMINAL_STAGES, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +58,7 @@ PURGE_GAP_S, PURGE_GAP_MAX_S = 0.05, 1.0
 class PurgeReport:
     workspaces: list[str] = field(default_factory=list)
     skipped_in_progress: list[str] = field(default_factory=list)
+    counted_from_now: list[str] = field(default_factory=list)  # visits that began after the clock's reading (_reanchor)
     runs: int = 0
     documents: int = 0
     files: int = 0
@@ -68,10 +74,50 @@ def _in(column: str, values: list[str]) -> tuple[str, dict[str, object]]:
     return f"{column} IN ({', '.join(':' + n for n in names)})", dict(zip(names, values, strict=True))
 
 
+# How SQLite keeps these columns: naive UTC text, compared as that text.
+STORED_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
+
+
+def _stored(moment: datetime) -> str:
+    return moment.astimezone(UTC).strftime(STORED_FORMAT)
+
+
+def _read_stored(text_value: object) -> datetime:
+    value = text_value if isinstance(text_value, datetime) else datetime.fromisoformat(str(text_value))
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def _reanchor(engine: Engine, now: datetime, report: PurgeReport, gap_s: float) -> None:
+    """Visits that began after ``now`` by more than the skew are moved to begin now, each keeping its own length of life
+    (not today's setting: lowering the retention days must not shorten a visit already made). Decided again under the
+    lock, where they are moved."""
+    ahead = {"ahead": _stored(now + CLOCK_SKEW)}
+    query = "SELECT workspace_id, created_at, expires_at FROM visitor_workspaces WHERE created_at > :ahead"
+    with engine.connect() as connection:
+        if connection.execute(text(query + " LIMIT 1"), ahead).first() is None:
+            return
+    with _locked(engine, gap_s) as connection:
+        rows = connection.execute(text(query), ahead).all()
+        for workspace, created, expires in rows:
+            began = _read_stored(created)
+            moved = {"w": workspace, "c": _stored(now), "e": _stored(now + (_read_stored(expires) - began))}
+            connection.execute(text("UPDATE visitor_workspaces SET created_at = :c, expires_at = :e WHERE workspace_id = :w"), moved)
+            report.counted_from_now.append(str(workspace))
+        latest = max((_read_stored(row[1]) for row in rows), default=now)
+    if report.counted_from_now:
+        # A clock fault made visible rather than silent: the hours say how far it was off.
+        log.warning(
+            "retention: %d visit(s) began up to %.1f h after the clock now reads; each is counted from now",
+            len(report.counted_from_now),
+            (latest - now).total_seconds() / 3600,
+        )
+
+
 def purge_expired_workspaces(engine: Engine, now: datetime | None = None, gap_s: float = PURGE_GAP_S) -> PurgeReport:
     report = PurgeReport()
-    # SQLite keeps these as naive UTC text, "YYYY-MM-DD HH:MM:SS.ffffff"; compared as that text.
-    moment = (now or utcnow()).astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S.%f")
+    instant = now or utcnow()
+    _reanchor(engine, instant, report, gap_s)
+    moment = _stored(instant)
     with engine.connect() as connection:
         # Candidates are read without the lock; each is decided again under it, where it is deleted.
         expired = _ids(connection, "SELECT workspace_id FROM visitor_workspaces WHERE expires_at <= :now", now=moment)
