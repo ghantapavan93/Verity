@@ -14,6 +14,8 @@ export interface Command {
   label: string;
   hint?: string;
   group: "Ask" | "Guidance" | "Evidence" | "Go to" | "Jump to";
+  /** Shown, with its hint saying why, but not run: a question while a run is live (one run at a time). */
+  disabled?: boolean;
   run: () => void;
 }
 
@@ -30,7 +32,10 @@ export function CommandPalette({ getCommands, onClose, reduceMotion }: { getComm
     const q = query.trim().toLowerCase();
     if (!q) return commands.slice(0, 40);
     const terms = q.split(/\s+/);
-    return commands.filter((c) => terms.every((t) => `${c.group} ${c.label} ${c.hint ?? ""}`.toLowerCase().includes(t))).slice(0, 40);
+    const found = commands.filter((c) => terms.every((t) => `${c.group} ${c.label} ${c.hint ?? ""}`.toLowerCase().includes(t)));
+    // A command that cannot run now is listed after those that can, so Enter on a filter reaches one that runs: typing a
+    // clause word to jump there started a question when Ask sorted first (stress test, 2026-10-30).
+    return [...found.filter((c) => !c.disabled), ...found.filter((c) => c.disabled)].slice(0, 40);
   }, [commands, query]);
 
   // Focus returns to what held it when the palette closes, unless a command already moved it: the evidence sheet focuses
@@ -51,7 +56,7 @@ export function CommandPalette({ getCommands, onClose, reduceMotion }: { getComm
   }, [index]);
 
   const choose = (command: Command | undefined) => {
-    if (!command) return;
+    if (!command || command.disabled) return;
     onClose();
     command.run();
   };
@@ -108,7 +113,8 @@ export function CommandPalette({ getCommands, onClose, reduceMotion }: { getComm
               id={`cmd-${command.id}`}
               role="option"
               aria-selected={i === index}
-              className={`${styles.item} ${i === index ? styles.itemActive : ""}`}
+              aria-disabled={command.disabled || undefined}
+              className={`${styles.item} ${i === index ? styles.itemActive : ""} ${command.disabled ? styles.itemDisabled : ""}`}
               onMouseEnter={() => setIndex(i)}
               onMouseDown={(e) => {
                 e.preventDefault();

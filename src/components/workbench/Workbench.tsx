@@ -305,7 +305,10 @@ function WorkbenchSurface() {
   const ask = useCallback(
     async (text: string) => {
       const question = text.trim();
-      if (!question || !doc) return;
+      // One run at a time, kept here, before anything changes, whatever control asks: the rule lived only in Enter and
+      // Send, and the palette's Ask started a second run while one was live, abandoning the one on screen and spending
+      // a visitor's question (stress test, 2026-10-30). The palette shows why its questions wait.
+      if (!question || !doc || runs.live) return;
       beginAction();
       setComposerText("");
       setEvidence(null);
@@ -314,7 +317,7 @@ function WorkbenchSurface() {
       const started = await startRun(doc.id, guidanceRecord?.id ?? null, question);
       if (!started) setComposerText(text); // the API refused it; the words are the person's, not the error's
     },
-    [beginAction, doc, guidanceRecord, startRun, resetMemo],
+    [beginAction, doc, runs.live, guidanceRecord, startRun, resetMemo],
   );
 
   // ---- opening records from the Documents, Findings and Runs surfaces ----------------------
@@ -583,7 +586,13 @@ function WorkbenchSurface() {
 
   // The palette calls this once when it mounts; nothing here runs during the workbench render.
   const buildCommands = (): Command[] => {
-    const list: Command[] = suggestionsFor(sample, ASSISTANT_SUGGESTIONS).map((s) => ({ id: `ask-${s}`, label: s, group: "Ask", run: () => void ask(s) }));
+    const list: Command[] = suggestionsFor(sample, ASSISTANT_SUGGESTIONS).map((s) => ({
+      id: `ask-${s}`,
+      label: s,
+      group: "Ask",
+      ...(runs.live ? { disabled: true, hint: "after this answer arrives" } : {}),
+      run: () => void ask(s),
+    }));
     list.push({
       id: "guidance-edit",
       label: guidanceRecord ? "Edit legal guidance" : "Add legal guidance",

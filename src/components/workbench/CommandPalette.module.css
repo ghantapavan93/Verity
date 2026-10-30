@@ -62,6 +62,11 @@
   color: var(--text);
 }
 
+.itemDisabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .group {
   font-size: 10px;
   font-weight: 600;

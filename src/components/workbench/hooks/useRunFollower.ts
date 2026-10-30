@@ -213,6 +213,9 @@ export function useRunFollower() {
     }
   }, [state]);
   const pending = state.phase === "starting" || state.phase === "not_started" ? { question: state.question, hasGuidance: state.hasGuidance } : null;
+  // A run is live from the moment its question is sent until its record is in, a dropped stream included: the phases in
+  // which another question would abandon the one on screen. The one predicate every way to ask reads (one run at a time).
+  const live = state.phase === "starting" || state.phase === "following" || state.phase === "loading_record" || state.phase === "disconnected";
   const stageDetails: StageDetails = "details" in state ? state.details : NO_DETAILS;
 
   return {
@@ -221,6 +224,7 @@ export function useRunFollower() {
     documentId: "documentId" in state ? state.documentId : null,
     run,
     pending,
+    live,
     runError: state.error,
     stageDetails,
     ahead: state.phase === "following" ? ahead : null,
@@ -245,5 +249,5 @@ export type RunController = ReturnType<typeof useRunFollower>;
  */
 export function beside(runs: RunController, documentId: string | null): RunController {
   if (runs.documentId === null ? runs.state.phase === "idle" : runs.documentId === documentId) return runs;
-  return { ...runs, state: IDLE, documentId: null, run: null, pending: null, runError: null, stageDetails: NO_DETAILS, ahead: null };
+  return { ...runs, state: IDLE, documentId: null, run: null, pending: null, live: false, runError: null, stageDetails: NO_DETAILS, ahead: null };
 }

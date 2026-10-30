@@ -480,3 +480,116 @@ describe("every interleaving of intents and answers", () => {
     });
   }
 });
+
+/**
+ * One run at a time: the rule lived in two controls, Enter and Send, and not in the action, so the command palette's Ask
+ * started a second run while one was live and abandoned the one on screen, spending one of a public visitor's questions;
+ * typing a clause word to jump there and pressing Enter did it too, since Ask sorts first (stress test, 2026-10-30). The
+ * workbench now refuses a question while a run is live, in every phase a run is live in, whatever control asks.
+ */
+describe("one run at a time, whatever control asks", () => {
+  /** The palette, opened with Ctrl K unless it is open already (a click on a question that waits leaves it open). */
+  async function palette() {
+    const open = screen.queryByRole("combobox");
+    if (open) return open;
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+      await sleep(10);
+    });
+    return screen.getByRole("combobox");
+  }
+
+  async function askFromThePalette() {
+    await palette();
+    const option = screen.getByText("What is the limitation of liability?");
+    await act(async () => {
+      fireEvent.mouseDown(option);
+      await sleep(20);
+    });
+  }
+
+  async function filterAndEnter(text: string) {
+    const input = await palette();
+    await act(async () => {
+      fireEvent.change(input, { target: { value: text } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await sleep(20);
+    });
+  }
+
+  const phases: [string, () => Promise<void>][] = [
+    ["following", async () => {}],
+    [
+      "loading its record",
+      async () => {
+        holding = (key) => key === "GET /api/runs/runA";
+        await finishOnStream("runA");
+      },
+    ],
+    [
+      "disconnected",
+      async () => {
+        const stream = FakeSource.all.find((s) => s.runId === "runA")!;
+        await act(async () => {
+          stream.emit("error", { detail: "the server stopped answering" });
+          await sleep(10);
+        });
+        expect(screen.getByText(/the server stopped answering/)).toBeTruthy();
+      },
+    ],
+  ];
+
+  for (const [phase, enter] of phases) {
+    it(`starts nothing from the palette, by click or by Enter, while a run is ${phase}`, async () => {
+      await mount("?run=runA");
+      await enter();
+      expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true); // control: Send already refuses
+      await askFromThePalette();
+      await filterAndEnter("terminat"); // an Ask command and the jump to §2 both match
+      expect(posts).toEqual([]);
+      expect(screen.queryByRole("combobox")).toBeNull(); // Enter ran the jump, which closes the palette
+    });
+  }
+
+  it("starts nothing from the palette while a question is still being created", async () => {
+    runs.get("runA")!.done = true;
+    await mount("?run=runA");
+    holding = (key) => key === "POST /api/runs";
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Ask a question about this contract"), { target: { value: "Which law governs, of docX?" } });
+      fireEvent.click(screen.getByLabelText("Send"));
+      await sleep(10);
+    });
+    await askFromThePalette();
+    await release("POST /api/runs");
+    expect(posts.map((p) => p.question)).toEqual(["Which law governs, of docX?"]);
+    expect(FakeSource.all.filter((s) => !s.closed).map((s) => s.runId)).toEqual(["run1"]);
+  });
+
+  it("says, in the palette, why its questions wait", async () => {
+    await mount("?run=runA");
+    await palette();
+    const ask = screen.getByText("What is the limitation of liability?").closest("[role=option]")!;
+    expect(ask.getAttribute("aria-disabled")).toBe("true");
+    expect(ask.textContent).toContain("after this answer arrives");
+  });
+
+  it("control: once the run has finished, the palette asks, once", async () => {
+    runs.get("runA")!.done = true;
+    await mount("?run=runA");
+    await askFromThePalette();
+    expect(posts).toEqual([{ documentId: "docX", question: "What is the limitation of liability?" }]);
+  });
+
+  it("control: a question typed on the first screen is asked of the contract added, though a run was live", async () => {
+    const { container } = await mount("?run=runA");
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Verity: the first screen") ?? screen.getByRole("button", { name: /first screen/ }));
+      await sleep(30);
+    });
+    fireEvent.change(await screen.findByLabelText("Your question, asked once the contract is added"), { target: { value: "What is the term of docU?" } });
+    await upload(container);
+    await settle(600);
+    expect(posts).toEqual([{ documentId: "docU", question: "What is the term of docU?" }]);
+  });
+});
