@@ -222,6 +222,13 @@ PACK_LIMIT, DOCUMENT_READ_LIMIT, PACKS_AT_ONCE = 30, 240, 2
 address_packs = SlidingWindow(PACK_LIMIT, ADDRESS_WINDOW_S)
 address_document_reads = SlidingWindow(DOCUMENT_READ_LIMIT, ADDRESS_WINDOW_S)
 packs_building = threading.BoundedSemaphore(PACKS_AT_ONCE)
+# A run's trust manifest locates every span in every section again, and its revision check scores every pair of loose
+# sections of the two versions: seconds to minutes of CPU and up to gigabytes per GET, with no bound of any kind (stress
+# test, 2026-10-30: GET /trust/diff on two 2,500-section versions took 15 s and 1.2 GB, and three at once three times
+# that). Built two at a time in every store, since one process serves every reader; in the public store each counts as
+# a contract view. What the diff costs itself is trust/diff.align's to bound.
+TRUST_READS_AT_ONCE = 2
+trust_reads_building = threading.BoundedSemaphore(TRUST_READS_AT_ONCE)
 
 
 def client_address(request: Request) -> str:

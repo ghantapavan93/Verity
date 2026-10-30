@@ -161,14 +161,17 @@ def manifest_of(session: Session, run: Run) -> TrustManifest:
     )
 
 
-def diff_against(session: Session, workspace: str, run: Run, document_id: str) -> tuple[TrustDiff, Document]:
-    """What the document, a later version of the one the run read, does to the run's findings.
-
-    The later document must have been recorded as a later version in this workspace. Two unrelated documents can
-    be compared by a machine, and the answer would be that everything is stale; calling a finding stale is a
-    statement about the same contract, so it is made only where a person has said it is the same contract.
-    """
+def later_version(session: Session, workspace: str, run: Run, document_id: str) -> Document:
+    """The document a run may be compared with: the run's own, or one recorded as a later version of it in this
+    workspace. Two unrelated documents can be compared by a machine, and the answer would be that everything is stale;
+    calling a finding stale is a statement about the same contract, so it is made only where a person has said it is
+    the same contract. Asked before the comparison is built, so a refused one costs nothing (api/trust.py)."""
     later = require_document(session, document_id, workspace)
     if later.id != run.document_id and not is_later_version(session, workspace, run.document_id, later.id):
         raise Conflict("That document has not been recorded as a later version of the one this run read. Record it as one first.")
-    return trust_diff(manifest_of(session, run), sections_of(run.document), sections_of(later), later.parser_version or ""), later
+    return later
+
+
+def diff_with(session: Session, run: Run, later: Document) -> TrustDiff:
+    """What the document, a later version of the one the run read (later_version), does to the run's findings."""
+    return trust_diff(manifest_of(session, run), sections_of(run.document), sections_of(later), later.parser_version or "")

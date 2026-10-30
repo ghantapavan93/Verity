@@ -138,3 +138,25 @@ def test_a_cached_reading_is_found_without_reading_the_text(client: TestClient) 
         clause_numbers_by_document(session, [document_id])
     assert [statement for statement in cold if "sections.text" in statement], "control: a cold cache reads the text"
     assert not [statement for statement in warm if "sections.text" in statement]
+
+
+@pytest.mark.parametrize("view", ["", "/detail"])
+def test_each_finding_s_account_is_built_once_per_read(client: TestClient, monkeypatch: pytest.MonkeyPatch, view: str) -> None:
+    # A finding's account re-reads the values its guidance, question and quotes state (runs/account.py), and the run's
+    # detail built every finding's twice, once for the run and again for its list (stress test, 2026-10-30).
+    from app.api import runs as runs_api
+
+    result = upload_and_ask(client, "What notice applies?")
+    shown = len(result["run"]["findings"]) + len(result["run"]["withheld"])
+    assert shown > 0
+    built: list[str] = []
+    real = runs_api.account_of
+
+    def counted(finding: Any, clauses: Any) -> Any:  # noqa: ANN401
+        built.append(finding.id)
+        return real(finding, clauses)
+
+    monkeypatch.setattr(runs_api, "account_of", counted)
+    answer = client.get(f"/api/runs/{result['run_id']}{view}")
+    assert answer.status_code == 200
+    assert sorted(built) == sorted(set(built)) and len(built) == shown

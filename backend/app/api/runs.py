@@ -132,20 +132,25 @@ def runs_ahead(run: Run) -> int | None:
     return session.scalar(select(func.count(Run.id)).where(Run.stage.notin_(sorted(TERMINAL)), Run.created_at < run.created_at, Run.id != run.id)) or 0
 
 
-def run_out(run: Run, locator: ClauseLocator | None = None) -> RunOut:
+def run_out(run: Run, locator: ClauseLocator | None = None, built: dict[str, FindingOut] | None = None) -> RunOut:
     # Unresolved findings are kept on the run but not shown as answers. The document's sections are read only for a run
     # with findings to place: the page asks for a run every few seconds while it is working, and every ask read the whole
-    # contract to place findings it did not have yet (backend audit, 2026-10-19).
+    # contract to place findings it did not have yet (backend audit, 2026-10-19). ``built``: each finding's answer
+    # already made, by its id (run_detail).
     if locator is None and run.findings:
         locator = ClauseLocator(run.document.sections)
-    shown = [finding_out(f, locator) for f in run.findings if f.status != "unresolved"] if run.stage == "complete" else []
+
+    def out(finding: Finding) -> FindingOut:
+        return built[finding.id] if built is not None else finding_out(finding, locator)
+
+    shown = [out(f) for f in run.findings if f.status != "unresolved"] if run.stage == "complete" else []
     return RunOut(
         id=run.id,
         question=run.question,
         shared=run.workspace_id is None,
         stage=run.stage,
         findings=shown,
-        withheld=[finding_out(f, locator) for f in run.findings if f.status == "unresolved"],
+        withheld=[out(f) for f in run.findings if f.status == "unresolved"],
         model=run.model,
         prompt_version=run.prompt_version,
         prompt_hash=run.prompt_hash,
@@ -168,8 +173,11 @@ def run_detail(run: Run) -> RunDetail:
     # As in run_out: no findings, nothing to place. A page whose stream dropped polls this every few seconds while the run
     # works, and every poll read the whole contract (fresh review, 2026-10-19).
     locator = ClauseLocator(run.document.sections) if run.findings else None
-    base = run_out(run, locator).model_dump(by_alias=False)
-    base["findings"] = [finding_out(f, locator) for f in run.findings]
+    # Each finding's answer is made once and used twice: building it again for the list doubled every detail read, and
+    # an account re-reads the values its guidance, question and quotes state (stress test, 2026-10-30).
+    built = {f.id: finding_out(f, locator) for f in run.findings}
+    base = run_out(run, locator, built).model_dump(by_alias=False)
+    base["findings"] = [built[f.id] for f in run.findings]
     spans = [s for f in run.findings for s in f.spans]
     return RunDetail(
         **base,
