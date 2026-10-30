@@ -263,10 +263,22 @@ export function partOf(heading: string): { base: string; index: number } | null 
  * writes parts only so (backend ingest.sections _push). Any other heading ending in " (part N)" is the document's own and
  * is shown as written: the paper read the suffix off any heading, so "2. Definitions (part 2)" lost its words and was
  * shown as a continuation the reader made (stress test, 2026-10-30). Two unnumbered headings the document wrote as
- * "X (part 1)" and "X (part 2)" cannot be told from a split by their text; the API would have to say which it made.
+ * "X (part 1)" and "X (part 2)" cannot be told from a split by their text: since reader v17 the API says which it made
+ * (`part`), and the headings are read only for a reading made before it.
  */
 export function readingParts(sections: readonly SectionView[]): Map<string, { base: string; index: number }> {
   const parts = new Map<string, { base: string; index: number }>();
+  // Reader v17 records its splits as data (SectionOut.part: 1..n for a split, 0 for a section not split): the record
+  // decides, so a document's own "X (part 2)" is never joined to another section. Only a reading made before it (part
+  // null) is read by its headings, below (2026-10-30).
+  if (sections.some((section) => section.part != null)) {
+    for (const section of sections) {
+      if (!section.part) continue;
+      const suffix = ` (part ${section.part})`;
+      parts.set(section.id, { base: section.heading.endsWith(suffix) ? section.heading.slice(0, -suffix.length) : section.heading, index: section.part });
+    }
+    return parts;
+  }
   let run: { section: SectionView; base: string }[] = [];
   const close = () => {
     if (run.length >= 2) run.forEach(({ section, base }, i) => parts.set(section.id, { base, index: i + 1 }));
