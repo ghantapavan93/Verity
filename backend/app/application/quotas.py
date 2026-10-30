@@ -18,6 +18,14 @@ stop for a paid GPU.
 
 The same definitions give the early answers that spare work: api/access.admit_upload refuses before a file is read,
 api/model.wake wakes no model for a question that would be refused. Those decide nothing; the count in `admit` does.
+
+A daily quota counts the day of the row it limits, not the day the count happens to be made on (`daily`). A run is
+stamped with the `now` start_run read for its identity, before the write lock; the count, inside the lock, read the
+clock again. A request that read `now` on day D and was counted after 00:00 UTC was counted against D+1, which does not
+hold its D stamp: a burst queued behind a long write across midnight was admitted whole, 8 runs on a day capped at 3
+(stress test, 2026-10-30, time 2). The run quotas are therefore made for the run's own instant (`run_quotas(at=...)`),
+and a day is counted exactly, from its midnight to the next. A grant and a document are stamped when their row is
+flushed, inside the lock and after the count, so counting on the clock read there can only undercount the day before.
 The per-address and per-reader windows (api/access.SlidingWindow) and the wake-up budget (wake_model) are not here: they
 live in this process's memory and record an event in the same step, under one lock, that checks it.
 """
@@ -29,7 +37,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import InstrumentedAttribute, Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from ..config import settings
@@ -48,24 +56,49 @@ class Quota:
     refusal: Callable[[], WorkbenchError]
 
 
-def day_start() -> datetime:
-    """The start of the current UTC day: every daily quota resets here."""
-    now = utcnow()
-    return datetime(now.year, now.month, now.day, tzinfo=UTC)
+DAY = timedelta(days=1)
 
 
-def seconds_to_tomorrow() -> int:
-    return int((day_start() + timedelta(days=1) - utcnow()).total_seconds()) + 1
+def day_start(at: datetime | None = None) -> datetime:
+    """The start of the UTC day of ``at`` (the current one when None): every daily quota resets here."""
+    moment = (at or utcnow()).astimezone(UTC)
+    return datetime(moment.year, moment.month, moment.day, tzinfo=UTC)
+
+
+def seconds_to_tomorrow(at: datetime | None = None) -> int:
+    """How long until the day of ``at`` is over, from now: at least a second. A request stamped on a day that ended while
+    it waited for the lock is refused against that day, and may ask again at once, as it would be stamped on the next."""
+    return max(1, int((day_start(at) + DAY - utcnow()).total_seconds()) + 1)
+
+
+def _of_day(column: InstrumentedAttribute[datetime], at: datetime | None) -> tuple[ColumnElement[bool], ColumnElement[bool]]:
+    """The rows of the UTC day of ``at``, exactly: from its midnight to the next. Read when the count is made, so a
+    quota made for no instant counts the day the lock was had on."""
+    start = day_start(at)
+    return column >= start, column < start + DAY
+
+
+def daily(
+    limit: int, count: Callable[[Session, tuple[ColumnElement[bool], ...]], int], column: InstrumentedAttribute[datetime], refusal: str, at: datetime | None
+) -> Quota:
+    """At most ``limit`` rows a UTC day: ``count`` counts the rows matching its day's conditions, which are those of the
+    day of ``at``, the instant the row being admitted carries. Refused with ``refusal`` and a Retry-After to the end of
+    that day."""
+    return Quota(
+        limit,
+        lambda session: count(session, _of_day(column, at)),
+        lambda: TooManyRequests(refusal, retry_after=seconds_to_tomorrow(at)),
+    )
 
 
 def _grants(session: Session, *where: ColumnElement[bool]) -> int:
     return session.scalar(select(func.count()).select_from(DocumentAccess).where(*where)) or 0
 
 
-def _public_bytes_today(session: Session) -> int:
-    """The sizes of the documents stored today that a public workspace holds."""
+def _public_bytes(session: Session, day: tuple[ColumnElement[bool], ...]) -> int:
+    """The sizes of the documents stored on the day that a public workspace holds."""
     held = select(DocumentAccess.document_id).where(DocumentAccess.document_id == Document.id, DocumentAccess.workspace_id.like(f"{PUBLIC_PREFIX}%"))
-    total = session.scalar(select(func.coalesce(func.sum(Document.size_bytes), 0)).where(Document.created_at >= day_start(), held.exists()))
+    total = session.scalar(select(func.coalesce(func.sum(Document.size_bytes), 0)).where(*day, held.exists()))
     return int(total or 0)
 
 
@@ -112,10 +145,12 @@ def document_quotas(workspace: str | None, adding_bytes: int = 0) -> tuple[Quota
     budget = settings.anonymous_max_upload_bytes_per_day
     in_bytes = (
         # Refused once today's bytes and this document's together pass the budget: the count reaching budget + 1.
-        Quota(
+        daily(
             budget + 1,
-            lambda session: _public_bytes_today(session) + adding_bytes,
-            lambda: TooManyRequests("The demo has taken all the contract text it takes in a day. Try again tomorrow (UTC).", retry_after=seconds_to_tomorrow()),
+            lambda session, day: _public_bytes(session, day) + adding_bytes,
+            Document.created_at,
+            "The demo has taken all the contract text it takes in a day. Try again tomorrow (UTC).",
+            at=None,
         ),
     )
     return (
@@ -125,19 +160,24 @@ def document_quotas(workspace: str | None, adding_bytes: int = 0) -> tuple[Quota
             lambda session: _grants(session, DocumentAccess.workspace_id == workspace),
             lambda: TooManyRequests(f"This demo workspace already holds {held} contracts, its limit. Ask about one of them.", retry_after=3600),
         ),
-        Quota(
+        # A grant is stamped when its row is flushed, inside the lock after this count: counted on the day the lock was had.
+        daily(
             settings.anonymous_max_uploads_per_day,
-            lambda session: _grants(session, DocumentAccess.workspace_id.like(f"{PUBLIC_PREFIX}%"), DocumentAccess.created_at >= day_start()),
-            lambda: TooManyRequests("The demo has taken all the uploads it takes in a day. Try again tomorrow (UTC).", retry_after=seconds_to_tomorrow()),
+            lambda session, day: _grants(session, DocumentAccess.workspace_id.like(f"{PUBLIC_PREFIX}%"), *day),
+            DocumentAccess.created_at,
+            "The demo has taken all the uploads it takes in a day. Try again tomorrow (UTC).",
+            at=None,
         ),
         *(in_bytes if budget > 0 else ()),
     )
 
 
-def run_quotas(workspace: str | None) -> tuple[Quota, ...]:
-    """What a new run is counted against: a public workspace's being open and its questions today, then every reader's
-    new runs today (settings.max_runs_per_day; 0 is no ceiling). The project's own runs (no workspace: goldens,
-    batches) are neither bounded nor counted."""
+def run_quotas(workspace: str | None, at: datetime | None = None) -> tuple[Quota, ...]:
+    """What a new run is counted against: a public workspace's being open and its questions that day, then every reader's
+    new runs that day (settings.max_runs_per_day; 0 is no ceiling). The day is that of ``at``, the instant the run is
+    stamped with (start_run), so a run is counted against the day it carries; None, the day the count is made on (the
+    early answers: api/model.wake). The project's own runs (no workspace: goldens, batches) are neither bounded nor
+    counted."""
     if workspace is None:
         return ()
     quotas: list[Quota] = [*workspace_open(workspace)]
@@ -172,25 +212,24 @@ def run_quotas(workspace: str | None) -> tuple[Quota, ...]:
         )
         asked = settings.anonymous_max_runs_per_day
         quotas.append(
-            Quota(
+            daily(
                 asked,
-                lambda session: _runs(session, Run.workspace_id == workspace, Run.created_at >= day_start()),
-                lambda: TooManyRequests(
-                    f"This demo workspace has asked {asked} questions today, its limit. Try again tomorrow (UTC).", retry_after=seconds_to_tomorrow()
-                ),
+                lambda session, day: _runs(session, Run.workspace_id == workspace, *day),
+                Run.created_at,
+                f"This demo workspace has asked {asked} questions today, its limit. Try again tomorrow (UTC).",
+                at,
             )
         )
     ceiling = settings.max_runs_per_day
     if ceiling > 0:
         quotas.append(
-            Quota(
+            daily(
                 ceiling,
-                lambda session: _runs(session, Run.workspace_id.isnot(None), Run.created_at >= day_start()),
-                lambda: TooManyRequests(
-                    f"Today's run budget for this workbench is spent ({ceiling} new questions). Answers already given still open; "
-                    "new questions can be asked again after midnight UTC.",
-                    retry_after=seconds_to_tomorrow(),
-                ),
+                lambda session, day: _runs(session, Run.workspace_id.isnot(None), *day),
+                Run.created_at,
+                f"Today's run budget for this workbench is spent ({ceiling} new questions). Answers already given still open; "
+                "new questions can be asked again after midnight UTC.",
+                at,
             )
         )
     return tuple(quotas)

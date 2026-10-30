@@ -7,8 +7,11 @@ or moving the boundary to local midnight or a rolling 24 hours, passed every tes
 regression quietly ends the day's quota for good (thirty questions a workspace in all) while telling the reader to come
 back tomorrow.
 
-Finished runs are immutable, so the rows are made now and the quotas' clock is moved: to the last microsecond of
-today, where a full quota still refuses (the control), then to the next midnight, where it must open.
+Finished runs are immutable, so the rows are made now and the clock a later request reads is moved: to the last
+microsecond of today, where a full quota still refuses (the control), then to the next midnight, where it must open. A
+run is counted on the day of its own stamp (test_quota_instant.py), so the request's clock is both start_run's, which
+stamps the run, and quotas', which counts it: moving the count's alone stood for a run stamped today and counted
+tomorrow, the very case that passed a day's cap.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import config
-from app.application import quotas
+from app.application import quotas, start_run
 from app.models import utcnow
 from tests.support import upload_and_ask
 from tests.test_quota_admission import _ask, _new_visitor, _upload_new, _with_document, windows_lifted
@@ -30,6 +33,7 @@ pytestmark = pytest.mark.usefixtures(windows_lifted.__name__)
 
 def _clock_at(monkeypatch: pytest.MonkeyPatch, moment: datetime) -> None:
     monkeypatch.setattr(quotas, "utcnow", lambda: moment)
+    monkeypatch.setattr(start_run, "utcnow", lambda: moment)
 
 
 def _end_of_today() -> datetime:
