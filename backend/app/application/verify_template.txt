@@ -89,7 +89,8 @@ QUOTE_MAP = json.loads(__QUOTE_MAP__)  # verifier v10's and before
 DELETED = frozenset(ch for ch, mapped in QUOTE_MAP.items() if mapped == "")
 # v11 reads every default-ignorable code point as absent (verify/spans.IGNORABLE_RANGES).
 IGNORABLE = frozenset(chr(code) for low, high in json.loads(__IGNORABLE_RANGES__) for code in range(low, high + 1))
-QUOTE_MAP_V11 = {**QUOTE_MAP, **{ch: "" for ch in IGNORABLE}}
+QUOTE_MAP_V11 = {**QUOTE_MAP, **{ch: "" for ch in IGNORABLE}, **json.loads(__QUOTE_FOLDS_V11__)}
+CHOICE_MARKS = frozenset(json.loads(__CHOICE_MARKS__))  # v11: compared as written (verify/tokens._CHOICE_MARKS)
 DELETED_V11 = DELETED | IGNORABLE
 
 
@@ -330,7 +331,8 @@ def typed_tokens(text, version=0):
                 last[1], last[3] = tail + after, high
     if version >= 11:
         tokens = whole_words(text, tokens)
-        tokens = sorted(tokens + [["break", "", at, at + 1] for at in sentence_ends(text)], key=lambda t: t[2])
+        choices = [["symbol", ch, at, at + 1] for at, ch in enumerate(text) if ch in CHOICE_MARKS]
+        tokens = sorted(tokens + [["break", "", at, at + 1] for at in sentence_ends(text)] + choices, key=lambda t: t[2])
     return tokens
 
 

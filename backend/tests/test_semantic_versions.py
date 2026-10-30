@@ -117,7 +117,7 @@ RECORDED: dict[str, str] = {
     # boundaries, and a label is stripped only whole. v11 is not committed to main, so its fingerprint was replaced, not
     # bumped. Replayed over 17,603 recorded spans in 94 stores: none lost or gained; six typed spans now end on their own
     # quote's closing semicolon.
-    "v11": "121c37a9a6aad7f5",
+    "v11": "b305081d7b7012a7",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
     # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.
@@ -132,7 +132,7 @@ RECORDED: dict[str, str] = {
     # definition read in every pair of quotation marks, words of construction not terms, a term used in capitals; the
     # amendments of every handed section handed with it, a linked section's included (runs.links).
     # retrieval-v3 is not committed to main, so its fingerprint is replaced, not bumped, as the branch adds to it.
-    "retrieval-v3": "1e7162826fdb5559",
+    "retrieval-v3": "ab47b9f8c56891a6",
 }
 
 

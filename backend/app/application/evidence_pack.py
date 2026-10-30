@@ -91,6 +91,8 @@ def render_verify_py() -> str:
         "__SENTENCE_END__": json.dumps(tokens._SENTENCE_END.pattern, ensure_ascii=True),
         "__CLAUSE_LETTER__": json.dumps(tokens._CLAUSE_LETTER.pattern, ensure_ascii=True),
         "__IGNORABLE_RANGES__": json.dumps(verifier.IGNORABLE_RANGES),
+        "__QUOTE_FOLDS_V11__": json.dumps(verifier.QUOTE_FOLDS_V11, ensure_ascii=True),
+        "__CHOICE_MARKS__": json.dumps(sorted(tokens._CHOICE_MARKS), ensure_ascii=True),
         "__JOINED__": json.dumps(sorted(tokens._JOINED), ensure_ascii=True),
         "__ATTACHED_V11__": json.dumps(sorted(tokens._ATTACHED_V11), ensure_ascii=True),
         "__LABEL_ENDS__": json.dumps(verifier._LABEL_ENDS, ensure_ascii=True),

@@ -442,3 +442,28 @@ def test_every_currency_sign_belongs_to_its_number(sign: str) -> None:
     text = f"The fee is {sign}500 per seat per year."
     assert locate("500 per seat", text) is None
     assert locate(f"{sign}500 per seat", text) is not None  # control: the amount with its sign
+
+
+# A box a party ticks carries the clause's meaning: reader v16 reads checkboxes as U+2612 and U+2610, and the typed tier
+# dropped them as punctuation, so a quote with the box inverted verified (the readers team's report, 2026-10-30).
+BOXES = ["\u2610", "\u2611", "\u2612", "\u2713", "\u2714", "\u2717", "\u2718", "\ufffd"]
+
+
+@pytest.mark.parametrize("ticked", [mark for mark in BOXES if mark != "\u2610"])
+def test_a_box_s_state_is_part_of_what_is_quoted(ticked: str) -> None:
+    text = f"Governing law: England and Wales \u2610 Scotland {ticked} Northern Ireland \u2610."
+    assert locate("Governing law: England and Wales Scotland \u2610 Northern Ireland", text) is None  # the box inverted
+    assert locate(f"Governing law: England and Wales \u2610 Scotland {ticked} Northern Ireland", text) is not None  # control
+
+
+@pytest.mark.parametrize(
+    ("quote", "text"),
+    [
+        ("the Customer\u02bcs liability", "the Customer's liability"),
+        ("the Customer`s liability", "the Customer's liability"),
+        ("the Customer\uff07s liability", "the Customer\u2019s liability"),
+    ],
+)
+def test_every_apostrophe_a_keyboard_or_a_font_writes_is_one(quote: str, text: str) -> None:
+    found = locate(quote, text)
+    assert found is not None and found.method == "normalized", found
