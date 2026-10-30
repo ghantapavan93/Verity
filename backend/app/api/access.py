@@ -231,8 +231,10 @@ TRUST_READS_AT_ONCE = 2
 trust_reads_building = threading.BoundedSemaphore(TRUST_READS_AT_ONCE)
 
 
-def client_address(request: Request) -> str:
-    """The address Cloudflare saw, when the request came through the tunnel; the socket's otherwise."""
+def _client_address(request: Request) -> str:
+    """The address Cloudflare saw, when the request came through the tunnel; the socket's otherwise. Read by
+    client_network alone: the wake-up share was keyed by it while every other window counted by network, and twelve
+    addresses of one /64 spent the day's wake-ups (stress test, 2026-10-30), so no bound can be keyed by it."""
     return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "unknown")
 
 
@@ -242,7 +244,7 @@ def client_network(request: Request) -> str:
     given, so a host cannot multiply its share by using more of its own addresses. The hourly windows count by it too:
     by full address, a host with a /64 took a fresh address for every visit and no window filled (security audit,
     2026-10-30, reversing war room F-32 on the owner's instruction)."""
-    address = client_address(request)
+    address = _client_address(request)
     try:
         ip = ipaddress.ip_address(address)
     except ValueError:
