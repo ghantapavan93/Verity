@@ -80,7 +80,7 @@ def to_document_out(session: Session, document: Document, workspace: str) -> Doc
         hidden_runs=document.hidden_runs,
         coverage=CoverageReport.model_validate(report) if (report := coverage_of(document)) else None,
         created_at=iso(display_created(session, document, workspace)) or "",
-        sections=[SectionOut(id=s.id, number=s.number, heading=s.heading, text=s.text) for s in document.sections],
+        sections=[SectionOut(id=s.id, number=s.number, heading=s.heading, text=s.text, part=s.part) for s in document.sections],
     )
 
 

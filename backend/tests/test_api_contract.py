@@ -148,3 +148,27 @@ def test_the_committed_contract_is_the_code_s(client: TestClient) -> None:
     from app.main import create_app
 
     assert committed == create_app().openapi()
+
+
+def test_a_document_says_which_part_of_a_split_section_each_section_is(client: TestClient) -> None:
+    # Reader v17 records the part of a section it split for size (sections.part: 1..n, 0 when not split, NULL on a
+    # reading stored before). Sent with each section, so the interface reads it instead of matching "(part N)" in a
+    # heading, which a document can write itself.
+    long_clause = "2. Services\n\n" + "The Supplier provides the services described in the schedule with due care. " * 150
+    body = f"SERVICES AGREEMENT\n\n1. Term\n\nThe Agreement runs for twelve months.\n\n{long_clause}\n\n3. Law\n\nDelaware law governs.\n"
+    uploaded = client.post("/api/documents", files={"file": ("long.txt", body.encode("utf-8"), "text/plain")}).json()
+    read = client.get(f"/api/documents/{uploaded['id']}").json()
+    for answer in (uploaded, read):
+        parts = {(s["number"], s["part"]) for s in answer["sections"]}
+        assert ("1", 0) in parts and ("3", 0) in parts, "a section the reader did not split is part 0"
+        split = sorted(p for n, p in parts if n == "2")
+        assert len(split) >= 2 and split == list(range(1, len(split) + 1)), split
+
+
+def test_a_reading_stored_before_parts_were_recorded_says_none(client: TestClient) -> None:
+    from sqlalchemy import text
+
+    uploaded = client.post("/api/documents", files={"file": ("c.txt", CONTRACT.encode("utf-8"), "text/plain")}).json()
+    with db_module.engine.begin() as connection:
+        connection.execute(text("UPDATE sections SET part = NULL WHERE document_id = :d"), {"d": uploaded["id"]})
+    assert {s["part"] for s in client.get(f"/api/documents/{uploaded['id']}").json()["sections"]} == {None}

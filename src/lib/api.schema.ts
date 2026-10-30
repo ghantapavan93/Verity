@@ -2244,6 +2244,8 @@ export interface components {
             id: string;
             /** Number */
             number: string;
+            /** Part */
+            part?: number | null;
             /** Text */
             text: string;
         };

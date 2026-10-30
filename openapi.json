@@ -4330,6 +4330,17 @@
             "title": "Number",
             "type": "string"
           },
+          "part": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
           "text": {
             "title": "Text",
             "type": "string"

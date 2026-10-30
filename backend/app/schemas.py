@@ -39,6 +39,12 @@ class SectionOut(ApiModel):
     number: str
     heading: str
     text: str
+    # Which part of a section the reader split for size this is, from 1; 0 for a section not split; None for a reading
+    # stored before parts were recorded (reader v17, models.Section.part). The interface reads this, not "(part N)" in a
+    # heading, which a document may write itself.
+    part: int | None = None
+
+    model_config = ConfigDict(json_schema_extra=added_later("part"))
 
 
 class CoverageOut(ApiModel):
