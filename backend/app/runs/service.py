@@ -50,6 +50,7 @@ from .status import (
     Decision,
     Grounds,
     LeftOut,
+    Place,
     check_conditions,
     check_old_value,
     check_references,
@@ -198,14 +199,29 @@ def reading_of(sections: Sequence[Section], section: Section) -> tuple[str, int]
     inside one paragraph is joined: both parts pieces of it (no paragraph break in either), the earlier not ending a
     passage. An edge between paragraphs ends a sentence, as a paragraph break inside a part does (`_PASSAGE_END`): a cover
     page's table rows, grouped into parts at their breaks, are not one sentence across them (Recording 6c, g25)."""
+    before, after = _run_on_parts(sections, section)
+    lead = f"{before.text} " if before else ""
+    return f"{lead}{section.text}{' ' + after.text if after else ''}", len(lead)
+
+
+def _run_on_parts(sections: Sequence[Section], section: Section) -> tuple[Section | None, Section | None]:
+    """The parts of the same clause a sentence in ``section`` runs on from and into, as `reading_of` joins them."""
     ordered = list(sections)
     here = next((i for i, s in enumerate(ordered) if s.id == section.id), None)
     if here is None:
-        return section.text, 0
-    before = ordered[here - 1].text if here > 0 and _runs_on(ordered[here - 1], section) else ""
-    after = ordered[here + 1].text if here + 1 < len(ordered) and _runs_on(section, ordered[here + 1]) else ""
-    lead = f"{before} " if before else ""
-    return f"{lead}{section.text}{' ' + after if after else ''}", len(lead)
+        return None, None
+    before = ordered[here - 1] if here > 0 and _runs_on(ordered[here - 1], section) else None
+    after = ordered[here + 1] if here + 1 < len(ordered) and _runs_on(section, ordered[here + 1]) else None
+    return before, after
+
+
+def place_in(sections: Sequence[Section], section: Section, start: int, end: int) -> Place | None:
+    """Where ``start``:``end`` of the text `reading_of` gives for ``section`` stands: a section's id and the place in its
+    own text, or None when it runs across a part's edge."""
+    before, after = _run_on_parts(sections, section)
+    at = len(before.text) + 1 if before else 0
+    pieces = [*([(before, 0)] if before else []), (section, at), *([(after, at + len(section.text) + 1)] if after else [])]
+    return next(((piece.id, start - offset, end - offset) for piece, offset in pieces if offset <= start and end <= offset + len(piece.text)), None)
 
 
 def _runs_on(earlier: Section, later: Section) -> bool:
@@ -488,7 +504,8 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             spans: list[EvidenceSpan] = []
             passages: list[str] = []
             dependencies: list[str] = []
-            conditions: list[LeftOut] = []  # what each verified quote's own sentence carries outside it (policy-v14)
+            conditions: list[tuple[LeftOut, Place | None]] = []  # what each verified quote's sentence carries outside it, and where
+            shown: list[Place] = []  # where each verified quote stands
             read: list[str] = []  # what each verified quote covers in the contract: what code reads values from (policy-v17)
             all_verified = bool(item.evidence)
             for span_ordinal, evidence in enumerate(item.evidence):
@@ -503,8 +520,9 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                     passage = enclosing_sentences(whole, at + located.start, at + located.end)
                     passages.append(passage)
                     dependencies += [d for d in unseen_references(passage, every_section, handed) if d not in dependencies]
+                    shown.append((section.id, located.start, located.end))
                     if (condition := left_out(whole, at + located.start, at + located.end)) is not None:
-                        conditions.append(condition)
+                        conditions.append((condition, place_in(sections, section, condition.start, condition.end)))
                 total_count += 1
                 verified_count += 1 if verified else 0
                 spans.append(
@@ -554,7 +572,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 guidance_text,
                 clause_numbers,
             )
-            decision = check_conditions(decision, unshown_conditions(conditions, read))
+            decision = check_conditions(decision, unshown_conditions(conditions, shown))
             if relations:
                 # What the located statements mean for this finding: only its verified quotes ground anything (runs.relations).
                 answer = " ".join(label_handles(text, labels) for text in (item.conclusion, item.observed) if text)

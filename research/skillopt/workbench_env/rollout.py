@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.analysis.service import PromptPackage, SectionForPrompt, analyze, build_user_message
+from app.analysis.service import MAX_SECTION_CHARS_IN_PROMPT, PromptPackage, SectionForPrompt, analyze, build_user_message
 from app.batch.cuad_match import answer_index, retrieved_carries
 from app.batch.cuad_match import outcome as cuad_outcome
 from app.config import settings
@@ -83,7 +83,11 @@ def rollout_one(item: dict[str, Any], skill: str, prediction_dir: Path) -> dict[
     chosen = retrieve(sections, str(item["question"]), settings.retrieval_k)
     by_label = {f"sec_{s.ordinal}": s for s in chosen}
     user = build_user_message(
-        str(item["question"]), None, str(item["contract_name"]), [SectionForPrompt(label, s.number, s.heading, s.text) for label, s in by_label.items()]
+        str(item["question"]),
+        None,
+        str(item["contract_name"]),
+        [SectionForPrompt(label, s.number, s.heading, s.text) for label, s in by_label.items()],
+        window=MAX_SECTION_CHARS_IN_PROMPT,  # the window every run had when this research was recorded
     )
     prompt = PromptPackage(version="skillopt-candidate", system=skill, sha256=sha256_text(skill))
     experts: list[str] = [str(e) for e in item.get("expert_spans") or []]

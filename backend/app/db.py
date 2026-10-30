@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import time
 import weakref
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -253,6 +254,11 @@ def _rebuild(target_engine: Engine, table: str, declared: str) -> None:
                 ids = [str(row[0]) for row in connection.execute(f'SELECT "{key}" FROM "{table}" WHERE NOT ({body}) LIMIT 20')]
                 if ids:
                     refused.append(f"{name} refuses {table} {', '.join(ids)}")
+            for column in Base.metadata.tables[table].columns:
+                if not column.nullable and column.name in stored_columns:
+                    ids = [str(row[0]) for row in connection.execute(f'SELECT "{key}" FROM "{table}" WHERE "{column.name}" IS NULL LIMIT 20')]
+                    if ids:
+                        refused.append(f"NOT NULL {table}.{column.name} refuses {table} {', '.join(ids)}")
             dropped = [c for c in stored_columns if c not in Base.metadata.tables[table].columns]
             if dropped:
                 refused.append(f"{table} holds column(s) the models no longer declare, which the rebuild would lose: {', '.join(dropped)}")
@@ -262,6 +268,8 @@ def _rebuild(target_engine: Engine, table: str, declared: str) -> None:
                 )
             tables = [str(r[0]) for r in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")]
             before = {name: connection.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0] for name in tables}
+            # A reference already dangling is the store's, not the rebuild's: only one the rebuild would add refuses it.
+            dangled = Counter((str(r[0]), str(r[2]), int(r[3])) for r in connection.execute("PRAGMA foreign_key_check"))
             triggers = [(str(n), str(s)) for n, s in connection.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'")]
             indexes = [
                 str(s) for (s,) in connection.execute("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL", (table,))
@@ -278,10 +286,10 @@ def _rebuild(target_engine: Engine, table: str, declared: str) -> None:
             for _name, statement in triggers:
                 connection.execute(statement)
             after = {name: connection.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0] for name in tables}
-            dangling = connection.execute("PRAGMA foreign_key_check").fetchall()
+            dangling = Counter((str(r[0]), str(r[2]), int(r[3])) for r in connection.execute("PRAGMA foreign_key_check")) - dangled
             if after != before or dangling:
                 raise RuntimeError(
-                    f"rebuilding {table} would change the store (rows {before} then {after}; {len(dangling)} dangling reference(s)): rolled back"
+                    f"rebuilding {table} would change the store (rows {before} then {after}; {dangling.total()} new dangling reference(s)): rolled back"
                 )
             connection.execute("COMMIT")
         except BaseException:

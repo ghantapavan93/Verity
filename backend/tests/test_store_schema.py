@@ -149,6 +149,41 @@ def test_a_row_the_new_constraint_refuses_stops_the_opening_and_changes_nothing(
     assert {name for name, _ in schema(path) if name.startswith("trg_")} >= {name for name, _ in before_schema if name.startswith("trg_")}
 
 
+def test_a_null_the_models_refuse_stops_the_opening_and_is_named(tmp_path: Path) -> None:
+    """The fresh review (2026-10-30): only CHECKs were read before the rebuild, so a NULL in a NOT NULL column failed the
+    copy with SQLite's message and no id."""
+    path, engine = old_store(tmp_path, "UPDATE runs SET stage = 'reading'")
+    with sqlite3.connect(path) as connection:
+        connection.execute("PRAGMA writable_schema=ON")
+        ddl = connection.execute("SELECT sql FROM sqlite_master WHERE name = 'findings'").fetchone()[0]
+        connection.execute("UPDATE sqlite_master SET sql = ? WHERE name = 'findings'", (ddl.replace("conclusion TEXT NOT NULL", "conclusion TEXT"),))
+    with sqlite3.connect(path) as connection:
+        connection.execute("UPDATE findings SET conclusion = NULL")
+        (finding_id,) = connection.execute("SELECT id FROM findings").fetchone()
+    before = counts(path)
+    with pytest.raises(db.StoreDrift, match=rf"NOT NULL findings\.conclusion refuses findings {finding_id}"):
+        db.init_db(engine)
+    engine.dispose()
+    assert counts(path) == before
+
+
+def test_a_dangling_reference_the_rebuild_did_not_make_does_not_stop_it(tmp_path: Path) -> None:
+    """A reference already dangling in another table is the store's, not the rebuild's: foreign_key_check is compared
+    before and after, never read whole after (the fresh review, 2026-10-30)."""
+    path, engine = old_store(
+        tmp_path,
+        "INSERT INTO finding_reviews (finding_id, verdict, reviewer, created_at) VALUES ('gone', 'confirmed', 'probe', '2026-10-30 00:00:00')",
+    )
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("PRAGMA foreign_key_check").fetchall()  # control: it dangles before
+    before = counts(path)
+    db.init_db(engine)
+    engine.dispose()
+    assert counts(path) == before
+    with sqlite3.connect(path) as connection:
+        assert "ck_findings_status_source" in db.describe_store(connection)["findings"]["checks"]
+
+
 def test_a_fresh_store_is_not_rebuilt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Control: nothing drifts, so nothing is rebuilt; the check is a read of sqlite_master."""
     engine = db.make_engine(f"sqlite:///{(tmp_path / 'fresh.db').as_posix()}")

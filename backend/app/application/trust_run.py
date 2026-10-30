@@ -20,7 +20,7 @@ from ..hashing import sha256_bytes
 from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile
 from ..ingest.bounded import read_file
 from ..models import TERMINAL_STAGES, Document, Run
-from ..runs.versions import SEMANTIC_VERSIONS, earlier_versions, unknown_versions
+from ..runs.versions import SEMANTIC_VERSIONS, compare_version, earlier_versions, unknown_versions
 from ..trust.compile import FindingRecord, SpanRecord, compile_manifest
 from ..trust.diff import TrustDiff, trust_diff
 from ..trust.model import TRUST_VERSION, SectionText, TrustManifest, snapshot_hash
@@ -205,6 +205,9 @@ def _work_out(session: Session, run: Run) -> tuple[TrustManifest, bool]:
     ]
     options = json.loads(run.options_json or "{}")
     again = None if document.parser_version == PARSER_VERSION else current_reading(session, document)
+    # A reading made by a reader this build does not know is not compared with this build's reading (trust.compile).
+    reader_unknown = compare_version(document.parser_version, PARSER_VERSION) == "unknown"
+    unknown_reader = [f"reader {document.parser_version} then, {PARSER_VERSION} now"] if reader_unknown else []
     manifest = compile_manifest(
         run_id=run.id,
         document_id=document.id,
@@ -213,7 +216,7 @@ def _work_out(session: Session, run: Run) -> tuple[TrustManifest, bool]:
         current_reader=PARSER_VERSION,
         rule_versions={name: str(options.get(name) or "not recorded") for name in SEMANTIC_VERSIONS},
         stale_rules=earlier_versions(options),
-        unknown_rules=unknown_versions(options),
+        unknown_rules=[*unknown_versions(options), *unknown_reader],
         sections=sections_of(document),
         findings=findings,
         current_reading=again,

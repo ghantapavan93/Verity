@@ -9,7 +9,7 @@ is counted here, with the verifier's own `locate`, because the record counts wit
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ..verify.spans import locate, verification_pass
 from .facts import facts_in
@@ -209,6 +209,25 @@ def rules_obligation(prefix: str, stale_rules: Sequence[str], evidence: Sequence
     )  # fmt: skip
 
 
+# What this build would judge with its own verifier or reader: where else a quote stands, and whether the reader's text
+# still carries it. Where a quote was found is the record's; what a quote states is the quote's.
+_JUDGED_BY_THIS_BUILD = frozenset({Need.QUOTE_UNIQUE, Need.READER_COMPATIBLE})
+
+
+def _not_judged(obligation: Obligation, unknown_rules: Sequence[str]) -> Obligation:
+    """A record made under rules or a reader this build does not know is not judged by an older verifier or reader: the
+    uniqueness count and the reader comparison were still made by this build's own after the rules obligation stopped
+    (the fresh review, 2026-10-30)."""
+    if obligation.need not in _JUDGED_BY_THIS_BUILD:
+        return obligation
+    return replace(
+        obligation,
+        standing=Standing.NOT_ESTABLISHED,
+        reason=f"recorded under rules this build does not know ({'; '.join(unknown_rules)}); not judged here",
+        depends_on=(Dependency(On.CODE),),
+    )
+
+
 @verification_pass()  # what is worked out about each text is kept for this pass only (verify/spans.py)
 def compile_manifest(
     *,
@@ -236,6 +255,8 @@ def compile_manifest(
             obligations += span_obligations(f"{prefix}.{item.span}", item, names)
         obligations.append(reader_obligation(prefix, reader_version, current_reader, evidence, current_reading))
         obligations.append(rules_obligation(prefix, stale_rules, evidence, unknown_rules))
+        if unknown_rules:
+            obligations = [_not_judged(o, unknown_rules) for o in obligations]
         proofs.append(
             FindingProof(finding.finding_id, finding.ordinal, finding.topic, finding.status, derive(tuple(obligations)), evidence, tuple(obligations))
         )

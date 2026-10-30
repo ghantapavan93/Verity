@@ -51,6 +51,7 @@ ENTRY_POINTS: dict[str, tuple[Symbol, ...]] = {
         ("analysis/schema.py", "ANALYSIS_SCHEMA"),
         ("analysis/service.py", "load_prompt"),
         ("document_names.py", "run_prompt_name"),  # the contract's name as the model reads it
+        ("providers/ollama.py", "OllamaProvider.chat_request"),  # the request: the schema as its format, thinking, no cut
     ),
     "policy_version": (("runs/service.py", "execute_run"),),
     "parser_version": (("ingest/__init__.py", "ingest"),),
@@ -144,7 +145,7 @@ RECORDED: dict[str, str] = {
     # lists, number words, invisible characters, negations, ambiguous periods anywhere in the quotes); a range compares in
     # one unit. v16 is released, so this is a bump. Re-recorded before release as each class of the stress test is closed,
     # and when the boundaries became closures of their entry points (the executor's, for the policy).
-    "policy-v17": "84822b2da8786c12",
+    "policy-v17": "e139fb7d79be932c",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
     # v8, 2026-10-13: no span begins or ends inside a number; a number's sign is part of its value (F-03). Re-recorded the
@@ -181,13 +182,13 @@ RECORDED: dict[str, str] = {
     # definition read in every pair of quotation marks, words of construction not terms, a term used in capitals; the
     # amendments of every handed section handed with it, a linked section's included (runs.links).
     # retrieval-v3 is not committed to main, so its fingerprint is replaced, not bumped, as the branch adds to it.
-    "retrieval-v3": "2c2ac572d30e5348",
+    "retrieval-v3": "272c76e0c6991632",
     # input-v1, 2026-10-30: the first version of what the model is handed. Recorded with the boundaries' move to closures,
     # which changed every fingerprint's definition; the versions above it are kept as they were recorded.
-    "input-v1": "8ed4812f0068d144",
+    "input-v1": "9579eac90fa902fa",
     # reader v17, 2026-10-30: the first reader version held to its code (columns, fields, branches, cells, checkboxes and
     # text boxes read as Word displays them; the PDF page read by position).
-    "reader v17": "e6c604d8461a23ae",
+    "reader v17": "3a4543713ac44436",
 }
 
 
@@ -250,6 +251,12 @@ def test_every_symbol_named_non_deciding_exists_and_is_reached_by_the_executor()
         ("runs/status.py", "check_conditions"),
         ("verify/tokens.py", "tokenize"),
         ("retrieval/lexical.py", "tokenize"),
+        # From the fresh review (2026-10-30): a field of the answer's schema, named only as a type, and the request the
+        # provider sends, reached only through a method of the provider.
+        ("analysis/schema.py", "FindingOut"),
+        ("analysis/schema.py", "EvidenceOut"),
+        ("providers/ollama.py", "OllamaProvider.chat_request"),
+        ("providers/ollama.py", "NEVER_CUT"),
     ],
 )
 def test_the_stress_tests_planted_rule_changes_each_move_a_fingerprint(planted: Symbol) -> None:

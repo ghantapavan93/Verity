@@ -23,7 +23,7 @@ from app.db import SessionLocal
 from app.models import Run
 from app.runs.versions import SEMANTIC_VERSIONS, compare_version, earlier_versions, stale_versions, unknown_versions
 from app.trust.compile import FindingRecord, SpanRecord, compile_manifest
-from app.trust.model import Need, SectionText, Standing
+from app.trust.model import Need, SectionText, Standing, TrustState
 from app.verify.spans import locate
 from tests.support import upload_and_ask
 from tests.test_status_script import status
@@ -89,6 +89,29 @@ def test_rules_this_build_does_not_know_are_not_established_by_running_the_older
     assert "earlier" not in reason and "this build does not know" in reason and "verifier version v99 then, v11 now" in reason
 
 
+def test_under_rules_this_build_does_not_know_no_obligation_is_judged_by_its_own_verifier_or_reader() -> None:
+    """The fresh review (2026-10-30): uniqueness was still counted by this build's verifier, and the reader obligation
+    locates quotes with it too. Only what the record states (where a quote was found) and what the quote itself says
+    stand; the finding cannot read supported."""
+    section = SectionText(0, "1", "Term", "Either party may terminate this Agreement on thirty (30) days' written notice.")
+    quote = "terminate this Agreement on thirty (30) days' written notice"
+    located = locate(quote, section.text, section.label)
+    assert located is not None
+    span = SpanRecord(0, quote, "sec_0", True, located.method, 0, located.start, located.end)
+    manifest = compile_manifest(
+        run_id="r", document_id="d", document_sha256="0" * 64, reader_version="v99", current_reader="v6", rule_versions={},
+        stale_rules=(), unknown_rules=("reader v99 then, v6 now",), sections=[section], findings=[FindingRecord("f", 0, "term", "pass", (span,))],
+        current_reading=[section],
+    )  # fmt: skip
+    proof = manifest.findings[0]
+    judged = {o.need for o in proof.obligations if o.standing is Standing.ESTABLISHED}
+    assert judged <= {Need.QUOTE_EXISTS, Need.FACT_MATCHES}, judged
+    for need in (Need.QUOTE_UNIQUE, Need.READER_COMPATIBLE, Need.RULES_COMPATIBLE):
+        reasons = [o.reason for o in proof.obligations if o.need is need]
+        assert reasons and all("this build does not know" in r and "earlier" not in r for r in reasons), (need, reasons)
+    assert proof.state is not TrustState.SUPPORTED
+
+
 def test_control_earlier_rules_are_still_asked_of_todays_verifier() -> None:
     standing, reason = rules(unknown_rules=(), stale_rules=("verifier version v5 then, v11 now",))
     assert standing is Standing.ESTABLISHED and "earlier rules" in reason
@@ -105,9 +128,16 @@ def _record_under(run_id: str, **versions: str) -> None:
         session.commit()
 
 
-def test_a_run_recorded_by_a_newer_build_is_named_so_on_its_trust_page(client: TestClient) -> None:
+@pytest.mark.parametrize("newer", ["verifier", "reader"])
+def test_a_run_recorded_by_a_newer_build_is_named_so_on_its_trust_page(client: TestClient, newer: str) -> None:
     run_id = upload_and_ask(client, "Is there an arbitration clause?")["run_id"]
-    _record_under(run_id, verifier_version="v99")
+    if newer == "verifier":
+        _record_under(run_id, verifier_version="v99")
+    else:
+        with SessionLocal() as session:
+            session.execute(text("DROP TRIGGER IF EXISTS trg_documents_no_update_when_finished"))
+            session.execute(text("UPDATE documents SET parser_version = 'v99'"))
+            session.commit()
     with SessionLocal() as session:
         run = session.scalars(select(Run).where(Run.id == run_id)).one()
         manifest = manifest_of(session, run)

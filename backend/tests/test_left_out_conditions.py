@@ -121,22 +121,30 @@ def test_a_pass_resting_on_a_quote_that_leaves_out_its_condition_is_lowered() ->
     assert check_conditions(PASS, []) == PASS
 
 
-def test_a_condition_another_quote_of_the_finding_shows_is_not_left_out() -> None:
+def test_a_condition_another_quote_of_the_finding_shows_where_it_stands_is_not_left_out() -> None:
     found = left_out(SECTION, *_span(SECTION, TRIMMED))
     assert found is not None and found.written == found.shown == "Except for the first sixty (60) calendar days of the Initial Term"
     assert SECTION[found.start : found.end] == found.written
-    assert unshown_conditions([found], [TRIMMED]) == [found.shown]
-    assert unshown_conditions([found], [TRIMMED, "Except for the first sixty (60) calendar days of the Initial Term"]) == []
-    assert unshown_conditions([found], [TRIMMED, "Except for the first sixty (60) calendar days"]) == [found.shown]  # part of it is not it
+    place = ("s1", found.start, found.end)
+    trimmed = ("s1", *_span(SECTION, TRIMMED))
+    assert unshown_conditions([(found, place)], [trimmed]) == [found.shown]
+    assert unshown_conditions([(found, place)], [trimmed, place]) == []
+    assert unshown_conditions([(found, place)], [trimmed, ("s1", found.start - 10, found.end + 5)]) == []  # a wider quote
+    assert unshown_conditions([(found, place)], [trimmed, ("s1", found.start, found.end - 20)]) == [found.shown]  # part of it is not it
+    # The same words quoted from another clause are not this sentence's condition (the fresh review, 2026-10-30).
+    assert unshown_conditions([(found, place)], [trimmed, ("s2", found.start, found.end)]) == [found.shown]
+    # A condition that runs across a part's edge has no one place: no quote shows it.
+    assert unshown_conditions([(found, None)], [trimmed, place]) == [found.shown]
 
 
-def test_a_long_condition_is_shown_cut_and_compared_whole() -> None:
+def test_a_long_condition_is_shown_cut_and_judged_by_its_whole_place() -> None:
     lead = "Unless " + " ".join(f"obligation{n} remains outstanding" for n in range(30))
     text = f"{lead}, Provider may suspend access on ten (10) days' notice."
     found = left_out(text, *_span(text, "Provider may suspend access on ten (10) days' notice"))
     assert found is not None and found.written == lead and found.shown.endswith("…") and len(found.shown) <= 201
-    assert unshown_conditions([found], [found.shown[:-1]]) == [found.shown]  # the cut words are not the whole condition
-    assert unshown_conditions([found], [text]) == []
+    place = ("s1", found.start, found.end)
+    assert unshown_conditions([(found, place)], [("s1", 0, len(found.shown) - 1)]) == [found.shown]  # the cut words are not the whole
+    assert unshown_conditions([(found, place)], [("s1", 0, len(text))]) == []
 
 
 @settings(max_examples=60, deadline=None)

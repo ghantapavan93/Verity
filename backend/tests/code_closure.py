@@ -1,10 +1,11 @@
 """The code a version names, found by following it rather than listed by hand (tests only; nothing here runs in the app).
 
-A closure starts from entry points, top-level definitions of app modules, and takes in every top-level function, class
-and assignment their code names, followed through imports inside the app, until nothing new is reached. A name used
-only as a type annotation is not followed: a type decides nothing. A name that cannot be resolved inside the app (the
-standard library, a third-party package, a method called on an object) ends there, which is why an entry point's own
-module-level helpers and constants are what a closure is made of.
+A closure starts from entry points, top-level definitions of app modules or a method of a top-level class
+("Class.method"), and takes in every top-level function, class and assignment their code names, followed through imports
+inside the app, until nothing new is reached. A field's type is followed (a Pydantic model's field types are the schema
+it reads), a parameter's or a return's annotation is not. A name that cannot be resolved inside the app (the standard
+library, a third-party package, a method called on an object) ends there: code reached only that way must be named as
+an entry point, as the provider's request is.
 """
 
 from __future__ import annotations
@@ -105,7 +106,8 @@ def references(node: ast.AST) -> set[tuple[str, ...]]:
             for part in [*current.decorator_list, *current.args.defaults, *(d for d in current.args.kw_defaults if d is not None), *current.body]:
                 visit(part)
             return
-        if isinstance(current, ast.AnnAssign):
+        if isinstance(current, ast.AnnAssign):  # a field: its type, and its default
+            visit(current.annotation)
             if current.value is not None:
                 visit(current.value)
             return
@@ -141,17 +143,27 @@ def resolve(path: str, reference: tuple[str, ...]) -> Symbol | None:
     return _symbol(path, name)
 
 
+def nodes_of(path: str, name: str) -> tuple[ast.stmt, ...]:
+    """A top-level definition, or "Class.method": the method's own definition."""
+    owner, _, method = name.partition(".")
+    nodes = definitions(path).get(owner, ())
+    if method:
+        nodes = tuple(node for owner_node in nodes if isinstance(owner_node, ast.ClassDef) for node in owner_node.body
+                      if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == method)  # fmt: skip
+    return nodes
+
+
 def closure(entries: Iterable[Symbol], stop: Iterable[Symbol] = ()) -> dict[Symbol, tuple[ast.stmt, ...]]:
     """Every definition the entries reach, the entries included; a symbol in ``stop`` is neither taken nor followed."""
     stopped, reached = set(stop), {}
     pending = list(entries)
     for path, name in pending:
-        assert name in definitions(path), f"{path}:{name} is not a top-level definition; the entry point moved"
+        assert nodes_of(path, name), f"{path}:{name} is not a top-level definition or method; the entry point moved"
     while pending:
         symbol = pending.pop()
         if symbol in reached or symbol in stopped:
             continue
-        nodes = definitions(symbol[0])[symbol[1]]
+        nodes = nodes_of(*symbol)
         reached[symbol] = nodes
         for node in nodes:
             for reference in references(node):

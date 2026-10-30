@@ -123,7 +123,8 @@ from .values import frame_times, redaction_given_as_value, uniform_party_choices
 # calendar days") where the passages state several of that kind and none gives that value to every party (the Customer
 # 45, the Provider 60): `check_values`, `values.uniform_party_choices`. (2) A verified quote whose own sentence carries a
 # condition outside the quoted words ("Except for the first sixty (60) calendar days of the Initial Term, …") that the
-# answer does not state: `check_conditions`, `left_out_condition`. Replay over recorded passes: DECISIONS.md.
+# answer does not state (since policy-v17: that no quote of the finding shows): `check_conditions`, `left_out_condition`.
+# Replay over recorded passes: DECISIONS.md.
 # policy-v15 (2026-10-17, the amendment challenge): the number of an instrument or a document named with a mark
 # ("Amendment No. 1", "Change Order #7") is not a value the answer states: `check_values` no longer lowers a pass for
 # it, and runs.relations no longer counts it as a value of a replaced clause or its replacement. Each number of the
@@ -530,11 +531,20 @@ def left_out_condition(text: str, start: int, end: int) -> str | None:
     return found.shown if found is not None else None
 
 
-def unshown_conditions(left: Sequence[LeftOut], shown: Sequence[str]) -> list[str]:
-    """The conditions, as a reason shows them, that no verified quote of the finding shows whole: ``shown`` is the
-    contract text each verified quote was found at. A condition another quote carries is on screen beside the one
-    that leaves it out; part of it is not it."""
-    return [condition.shown for condition in left if not any(condition.written in text for text in shown)]
+# Where a passage stands: a section's id, and its start and end in that section's own text.
+Place = tuple[str, int, int]
+
+
+def unshown_conditions(left: Sequence[tuple[LeftOut, Place | None]], shown: Sequence[Place]) -> list[str]:
+    """The conditions, as a reason shows them, that no verified quote of the finding covers where they stand: ``left``
+    pairs each with its place (None when it runs across a part's edge, where no one quote can cover it), ``shown`` is
+    where each verified quote was found. A condition another quote covers is on screen beside the one that leaves it
+    out; part of it is not it, and the same words quoted from another clause are not it (the fresh review, 2026-10-30)."""
+    return [
+        condition.shown
+        for condition, place in left
+        if place is None or not any(at == place[0] and start <= place[1] and place[2] <= end for at, start, end in shown)
+    ]
 
 
 _QUOTED_END = re.compile(r"[.!?][\"”’)]+\s+")
