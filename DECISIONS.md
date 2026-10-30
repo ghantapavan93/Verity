@@ -1792,3 +1792,10 @@ disagree.
   `numeric_precision` goldens, now name the period they ask for (30 and 60 days), and the answer must state it; a run
   answering 30 days for g36 passed before. This tightens two goldens' expectations, which rule 3 of `docs/GOLDENS.md`
   allows only with this entry: neither expectation was wrong, both were unread.
+- **The golden report reads every recording, judged by section text.** It found runs by today's fingerprint on today's
+  reading only, so every version bump hid the record: over a copy of the store holding 673 golden runs it said "no
+  golden run is recorded yet". And reader v14 renumbered 14 of the sample's 123 sections, the set was relabelled with
+  them, and every committed recording judged 28 of 44 under today's set against 37 under the set it was made with. The
+  report now reads recordings by what the runs stored and labels each with its reader, rules and options; a golden names
+  its sections by text. The dead fallback in `run_for` is gone. On that store copy the report reads Recordings 3, 6c
+  and 5 as published (32 of 42, 37 of 44, 38 of 44), and the routing comparison 36 of 42 against 34.

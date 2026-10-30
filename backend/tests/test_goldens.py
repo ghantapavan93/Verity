@@ -4,15 +4,33 @@ run not to assert the point. The comparison between prompt versions reads those 
 
 from __future__ import annotations
 
+import json
+import re
+from collections import Counter
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app import db as db_module
-from app.goldens.service import LOWERED_NOTE, Golden, Verdict, compare, ensure_golden_document, judge, load_set, lowered_passes, report
-from app.ingest import PARSER_VERSION
-from app.models import EvidenceSpan, Finding, FindingStatusName, Run, RunReasonName, RunStageName, Section
+from app.analysis.service import load_prompt
+from app.db import SessionLocal
+from app.goldens.service import (
+    LOWERED_NOTE,
+    Golden,
+    Verdict,
+    compare,
+    ensure_golden_document,
+    judge,
+    load_set,
+    lowered_passes,
+    report,
+    run_for,
+    section_anchor,
+)
+from app.ingest import PARSER_VERSION, ingest
+from app.models import Document, EvidenceSpan, Finding, FindingStatusName, Run, RunReasonName, RunStageName, Section
 from app.schemas import GoldenRunOut
 
 
@@ -219,3 +237,140 @@ def test_model_comparison_groups_goldens_by_task_and_needs_the_sample(tmp_path: 
     db_module.init_db(engine)
     with Session(engine) as session, pytest.raises(ValueError, match="run the golden set first"):
         compare_models(session, "answer-v2", "qwen3:8b", "qwen3:4b")
+
+
+# ----------------------------------------------------------------------------- recordings under other readers and rules
+#
+# Every committed golden recording judged 37 of 44 under the set as it stood and 28 under today's, because reader v14
+# renumbered 14 of the sample's 123 sections (5.3.1 became 5.3(a)) and the set was relabelled with them; and the report
+# found runs only under today's fingerprint, so a store with 673 golden runs said "no golden run is recorded yet"
+# (stress test EVL-2, 2026-10-30). A golden names its sections by text, and the report reads recordings by what each run
+# stored.
+
+
+def renumbered(number: str) -> str:
+    """Reader v5's number for a sub-clause reader v15 numbers by letter: 5.3(a) was 5.3.1."""
+    match = re.fullmatch(r"(.+)\(([a-z])\)", number)
+    return f"{match.group(1)}.{ord(match.group(2)) - ord('a') + 1}" if match else number
+
+
+def test_the_set_names_each_section_by_its_text_under_todays_reading() -> None:
+    golden_set = load_set()
+    path = golden_set.document_path
+    parsed = ingest(path.name, path.read_bytes())
+    by_number = {s.number: s for s in parsed.sections if s.number}
+    anchors = Counter(section_anchor(s.text) for s in parsed.sections)
+    named = {number for g in golden_set.goldens for number in g.sections}
+    assert set(golden_set.anchors) == {n for n in named if section_anchor(by_number[n].text)}, "every named section with text is anchored"
+    for number, anchor in golden_set.anchors.items():
+        assert section_anchor(by_number[number].text) == anchor, f"§{number}'s text is not the text the set anchors"
+        assert anchors[anchor] == 1, f"§{number}'s text is not unique in the sample, so it cannot name the section"
+    g02 = next(g for g in golden_set.goldens if g.id == "g02")
+    assert g02.anchors == (("5.3(a)", golden_set.anchors["5.3(a)"]),)
+    # An earlier reader's text of a section is that section's too, and no other section's today.
+    for number, earlier in golden_set.earlier_anchors.items():
+        assert number in golden_set.anchors and not set(earlier) & set(anchors), number
+
+
+def test_a_run_on_an_older_reading_is_judged_by_the_text_it_cites_not_the_number() -> None:
+    golden_set = load_set()
+    g02 = next(g for g in golden_set.goldens if g.id == "g02")
+    path = golden_set.document_path
+    today = next(s for s in ingest(path.name, path.read_bytes()).sections if s.number == "5.3(a)")
+    older = Section(number="5.3.1", heading=today.heading, text=today.text)
+    cited = EvidenceSpan(verified=True, method="exact", cited_section_label="sec_40", section=older, quote="q")
+    verdict = judge(g02, run_with("complete", [finding("pass", cited)]))
+    assert verdict.outcome == "pass" and "§5.3(a)" in verdict.because and "§5.3.1" in verdict.because
+    # Control: today's number on other text is another section, whatever it is called.
+    elsewhere = Section(number="5.3(a)", heading="h", text="Either party may terminate on thirty days' notice.")
+    other = EvidenceSpan(verified=True, method="exact", cited_section_label="sec_40", section=elsewhere, quote="q")
+    assert judge(g02, run_with("complete", [finding("pass", other)])).outcome == "fail"
+
+
+def test_a_named_section_with_no_text_today_is_still_named_by_its_number() -> None:
+    """Reader v15 reads §5.6 as a heading alone, so it has no anchor; reader v3 kept the survival lead-in under §5.6,
+    and a recording on that reading that quoted it (ROUTING's qwen3:4b g23) cites the golden's section."""
+    golden_set = load_set()
+    g23 = next(g for g in golden_set.goldens if g.id == "g23")
+    assert g23.sections == ("5.6(a)", "5.6") and {label for label, _anchor in g23.anchors} == {"5.6(a)"}
+    lead_in = Section(number="5.6", heading="Survival", text="The following sections will survive expiration or termination of this Agreement.")
+    cited = EvidenceSpan(verified=True, method="exact", cited_section_label="sec_60", section=lead_in, quote="q")
+    assert judge(g23, run_with("complete", [finding("pass", cited)])).outcome == "pass"
+    # Control: an anchored section is still named by its text only.
+    other = Section(number="5.6(a)", heading="h", text="Either party may terminate on thirty days' notice.")
+    stranger = EvidenceSpan(verified=True, method="exact", cited_section_label="sec_61", section=other, quote="q")
+    assert judge(g23, run_with("complete", [finding("pass", stranger)])).outcome == "fail"
+
+
+def older_reading(session: Session, today: Document) -> Document:
+    """The sample's bytes as reader v5 read them: the same sections, texts and order, sub-clauses numbered 5.3.1."""
+    sections = [Section(ordinal=s.ordinal, number=renumbered(s.number), heading=s.heading, text=s.text) for s in today.sections]
+    document = Document(name="cloud-service-agreement.docx", media_type=today.media_type, sha256=today.sha256, parser_version="v5", sections=sections)
+    session.add(document)
+    session.flush()
+    return document
+
+
+def recorded_run(document: Document, golden: Golden, number: str, options: dict[str, object], session: Session) -> Run:
+    prompt = load_prompt("answer-v2")
+    section = next(s for s in document.sections if s.number == number)
+    quote = section.text[:60]
+    span_ = EvidenceSpan(
+        ordinal=0, section_id=section.id, cited_section_label=f"sec_{section.ordinal}", start=0, end=len(quote), quote=quote, verified=True, method="exact"
+    )
+    run = Run(
+        document_id=document.id,
+        question=golden.question,
+        stage="complete",
+        provider="ollama",
+        model="qwen3:8b",
+        prompt_version=prompt.version,
+        prompt_hash=prompt.sha256,
+        options_json=json.dumps(options, sort_keys=True),
+        document_sha256=document.sha256,
+        fingerprint=f"recorded-{golden.id}-{document.id}-k{options['retrieval_k']}",
+        findings=[Finding(ordinal=0, topic="t", status="pass", status_source="model_hint", conclusion="c", spans=[span_])],
+    )
+    session.add(run)
+    return run
+
+
+def test_the_report_shows_a_recording_made_on_an_older_reading_under_older_rules(client: TestClient) -> None:
+    golden_set = load_set()
+    g02, g13 = (next(g for g in golden_set.goldens if g.id == gid) for gid in ("g02", "g13"))
+    legacy = {"model": "qwen3:8b", "num_ctx": 16384, "retrieval_k": 6, "seed": 42, "temperature": 0.0}
+    with SessionLocal() as session:
+        today = ensure_golden_document(session, golden_set)
+        older = older_reading(session, today)
+        recorded_run(older, g02, "5.3.1", legacy, session)
+        recorded_run(older, g13, renumbered(g13.sections[0]), legacy, session)
+        session.commit()
+        out = report(session, golden_set)
+        assert [p.version for p in out.prompts] == ["answer-v2"], out.detail
+        prompt = out.prompts[0]
+        assert (prompt.passes, prompt.recorded) == (2, 2)
+        assert {r.golden_id: r.verdict for r in prompt.runs if r.verdict != "missing"} == {"g02": "pass", "g13": "pass"}
+        detail = out.detail or ""
+        assert "reader v5" in detail and "rules not recorded" in detail and "today's rules" in detail
+        # The CLI says the same, and its counts are the report's.
+        verdicts = {g.id: judge(g, run_for(session, older, g, load_prompt("answer-v2"))) for g in (g02, g13)}
+        assert {gid: v.outcome for gid, v in verdicts.items()} == {"g02": "pass", "g13": "pass"}
+
+
+def test_the_report_prefers_the_most_complete_recording_and_compares_only_like_with_like(client: TestClient) -> None:
+    golden_set = load_set()
+    g02, g13 = (next(g for g in golden_set.goldens if g.id == gid) for gid in ("g02", "g13"))
+    legacy = {"model": "qwen3:8b", "num_ctx": 16384, "retrieval_k": 6, "seed": 42, "temperature": 0.0}
+    wider = legacy | {"retrieval_k": 10}
+    with SessionLocal() as session:
+        today = ensure_golden_document(session, golden_set)
+        older = older_reading(session, today)
+        recorded_run(older, g02, "5.3.1", legacy, session)
+        recorded_run(older, g13, renumbered(g13.sections[0]), legacy, session)
+        session.flush()
+        later = recorded_run(older, g02, "5.3.1", wider, session)  # a later recording of one golden, at k = 10
+        session.commit()
+        out = report(session, golden_set)
+        shown = {r.golden_id: r.run_id for r in out.prompts[0].runs if r.run_id}
+        assert set(shown) == {"g02", "g13"} and shown["g02"] != later.id, "two goldens recorded together outrank one recorded later"
+        assert out.compare is None

@@ -39,6 +39,8 @@ def print_report() -> int:
     if not out.available or not out.prompts:
         print(out.detail or "nothing recorded")
         return 1
+    if out.detail:
+        print(out.detail, end="\n\n")
     for prompt in out.prompts:
         latency = f" · mean model latency {prompt.mean_latency_ms / 1000:.1f} s" if prompt.mean_latency_ms else ""
         print(f"{prompt.version} ({prompt.hash[:12]}): {prompt.passes} of {prompt.recorded} pass{latency}")
@@ -48,7 +50,7 @@ def print_report() -> int:
         print(f"    passes carried by a finding code lowered to needs review: {len(carried)} {' '.join(carried)}".rstrip())
     compare = out.compare
     if compare is None:
-        print("\none prompt version recorded; nothing to compare")
+        print("\nnothing to compare: " + ("one prompt version recorded" if len(out.prompts) < 2 else "the two latest were not recorded alike"))
         return 0
     rows = {r.golden_id: r for r in compare.rows}
     improvements = [g for g, r in rows.items() if r.change == "better"]
@@ -80,6 +82,8 @@ def print_model_report(prompt_version: str, base_model: str, candidate_model: st
     rows = {r.golden_id: r for r in out.compare.rows}
     golden_task = {g.id: task_of(g) for g in load_set().goldens}
     print(f"prompt {out.prompt_version} · {out.candidate_model} against {out.base_model}")
+    print(f"  {out.base_model} judged on: {out.base_recording}")
+    print(f"  {out.candidate_model} judged on: {out.candidate_recording}")
     tasks = sorted(set(out.base_by_task) | set(out.candidate_by_task))
     for task in tasks:
         b = out.base_by_task.get(task, (0, 0))

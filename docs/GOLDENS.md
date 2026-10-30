@@ -93,6 +93,20 @@ half an hour on a laptop. The report prints, for the two latest prompt versions:
 regressions, unchanged passes, unchanged failures, the count with different citations or
 statuses under the same verdict, the mean latency delta, and the verdict under the rule.
 
+The report and the model comparison read recordings by what each run stored (its reading of the
+sample, question, guidance, prompt hash and options), not by today's fingerprint: for each prompt
+version they show its most complete recording, labelled with the reader, the rules and the options
+it was made under, and say when none is under today's rules. Two recordings are compared only when
+they share a reading and options. A golden names its sections by their text (`anchors` in the set,
+with the text an earlier reader gave a section where it differs), so a reader that renumbers a
+section judges a recording the same: reader v14 renumbered 14 of the sample's 123 sections, and
+until 2026-10-30 the report found nothing recorded under today's rules ("no golden run is recorded
+yet" over a store of 673 golden runs) and every committed recording judged 28 of 44 under the
+relabelled set. On a copy of that store the report now reads Recording 3 for answer-v1 (32 of 42),
+Recording 6c for answer-v2 (37 of 44, g38 carried by a finding the reference check lowered) and
+Recording 5 at k = 10 for answer-v3 (38 of 44), and the qwen3:4b comparison in `docs/ROUTING.md`
+again reads 36 of 42 against 34.
+
 ## Results
 
 The recorded results are in the database and on the Runs surface. The tables below are the

@@ -2,14 +2,17 @@
 
 Nothing here calls a model. Running the set is `scripts/run_goldens.py`, which uses the same
 start_run use case as the interface, so a golden run is an ordinary run: same fingerprint,
-same record, same idempotency. This module only reads those records back.
+same record, same idempotency. This module only reads those records back: by what each run
+stored (`recordings`), so a recording made under an older reader or older rules is found and
+shown as what it is, and judged by the text of the sections it cited, not their numbers.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -18,13 +21,13 @@ from sqlalchemy.orm import Session
 from ..analysis.service import PROMPTS_DIR, PromptPackage, load_prompt
 from ..application.ingest_document import ingest_document
 from ..application.save_guidance import stored_guidance
-from ..application.start_run import compute_fingerprint, identity_options, run_options
-from ..config import BACKEND_DIR
+from ..application.start_run import compute_fingerprint, identity_options
+from ..config import BACKEND_DIR, settings
 from ..hashing import sha256_bytes, sha256_text
 from ..ingest import PARSER_VERSION
-from ..models import TERMINAL_STAGES, Document, Finding, FindingStatusName, Run, StatusSourceName, utcnow
+from ..models import TERMINAL_STAGES, Document, EvidenceSpan, Finding, FindingStatusName, Run, Section, StatusSourceName, as_utc, utcnow
 from ..policy.durations import Duration, parse_durations
-from ..runs.versions import without_versions
+from ..runs.versions import SEMANTIC_VERSIONS
 from ..schemas import (
     GoldenCategoryCount,
     GoldenCompareOut,
@@ -60,6 +63,9 @@ class Golden:
     guidance: str | None = None  # supplied to the run when set; the status is then judged too
     status: ExpectedStatus | None = None  # required on every finding that carries a citation in the golden's sections
     expected_value: str | None = None  # a period the carrying finding's answer must state ("60 days"), read by policy.durations
+    # (section, anchor) for each named section that has text: a golden from the set is judged by these, a golden
+    # written without them (a test's) by section number.
+    anchors: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -71,6 +77,8 @@ class GoldenSet:
     rules: str
     categories: dict[str, str]
     goldens: tuple[Golden, ...]
+    anchors: dict[str, str]  # section number under today's reader → section_anchor of its text
+    earlier_anchors: dict[str, tuple[str, ...]]  # the same sections' anchors as an earlier reader read them, where they differ
 
 
 @dataclass(frozen=True)
@@ -100,9 +108,21 @@ def expected_period(value: str, golden_id: str = "") -> Duration:
     return periods[0]
 
 
+def section_anchor(text: str) -> str | None:
+    """A section's identity by its text: the first 16 hex digits of the SHA-256 of the text casefolded, whitespace
+    collapsed; None for a section with no text, where no quote can be found. A golden names its sections by these, so a
+    reader that renumbers a section does not change what a recording under the old numbering cited: reader v14 made
+    5.3.1 into 5.3(a), and every committed recording, judged under the relabelled set, fell from 37 of 44 to 28 (stress
+    test EVL-2, 2026-10-30)."""
+    folded = " ".join(text.casefold().split())
+    return sha256_text(folded)[:16] if folded else None
+
+
 def load_set(path: Path = SET_PATH) -> GoldenSet:
     raw = path.read_bytes()
     data = json.loads(raw)
+    anchors = {str(number): str(anchor) for number, anchor in (data.get("anchors") or {}).items()}
+    earlier = {str(number): tuple(str(a) for a in found) for number, found in (data.get("earlier_anchors") or {}).items()}
     goldens = tuple(
         Golden(
             id=str(g["id"]),
@@ -114,6 +134,7 @@ def load_set(path: Path = SET_PATH) -> GoldenSet:
             guidance=(str(g["guidance"]).strip() or None) if g.get("guidance") else None,
             status=_expected_status(g.get("status"), str(g["id"])),
             expected_value=str(g["expected_value"]) if g.get("expected_value") else None,
+            anchors=tuple((str(n), anchor) for n in g.get("sections", []) if str(n) in anchors for anchor in (anchors[str(n)], *earlier.get(str(n), ()))),
         )
         for g in data["goldens"]
     )
@@ -143,6 +164,8 @@ def load_set(path: Path = SET_PATH) -> GoldenSet:
         rules=str(data.get("rules", "")),
         categories=categories,
         goldens=goldens,
+        anchors=anchors,
+        earlier_anchors=earlier,
     )
 
 
@@ -179,22 +202,116 @@ def guidance_id_for(session: Session, golden: Golden) -> str | None:
     return guidance.id if guidance else None
 
 
+@dataclass(frozen=True)
+class Recording:
+    """One sitting of the set, found by what its runs stored: one reading of the sample, one prompt, one model and one
+    set of recorded options, with the run that answers each golden recorded in it."""
+
+    document: Document
+    prompt: PromptPackage
+    model: str
+    options: dict[str, object]
+    runs: dict[str, Run]
+    current: bool  # every run carries today's identity: the runs a request asked today would be handed
+
+    @property
+    def made(self) -> datetime:
+        return max(as_utc(run.created_at) for run in self.runs.values())
+
+    def label(self) -> str:
+        """What the recording was made on, from its own record."""
+        options = self.options
+        rules = rules_named(options) or "rules not recorded (made before 2026-10-02)"
+        days = sorted(as_utc(run.created_at).date().isoformat() for run in self.runs.values())
+        parts = [self.prompt.version, self.model, f"reader {self.document.parser_version or 'unversioned'}", rules, f"k {options.get('retrieval_k', '?')}"]
+        if "section_window" in options:
+            parts.append(f"window {options['section_window']}")
+        if "retrieval_aliases" in options:
+            parts.append(f"alias table {options['retrieval_aliases']}")
+        parts.append(f"recorded {days[0]}" if days[0] == days[-1] else f"recorded {days[0]} to {days[-1]}")
+        return " · ".join(parts)
+
+
+def rules_named(options: Mapping[str, object]) -> str:
+    """The versions of the rules a run's options record, as the documents name them: "policy-v16, verifier v11, retrieval-v2"."""
+    named = {"policy_version": "", "verifier_version": "verifier ", "retrieval_version": ""}
+    return ", ".join(f"{prefix}{options[key]}" for key, prefix in named.items() if key in options)
+
+
+def sample_documents(session: Session, golden_set: GoldenSet) -> list[Document]:
+    """Every reading of the sample's bytes, by any reader, oldest first."""
+    return session.query(Document).filter(Document.sha256.startswith(golden_set.document_sha256_prefix)).order_by(Document.created_at).all()
+
+
+def _chosen(runs: Sequence[Run]) -> Run | None:
+    """Of one golden's runs, newest first: the live or finished one, else the latest failed one."""
+    return next((r for r in runs if r.stage != "failed"), runs[0] if runs else None)
+
+
+def recordings(session: Session, documents: Sequence[Document], goldens: Sequence[Golden], prompt: PromptPackage, model: str | None = None) -> list[Recording]:
+    """Every recording of these goldens under this prompt and model on these readings, found by what each run stored
+    (document, question, guidance, prompt hash, options), never by recomputing today's fingerprint, so a version moved
+    since hides nothing that was recorded. The report looked runs up by today's fingerprint on today's reading only, and
+    over a store holding 673 golden runs it said "no golden run is recorded yet" (stress test EVL-2, 2026-10-30)."""
+    wanted = model or settings.model
+    by_asked: dict[tuple[str, str | None], list[Golden]] = {}
+    for golden in goldens:
+        guidance_id = guidance_id_for(session, golden)
+        if golden.guidance is None or guidance_id is not None:
+            by_asked.setdefault((golden.question, guidance_id), []).append(golden)
+    by_id = {document.id: document for document in documents}
+    if not by_id or not by_asked:
+        return []
+    runs = (
+        session.query(Run)
+        .filter(
+            Run.document_id.in_(list(by_id)),
+            Run.prompt_hash == prompt.sha256,
+            Run.question.in_(sorted({question for question, _guidance in by_asked})),
+            Run.workspace_id.is_(None),
+        )
+        .order_by(Run.created_at.desc())
+        .all()
+    )
+    groups: dict[tuple[str, str], dict[str, list[Run]]] = {}
+    for run in runs:
+        options = json.loads(run.options_json or "{}")
+        # The model asked for, as the run's options name it; a run recorded before they did names it on its own row.
+        if str(options.get("model", run.model)) != wanted:
+            continue
+        key = (run.document_id, json.dumps(options, sort_keys=True))
+        for golden in by_asked.get((run.question, run.guidance_id), []):
+            groups.setdefault(key, {}).setdefault(golden.id, []).append(run)
+    now = utcnow()
+    found: list[Recording] = []
+    for (document_id, options_text), by_golden in groups.items():
+        document = by_id[document_id]
+        chosen = {golden_id: picked for golden_id, candidates in by_golden.items() if (picked := _chosen(candidates)) is not None}
+        today = identity_options(session, document, model, now)
+        current = all(run.fingerprint == compute_fingerprint(document.id, run.guidance_id, run.question, prompt.sha256, today) for run in chosen.values())
+        found.append(Recording(document, prompt, wanted, json.loads(options_text), chosen, current))
+    return found
+
+
+def best_recording(found: Sequence[Recording]) -> Recording | None:
+    """The recording that speaks for a prompt version: the most complete, then one under today's rules, then the latest."""
+    return max(found, key=lambda r: (len(r.runs), r.current, r.made), default=None)
+
+
 def run_for(session: Session, document: Document, golden: Golden, prompt: PromptPackage, model: str | None = None) -> Run | None:
-    """The run that answers this golden under this prompt and model: the live or finished one, else the latest failed one."""
+    """The run that answers this golden under this prompt and model on this reading: the one under today's identity,
+    which a request would be handed; else the run of the most complete earlier recording, found by what it stored. That
+    one is shown as recorded and never handed to a request: application.start_run looks up today's key only."""
     guidance_id = guidance_id_for(session, golden)
     if golden.guidance is not None and guidance_id is None:
         return None
-    # The identity start_run gives the same request today, so the run found is the one a request would be handed.
     options = identity_options(session, document, model, utcnow())
     key = compute_fingerprint(document.id, guidance_id, golden.question, prompt.sha256, options)
-    runs = session.query(Run).filter(Run.fingerprint == key).order_by(Run.created_at.desc()).all()
-    if not runs:
-        # No recording under today's rules: the report shows the recording made before the rules were versioned
-        # (to 2026-10-02), which is what the set's published numbers are. It is superseded the first time the set is
-        # recorded again, and never reused as the answer to a request (application.start_run looks up today's key only).
-        legacy = compute_fingerprint(document.id, guidance_id, golden.question, prompt.sha256, without_versions(run_options(model)))
-        runs = session.query(Run).filter(Run.fingerprint == legacy).order_by(Run.created_at.desc()).all()
-    return next((r for r in runs if r.stage != "failed"), runs[0] if runs else None)
+    current = _chosen(session.query(Run).filter(Run.fingerprint == key).order_by(Run.created_at.desc()).all())
+    if current is not None:
+        return current
+    earlier = best_recording(recordings(session, [document], (golden,), prompt, model))
+    return earlier.runs.get(golden.id) if earlier is not None else None
 
 
 def _citations(run: Run) -> tuple[str, ...]:
@@ -206,6 +323,24 @@ def _citations(run: Run) -> tuple[str, ...]:
             else:
                 cited.append(f"{span.cited_section_label or '?'} not found")
     return tuple(cited)
+
+
+def _named(golden: Golden, section: Section) -> str | None:
+    """The golden's label for the section a quote verified in, or None when the golden does not name it: by its text
+    for a section the set anchors, whatever number the run's reading gave it; by number for a named section that has
+    no text today (reader v15 reads §5.6 as a heading alone; reader v3 kept the survival lead-in under it) and for a
+    golden written without anchors."""
+    anchor = section_anchor(section.text)
+    by_text = next((label for label, named in golden.anchors if named == anchor), None)
+    if by_text is not None:
+        return by_text
+    anchored = {label for label, _named in golden.anchors}
+    return section.number if section.number in golden.sections and section.number not in anchored else None
+
+
+def _numbered(span: EvidenceSpan, label: str) -> str:
+    number = span.section.number if span.section is not None else ""
+    return f"; that reading numbers it §{number}" if number and number != label else ""
 
 
 def _states(finding: Finding, period: Duration) -> bool:
@@ -237,33 +372,33 @@ def judge(golden: Golden, run: Run | None) -> Verdict:
     if run.stage == "unresolved":
         return Verdict("fail", f"withheld ({run.reason}) although the contract contains the point", statuses, cited)
     carriers = [
-        (finding, span)
+        (finding, span, label)
         for finding in run.findings
         if finding.status in ASSERTING
         for span in finding.spans
-        if span.verified and span.section is not None and span.section.number in golden.sections
+        if span.verified and span.section is not None and (label := _named(golden, span.section)) is not None
     ]
     if golden.status is not None:
         # Every finding that cites the clause decides it: a pass and a needs review on the same quote is no decision,
         # and it used to satisfy either expectation (stress test EVL-3, 2026-10-30).
-        others = sorted({finding.status for finding, _span in carriers} - {golden.status})
-        if others and any(finding.status == golden.status for finding, _span in carriers):
+        others = sorted({finding.status for finding, _span, _label in carriers} - {golden.status})
+        if others and any(finding.status == golden.status for finding, _span, _label in carriers):
             return Verdict("fail", f"cited the right clause and decided both {golden.status} and {others[0]}; {golden.status} was expected", statuses, cited)
         if others:
             return Verdict("fail", f"cited the right clause but decided {others[0]} where {golden.status} was expected", statuses, cited)
     if carriers and golden.expected_value is not None:
         period = expected_period(golden.expected_value, golden.id)
-        stating = [(finding, span) for finding, span in carriers if _states(finding, period)]
+        stating = [carrier for carrier in carriers if _states(carrier[0], period)]
         if not stating:
-            stated = sorted({m.surface for f, _s in carriers for text in (f.conclusion, f.observed) for m in parse_durations(text)})
+            stated = sorted({m.surface for f, _s, _l in carriers for text in (f.conclusion, f.observed) for m in parse_durations(text)})
             said = f"states {', '.join(stated)}" if stated else "states no period"
             return Verdict("fail", f"cited the right clause, but the answer {said} where {golden.expected_value} was asked for", statuses, cited)
         carriers = stating
     if carriers:
         # A finding code did not lower carries the pass when there is one; otherwise the verdict says which check lowered it.
-        finding, span = next(((f, s) for f, s in carriers if f.status_source not in LOWERED_BY_CODE), carriers[0])
+        finding, span, label = next((c for c in carriers if c[0].status_source not in LOWERED_BY_CODE), carriers[0])
         lowered = finding.status_source if finding.status_source in LOWERED_BY_CODE else None
-        because = f"verified citation in §{span.section.number if span.section else '?'} ({span.method})"
+        because = f"verified citation in §{label} ({span.method}{_numbered(span, label)})"
         return Verdict("pass", f"{because}; {LOWERED_NOTE} ({lowered})" if lowered else because, statuses, cited, lowered)
     verified = sorted({span.section.number or span.section.heading for f in run.findings for span in f.spans if span.verified and span.section is not None})
     if statuses and all(s == "missing" for s in statuses):
@@ -328,6 +463,8 @@ class ModelComparison:
     candidate_by_task: dict[str, tuple[int, int]]
     base_latency_ms: float | None
     candidate_latency_ms: float | None
+    base_recording: str = ""  # Recording.label of what each side was judged on
+    candidate_recording: str = ""
 
 
 def task_of(golden: Golden) -> str:
@@ -336,20 +473,23 @@ def task_of(golden: Golden) -> str:
 
 def compare_models(session: Session, prompt_version: str, base_model: str, candidate_model: str, golden_set: GoldenSet | None = None) -> ModelComparison:
     golden_set = golden_set or load_set()
-    document = golden_document(session, golden_set)
-    if document is None:
-        raise ValueError("the sample has not been read by the current reader; run the golden set first")
+    documents = sample_documents(session, golden_set)
+    if not documents:
+        raise ValueError("the sample has not been read yet; run the golden set first")
     prompt = load_prompt(prompt_version)
+    candidate = best_recording(recordings(session, documents, golden_set.goldens, prompt, candidate_model))
+    base_found = recordings(session, documents, golden_set.goldens, prompt, base_model)
+    if candidate is not None:
+        # The two models are compared on one reading under the same options, the model apart.
+        like = [r for r in base_found if r.document.id == candidate.document.id and _apart_from_model(r.options) == _apart_from_model(candidate.options)]
+        base_found = like
+    base = best_recording(base_found)
     verdicts: dict[str, dict[str, Verdict]] = {}
     latencies: dict[str, list[float]] = {}
-    for model in (base_model, candidate_model):
-        verdicts[model] = {}
-        latencies[model] = []
-        for golden in golden_set.goldens:
-            run = run_for(session, document, golden, prompt, model)
-            verdicts[model][golden.id] = judge(golden, run)
-            if run is not None and run.latency_ms is not None:
-                latencies[model].append(run.latency_ms)
+    for model, shown in ((base_model, base), (candidate_model, candidate)):
+        runs = shown.runs if shown is not None else {}
+        verdicts[model] = {golden.id: judge(golden, runs.get(golden.id)) for golden in golden_set.goldens}
+        latencies[model] = [run.latency_ms for run in runs.values() if run.latency_ms is not None]
 
     def by_task(model: str) -> dict[str, tuple[int, int]]:
         out: dict[str, tuple[int, int]] = {}
@@ -376,7 +516,13 @@ def compare_models(session: Session, prompt_version: str, base_model: str, candi
         candidate_by_task=by_task(candidate_model),
         base_latency_ms=_mean(latencies[base_model]),
         candidate_latency_ms=_mean(latencies[candidate_model]),
+        base_recording=base.label() if base is not None else "not recorded",
+        candidate_recording=candidate.label() if candidate is not None else "not recorded",
     )
+
+
+def _apart_from_model(options: dict[str, object]) -> dict[str, object]:
+    return {key: value for key, value in options.items() if key != "model"}
 
 
 def _mean(values: list[float]) -> float | None:
@@ -396,31 +542,33 @@ def report(session: Session, golden_set: GoldenSet | None = None) -> GoldensOut:
         )
         for g in golden_set.goldens
     ]
-    document = golden_document(session, golden_set)
-    if document is None:
+    documents = sample_documents(session, golden_set)
+    if not documents:
         return GoldensOut(
             available=False,
-            detail="The sample has not been read by the current reader yet; run `scripts/run_goldens.py` to record the set.",
+            detail="The sample has not been read yet; run `scripts/run_goldens.py` to record the set.",
             set_sha256=golden_set.sha256,
             document_name=golden_set.document_name,
             rules=golden_set.rules,
             categories=golden_set.categories,
             goldens=goldens_out,
         )
+    document = golden_document(session, golden_set) or documents[-1]
     prompts: list[GoldenPromptOut] = []
+    shown: list[Recording] = []
     verdicts_by_version: dict[str, dict[str, Verdict]] = {}
     latency_by_version: dict[str, float | None] = {}
     category_names = list(golden_set.categories) or sorted({g.category for g in golden_set.goldens})
     for prompt in prompt_versions():
+        recording = best_recording(recordings(session, documents, golden_set.goldens, prompt))
+        if recording is None:
+            continue
         verdicts: dict[str, Verdict] = {}
         rows: list[GoldenRunOut] = []
-        latencies: list[float] = []
         for golden in golden_set.goldens:
-            run = run_for(session, document, golden, prompt)
+            run = recording.runs.get(golden.id)
             verdict = judge(golden, run)
             verdicts[golden.id] = verdict
-            if run is not None and run.latency_ms is not None:
-                latencies.append(run.latency_ms)
             rows.append(
                 GoldenRunOut(
                     golden_id=golden.id,
@@ -434,11 +582,9 @@ def report(session: Session, golden_set: GoldenSet | None = None) -> GoldensOut:
                     because=verdict.because,
                 )
             )
-        recorded = sum(1 for v in verdicts.values() if v.outcome != "missing")
-        if recorded == 0:
-            continue
+        shown.append(recording)
         verdicts_by_version[prompt.version] = verdicts
-        latency_by_version[prompt.version] = _mean(latencies)
+        latency_by_version[prompt.version] = _mean([run.latency_ms for run in recording.runs.values() if run.latency_ms is not None])
         by_category = [
             GoldenCategoryCount(
                 category=category,
@@ -453,26 +599,38 @@ def report(session: Session, golden_set: GoldenSet | None = None) -> GoldensOut:
                 hash=prompt.sha256,
                 runs=rows,
                 passes=sum(1 for v in verdicts.values() if v.outcome == "pass"),
-                recorded=recorded,
+                recorded=sum(1 for v in verdicts.values() if v.outcome != "missing"),
                 mean_latency_ms=latency_by_version[prompt.version],
                 by_category=[c for c in by_category if c.recorded],
             )
         )
-    comparison = None
-    if len(prompts) >= 2:
-        base, head = prompts[-2], prompts[-1]
-        comparison = compare(
-            verdicts_by_version[base.version],
-            verdicts_by_version[head.version],
-            base.version,
-            head.version,
-            golden_set.goldens,
-            latency_by_version[base.version],
-            latency_by_version[head.version],
+    notes: list[str] = []
+    if any(not recording.current for recording in shown):
+        rules = rules_named(SEMANTIC_VERSIONS)
+        notes.append(
+            "Shown for each prompt version, its most complete recording: "
+            + "; ".join(recording.label() for recording in shown)
+            + f". {'None is' if not any(r.current for r in shown) else 'Not every one is'} under today's rules ({rules}, reader {PARSER_VERSION}),"
+            " so a question asked today is answered anew; each is judged as recorded, by the text of the sections it cited."
         )
+    comparison = None
+    if len(shown) >= 2:
+        base, head = shown[-2], shown[-1]
+        if base.document.id == head.document.id and base.options == head.options:
+            comparison = compare(
+                verdicts_by_version[base.prompt.version],
+                verdicts_by_version[head.prompt.version],
+                base.prompt.version,
+                head.prompt.version,
+                golden_set.goldens,
+                latency_by_version[base.prompt.version],
+                latency_by_version[head.prompt.version],
+            )
+        else:
+            notes.append(f"{base.prompt.version} and {head.prompt.version} were not recorded on one reading under the same options, so they are not compared.")
     return GoldensOut(
         available=True,
-        detail=None if prompts else "The sample is read; no golden run is recorded yet. Run `scripts/run_goldens.py`.",
+        detail=(" ".join(notes) or None) if prompts else "The sample is read; no golden run is recorded yet. Run `scripts/run_goldens.py`.",
         set_sha256=golden_set.sha256,
         document_id=document.id,
         document_name=document.name,
