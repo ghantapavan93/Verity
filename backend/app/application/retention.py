@@ -23,6 +23,7 @@ refuses to delete one (db.immutability_triggers). This is the one, scoped except
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import time
 from collections.abc import Iterator
@@ -243,6 +244,24 @@ def sweep_orphaned_files(engine: Engine, now: datetime | None = None) -> int:
         if path.is_file() and path.stat().st_mtime < cutoff:
             removed += _unlink(path)
     return removed
+
+
+def forget_process_state() -> None:
+    """Drop what this process derived from documents and kept beyond a request, after every retention pass, a failed one
+    included: readings again (trust_run), clause numbers, replacement starts, the defined terms' patterns and every
+    pattern re compiled from document text. Kept, a deleted visitor's defined terms and prose were still reachable in
+    the process after the purge (stress test, 2026-10-30, privacy 2). Unreachable is not erased: freed memory is not
+    zeroed, and only a restart of the process drops it."""
+    from ..runs import links
+    from . import clause_location, start_run, trust_run
+
+    trust_run.forget_readings()
+    with clause_location._clause_numbers_lock:
+        clause_location._clause_numbers.clear()
+    with start_run._STARTS_LOCK:
+        start_run._STARTS.clear()
+    links._use_of.cache_clear()
+    re.purge()
 
 
 def _unlink(path: Path) -> int:

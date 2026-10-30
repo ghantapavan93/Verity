@@ -23,10 +23,9 @@ from . import log_sink
 from .api import access, batches, documents, engineering, findings, guidance, health, memos, model, runs, trust
 from .api.body_limit import BodyLimitMiddleware, BodyRefused
 from .api.in_flight import InFlightMiddleware
-from .application import trust_run
 from .application.quotas import VISIT_ENDED
 from .application.recover_runs import recover_interrupted_runs
-from .application.retention import purge_expired_workspaces, sweep_orphaned_files
+from .application.retention import forget_process_state, purge_expired_workspaces, sweep_orphaned_files
 from .config import settings
 from .db import SessionLocal, init_db
 from .errors import AccessRequired, WorkbenchError
@@ -73,7 +72,10 @@ async def _retain_hourly() -> None:
             try:
                 await asyncio.to_thread(purge_expired_workspaces, db_module.engine)
             finally:
-                trust_run.forget_readings()  # no document read again outlives a pass that deleted it, even one that failed midway
+                # Nothing derived from a deleted document, and no address past its window, outlives a pass, even one
+                # that failed midway (stress test, 2026-10-30).
+                forget_process_state()
+                access.prune_windows()
             await asyncio.to_thread(sweep_orphaned_files, db_module.engine)
         except Exception:  # a failed pass is logged and tried again next hour; it never takes the API down
             log.exception("retention pass failed")

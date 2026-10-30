@@ -35,10 +35,11 @@ import secrets
 import shutil
 import threading
 import time
+import weakref
 from collections import deque
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Literal
+from typing import ClassVar, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session as DbSession
@@ -180,17 +181,34 @@ def current_workspace(request: Request) -> str:
 
 
 class SlidingWindow:
-    """At most ``limit`` events per key in any ``window_s`` seconds. Returns the seconds to wait when refused."""
+    """At most ``limit`` events per key in any ``window_s`` seconds. Returns the seconds to wait when refused.
+
+    A key whose newest event is older than the window is dropped once a window has passed since the last sweep, and at
+    every retention pass (prune_windows): pruned only past 4,096 keys, a visitor's address or /64 was kept for the life
+    of the process at demo traffic, the one place the API kept it (stress test, 2026-10-30, privacy 2)."""
+
+    _every: ClassVar[weakref.WeakSet[SlidingWindow]] = weakref.WeakSet()
 
     def __init__(self, limit: int, window_s: int) -> None:
         self.limit, self.window_s = limit, window_s
         self._events: dict[str, deque[float]] = {}
         self._lock = threading.Lock()
+        self._swept = time.monotonic()
+        SlidingWindow._every.add(self)
 
     def reset(self) -> None:
         """Forget every event: a new deployment, or a test that is its own reader."""
         with self._lock:
             self._events.clear()
+
+    def _sweep(self, current: float) -> None:
+        for stale in [k for k, v in self._events.items() if not v or v[-1] <= current - self.window_s]:
+            del self._events[stale]
+        self._swept = current
+
+    def prune(self, now: float | None = None) -> None:
+        with self._lock:
+            self._sweep(time.monotonic() if now is None else now)
 
     def take(self, key: str, now: float | None = None) -> float | None:
         current = time.monotonic() if now is None else now
@@ -201,10 +219,16 @@ class SlidingWindow:
             if len(events) >= self.limit:
                 return events[0] + self.window_s - current
             events.append(current)
-            if len(self._events) > 4096:  # a flood of distinct keys does not grow this without bound
-                for stale in [k for k, v in self._events.items() if not v or v[-1] <= current - self.window_s]:
-                    del self._events[stale]
+            # A flood of distinct keys does not grow this without bound, and no key outlives its window by more than one.
+            if len(self._events) > 4096 or current - self._swept >= self.window_s:
+                self._sweep(current)
             return None
+
+
+def prune_windows(now: float | None = None) -> None:
+    """Drop, from every window in this process, the keys past their window: at each retention pass (app.main)."""
+    for window in list(SlidingWindow._every):
+        window.prune(now)
 
 
 exchanges = SlidingWindow(EXCHANGE_LIMIT, EXCHANGE_WINDOW_S)
