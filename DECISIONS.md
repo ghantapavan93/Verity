@@ -28,6 +28,7 @@ Each decision as it was taken, newest last:
 - [2026-10-21: an answer depends on the model server's prompt cache (measured, open)](#2026-10-21-an-answer-depends-on-the-model-servers-prompt-cache-measured-open)
 - [2026-10-21: a casebook](#2026-10-21-a-casebook)
 - [2026-10-21: every answer computed from its first token](#2026-10-21-every-answer-computed-from-its-first-token)
+- [2026-10-30: an audit by people trying to break it](#2026-10-30-an-audit-by-people-trying-to-break-it)
 
 ## 2026-09-28: the pivot
 Three experiments killed three product ideas, and the results page records that. The next
@@ -1729,3 +1730,39 @@ README says how to set it. Not changed: the prompt, decoding options, policy, ve
 identity moves; answers after this are the ones a cold model gives. Runs answered before it keep their answers, and a
 workspace that asks the same question again is handed its earlier run, not a new answer. It holds only with one server
 slot (Ollama's default, `OLLAMA_NUM_PARALLEL=1`) used one answer at a time (`WORKBENCH_MODEL_CONCURRENCY=1`).
+
+## 2026-10-30: an audit by people trying to break it
+
+Four fresh reviews, each told to break one thing: the public site and the laptop behind it, the verifier and the status
+rules, the interface, and the repository as a stranger first reads it. What they found, and what was done:
+
+- **The verifier said "found" where the text does not say it** (verifier v11). A ".5%" late fee was found as "5%", "±5%"
+  as "5%", ">$1,000,000" as "$1,000,000", "2/3" as "2-3"; the typed tier joined "terminate. Without cause" into
+  "terminate without cause"; a word was split at a combining mark or a Persian non-joiner; "Section 2(A)" was found at
+  "Section 2(a)"; a quote of punctuation alone was found. Each is refused at every tier and by the pack, which reads a
+  v10 run as v10 did. Replayed read-only over 17,603 recorded spans in 94 stores: none lost or gained.
+- **A pass label could claim more of code than its record**: an unknown source, or a memo caller naming none, read
+  "Within guidance". Both now read as the model's view.
+- **Large reads had no bound**: one upload's evidence pack (up to 26 MB, rebuilt per request) could be asked for in a
+  loop. Packs and contract reads are now bounded per network an hour, two packs at a time; the hourly windows count an
+  IPv6 /64 once, reversing F-32 on the owner's instruction that abuse must not get through. Health caches its model
+  probe and no longer lists the machine's models.
+- **The interface**: phone heights (100dvh), chips that wrap, landmarks and a heading outline, live regions, one name
+  per action. The repository: one-screen README, docs/STATUS.md, docs/archive/, research/.
+- **Dependencies**: pypdf 6.21.2, certifi 2026.10.19, Next 16.4.1; npm audit and pip-audit clean. The Next install
+  dropped the @emnapi/runtime lock entry a third time; `test_lockfile.py` caught it.
+
+Open, each recorded with what it would take:
+
+- Text a reader cannot see (PDF render mode 3, white or 0.1 pt text, text off the page; DOCX white or half-point
+  text) is read, can be quoted and verifies. A pass on it is still the model's view. The fix is to read render mode,
+  colour, size and page bounds, count such text in the coverage, and raise a concern on a quote that overlaps it.
+- The status rule is chosen by the model's topic and the order of the guidance's sentences: the same quote and guidance
+  are a pass under one topic and code's shortfall under another. It can lower a status, never make a code-owned pass.
+  The fix, a policy version of its own: evaluate every rule the guidance states.
+- Uploads are capped by count (300 a public day), not bytes; at 25 MB each the store could reach its 2 GiB floor in
+  days, pausing public writes until retention. A daily byte budget needs the size stored per document.
+- Open event streams per workspace are not capped; the CSP allows inline scripts (Next's nonces not yet wired).
+- On the laptop, the owner's steps: Redis listens on every interface with no password (stop it, or bind 127.0.0.1 and
+  set a password, and remove its firewall rule); the MySQL firewall rules allow every profile; Postgres listens on
+  every interface; llama-server's `/slots` is on (`LLAMA_ARG_ENDPOINT_SLOTS=0`); Ollama updates itself.
