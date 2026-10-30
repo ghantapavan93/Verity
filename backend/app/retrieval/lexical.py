@@ -21,7 +21,7 @@ TOKEN = re.compile(r"[a-z0-9]+(?:'[a-z]+)?")
 # that met "U.S." and "Product(s)", so the same question typed on a desktop or a phone handed different sections in 76
 # to 98% of CUAD runs. The four apostrophes the verifier's table does not hold yet are folded here too; the verifier is
 # the place for them. A change to that table bumps the verifier's version, which is part of every run's identity.
-_FOLD = _QUOTE_MAP | str.maketrans({"ʼ": "'", "＇": "'", "`": "'", "´": "'"})
+_FOLD = _QUOTE_MAP | str.maketrans({"\u02bc": "'", "\uff07": "'", "`": "'", "\u00b4": "'"})
 STOPWORDS = frozenset(
     [
         "a",

@@ -19,11 +19,11 @@ from app.retrieval.lexical import STOPWORDS, LexicalIndex, tokenize, words
 from app.runs.service import FrozenOptions, _retrieve
 from app.verify.spans import _QUOTE_MAP
 
-APOSTROPHES = ["’", "‘", "‚", "‛", "ʼ", "＇", "`", "´"]
+APOSTROPHES = ["\u2019", "\u2018", "\u201a", "\u201b", "\u02bc", "\uff07", "`", "\u00b4"]
 FROZEN = FrozenOptions(retrieval_k=6, retriever="bm25", aliases=True, embed_model="", window=6000, decoding={})
 
 # Letters, digits, every apostrophe and quotation glyph, dashes, ligatures and the characters casefold changes.
-_ALPHABET = st.sampled_from(list("abcdeABCDE sS19'.-") + APOSTROPHES + ["“", "”", "–", "ﬁ", "ß", "İ", "​"])
+_ALPHABET = st.sampled_from(list("abcdeABCDE sS19'.-") + APOSTROPHES + ["\u201c", "\u201d", "\u2013", "\ufb01", "\u00df", "\u0130", "\u200b"])
 
 
 @dataclass
@@ -53,13 +53,13 @@ def test_a_possessive_is_its_word_whatever_the_apostrophe(word: str, mark: str) 
 
 def test_the_glyphs_the_stress_test_named() -> None:
     assert tokenize("Which state's law governs this contract?") == ["state", "law", "governs", "contract"]
-    assert tokenize("Which state’s law governs this contract?") == ["state", "law", "governs", "contract"]
-    assert tokenize("conﬁdential") == ["confidential"], "a PDF ligature is the letters it stands for, as casefold reads it"
+    assert tokenize("Which state\u2019s law governs this contract?") == ["state", "law", "governs", "contract"]
+    assert tokenize("con\ufb01dential") == ["confidential"], "a PDF ligature is the letters it stands for, as casefold reads it"
 
 
 def test_control_words_without_an_apostrophe_are_unchanged() -> None:
     assert tokenize("What is the notice period, 15 days? Section 12.3") == ["notice", "period", "15", "days", "section", "12", "3"]
-    assert tokenize("can't") == tokenize("can’t") == ["can't"], "a contraction stays one word"
+    assert tokenize("can't") == tokenize("can\u2019t") == ["can't"], "a contraction stays one word"
     assert tokenize("the Parties' rights") == ["parties", "rights"]
     assert words("at any time") == ["at", "any", "time"] and tokenize("at any time") == ["time"], "words() keeps the stopwords"
 
@@ -77,7 +77,7 @@ def _contract(apostrophe: str) -> list[S]:
 
 
 def test_the_same_question_typed_on_a_desktop_or_a_phone_hands_the_same_sections() -> None:
-    for contract in ("'", "’"):
+    for contract in ("'", "\u2019"):
         sections = _contract(contract)
         handed = {
             glyph: [s.id for s in _retrieve(sections, f"What is the cap on each party{glyph}s liability?", None, FROZEN)[0]]  # type: ignore[arg-type]
