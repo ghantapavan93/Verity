@@ -15,6 +15,7 @@ import re
 import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,7 @@ from ..document_names import run_document_name
 from ..errors import NotFound
 from ..hashing import sha256_bytes
 from ..ingest import base_name
+from ..memo.visible import shown
 from ..models import Run, iso, utcnow
 from ..runs.account import account_of
 from ..runs.relations import load
@@ -117,6 +119,38 @@ have now checked yourself. A PASS on a span says its quote was found where the r
 nothing about whether the finding's answer is right. The pack is not signed: it shows that its files agree with each other and
 with the hashes the run recorded, not that nobody changed them together.
 """
+
+
+# A string the model wrote is kept in findings.json exactly as written: it is the record, and verify.py reads it. What a
+# reader sees of it in an editor is another matter. A direction override the model wrote into a quote displays "(15)"
+# as "(51)", and the pack's PASS line stands under it (hostile-model review, 2026-10-30). So the README says, of this
+# pack, which of the model's strings hold such characters, and shows each through the display primitive the memo uses
+# (memo.visible), every one named in brackets. A pack whose strings hold none has the README above, unchanged.
+INVISIBLE_HEAD = """
+Characters in the model's own words that a reader does not see
+
+findings.json keeps every string exactly as the model wrote it. These hold characters that display as nothing, and some
+change how an editor orders what is around them (a direction override shows "(15)" as "(51)"). Each is named in
+brackets here; findings.json is unchanged. A PASS line from verify.py says where a quote was found, not how it displays.
+"""
+
+
+def _model_strings(finding: dict[str, Any], number: int) -> list[tuple[str, str]]:
+    """Each string the model wrote for a finding in findings.json, with where it is, in the words verify.py numbers it."""
+    named = [(f"finding {number}, {field}", finding.get(field)) for field in ("topic", "conclusion")]
+    model = finding.get("model") or {}
+    named += [(f"finding {number}, model.{field}", model.get(field)) for field in ("observed", "required", "guidance_reference", "suggested_position")]
+    for span in finding.get("spans", []):
+        where = f"finding {number}, span {span['ordinal'] + 1}"
+        named += [(f"{where}, quote", span.get("quote")), (f"{where}, cited_label", span.get("cited_label"))]
+    return [(where, text) for where, text in named if isinstance(text, str) and text]
+
+
+def readme_text(findings: list[dict[str, Any]]) -> str:
+    """README.txt for this pack: the fixed text, then, when there are any, the model's strings that hold characters a
+    reader does not see, each shown with them named."""
+    lines = [f"  {where}: {shown(text)}" for finding in findings for where, text in _model_strings(finding, finding["ordinal"] + 1) if shown(text) != text]
+    return README_TXT if not lines else "\n".join([README_TXT + INVISIBLE_HEAD, *lines, ""])
 
 
 @dataclass(frozen=True)
@@ -279,7 +313,7 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as pack:
-        pack.writestr("README.txt", README_TXT)
+        pack.writestr("README.txt", readme_text(findings))
         pack.writestr("run.json", json.dumps(record, ensure_ascii=False, indent=1))
         pack.writestr("sections.json", sections_json)
         pack.writestr("findings.json", json.dumps(findings, ensure_ascii=False, indent=1))
