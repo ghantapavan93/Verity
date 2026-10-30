@@ -3,8 +3,32 @@ root_package = app
 
 [importlinter:contract:verifier-is-pure]
 name = the verifier imports nothing else in the app: code decides what "verified" means, nothing decides it for the code
-type = independence
-modules = app.verify
+type = forbidden
+source_modules = app.verify
+forbidden_modules =
+    app.analysis
+    app.api
+    app.application
+    app.batch
+    app.config
+    app.db
+    app.document_names
+    app.errors
+    app.families
+    app.goldens
+    app.hashing
+    app.ingest
+    app.main
+    app.memo
+    app.models
+    app.policy
+    app.providers
+    app.retrieval
+    app.routing
+    app.runs
+    app.schemas
+    app.serving
+    app.trust
 
 [importlinter:contract:providers-know-nothing]
 name = a model provider sees settings and its own base only; it cannot reach the verifier, the record or the run
@@ -28,7 +52,7 @@ layers =
     app.api
     app.batch | app.goldens | app.families
     app.application
-    app.runs | app.routing
+    app.runs | app.routing | app.trust
     app.analysis | app.retrieval | app.verify | app.ingest | app.memo | app.policy
     app.providers
     app.document_names : app.models : app.db : app.schemas : app.config : app.hashing : app.errors
