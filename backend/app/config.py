@@ -126,6 +126,14 @@ class Settings(BaseModel):
     # half a minute an answer, eight is a wait of four minutes; the ninth visitor is told at once rather than queued.
     public_max_runs_in_flight: int = int(os.environ.get("WORKBENCH_PUBLIC_MAX_RUNS_IN_FLIGHT", "8"))
     anonymous_max_uploads_per_day: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_UPLOADS_PER_DAY", "300"))
+    # Requests one network may have in flight at once in the public store (api/in_flight.py): a fifth of the forty request
+    # threads, so no one network holds them. A page's own burst at load is a handful, and one past the bound waits two
+    # seconds for a turn before it is refused.
+    public_requests_per_network: int = int(os.environ.get("WORKBENCH_PUBLIC_REQUESTS_PER_NETWORK", "8"))
+    # Live event streams open at once, per workspace and per network (api/in_flight.py): a workspace has at most two
+    # questions being answered, so four covers two tabs. A stream refused is followed by polling the run instead.
+    public_streams_per_workspace: int = int(os.environ.get("WORKBENCH_PUBLIC_STREAMS_PER_WORKSPACE", "4"))
+    public_streams_per_network: int = int(os.environ.get("WORKBENCH_PUBLIC_STREAMS_PER_NETWORK", "16"))
     # Free space the public store keeps: below it new uploads and writes are paused, reading still works (2 GiB).
     public_min_free_bytes: int = int(os.environ.get("WORKBENCH_PUBLIC_MIN_FREE_BYTES", str(2 * 1024**3)))
     # Optional: the results.json of the ivo-experiments repository, for the Runs surface, and the

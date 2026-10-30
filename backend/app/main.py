@@ -20,6 +20,7 @@ from sqlalchemy import text
 from . import db as db_module
 from .api import access, batches, documents, engineering, findings, guidance, health, memos, model, runs, trust
 from .api.body_limit import BodyLimitMiddleware, BodyRefused
+from .api.in_flight import InFlightMiddleware
 from .application import trust_run
 from .application.recover_runs import recover_interrupted_runs
 from .application.retention import purge_expired_workspaces, sweep_orphaned_files
@@ -120,6 +121,9 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
     # Every body is bounded before its route, gate or parser reads it (api/body_limit.py). Inside CORS and the request
     # log, so a refusal carries their headers like any other answer.
     app.add_middleware(BodyLimitMiddleware)
+    # Outside the body's bound: a network past its requests in flight is refused before the door asks anything of the
+    # request threads (api/in_flight.py).
+    app.add_middleware(InFlightMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

@@ -1,20 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import threading
 import time
 import weakref
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 
 from ..config import settings
 from ..providers.base import ModelProvider
 from ..schemas import HealthOut
 from . import access
-from .deps import get_provider
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -61,6 +62,20 @@ def probe_model(provider: ModelProvider) -> tuple[bool, str]:
         return answer
 
 
+# The model's probe is a network call, so it leaves the event loop, but on a thread of its own: on the request threads
+# every sync route shares it waited behind them as health did (stress test, 2026-10-30). One thread, since probe_model
+# asks one at a time anyway; a request that finds a fresh answer never reaches it.
+_PROBE_THREAD = ThreadPoolExecutor(max_workers=1, thread_name_prefix="health-probe")
+
+
+async def _probe_off_the_loop(provider: ModelProvider) -> tuple[bool, str]:
+    with _probes_lock:
+        kept = _probes.get(provider)
+        if kept is not None and time.monotonic() - kept[0] < HEALTH_PROBE_TTL_S:
+            return kept[1]
+    return await asyncio.get_running_loop().run_in_executor(_PROBE_THREAD, probe_model, provider)
+
+
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 
 
@@ -72,11 +87,17 @@ def model_location() -> tuple[Literal["server", "hosted"], str]:
 
 
 @router.get("/health", response_model=HealthOut)
-def health(request: Request, provider: ModelProvider = Depends(get_provider)) -> HealthOut:
+async def health(request: Request) -> HealthOut:
     """Open to everyone, because the supervisor and the page ask before anyone has entered. Past the gate it names
     the model and its state; before it, only whether the workbench is up and that the gate is on. A store that cannot
     take a write is not healthy, whatever the model's state. A visitor who has not entered never makes it ask the
-    model, and a deployment whose model bills by the second can leave the model to the answer itself."""
+    model, and a deployment whose model bills by the second can leave the model to the answer itself.
+
+    It answers on the event loop and takes none of the request threads, not even for a dependency: declared `def`, it
+    waited behind them, and one visitor's 120 concurrent reads of its own run held it for 21 s, past the supervisor's
+    10 s, so the probe that restarts the API measured the queue, not the process (stress test, 2026-10-30). What it
+    does here is a check of the file system and a token's MAC; the model's probe has its own thread."""
+    provider: ModelProvider = request.app.state.provider
     location, host = model_location()
     problem = storage_problem()
     if access.enabled() and access.current_session(request) is None:
@@ -91,7 +112,7 @@ def health(request: Request, provider: ModelProvider = Depends(get_provider)) ->
             fault="store" if problem is not None else "",
         )
     if settings.health_probes_model:
-        ok, detail = probe_model(provider)
+        ok, detail = await _probe_off_the_loop(provider)
     else:
         ok, detail = True, f"{provider.model}: checked before every answer, not by health"
     fault: Literal["", "store", "model"] = "" if ok else "model"
