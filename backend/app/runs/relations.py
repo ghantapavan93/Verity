@@ -473,13 +473,16 @@ def assess(
     question: str,
     parts: dict[str, str],
     observed: str | None = None,
+    conclusion: str | None = None,
 ) -> list[Note]:
     """What each relation means for one finding. ``spans`` are its verified quotes as (section id, start, end) in the
     stored text: an unverified quote grounds nothing. ``answer`` is the model's conclusion and stated position;
-    ``observed`` is the value the model gave as what the contract says, when it gave one."""
+    ``observed`` is the value the model gave as what the contract says, when it gave one, and ``conclusion`` the
+    conclusion alone, which the reader sees."""
     notes: list[Note] = []
     said = stated_values(answer, answer=True)
     position = stated_values(observed, answer=True) if observed else set()
+    concluded = stated_values(conclusion, answer=True) if conclusion else set()
     asked, when = perspective(question), asked_time(question)
     explained: set[tuple[str, int, int]] = set()
     for index, relation in enumerate(relations):
@@ -528,6 +531,12 @@ def assess(
             if by_position
             else "states a value only the replaced wording states and none only the new wording states"
         )
+        # The conclusion is read on its own too: a stated value that names the replacement's value does not take back a
+        # conclusion the reader sees that states only the replaced one (stress test, 2026-10-30: concluded "90 days",
+        # stated "60 days", and the pass stood). Read together, the two would leave that hole open.
+        concludes_old = bool(concluded & only_old) and not concluded & only_new
+        if concludes_old and not (states_old and not states_new):
+            gives_old = "its conclusion states a value only the replaced wording states and none only the new wording states"
         if asked == "historical":
             original = f"the quoted {target} is the original wording; {where} later replaced it, and the question asks about the original agreement"
             notes.append(Note(index, "context", original if old else new_wording))
@@ -536,7 +545,7 @@ def assess(
         elif asked == "dated":
             quoted = f"the quoted {target} is text that {where} {does}{since}" if old else f"{new_wording}{since}"
             notes.append(Note(index, "dated", f"{quoted}; the question names a time (“{when}”), and which wording applied then is not decided by code"))
-        elif new and states_old and not states_new:
+        elif new and ((states_old and not states_new) or concludes_old):
             notes.append(
                 Note(
                     index,

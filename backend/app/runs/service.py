@@ -460,7 +460,9 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 # What the located statements mean for this finding: only its verified quotes ground anything (runs.relations).
                 answer = " ".join(label_handles(text, labels) for text in (item.conclusion, item.observed) if text)
                 quoted = [(span.section_id, span.start, span.end) for span in spans if span.verified and span.section_id]
-                notes[ordinal] = tuple(assess(relations, quoted, answer, run.question, parts, label_handles(item.observed, labels)))
+                notes[ordinal] = tuple(
+                    assess(relations, quoted, answer, run.question, parts, label_handles(item.observed, labels), label_handles(item.conclusion, labels))
+                )
                 decision = check_replaced(decision, next((n.sentence for n in notes[ordinal] if n.effect == "replaced"), None))
                 decision = check_old_value(decision, next((n.sentence for n in notes[ordinal] if n.effect == "old_value"), None))
             verified_any = verified_any or all_verified
