@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Health, RunSummary } from "@/lib/types";
 
-import { AccessModeKnown, PublicDemo } from "../access/PublicDemo";
+import { AccessModeKnown, PublicDemo, Reader } from "../access/PublicDemo";
 import { INDEPENDENCE } from "@/lib/independence";
 import { Landing } from "./Landing";
 
@@ -94,6 +94,41 @@ describe("Landing: the door", () => {
     renderLanding(health("off"), true);
     expect(screen.getByText("Open preview")).toBeTruthy();
     expect(document.body.textContent).toContain("anyone with this address can open it");
+  });
+
+  it("names the reader this browser is inside as, so a switched session cannot pass unseen (2026-10-30)", () => {
+    render(
+      <Reader.Provider value="min-kyu">
+        <Landing
+          stage="empty"
+          processingLabel=""
+          pendingName=""
+          composerText=""
+          setComposerText={vi.fn()}
+          onHome={vi.fn()}
+          onPickFile={vi.fn()}
+          onLoadSample={vi.fn()}
+          proof={null}
+          proofStory={false}
+          onOpenProof={vi.fn()}
+          uploadError={null}
+          apiHealth={health("entered")}
+          accessKnown
+          recent={[]}
+          onOpenDocument={vi.fn()}
+          onAllDocuments={vi.fn()}
+          viewError={null}
+          reduceMotion
+        />
+      </Reader.Provider>,
+    );
+    expect(screen.getByText("Inside as min-kyu")).toBeTruthy();
+    expect(screen.getByText("Private preview")).toBeTruthy();
+  });
+
+  it("control: with no reader named, none is claimed", () => {
+    renderLanding(health("entered"), true);
+    expect(screen.queryByText(/Inside as/)).toBeNull();
   });
 
   it.each(["required", "entered"] as const)("says a gated site (%s) is private", (access) => {
