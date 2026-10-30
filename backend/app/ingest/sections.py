@@ -303,6 +303,8 @@ def looks_like_sentence(text: str) -> bool:
     sat in no section text; so was a clause's first line that states an obligation or a permission ("8.1 Seller shall
     indemnify Buyer against Losses arising from (a) any breach of Seller's"): a title does not say "shall"."""
     words = text.split()
+    if shouting(text) and capitals_sentence(text):
+        return True  # reader v16: a line in capitals has no case for the tests below to read, so its words decide first
     if len(words) < SENTENCE_MIN_WORDS or title_cased(text):
         return False  # "Conduct of Business Prior to the Closing." is a title, its full stop aside
     if text.rstrip().endswith((".", ";", ":")) or _CLAUSE_VERB.search(text):
@@ -329,6 +331,58 @@ def title_cased(text: str) -> bool:
 
 # What a clause says and a title does not (reader v14): its operative verb, in lower case ("May 2026 Amendment" is a title).
 _CLAUSE_VERB = re.compile(r"\b(?:shall|must|may|will)\b")
+
+
+# Reader v16: a line in capitals carries no case, so every test above that tells a sentence from a title by case passed
+# it: "SECTION 9 OF THIS AGREEMENT, IN NO EVENT SHALL eGAIN BE LIABLE TO CUSTOMER FOR" was §9 and the exclusion of
+# consequential damages after it sat in headings only, where no quote is searched (stress test, 2026-10-30: CUAD's eGain
+# hosting agreement; 96 of 5,229 EDGAR texts held operative capitals lines only in headings). Such a line is judged on
+# its words: it is a sentence, or a piece of one, when it states an operative word or a form of "to be", ends in a comma or a semicolon, or
+# opens with a function word no title opens with. A line that ends in a function word is a title that wraps ("ARTICLE IV
+# REPRESENTATIONS AND" / "WARRANTIES"), joined to its next line by readers._blocks_from_lines, or a sentence's first
+# line, which the line after it shows.
+_OPERATIVE = re.compile(r"\b(?:shall|must|will|may(?!\s+\d)|hereby|in\s+no\s+event|is|are|be|been|was|were)\b")
+_ENDING_WORDS = frozenset(
+    {"of", "to", "for", "the", "a", "an", "and", "or", "in", "at", "as", "by", "with", "any", "such", "that", "than", "whether", "including", "from", "on"}
+    | {"upon", "under", "into", "between", "among", "against", "nor", "but"}
+)
+_OPENING_WORDS = frozenset({"of", "to", "for", "and", "or", "by", "with", "any", "such", "that", "than", "whether", "including", "from", "upon", "nor", "but"})
+_WORD = re.compile(r"[a-z]+(?:[-'’][a-z]+)*")
+
+
+def shouting(text: str) -> bool:
+    """Whether a line is set in capitals: four letters or more, at most one in ten in lower case ("eGAIN" in a
+    capitals clause is a name, not case evidence)."""
+    letters = [c for c in text if c.isalpha()]
+    return len(letters) >= 4 and sum(1 for c in letters if c.islower()) * 10 <= len(letters)
+
+
+def capitals_sentence(text: str) -> bool:
+    """Whether a line in capitals reads as a sentence or a piece of one, judged on its words (reader v16)."""
+    folded = text.casefold()
+    words = _WORD.findall(folded)
+    if not words:
+        return False
+    stripped = text.rstrip()
+    return bool(_OPERATIVE.search(folded)) or stripped.endswith((",", ";")) or words[0] in _OPENING_WORDS
+
+
+def states(text: str) -> bool:
+    """Whether a line states an operative word or a form of "to be", in any case ("SHALL", "IN NO EVENT", "IS")."""
+    return bool(_OPERATIVE.search(text.casefold()))
+
+
+def goes_on(text: str) -> bool:
+    """Whether a line stops where its sentence or title cannot end: on a comma or a semicolon ("2. SALE AND PURCHASE;
+    CLOSING;" goes on to its next line's title), or on a function word ("REPRESENTATIONS AND", "in accordance with", "by
+    and between")."""
+    stripped = text.rstrip()
+    words = _WORD.findall(stripped.casefold())
+    return stripped.endswith((",", ";")) or (bool(words) and words[-1] in _ENDING_WORDS and stripped[-1:].isalpha())
+
+
+# A line that ends a passage: a stop, then any closing quote or bracket (reader v16, readers._blocks_from_lines).
+PASSAGE_ENDS = re.compile(r"[.;:!?][\"'”’)\]]*$")
 
 
 # A sentence end inside a line: a word of three or more lower-case letters, a full stop, a space and a capitalised
@@ -704,7 +758,21 @@ def looks_like_heading(line: str) -> bool:
         # the CUAD texts and 300 EDGAR filings; none of 60 sampled was a clause title.
         if title[:1].islower():
             return False
+        # The same in capitals, which have no case (reader v16): "SECTION 19 OF THE FACILITY LEASE, OR MODIFY" is the
+        # capitals twin of the lower-case line above, a wrapped sentence opening with a function word.
+        words = _WORD.findall(title.casefold())
+        if shouting(title) and words and words[0] in _OPENING_WORDS:
+            return False
         # Cross-references read like headings and are not: "5.5 (Effect of Termination), Section 5.6 (Survival)".
         return not (title.startswith("(") or re.search(r"\b(?:Section|Clause|Article)s?\s+\d", title, re.IGNORECASE))
     letters = [c for c in stripped if c.isalpha()]
-    return len(letters) >= 4 and all(c.isupper() for c in letters) and len(stripped.split()) <= 10
+    if not (len(letters) >= 4 and all(c.isupper() for c in letters) and len(stripped.split()) <= 10):
+        return False
+    if match:
+        # A numbered capitals line that stops on a comma or a semicolon is a clause opening ("5.21 WAIVER OF JURY TRIAL.
+        # IN ANY ACTION, SUIT,", "2. SALE AND PURCHASE; CLOSING;"): a heading, its words kept as body by split_lead_in,
+        # unless its title opens with a function word (reader v16).
+        words = _WORD.findall(match.group(2).casefold())
+        return not (words and words[0] in _OPENING_WORDS)
+    # A capitals line is a heading when it is short and reads as a title, not as a sentence (reader v16).
+    return not capitals_sentence(stripped)

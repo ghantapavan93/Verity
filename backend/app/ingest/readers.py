@@ -29,7 +29,18 @@ from pypdf import PdfReader
 
 from .coverage import DocxWalkCounts, PartCoverage, Status, docx_coverage, docx_more_coverage, pdf_coverage, txt_coverage
 from .invisible import remove_format_characters, visible_text
-from .sections import HEADING_NUMBER, MAX_TOP_STEP, Block, continues_numbering, looks_like_heading, page_edge_furniture
+from .sections import (
+    HEADING_NUMBER,
+    MAX_TOP_STEP,
+    PASSAGE_ENDS,
+    Block,
+    continues_numbering,
+    goes_on,
+    looks_like_heading,
+    page_edge_furniture,
+    shouting,
+    states,
+)
 from .word_display import (
     ALTERNATE,
     CHOICE,
@@ -1293,6 +1304,20 @@ def shorten_title(text: str) -> str:
     return text[: cut if cut > 0 else MAX_TITLE_CHARS].rstrip() + "…"
 
 
+# Reader v16: a line at least this share of the length of the line after it is one of a paragraph's wrapped lines.
+WRAPPED_LINE_SHARE = 0.6
+MAX_TITLE_CONTINUATION_WORDS = 6
+
+
+def _continues_title(line: str, heading: str, candidate: bool) -> bool:
+    """Whether a capitals line run straight on from a heading is that heading's next line: short, stating nothing, not
+    stopping on a comma, and either after a heading that goes on ("REPRESENTATIONS AND") or no title of its own (it opens
+    with a function word, "OF LOAN REQUEST", or stops on a semicolon, "CONTRIBUTIONS; CAPITAL ACCOUNTS;")."""
+    if not shouting(line) or len(line.split()) > MAX_TITLE_CONTINUATION_WORDS or line.rstrip().endswith(",") or states(line):
+        return False
+    return goes_on(heading) or not candidate
+
+
 # A line that names an Article, a Part or a Chapter and nothing else: "ARTICLE II", "Article 2", "PART IV".
 _PART_LINE = re.compile(r"^(?:ARTICLE|Article|PART|Part|CHAPTER|Chapter)\s+(?:[IVXLC]{1,7}|\d{1,3})\.?$")
 
@@ -1312,15 +1337,47 @@ def _blocks_from_lines(lines: list[str], pages: list[int] | None = None) -> list
 
     seen_heading = False
     last_number = 0  # the top-level number of the last numbered heading: clause numbers count on from it
+    after_heading = False  # the line before was a heading's, with no blank line between
     for index, raw in enumerate(lines):
         line = raw.strip()
         page = pages[index] if pages is not None else None
         if not line:
             flush()
+            after_heading = False
             continue
         if not paragraph:
             paragraph_page = page
-        if looks_like_heading(line):
+        candidate = looks_like_heading(line)
+        unnumbered = HEADING_NUMBER.match(line) is None and not _PART_LINE.match(line)
+        if after_heading and unnumbered and blocks and blocks[-1].kind == "heading" and _continues_title(line, blocks[-1].text, candidate):
+            # A title that wraps is one heading (reader v16): "ARTICLE IV REPRESENTATIONS AND" / "WARRANTIES", "RESOLUTION
+            # OF" / "CLAIMS", "NOTICE" / "OF LOAN REQUEST", "ARTICLE V CAPITAL" / "CONTRIBUTIONS; CAPITAL ACCOUNTS;".
+            blocks[-1] = Block("heading", f"{blocks[-1].text} {line}", blocks[-1].level, implicit_number=False, page=blocks[-1].page)
+            continue
+        if candidate and unnumbered:
+            # Reader v16: an unnumbered title line inside a paragraph is the paragraph's next line, where the line
+            # before it goes on (it is in capitals and ends no passage, or it stops on a comma or a function word): a
+            # wrapped capitals clause's last line ("IN BREACH OF ITS PAYMENT OBLIGATIONS.") was a heading, and the
+            # condition it carried left the quotable text; so were "GAAP." after "in accordance with" and a party's
+            # name after "between" (stress test, 2026-10-30).
+            last = paragraph[-1] if paragraph else ""
+            if last and not PASSAGE_ENDS.search(last) and (shouting(last) or goes_on(last)):
+                paragraph.append(line)
+                after_heading = False
+                continue
+            following = lines[index + 1].strip() if index + 1 < len(lines) else ""
+            wrapped = following and shouting(following) and not looks_like_heading(following) and len(line) >= WRAPPED_LINE_SHARE * len(following)
+            if wrapped and not PASSAGE_ENDS.search(line):
+                # A capitals paragraph's first line, run straight into a capitals line that is no title and about as
+                # long ("EXCEPT FOR A BREACH OF SECTION" / "9, IN NO EVENT WILL EITHER"): the paragraph's, not a
+                # heading. A title is shorter than the line of body after it ("CAPITAL" / "CONTRIBUTIONS; ...").
+                flush()
+                paragraph_page = page
+                paragraph.append(line)
+                after_heading = False
+                continue
+        after_heading = False
+        if candidate:
             numbered = HEADING_NUMBER.match(line)
             if numbered and not continues_numbering(numbered.group(1), last_number):
                 # "15285 Minnetonka Blvd.", "2024 Fee Schedule", "4552374 CUDDL DUDS": a number that does not continue the
@@ -1337,12 +1394,14 @@ def _blocks_from_lines(lines: list[str], pages: list[int] | None = None) -> list
                 # "ARTICLE II" on one line and "PURCHASE AND SALE" on the next are one heading: apart, the first was an
                 # empty section and the Article's clauses sat under a title with no number (retrieval study, 2026-10-14).
                 blocks[-1] = Block("heading", f"{blocks[-1].text} {line}", blocks[-1].level, implicit_number=False, page=blocks[-1].page)
+                after_heading = True
                 continue
             if numbered:
                 last_number = int(numbered.group(1).split(".")[0])
             # A plain-text or PDF heading carries its number in its text or has none: no format numbers it implicitly,
             # so a number computed for it would be a number the document never shows (QA campaign, 2026-10-08).
             blocks.append(Block("heading", line, 1 if "." not in line.split(" ", 1)[0].rstrip(".") else 2, implicit_number=False, page=page))
+            after_heading = True
             continue
         paragraph.append(line)
     flush()

@@ -87,6 +87,13 @@ MAX_TEXT_CHARS = 3 * 4_400_000
 # around cells entered; text drawn so it cannot be seen (white on nothing shaded, 1 pt or less) is left out and counted.
 # A table row has one slot per grid column, empty and repeated cells kept: v15 dropped them, so values moved columns.
 # Measured on the 31 DOCX of the corpus: tables in 19 (empty and repeated cells), check boxes in two, nothing else.
+# Plain text and PDF (and unstyled DOCX lines): a line in capitals is judged on its words, not its case, which it has
+# none of: one stating "shall", "in no event", "is" or the like, stopping on a comma or a semicolon, or opening with a
+# function word ("SECTION 9 OF THIS AGREEMENT, IN NO EVENT …") is no heading; an unnumbered title line inside a paragraph
+# that goes on is its next line; a capitals title that wraps is one heading. CUAD's eGain agreement read its exclusion
+# of consequential damages in headings only, as §9. Measured on 5,739 EDGAR and CUAD texts against v16's first commit:
+# 3,052 read differently; texts holding operative capitals words only in headings, 332 to 57; 105,132 words moved from
+# headings into section text; clause numbers lost 51 in 36 texts (wrapped sentences that open with a number), gained 802.
 PARSER_VERSION = "v16"
 
 
