@@ -139,10 +139,12 @@ const STATUS_LABELS: Record<Exclude<FindingStatus, "pass">, string> = {
 export function statusLabel(status: FindingStatus, hasGuidance: boolean, source: string = "model_hint"): string {
   if (status === "pass") {
     if (!hasGuidance) return "Model's answer";
-    if (source === "model_hint") return "Within guidance (model's view)";
     // The model proposed the pass and code confirmed it; had the model asked for review there would be no pass, so
     // the label does not present it as a decision code made (policy-v2).
-    return source === "confirmed_days" ? "Within guidance (confirmed by code)" : "Within guidance";
+    if (source === "confirmed_days") return "Within guidance (confirmed by code)";
+    if (source === "computed_days") return "Within guidance"; // code computed it from the day counts, before policy-v2
+    // The model's hint, or a source this label does not know: never more of code than the record says (2026-10-30).
+    return "Within guidance (model's view)";
   }
   return STATUS_LABELS[status];
 }

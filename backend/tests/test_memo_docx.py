@@ -37,8 +37,10 @@ def test_the_docx_memo_carries_its_record_and_its_links(client: TestClient) -> N
 
 
 def test_a_pass_is_within_guidance_only_when_the_run_had_guidance() -> None:
-    assert status_label("pass", True) == "Within guidance"
+    assert status_label("pass", True, "computed_days") == "Within guidance"
     assert status_label("pass", True, "model_hint") == "Within guidance (model's view)", "a pass the model hinted is labelled as its view"
+    # A label never says more of code than its record: no source, or one it does not know, is the model's view.
+    assert status_label("pass", True) == status_label("pass", True, "a_source_added_later") == "Within guidance (model's view)"
     assert status_label("pass", False, "model_hint") == "Model's answer"
     assert status_label("pass", False) == "Model's answer"
     assert status_label("needs_review", False) == "Needs review" and status_label("missing", True) == "Not found in the sections read (model's view)"

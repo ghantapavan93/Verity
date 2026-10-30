@@ -38,6 +38,11 @@ describe("statusLabel", () => {
     expect(statusLabel("pass", true)).toBe("Within guidance (model's view)");
   });
 
+  it("gives a source it does not know the weaker claim", () => {
+    expect(statusLabel("pass", true, "a_source_added_later")).toBe("Within guidance (model's view)");
+    expect(statusLabel("pass", true, "confirmed_days")).toBe("Within guidance (confirmed by code)");
+  });
+
   it("knows which sources mean code decided", () => {
     for (const source of ["computed_days", "position_check", "ambiguous_fact", "reference_check"]) expect(decidedByCode(source)).toBe(true);
     for (const source of ["confirmed_days", "model_hint", "no_evidence", "", null, undefined]) expect(decidedByCode(source)).toBe(false);

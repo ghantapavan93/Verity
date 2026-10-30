@@ -161,19 +161,23 @@ def unseen_note(unseen: str) -> str:
     return f"Code found that {unseen}. The answer may depend on it, and nothing checked that."
 
 
-def status_label(status: str, with_guidance: bool, source: str = "computed_days") -> str:
+def status_label(status: str, with_guidance: bool, source: str = "model_hint") -> str:
     """A pass is "within guidance" only when the run had guidance to be within; without it the model gave a plain
     answer (prompt rule 5). Found while tracing on 2026-09-29: every pass used to be headed "Within guidance".
     When the pass is the model's own hint rather than a comparison code made, the label says so: the sweep of
-    2026-10-01 found "Within guidance" on findings that said the contract provides no notice period at all."""
+    2026-10-01 found "Within guidance" on findings that said the contract provides no notice period at all.
+    A label never claims more of code than the record does: a caller that names no source, or a source this function
+    does not know, reads as the model's view (break audit, 2026-10-30), as the interface's statusLabel reads it."""
     if status == "pass":
         if not with_guidance:
             # Code evaluated nothing: no guidance, so the pass is the model's answer and is named as such (2026-10-08).
             return "Model's answer"
-        if source == "model_hint":
-            return "Within guidance (model's view)"
-        # The model proposed the pass and code confirmed it (policy-v2): not a decision code made, and not headed as one.
-        return "Within guidance (confirmed by code)" if source == "confirmed_days" else "Within guidance"
+        if source == "confirmed_days":
+            # The model proposed the pass and code confirmed it (policy-v2): not a decision code made, and not headed as one.
+            return "Within guidance (confirmed by code)"
+        if source == "computed_days":
+            return "Within guidance"  # a pass code computed from the day counts alone, recorded before policy-v2
+        return "Within guidance (model's view)"
     return STATUS_LABELS.get(status, status)
 
 
