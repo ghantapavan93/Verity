@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -12,6 +13,25 @@ from .models import FindingStatusName, RetrievalModeName, ReviewVerdictName, Run
 
 class ApiModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
+
+
+def added_later(*fields: str) -> Callable[[dict[str, Any]], None]:
+    """A model's JSON schema with these fields (by their wire names) optional: fields added to an answer after the
+    interface was written, which a server from before does not send. The API always sends them; a client must not need
+    them. Neither required nor given a default, which the interface's type generator would read as always present."""
+
+    def optional(schema: dict[str, Any]) -> None:
+        schema["required"] = [name for name in schema.get("required", []) if name not in fields]
+        for name in fields:
+            schema.get("properties", {}).get(name, {}).pop("default", None)
+
+    return optional
+
+
+class ErrorOut(ApiModel):
+    """Every refusal: the API's own sentence, or FastAPI's list of what in the request failed validation (api/contract.py)."""
+
+    detail: str | list[dict[str, Any]]
 
 
 class SectionOut(ApiModel):
@@ -297,6 +317,8 @@ class RunSummary(ApiModel):
     document_id: str
     document_name: str
     created_at: str
+
+    model_config = ConfigDict(json_schema_extra=added_later("withheld"))
 
 
 class FindingRecord(ApiModel):
@@ -1109,6 +1131,8 @@ class TrustSectionChangesOut(ApiModel):
     added: list[str]
     # Of the removed, how many were not compared by their wording: the comparison is bounded (trust/diff.align).
     not_compared: int = 0
+
+    model_config = ConfigDict(json_schema_extra=added_later("notCompared"))
 
 
 class TrustDiffOut(ApiModel):

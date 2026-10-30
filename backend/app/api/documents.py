@@ -14,14 +14,17 @@ from ..application.ingest_document import READINGS_BUSY, IngestedDocument, cover
 from ..application.workspace import require_document, visible_documents, visible_runs
 from ..db import get_session
 from ..document_names import display_created, display_name
-from ..errors import Busy
+from ..errors import Busy, TooManyRequests
 from ..ingest.bounded import READINGS_AT_ONCE
 from ..ingest.readers import SUFFIX_OF
 from ..models import Document, Finding, FindingReview, Run, Section, iso
-from ..schemas import CoverageReport, DocumentOut, DocumentSummary, SectionOut
+from ..schemas import CoverageReport, DocumentOut, DocumentSummary, ErrorOut, SectionOut
 from .access import admit_upload, client_network, current_workspace, limit_document_reads
+from .contract import FOUND, GATED, INVALID, WRITES, Responses, error_responses, held_or_created, merged
 
-router = APIRouter(prefix="/api/documents", tags=["documents"])
+router = APIRouter(prefix="/api/documents", tags=["documents"], responses=GATED)
+# An upload whose body stopped arriving, or arrived too slowly (api/body_limit.py BodyStalled).
+STALLED: Responses = {408: {"model": ErrorOut, "description": "The upload stopped arriving, or arrived slower than 256 kbit/s."}}
 
 # An upload waits for its reading here, on the event loop: no thread, and no second copy of its bytes, which are taken
 # from the spool only once a reading may start. Waiting on threads, sixteen uploads held sixteen copies (counter-review
@@ -81,7 +84,7 @@ def to_document_out(session: Session, document: Document, workspace: str) -> Doc
     )
 
 
-@router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED, responses=merged(WRITES, INVALID, STALLED, held_or_created(DocumentOut)))
 async def upload_document(
     file: UploadFile, request: Request, response: Response, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)
 ) -> DocumentOut:
@@ -163,6 +166,8 @@ def _iso_any(value: datetime | str | None) -> str | None:
     return iso(datetime.fromisoformat(str(value)))
 
 
-@router.get("/{document_id}", response_model=DocumentOut, dependencies=[Depends(limit_document_reads)])
+@router.get(
+    "/{document_id}", response_model=DocumentOut, dependencies=[Depends(limit_document_reads)], responses=merged(FOUND, error_responses(TooManyRequests))
+)
 def get_document(document_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> DocumentOut:
     return to_document_out(session, require_document(session, document_id, workspace), workspace)

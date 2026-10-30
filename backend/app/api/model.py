@@ -13,8 +13,9 @@ from ..db import get_session
 from ..errors import Busy, TooManyRequests
 from ..schemas import ModelWakeOut
 from . import access
+from .contract import GATED
 
-router = APIRouter(prefix="/api/model", tags=["model"])
+router = APIRouter(prefix="/api/model", tags=["model"], responses=GATED)
 
 # One network's share of the day's wake-ups (access.client_network, as every other window): a script holding a session
 # could otherwise spend all of them (security review, 2026-10-13). Three an hour still wakes the model for a reader each

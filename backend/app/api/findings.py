@@ -16,11 +16,17 @@ from ..models import Document, EvidenceSpan, Finding, Run, Section, iso
 from ..runs.account import account_of
 from ..schemas import FindingRecord, FindingReviewOut, ReviewIn
 from .access import current_workspace
+from .contract import CONFLICT, FOUND, GATED, INVALID, WRITES, held_or_created, merged
 
-router = APIRouter(prefix="/api/findings", tags=["findings"])
+router = APIRouter(prefix="/api/findings", tags=["findings"], responses=GATED)
 
 
-@router.post("/{finding_id}/review", response_model=FindingReviewOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{finding_id}/review",
+    response_model=FindingReviewOut,
+    status_code=status.HTTP_201_CREATED,
+    responses=merged(WRITES, INVALID, FOUND, CONFLICT, held_or_created(FindingReviewOut)),
+)
 def review(
     finding_id: str,
     body: ReviewIn,

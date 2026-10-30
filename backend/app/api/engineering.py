@@ -33,10 +33,11 @@ from ..schemas import (
     StateSummary,
 )
 from .access import current_workspace, owner_only
+from .contract import GATED
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/engineering", tags=["engineering"])
+router = APIRouter(prefix="/api/engineering", tags=["engineering"], responses=GATED)
 # The recorded contract-state experiment, as the public research page shows it: no reader's data, so no session.
 public_router = APIRouter(prefix="/api/engineering", tags=["engineering"])
 

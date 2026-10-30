@@ -22,7 +22,7 @@ from app.api import batches
 from app.api.batches import spreadsheet_cell
 from app.schemas import BatchField, BatchOut, BatchRow, BatchValue
 
-LEADS = ["=", "+", "-", "@", "\t", "\r", " =", " =", "\n+"]
+LEADS = ["=", "+", "-", "@", "\t", "\r", " =", "\u00a0=", "\n+"]
 
 
 def _report(document: str, value: str, citation: str, field_key: str = "law") -> BatchOut:
@@ -54,7 +54,7 @@ def _cells(client: TestClient, monkeypatch: pytest.MonkeyPatch, out: BatchOut) -
 
 
 def _executable(cell: str) -> bool:
-    return cell[:1] in ("\t", "\r") or cell.lstrip("  \t\r\n")[:1] in ("=", "+", "-", "@")
+    return cell[:1] in ("\t", "\r") or cell.lstrip(" \u00a0\t\r\n")[:1] in ("=", "+", "-", "@")
 
 
 @pytest.mark.parametrize("lead", LEADS)

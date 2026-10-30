@@ -11,7 +11,7 @@ from ..application.versions import declare_supersedes, lineage
 from ..application.workspace import require_run
 from ..db import get_session
 from ..document_names import display_name
-from ..errors import Busy
+from ..errors import Busy, TooManyRequests
 from ..models import DocumentVersion, iso
 from ..schemas import (
     DocumentVersionOut,
@@ -30,8 +30,10 @@ from ..schemas import (
 from ..trust.diff import TrustDiff
 from ..trust.model import TrustManifest
 from .access import current_workspace, limit_document_reads, trust_reads_building
+from .contract import CONFLICT, FOUND, GATED, INVALID, WRITES, error_responses, held_or_created, merged
 
-router = APIRouter(prefix="/api", tags=["trust"])
+router = APIRouter(prefix="/api", tags=["trust"], responses=GATED)
+TRUST_READ = merged(FOUND, CONFLICT, error_responses(TooManyRequests))
 
 
 # ----------------------------------------------------------------------------- mapping
@@ -157,7 +159,7 @@ def _trust_read(request: Request) -> Iterator[None]:
         trust_reads_building.release()
 
 
-@router.get("/runs/{run_id}/trust", response_model=TrustManifestOut)
+@router.get("/runs/{run_id}/trust", response_model=TrustManifestOut, responses=TRUST_READ)
 def run_trust(run_id: str, request: Request, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> TrustManifestOut:
     """What each finding of a finished run stands on: its quotes, whether each stands once, the typed values they
     state, and the reader and rules it was made under."""
@@ -166,7 +168,7 @@ def run_trust(run_id: str, request: Request, session: Session = Depends(get_sess
         return manifest_out(manifest_of(session, run))
 
 
-@router.get("/runs/{run_id}/trust/diff", response_model=TrustDiffOut)
+@router.get("/runs/{run_id}/trust/diff", response_model=TrustDiffOut, responses=TRUST_READ)
 def run_trust_diff(
     run_id: str,
     request: Request,
@@ -182,7 +184,12 @@ def run_trust_diff(
         return diff_out(diff_with(session, run, later), run.document_id, later.id)
 
 
-@router.post("/documents/{document_id}/supersedes", response_model=DocumentVersionOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/documents/{document_id}/supersedes",
+    response_model=DocumentVersionOut,
+    status_code=status.HTTP_201_CREATED,
+    responses=merged(WRITES, INVALID, FOUND, CONFLICT, held_or_created(DocumentVersionOut)),
+)
 def record_supersedes(
     document_id: str, body: SupersedesIn, response: Response, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)
 ) -> DocumentVersionOut:
@@ -193,7 +200,7 @@ def record_supersedes(
     return version_out(declared.version)
 
 
-@router.get("/documents/{document_id}/versions", response_model=list[DocumentVersionOut])
+@router.get("/documents/{document_id}/versions", response_model=list[DocumentVersionOut], responses=FOUND)
 def document_versions(document_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> list[DocumentVersionOut]:
     """The line of versions this document belongs to in this workspace, oldest first; empty when it is in none."""
     return [version_out(version) for version in lineage(session, workspace, document_id)]
