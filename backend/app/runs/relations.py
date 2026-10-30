@@ -41,18 +41,29 @@ Perspective = Literal["historical", "dated", "current", "unstated"]
 # runs.status.check_old_value). "replaced" sets the status; "context" is none.
 CONCERNS: frozenset[Effect] = frozenset({"scoped", "precedence", "dated", "old_value"})
 
-# A provision named, then the verb that replaces it: "clause 3.2 of the Agreement is deleted in its entirety and …".
+# A provision named, then the verb that replaces it: "clause 3.2 of the Agreement is deleted in its entirety and …". One
+# family since policy-v17: "is amended to read (in its entirety) as follows", "shall read as follows" and "is amended by
+# deleting the definition of 'X' … and replacing it" were not read, and a pass quoting the text they replace stood with
+# code's own day count of it (stress test, 2026-10-30; in the local EDGAR corpus, 0 of 25 and 52 of 315 such statements
+# were located). The part a statement names after "amended by deleting" is its `part`.
 _REPLACED_VERB = re.compile(
     r"\b(?:is|are|shall\s+be|will\s+be)\s+(?:hereby\s+)?"
     r"(?:deleted(?:\s+in\s+(?:its|their)\s+entirety)?(?:\s+and\s+replaced)?|replaced(?:\s+in\s+(?:its|their)\s+entirety)?|superseded"
-    r"|amended\s+and\s+restated|substituted)\b",
+    r"|amended\s+and\s+restated|amended\s+to\s+read|substituted"
+    r"|amended\s+by\s+(?:deleting|striking)\s+(?P<part>the\s+definition\s+of\s+[\"“][^\"”]{1,60}[\"”]|the\s+words\s+[\"“][^\"”]{1,80}[\"”])"
+    r"[^.;:]{0,60}?\s+and\s+(?:replacing|substituting|inserting))\b"
+    r"|\b(?:shall|will)\s+(?:hereby\s+)?read\s+(?:in\s+(?:its|their)\s+entirety\s+)?as\s+follows\b",
     re.IGNORECASE,
 )
-# The verb, then the provision: "… amended by deleting Section 3.2 in its entirety and replacing it with …".
+# The verb, then the provision: "… amended by deleting Section 3.2 in its entirety and replacing it with …", "… and
+# inserting the following in lieu thereof".
 _DELETING = re.compile(
-    rf"\bdeleting\s+(?P<ref>{REFERENCE.pattern}(?:\([a-z0-9]{{1,4}}\))*)[^.;:]{{0,40}}?\s+and\s+(?:replacing|substituting)\s+(?:it|the\s+same)\b",
+    rf"\bdeleting\s+(?P<ref>{REFERENCE.pattern}(?:\([a-z0-9]{{1,4}}\))*)[^.;:]{{0,40}}?\s+and\s+(?:(?:replacing|substituting)\s+(?:it|the\s+same)|inserting)\b",
     re.IGNORECASE,
 )
+# One definition of a clause, named by the statement ('the definition of "Notice Period"'), and where the clause states it.
+_DEFINITION_NAMED = re.compile(r"\bdefinition\s+of\s+[\"“](?P<term>[^\"”]{1,60})[\"”]", re.IGNORECASE)
+_DEFINITION_ENDS = re.compile(r"[.;](?=\s|$)|\n")
 _SUB_ITEMS = re.compile(r"(?:\([a-z0-9]{1,4}\))+")
 # A part of a clause named before it: one paragraph, one definition, one sentence, some words ("The definition of
 # 'Applicable Margin' in Section 1.01 is amended and restated": a real EDGAR amendment, one definition of many in 1.01).
@@ -73,7 +84,8 @@ _AS_IF = re.compile(
 )
 # How the new wording is introduced after the verb: "with the following:", "by", "to read as follows:".
 _INTRODUCES = re.compile(
-    r"[^.;:\"“]{0,60}?\b(?:with|by|to\s+read)\b(?:\s+as\s+follows|\s+(?:the\s+)?following(?:[^;:\"“\n]{0,40}?(?=:))?)?\s*:?\s*",
+    r"[^.;:\"“]{0,60}?(?:\b(?:with|by|to\s+read)\b(?:\s+as\s+follows|\s+(?:the\s+)?following(?:[^;:\"“\n]{0,40}?(?=:))?)?"
+    r"|\bas\s+follows\b|\bthe\s+following\s+is\s+substituted\b|\bthe\s+following\s+in\s+lieu\s+thereof\b)\s*:?\s*",
     re.IGNORECASE,
 )
 _QUOTE_OPEN = '"“'
@@ -326,6 +338,8 @@ def _replacements(document: _Document, section: Readable, as_of: date) -> Iterat
             # "In Section 4.1, the words 'thirty (30) days' are replaced …": what is replaced is named after the clause.
             if _PART_AFTER.search(text, named[-1].end(), verb.start()):
                 only = text[named[-1].start() : verb.start()].rstrip(" ,")
+            if verb.group("part"):  # "Section 1 … is amended by deleting the definition of 'X' … and replacing it"
+                only = verb.group("part")
             statements.append((start, named[-1].group(1), verb.end(), only))
     for deleting in _DELETING.finditer(text):
         reference = REFERENCE.search(deleting.group("ref"))
@@ -341,14 +355,25 @@ def _replacements(document: _Document, section: Readable, as_of: date) -> Iterat
             lead = text[head : named[-1].start()].strip().rstrip(",")
             words = text[deeming.start() : _sentence(text, deeming.start(), deeming.end(), colon_ends=True)[1]].strip().rstrip(".;")
             statements.append((head, named[-1].group(1), deeming.end(), "; ".join(part for part in (lead, words) if part)))
+    stated_once: set[tuple[int, str]] = set()
     for named_at, target, verb_end, only in statements:
         head, tail = _sentence(text, named_at, verb_end, colon_ends=True)
+        # "… is deleted and the following is substituted" is one statement, not two (stress test, 2026-10-30).
+        if (head, target) in stated_once:
+            continue
+        stated_once.add((head, target))
         wording = _new_wording(text, verb_end)
         stated = text[head : min(tail, wording[0]) if wording else tail]  # limits are read in the statement, not in the new wording
         # One paragraph of a clause ("Paragraph (b) of clause 6.1", "clause 6.1(b)") is a limit on the clause, as written:
         # code locates the clause and does not decide which of its words a quote leans on.
         limits = ([" ".join(only.split())] if only else []) + [" ".join(m.group(0).split()) for m in _LIMIT.finditer(stated)]
         replaced = document.provision(target, section.id)
+        # One definition of the clause, where the clause states it, is the replaced text, and no limit: a quote of it is a
+        # quote of replaced text, and a quote of another definition in the clause is not (policy-v17). A definition the
+        # clause does not state stays a limit, as written (FAILURE-ENVELOPE: never generalised to the clause).
+        definition = _definition_in(replaced, only) if replaced is not None and only else None
+        if definition is not None:
+            replaced, limits = definition, limits[1:]
         effective = None
         starts: list[str] = []
         for begins in _STARTS.finditer(stated):
@@ -369,6 +394,21 @@ def _replacements(document: _Document, section: Readable, as_of: date) -> Iterat
             effective=effective,
             starts=tuple(starts),
         )
+
+
+def _definition_in(provision: Passage, named: str) -> Passage | None:
+    """The definition a statement names ('the definition of "Notice Period"'), where the provision states it: from its
+    term to the end of its sentence. None when the statement names no definition or the provision does not state it."""
+    term = _DEFINITION_NAMED.search(named)
+    if term is None:
+        return None
+    opens = re.search(rf"[\"“]{re.escape(term.group('term'))}[\"”]\s+(?:shall\s+)?(?:means?|has\s+the\s+meaning|refers?\s+to)\b", provision.text, re.IGNORECASE)
+    if opens is None:
+        return None
+    stop = _DEFINITION_ENDS.search(provision.text, opens.end())
+    end = stop.end() if stop is not None and stop.group(0) != "\n" else (stop.start() if stop is not None else len(provision.text))
+    start = provision.start + opens.start()
+    return Passage(provision.section_id, provision.label, start, provision.start + end, provision.text[opens.start() : end])
 
 
 def _precedences(section: Readable) -> Iterator[Relation]:
