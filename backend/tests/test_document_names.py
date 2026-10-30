@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from app.api.access import workspace_for
 from app.db import SessionLocal
 from app.document_names import UNNAMED
-from app.models import DocumentAccess
+from app.models import Document, DocumentAccess
 from tests.support import CONTRACT
 from tests.test_workspaces import QUESTION, Reviewer, two  # noqa: F401  (the fixture)
 
@@ -103,6 +103,10 @@ def test_a_grant_made_before_names_were_kept_shows_no_one_elses_name(two: tuple[
             grant = session.get(DocumentAccess, (workspace_for(subject), document_id))
             assert grant is not None
             grant.name = None
+        # A row of that time carried its first uploader's name; rows are named by their type since 2026-10-30.
+        stored = session.get(Document, document_id)
+        assert stored is not None
+        stored.name = "original-name.txt"
         session.commit()
     run_b = ask(b, document_id)
     assert b.get(f"/api/documents/{document_id}").json()["name"] == UNNAMED

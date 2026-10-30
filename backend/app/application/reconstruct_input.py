@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 
 from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, PROMPTS_DIR, SectionForPrompt, build_user_message, load_prompt, window_of
-from ..document_names import run_prompt_name
+from ..document_names import run_legacy_prompt_name, run_prompt_name
 from ..errors import NotFound
 from ..hashing import sha256_text
 from ..models import Run, RunStage, Section
@@ -183,6 +183,12 @@ def reconstruct_input(session: Session, run_id: str) -> Reconstruction:
     result.system = prompt.system
     result.user = build_user_message(run.question, guidance_text, run_prompt_name(run), sections, window=window)
     result.input_sha256 = sha256_text(prompt.sha256 + result.user)
+    if result.recorded_input_sha256 not in (None, result.input_sha256) and run_legacy_prompt_name(run) != run_prompt_name(run):
+        # A run recorded before 2026-10-30 was given the stored name where its workspace is now shown another
+        # (document_names): rebuilt with the name it was given, when that is what the record says.
+        legacy = build_user_message(run.question, guidance_text, run_legacy_prompt_name(run), sections, window=window)
+        if sha256_text(prompt.sha256 + legacy) == result.recorded_input_sha256:
+            result.user, result.input_sha256 = legacy, result.recorded_input_sha256
     if result.recorded_input_sha256 is None:
         # Not a mismatch: there is nothing to match. The checking stage began recording its input hash on
         # 2026-09-28; the 58 runs before it were being reported as "does not hash to what was recorded", which

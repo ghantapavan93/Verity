@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..application.ingest_document import ingest_document
 from ..application.start_run import start_run
+from ..document_names import display_name
 from ..errors import InvalidInput, NotFound
 from ..hashing import sha256_bytes
 from ..ingest import SUPPORTED
@@ -248,7 +249,8 @@ def report(session: Session, batch_id: str) -> BatchOut:
     rows = [
         BatchRow(
             document_id=document_id,
-            document_name=documents[document_id].name if document_id in documents else document_id,
+            # Named as a curated run is (document_names): a stored name a workspace chose is that workspace's alone.
+            document_name=display_name(session, documents[document_id], None) if document_id in documents else document_id,
             values={field.key: by_field.get(field.key, BatchValue(run_id="", outcome="in_progress")) for field in task.fields},
         )
         for document_id, by_field in values.items()
