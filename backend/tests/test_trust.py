@@ -852,3 +852,77 @@ def test_one_workspaces_versions_and_trust_are_not_anothers(two: tuple[Reviewer,
     assert b.get(f"/api/documents/{b_second}/versions").json() == [], "A's statement is not visible to B"
     assert b.post(f"/api/documents/{b_first}/supersedes", json={"previousDocumentId": b_second}).status_code == 201, "and does not bind B"
     assert [v["documentId"] for v in a.get(f"/api/documents/{second}/versions").json()] == [first, second]
+
+
+# ---------------------------------------------------------------------------- a manifest, worked out once
+# A finished run's manifest depends only on its record, its document's sections and today's rules, yet every GET of
+# /trust and /trust/diff located every span in every section again: 10 s per GET on a real 2.8 MB filing with three
+# spans, 62 to 73 s with fifteen (stress test, 2026-10-30, performance 6). It is now kept, for minutes, per run and the
+# rules it was worked out under; a manifest that could not read the document again is not kept.
+
+
+def _compiled(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    from app.application import trust_run
+
+    calls: list[str] = []
+    real = trust_run.compile_manifest
+
+    def counted(**kwargs: object) -> object:
+        calls.append(str(kwargs["run_id"]))
+        return real(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(trust_run, "compile_manifest", counted)
+    trust_run.forget_readings()
+    return calls
+
+
+def test_a_second_read_of_a_run_s_trust_works_nothing_out_again(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _compiled(monkeypatch)
+    run_id = upload_and_ask(client, "What notice period applies to termination for convenience?")["run_id"]
+    first = client.get(f"/api/runs/{run_id}/trust").json()
+    assert client.get(f"/api/runs/{run_id}/trust").json() == first
+    assert calls == [run_id]
+    from app.application import trust_run
+
+    trust_run.forget_readings()  # every retention pass drops it: it holds the contract's quotes
+    assert client.get(f"/api/runs/{run_id}/trust").json() == first and calls == [run_id, run_id]
+
+
+def test_concurrent_reads_of_one_manifest_work_it_out_once(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    from app.application import trust_run
+    from app.db import SessionLocal
+    from app.models import Run
+
+    calls = _compiled(monkeypatch)
+    run_id = upload_and_ask(client, "What notice period applies to termination for convenience?")["run_id"]
+    go = threading.Barrier(4)
+    ids: list[str] = []
+
+    def read() -> None:
+        with SessionLocal() as session:
+            run = session.get(Run, run_id)
+            assert run is not None
+            go.wait()
+            ids.append(trust_run.manifest_of(session, run).manifest_id)
+
+    threads = [threading.Thread(target=read) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert len(ids) == 4 and len(set(ids)) == 1
+    assert calls == [run_id]
+
+
+def test_control_a_manifest_that_could_not_read_the_document_again_is_not_kept(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.application import trust_run
+
+    calls = _compiled(monkeypatch)
+    run_id = upload_and_ask(client, "What notice period applies to termination for convenience?")["run_id"]
+    monkeypatch.setattr(trust_run, "PARSER_VERSION", "a later reader")  # the run's reading is now an earlier reader's
+    monkeypatch.setattr(trust_run, "current_reading", lambda session, document: None)  # and not read again yet
+    for _ in range(2):
+        assert client.get(f"/api/runs/{run_id}/trust").status_code == 200
+    assert calls == [run_id, run_id], "'could not be read again' is never kept"
