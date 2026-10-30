@@ -29,6 +29,8 @@ Each decision as it was taken, newest last:
 - [2026-10-21: a casebook](#2026-10-21-a-casebook)
 - [2026-10-21: every answer computed from its first token](#2026-10-21-every-answer-computed-from-its-first-token)
 - [2026-10-30: an audit by people trying to break it](#2026-10-30-an-audit-by-people-trying-to-break-it)
+- [2026-10-30: published figures derived by code](#2026-10-30-published-figures-derived-by-code)
+- [2026-10-30: a stress test by 125 agents](#2026-10-30-a-stress-test-by-125-agents)
 
 ## 2026-09-28: the pivot
 Three experiments killed three product ideas, and the results page records that. The next
@@ -1755,17 +1757,17 @@ rules, the interface, and the repository as a stranger first reads it. What they
   (TLS-3); this line said "npm audit and pip-audit clean" until then. The Next install
   dropped the @emnapi/runtime lock entry a third time; `test_lockfile.py` caught it.
 
-Open, each recorded with what it would take:
+Open, each recorded with what it would take (the stress test below closed all but the second):
 
 - Text a reader cannot see (PDF render mode 3, white or 0.1 pt text, text off the page; DOCX white or half-point
-  text) is read, can be quoted and verifies. A pass on it is still the model's view. The fix is to read render mode,
-  colour, size and page bounds, count such text in the coverage, and raise a concern on a quote that overlaps it.
+  text) is read, can be quoted and verifies. Closed by reader v16, except clipping paths, optional-content layers and
+  colour on a painted colour.
 - The status rule is chosen by the model's topic and the order of the guidance's sentences: the same quote and guidance
   are a pass under one topic and code's shortfall under another. It can lower a status, never make a code-owned pass.
-  The fix, a policy version of its own: evaluate every rule the guidance states.
-- Uploads are capped by count (300 a public day), not bytes; at 25 MB each the store could reach its 2 GiB floor in
-  days, pausing public writes until retention. A daily byte budget needs the size stored per document.
-- Open event streams per workspace are not capped; the CSP allows inline scripts (Next's nonces not yet wired).
+  Still open: policy-v17 reads one guidance sentence whole, but which of two sentences applies is still the topic's.
+- Uploads are capped by count (300 a public day), not bytes. Closed: 1 GiB of new public contracts a day.
+- Open event streams per workspace are not capped; the CSP allows inline scripts. Closed: four streams a workspace and
+  sixteen a network; scripts run only with the response's nonce.
 - On the laptop, the owner's steps: Redis listens on every interface with no password (stop it, or bind 127.0.0.1 and
   set a password, and remove its firewall rule); the MySQL firewall rules allow every profile; Postgres listens on
   every interface; llama-server's `/slots` is on (`LLAMA_ARG_ENDPOINT_SLOTS=0`); Ollama updates itself.
@@ -1815,3 +1817,59 @@ disagree.
   code in force only while the code's inputs are the file's. The hybrid was measured against the older BM25 and is not
   re-measured here (it needs the embedding model). The full `npm audit` reports six development advisories where this
   log said it was clean; the line above now says which audit is clean.
+
+## 2026-10-30: a stress test by 125 agents
+
+The owner asked for every corner to be attacked, from as many angles as the system has. Seventeen agents each took one:
+the verifier, the status rules, the readers, retrieval, a hostile model, isolation, abuse, concurrency, performance, the
+evidence pack, the interface, operations, the architecture, mutation of the test suite, external tools, privacy and
+whole journeys. A critic named four more: the model's transport, the store across releases, the published figures, and
+time. Each finding went to a second agent told to refute it by reproducing it from scratch. 102 findings were reproduced;
+none was refuted, which says more about the skeptics than about the findings, so the lead re-read every blocker and high.
+They group into 64 fix classes: one per broken invariant and shared primitive, never one per example.
+
+Fixed, by teams in their own worktrees, each test written first and red, then merged here:
+
+- **Verifier v11** also reads every default-ignorable character as absent, keeps typeset joints, mixed numbers and unit
+  signs with their number, compares a word through its combining marks by canonical caseless match, never ends a match
+  at a window's end or inside one character's fold, strips a section label only whole, and compares a ticked box. The
+  lead found and fixed one of its own: "2/3" read as "23". Every recorded span was replayed: none lost or gained.
+- **Policy-v17** reads a period as the text writes it (ranges, lists and number words whole, one unit per comparison, a
+  negated period never what the contract provides), reads the contract's located text rather than the model's spelling
+  of a quote, lets the guidance support a comparison but never give a figure as the contract's, reads a sentence across
+  the reader's part cuts, and lowers a pass resting on text an unhanded amendment changes.
+- **Reader v16 and v17** read a PDF page by position and a DOCX as Word displays it: columns in order, fields' results,
+  one alternate branch, table cells in their columns, checkboxes and their state, text boxes, hidden text left out and
+  counted, capitals lines judged by their words, long paragraphs cut only at passage ends, the reader's own splits
+  recorded as data, one defined-term reader. The PDF reader was fixed again to import under pypdf 6.21.2, the lock's
+  version: written against 6.19, it would not have started.
+- **Retrieval-v3** reads text as the verifier does, ranks every section that shares a word while places remain, fires an
+  alias only on its concept's name, reads definitions in any quotation style, and hands an amendment with the section it
+  changes: the answer is handed in 0.941 of CUAD-510's labelled runs, from 0.914.
+- **The evidence pack** checks every field it shows against the run's recorded stage hashes or prints it UNCHECKED, and a
+  finished run hashes the record it finished on. It stays unsigned.
+- **The API and operations**: health off the request threads and a per-network bound at the door, capped streams, a daily
+  byte budget, a bounded and rotated log, run liveness and recovery in one place, bounded purge transactions with
+  originals written whole, an OpenAPI contract generated from the error classes, escaped spreadsheet cells, bounded and
+  cached trust reads, no workspace shown another's file name. Time, the model's transport and the store's evolution
+  are the last team's (their entry follows when it lands).
+- **The interface** shows a run only beside its own contract, shows every model- or file-written string through one
+  display primitive, keys a memo by what it says, asks before an invite replaces a working session, runs no script
+  without the response's nonce, and joins sections only where the reader recorded a split.
+- **The figures**: CUAD-30 is 0.81 / 0.64 scored on the reported answer (it was 0.85 / 0.67), the golden figure is
+  derived by replaying Recording 6c (37 of 44), Recall@6 is 0.98 measured today; see the entry above.
+- **The checks themselves**: the verifier is forbidden every other module of the app, every module sits in a layer or
+  says why not, and retrieval's version covers the defined-term reader it now asks.
+
+Decided along the way: model text is neutralised where it is displayed, never where it is stored, so the record keeps
+the model's characters as evidence; a memo's identity is its content; the record hash sits on the run's last stage, so the
+verifying stage's hash keeps its meaning; the CSP nonce governs scripts only, since styles are written as attributes and
+the API may be another origin.
+
+Open: whether an answer that repeats a condition's words while denying it keeps its pass, which waits for the owner (the
+skeptic's rule, judging on the evidence alone, reverses the 2026-10-16 decision); which of two guidance sentences applies
+(above); PDF text hidden by clipping or optional content; columns narrower than 0.9 line-heights; an amendment only
+links' grammar reads ("amended by adding") is not yet a reason to lower; a shared reading still reveals that the same
+bytes were uploaded before; reviews are not bound by the pack; a sign set apart from its number by a space is
+punctuation, as since v8. Including in each version every code that decides its outcome, by the closure of its entry
+points rather than a hand-made list, is the lead's next step.
