@@ -325,8 +325,11 @@ function whereItGoes(place: { hosted: boolean; place: string } | null): { head: 
 export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place: { hosted: boolean; place: string } | null }) {
   const lines = [
     {
-      head: "It does not read the whole agreement.",
-      text: "Up to six sections per question, chosen by retrieval, and up to two the contract points to from them. The rest is not read. Every answer says how many it was handed, and why.",
+      // Verity reads every section; only the model is shown part. "It does not read the whole agreement … the rest is not
+      // read" said the opposite of what code does with the rest (owner's review, 2026-10-30). Numbers pinned by
+      // backend/tests/test_docs_claims.py.
+      head: "It does not show its model the whole agreement.",
+      text: "Verity reads every section, but each question shows the model at most six chosen by retrieval and two the contract points to from them, each cut at 6,000 characters. Code looks across the rest for amendments to what the model was shown, and says when a quote points to a section it was not. Every answer says how many sections the model was handed, and why.",
     },
     {
       head: "It does not pass a clause on its own.",

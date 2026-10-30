@@ -200,6 +200,11 @@ def test_what_the_hosted_page_says_reaches_the_model_is_what_the_deployment_send
     message = build_user_message("How long is the term?", "Prefer a short term.", "acme-msa.pdf", [section])
     assert all(part in message for part in ("How long is the term?", "Prefer a short term.", "acme-msa.pdf", "This agreement lasts one year."))
     assert "the question, any guidance, the contract's file name and the sections retrieval ranked" in story
+    # What the model is shown on every deployment, hosted or not: the ranked sections, the linked ones, the window.
+    from app.runs.links import MAX_LINKS
+
+    assert f"shows the model at most {words[k]} chosen by retrieval and {words[MAX_LINKS]} the contract points to" in story
+    assert f"each cut at {window:,} characters. Code looks across the rest" in story
 
 
 def test_every_sentence_that_says_what_the_model_is_sent_names_the_file_too() -> None:
