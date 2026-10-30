@@ -143,7 +143,12 @@ from .values import frame_times, redaction_given_as_value, uniform_party_choices
 # rule's sentence states; a range compares in one unit. A period whose words and digits disagree anywhere in the quotes
 # makes the finding an ambiguous fact; a period beside a negation is never what "the contract provides" (an ambiguous
 # fact, or a blocked pass); a stated position is compared by value ("56 days" is "8 weeks"), and a pass stating a
-# period no verified quote states is lowered whether or not the quotes state any.
+# period no verified quote states is lowered whether or not the quotes state any. A "days" convention limited to one
+# part of the contract reads a quote both ways. Every check reads the contract text a verified quote was found at, never
+# the model's spelling of it (runs.service.located_text). A value only the guidance states supports an answer that
+# compares, never one that gives it as the contract's (`check_values`). Relations: a replaced definition is the replaced
+# text in every wording of the statement, and the conclusion alone is read for the replaced value (`old_value`). The
+# condition words read every way a contract opens one; a number written in words is no subject word.
 POLICY_VERSION = "policy-v17"
 
 
@@ -205,6 +210,9 @@ def decide(
         return Decision("needs_review", "position_check", "the requirement the model stated is not in the guidance")
     rule = parse_rule(guidance, topic) if guidance_present else None
     found = next(((q, f) for q in quotes if (f := observed_fact(q, stated=observed)) is not None), None)
+    # A convention limited to a part of the contract is not applied to a quote code cannot place in that part: the quote's
+    # "days" are read both ways below, and as written otherwise.
+    scoped, days = (days, None) if days is not None and days.scoped else (None, days)
     read = read_as_the_contract_does(found[1], days) if found is not None else None
     converted = read is not None and found is not None and read.duration != found[1].duration
     fact = read
@@ -227,6 +235,15 @@ def decide(
         inconsistent = next((m.ambiguity for q in quotes for m in parse_durations(q) if m.ambiguity is not None), None)
         if inconsistent is not None:
             return Decision("needs_review", "ambiguous_fact", f"the quote is internally inconsistent: {inconsistent}")
+        if scoped is not None:
+            either = set().union(*(stated_periods(q) | periods_as_the_contract_reads(q, scoped) for q in quotes))
+            if len({evaluate(ObservedFact("notice_period", d, "", 0, 0), rule, week).outcome for d in either}) > 1:
+                return Decision(
+                    "needs_review",
+                    "ambiguous_fact",
+                    f"{scoped.note.replace(' in this contract', '')} only where that sentence says (“{scoped.sentence}”), and code does not read "
+                    f"which part the quote is in; read either way ({_periods(either)}), the quote does not meet the guidance alike",
+                )
         # A quote that states more than one period ("90 days' notice, unless …, in which case 10 days") may be decided
         # by code only when every period it states leads to the same result. Until 2026-10-02 the first period, or the
         # one the model pointed at, decided alone, and "90 days unless … 10 days" was a computed pass against a 90-day

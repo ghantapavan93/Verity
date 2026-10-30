@@ -1071,6 +1071,9 @@ class DayConvention:
     unit: DurationUnit  # BUSINESS_DAY or CALENDAR_DAY
     sentence: str
     where: str
+    # The sentence limits it to a part of the contract ("In this Clause 5 only", "For the purposes of this Schedule"):
+    # code does not read which part a quote is in, so it reads a quote's "days" both ways (policy-v17).
+    scoped: bool = False
 
     @property
     def note(self) -> str:
@@ -1084,13 +1087,25 @@ _DAYS_ARE = re.compile(
 )
 
 
+# A statement limited to one part of the contract: "In this Clause 5 only", "For the purposes of this Schedule", "except
+# in clause 7". Until policy-v17 such a convention was applied to every quote, so a §2 "thirty (30) days" was read as
+# Business Days by a §5 that spoke of itself, and code computed a shortfall, or a "consistent" pass, from it (stress
+# test, 2026-10-30). The boilerplate "unless the context otherwise requires" limits nothing.
+_SCOPED = re.compile(
+    r"\b(?:in|for\s+(?:the\s+)?purposes?\s+of|within|under)\s+this\s+(?:clause|section|schedule|part|annex(?:ure)?|exhibit|appendix|paragraph"
+    r"|article|sub-?clause)\b|\bonly\b|\bexcept\s+(?:in|where|as)\b",
+    re.IGNORECASE,
+)
+
+
 def day_convention(sections: Iterable[tuple[str, str]]) -> DayConvention | None:
     """The contract's own statement of what its bare "days" are; None when it makes none, or two that disagree."""
     found: list[DayConvention] = []
     for where, text in sections:
         for match in _DAYS_ARE.finditer(text):
             unit = DurationUnit.CALENDAR_DAY if match.group(1).casefold() == "calendar" else DurationUnit.BUSINESS_DAY
-            found.append(DayConvention(unit, _definition_at(text, match.start()), _clause_where(text, match.start(), where)))
+            sentence = _definition_at(text, match.start())
+            found.append(DayConvention(unit, sentence, _clause_where(text, match.start(), where), _SCOPED.search(sentence) is not None))
     if not found or len({c.unit for c in found}) != 1:
         return None
     return found[0]
