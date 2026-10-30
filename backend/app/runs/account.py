@@ -102,7 +102,11 @@ def account_of(finding: Finding, clause_numbers: frozenset[str] = frozenset()) -
         concerns.append("no quote of it was found in the sections handed to the model, so it is withheld")
     elif source in DECIDED_BY_CODE:
         decided_by = "code"
-        concerns.append(f"code: {reason}" if reason else _CHECK_DID[source])
+        # A pass code computed or confirmed (records made before policy-v3) carries its comparison as its reason, not as a
+        # concern: read as one, a 15-day notice against a 10-day floor was flagged with its own pass sentence (stress
+        # test, 2026-10-30: store evolution). Only a status code lowered is a concern of code's.
+        if finding.status != "pass":
+            concerns.append(f"code: {reason}" if reason else _CHECK_DID[source])
     else:
         decided_by = "model"
         if finding.status == "needs_review":

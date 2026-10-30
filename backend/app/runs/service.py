@@ -15,7 +15,7 @@ from functools import partial
 
 from sqlalchemy.orm import Session
 
-from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, SectionForPrompt, analyze, build_user_message, load_prompt, window_of
+from ..analysis.service import SectionForPrompt, analyze, build_user_message, load_prompt, window_of
 from ..config import settings
 from ..document_names import run_prompt_name
 from ..hashing import sha256_text
@@ -146,7 +146,7 @@ def _label(section: Section) -> str:
 
 
 def verify_evidence(
-    quote: str, cited_label: str, by_label: Mapping[str, Section], chosen: Sequence[Section], window: int = MAX_SECTION_CHARS_IN_PROMPT
+    quote: str, cited_label: str, by_label: Mapping[str, Section], chosen: Sequence[Section], *, window: int
 ) -> tuple[Section | None, Located | None, str]:
     """Where a proposed quote is, if anywhere: first in the section the model cited, then in the other
     candidates (a real quote attributed to the wrong section is kept and marked relocated). The search is

@@ -157,3 +157,21 @@ def test_the_finding_account_reads_the_located_text_and_the_guidance_as_a_standa
     assert _unquoted(client, NINETY, NINETY.replace("90", "9\u200b0"), answer) == []  # the contract says 90; so does the answer
     echoed = "Either party may terminate for convenience on 30 days' written notice."
     assert _unquoted(client, NINETY, NINETY, echoed) == ["30 days"]  # only the guidance says 30: reported
+
+
+def test_a_pass_code_computed_before_policy_v3_is_no_concern_of_its_own() -> None:
+    """A record from before policy-v2: code passed 15 days' notice against a 10-day floor (computed_days, pass). The
+    account read its pass sentence as a concern and flagged it; it is code's pass, with nothing against it."""
+    from app.models import Finding, Run
+    from app.runs.account import account_of
+
+    reason = "the contract provides 15 calendar days; the guidance requires at least 10 calendar days"
+    old = Finding(
+        topic="Termination", conclusion="Fifteen days' notice.", status="pass", status_source="computed_days", status_reason=reason, spans=[], run=Run()
+    )
+    account = account_of(old)
+    assert (account.decided_by, account.concerns, account.flagged) == ("code", (), False)
+    lowered = Finding(
+        topic="Termination", conclusion="Five days.", status="needs_review", status_source="computed_days", status_reason=reason, spans=[], run=Run()
+    )
+    assert account_of(lowered).concerns == (f"code: {reason}",)  # control: code's shortfall is its concern
