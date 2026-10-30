@@ -88,6 +88,8 @@ _LIMIT = re.compile(
 )
 # A comma ends the start, unless a year follows it ("September 18, 2025": cut at its comma, it was never read).
 _STARTS = re.compile(r"\b(?:with\s+effect\s+(?:from|on|as\s+of)|effective\s+(?:from|on|as\s+of))\s+(?P<when>(?:[^,;:]|,(?=\s*\d{4}\b)){3,60})", re.IGNORECASE)
+# A term the document defines in brackets after what defines it: 'dated September 18, 2025 (the "Amendment Date")'.
+_DEFINED_TERM = re.compile(r"\(\s*(?:the\s+)?[\"“](?P<term>[^\"”]*)[\"”]\s*\)")
 _NAMED_DATE = re.compile(r"[\"“](?P<term>[^\"”]{2,40})[\"”]|\bthe\s+(?P<bare>[A-Z]\w*(?:\s+[A-Z]\w*){0,3})")
 
 _PRECEDENCE = re.compile(
@@ -223,12 +225,18 @@ def _new_wording(text: str, at: int) -> tuple[int, int] | None:
 
 
 class _Document:
-    """The sections and, built once when first needed, where each clause number opens: no section is re-read per relation."""
+    """The sections and, each built once when first needed, where each clause number opens, which sections are numbered
+    so, and the dates the document's defined terms name: no section is re-read per statement. Until policy-v17 a
+    provision's section and a start named by a defined term were each found by scanning every section once per
+    statement, so a document of many statements cost the square of its length, in the request thread (stress test,
+    2026-10-30: 65 s to locate a crafted 5 MB upload)."""
 
     def __init__(self, sections: Sequence[Readable]) -> None:
         self.sections = sections
         self._opened: dict[str, list[int]] | None = None
         self._openings: dict[int, list[tuple[str, int]]] = {}
+        self._numbered: dict[str, list[int]] | None = None
+        self._defined: dict[str, set[str]] | None = None
 
     def openings(self, index: int) -> list[tuple[str, int]]:
         if index not in self._openings:
@@ -246,7 +254,11 @@ class _Document:
     def provision(self, number: str, besides: str) -> Passage | None:
         """The provision's own text: the section numbered so, else the first other section that opens it. Never the
         statement's own section, which may quote the new wording under the same number."""
-        numbered = [i for i, s in enumerate(self.sections) if s.number == number and s.id != besides]
+        if self._numbered is None:
+            self._numbered = {}
+            for index, section in enumerate(self.sections):
+                self._numbered.setdefault(section.number, []).append(index)
+        numbered = [i for i in self._numbered.get(number, []) if self.sections[i].id != besides]
         for index in numbered + [i for i in self.opened(number) if i not in numbered and self.sections[i].id != besides]:
             found = self._extent(index, number)
             if found is not None:
@@ -279,12 +291,15 @@ class _Document:
         term = (named.group("term") or named.group("bare")) if named else None
         if not term:
             return None
-        definition = re.compile(rf"\(\s*(?:the\s+)?[\"“]{re.escape(term)}[\"”]\s*\)")
-        found = set()
-        for section in self.sections:
-            for match in definition.finditer(section.text):
-                found |= {v for v in stated_values(section.text[max(0, match.start() - 60) : match.start()]) if v.startswith("d:")}
-        return _first_day(found.pop()) if len(found) == 1 else None
+        if self._defined is None:
+            self._defined = {}
+            for section in self.sections:
+                text = section.text
+                for match in _DEFINED_TERM.finditer(text):
+                    dates = {v for v in stated_values(text[max(0, match.start() - 60) : match.start()]) if v.startswith("d:")}
+                    self._defined.setdefault(match.group("term"), set()).update(dates)
+        found = self._defined.get(term, set())
+        return _first_day(next(iter(found))) if len(found) == 1 else None
 
 
 def _first_day(key: str) -> date | None:
@@ -601,8 +616,10 @@ def latest_start_reached(sections: Sequence[Readable], as_of: date) -> str | Non
 def relevant(relations: Sequence[Relation], section_ids: set[str]) -> list[Relation]:
     """The relations a run records: those whose statement, provision or new wording is in a section it read or quoted,
     then the rest, up to MAX_RELATIONS, in reading order."""
-    near = [r for r in relations if any(p is not None and p.section_id in section_ids for p in (r.statement, r.replaced, r.replacement))]
-    return (near + [r for r in relations if r not in near])[:MAX_RELATIONS]
+    # By position, never by comparing relations: list membership through the dataclass's equality was quadratic.
+    near = [i for i, r in enumerate(relations) if any(p is not None and p.section_id in section_ids for p in (r.statement, r.replaced, r.replacement))]
+    chosen = set(near)
+    return [relations[i] for i in near + [i for i in range(len(relations)) if i not in chosen]][:MAX_RELATIONS]
 
 
 def dump(recorded: Recorded) -> str:
