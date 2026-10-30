@@ -43,6 +43,7 @@ BOUNDARIES: dict[str, tuple[str | tuple[str, str], ...]] = {
         ("retrieval/aliases.py", "_phrase_in"),
         ("runs/service.py", "_retrieve"),  # the opening-sections fallback
         "runs/links.py",  # retrieval-v2: the sections the ranked ones depend on
+        "ingest/terms.py",  # the defined-term reader links ask (reader v17 moved it out of links, 2026-10-30)
     ),
 }
 
@@ -132,7 +133,7 @@ RECORDED: dict[str, str] = {
     # definition read in every pair of quotation marks, words of construction not terms, a term used in capitals; the
     # amendments of every handed section handed with it, a linked section's included (runs.links).
     # retrieval-v3 is not committed to main, so its fingerprint is replaced, not bumped, as the branch adds to it.
-    "retrieval-v3": "ab47b9f8c56891a6",
+    "retrieval-v3": "a0aecedd9e306a88",
 }
 
 
