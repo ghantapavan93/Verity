@@ -442,6 +442,9 @@
 .assistantPane {
   position: relative;
   display: grid;
+  /* One declared column, as .workspace and .split declare theirs: the implicit auto track grew to the widest row that
+     does not scroll (a long document name in the header), and the hidden overflow clipped every row (2026-10-30). */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   height: 100vh;
