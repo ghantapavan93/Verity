@@ -165,8 +165,15 @@ _LABELLED_WORD = re.compile(r"([^\W\d_]*)(\d+)(mln|bln|mm|mn|bn|tn|k|m|b|t)?", r
 # "3+4" a sum, "COVID-19" a name).
 _RELATIONS = frozenset("<>≤≥≦≧≠⩽⩾≶≷")
 _COMPARATORS = _RELATIONS | frozenset("+±∓~≈")
-_JOINED = frozenset("/:")
-_DIGIT_MARKS_V11 = _DIGIT_MARKS | _JOINED
+# Digits joined by a slash or a colon are one value; a typeset fraction slash, division slash, ratio colon or their
+# fullwidth forms join them as the ASCII ones do (stress test, 2026-10-30: "2% per month" was found inside "1" U+2044
+# "2%"). So do a middle dot, a fullwidth stop or comma and the other marks a typesetter writes for a decimal point.
+_SLASHES = frozenset("/\u2044\u2215\uff0f")
+_JOINED = _SLASHES | frozenset(":\u2236\uff1a")
+_DIGIT_MARKS_V11 = _DIGIT_MARKS | _JOINED | frozenset("\u00b7\u0387\u02d9\u2027\uff0c\uff0e")
+# What is written after a number and belongs to it: per cent and per mille in every form, degrees, primes, a plus.
+_UNIT_SIGNS = frozenset("%\u2030\u2031\u066a\ufe6a\uff05\u00b0\u2032\u2033+")
+_ATTACHED_V11 = _ATTACHED | _UNIT_SIGNS
 SIGN_OPENERS_V11 = SIGN_OPENERS | _COMPARATORS | frozenset(".")
 # Where a sentence ends: a full stop, an ellipsis, a question or an exclamation mark, past closing quotation marks and
 # brackets, that a space and a letter not in lower case follow ("Inc. shall" goes on, "terminate. Without" does not), or,
@@ -227,7 +234,7 @@ def _written_v11(one: str) -> re.Pattern[str]:
     (?:(?P<sign>(?<![^\W_])(?:\+/{minus}|{loose}{minus}?|{minus})|(?:[<>]=|{relation}){minus}?))?
     (?:(?(sign){_LABEL}\.?\s?|(?(open){_LABEL}\.?\s?|(?!))))?
     (?:\.(?=\d))?
-    {one}(?:{_one_of(_DIGIT_MARKS_V11)}{one})*+%?+
+    {one}(?:(?:{_one_of(_DIGIT_MARKS_V11)}|[ -](?=\d+{_one_of(_SLASHES)}\d)){one})*+{_one_of(_UNIT_SIGNS)}?+
     (?(open)\))
     """
     return re.compile(pattern, re.IGNORECASE | re.VERBOSE)
@@ -272,16 +279,24 @@ def written_numbers(text: str, version: int = VERSION, invisible: frozenset[str]
 
 def joins_digits(before: str, after: str) -> bool:
     """Whether the joint between ``before`` and ``after``, the characters a reader sees on each side of an edge, is a
-    digit mark between two digits: "1,500|,000", "Section 5|.2", "1| 500" with a narrow space (verifier v8), "2|/3" (v11)."""
+    digit mark between two digits: "1,500|,000", "Section 5|.2", "1| 500" with a narrow space (verifier v8), "2|/3" (v11);
+    or the space between a whole number and its vulgar fraction, "2| ½" (v11)."""
     b, a = before[-1:], after[:1]
-    return (b.isdigit() and a in _DIGIT_MARKS_V11 and after[1:2].isdigit()) or (b in _DIGIT_MARKS_V11 and before[-2:-1].isdigit() and a.isdigit())
+    if (b.isdigit() and a in _DIGIT_MARKS_V11 and after[1:2].isdigit()) or (b in _DIGIT_MARKS_V11 and before[-2:-1].isdigit() and a.isdigit()):
+        return True
+    return (b.isdigit() and a == " " and _fraction(after[1:2])) or (b == " " and before[-2:-1].isdigit() and _fraction(a))
+
+
+def _fraction(ch: str) -> bool:
+    """Whether ``ch`` is a vulgar fraction, "½", "⅞": a number of its own that a space after a whole number joins."""
+    return len(ch) == 1 and unicodedata.category(ch) == "No" and 0 < unicodedata.numeric(ch, 0) < 1
 
 
 def attaches(b: str, a: str) -> bool:
     """Whether a character at a joint is one written against a number (a sign, a currency or percent sign, a
-    parenthesis). Only there can a joint that is not between two digits lie inside a number; at a space or any other
-    punctuation it is an edge."""
-    return b in _ATTACHED or a in _ATTACHED
+    parenthesis, and from v11 every unit sign: "‰", "°", "+"). Only there can a joint that is not between two
+    digits lie inside a number; at a space or any other punctuation it is an edge."""
+    return b in _ATTACHED_V11 or a in _ATTACHED_V11
 
 
 _GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?")
@@ -412,8 +427,16 @@ def signed(text: str, tokens: list[Token], version: int = VERSION, invisible: fr
             head = text[first.start : first.end] if first.kind is Kind.SECTION else head
             tail = text[last.start : last.end] if last.kind is Kind.SECTION else tail
         if v11 and len(inside) > 1 and not _JOINED.isdisjoint(text[first.end : last.start]):
-            middle = "".join(_joined_value(text, t) for t in out[inside[0] + 1 : inside[-1]])
-            out[inside[0]] = Token(first.kind, before + head + middle + tail + after, low, high)
+            # One value, its joints included: a joint is often no token at all (no token starts against a digit), and
+            # leaving it out read "2/3" as "23" (found by the lead, 2026-10-30). A space between a whole number and its
+            # fraction is kept as one space, so "1 1/2%" is neither "11/2%" nor "1/2%".
+            joined, previous = head, first
+            for t in out[inside[0] + 1 : inside[-1] + 1]:
+                gap = "".join(c for c in text[previous.end : t.start] if c not in invisible)
+                joined += (" " if any(c.isspace() for c in gap) else "") + "".join(c for c in gap if not c.isspace())
+                joined += tail if t is last else _joined_value(text, t)
+                previous = t
+            out[inside[0]] = Token(first.kind, before + joined + after, low, high)
             for j in range(inside[0] + 1, inside[-1] + 1):
                 out[j] = Token(Kind.PUNCT, out[j].canonical, out[j].start, out[j].end)
         elif len(inside) == 1:

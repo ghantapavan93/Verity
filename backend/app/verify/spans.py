@@ -87,8 +87,10 @@ VERIFIER_VERSION = f"v{VERSION}"
 
 # A section number as the reader writes it: "12", "8.1.2". Anything else in front of a label is heading text.
 _SECTION_NUMBER = re.compile(r"\d+(?:\.\d+)*")
+# What may follow a heading the model copied in front of its quote, besides a space (v11).
+_LABEL_ENDS = ".:;)]-–—"
 
-_QUOTE_MAP = str.maketrans(
+_QUOTE_MAP_V10 = str.maketrans(
     {
         "‘": "'",
         "’": "'",
@@ -107,6 +109,31 @@ _QUOTE_MAP = str.maketrans(
         "﻿": "",
     }
 )
+# Verifier v11 reads every default-ignorable code point (Unicode's Default_Ignorable_Code_Point, written out so every
+# Python and every pack reads the same set) as absent, as a reader sees the text. v10 deleted four of them, so an Arabic
+# letter mark between two digits ("9", U+061C, "0" displays as 90) parted a number, and "upon 9" was found exact in it,
+# and a joiner or a variation selector after a digit hid the number's end (stress test, 2026-10-30). `_QUOTE_MAP_V10`
+# is v10's, kept for the evidence packs of runs verified under v10 and before.
+IGNORABLE_RANGES = (
+    (0x00AD, 0x00AD),
+    (0x034F, 0x034F),
+    (0x061C, 0x061C),
+    (0x115F, 0x1160),
+    (0x17B4, 0x17B5),
+    (0x180B, 0x180F),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x206F),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFF8),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
+)
+_QUOTE_MAP: dict[int, str] = {**_QUOTE_MAP_V10, **{code: "" for low, high in IGNORABLE_RANGES for code in range(low, high + 1)}}
 
 
 @dataclass(frozen=True)
@@ -200,8 +227,9 @@ def _splits(text: str, at: int) -> bool:
         return False
     # Inside a number: at what is written against it, always (v8); anywhere else (a space, the full stop of "Rs."), only
     # in a number written with a sign or parentheses, so a quote cannot drop "-USD " from "-USD 10K" (v9) while "500"
-    # still stands alone in "USD 500"; from v11 also a comparator, a plus sign or a leading decimal point.
-    return attached or text[starts[last]] in SIGN_OPENERS_V11
+    # still stands alone in "USD 500"; from v11 also a comparator, a plus sign or a leading decimal point, and anywhere
+    # after a number's first digit, so "1/2%" is not found inside "1 1/2%" (stress test, 2026-10-30).
+    return attached or text[starts[last]] in SIGN_OPENERS_V11 or any(ch.isdigit() for ch in text[starts[last] : at])
 
 
 def _in_run(ch: str) -> bool:
@@ -278,16 +306,21 @@ def _find_bounded(
     haystack: str, needle: str, index_map: list[int] | None, text: str, keep: Callable[[int, int], bool] | None = None
 ) -> tuple[int, int, int] | None:
     """The first occurrence of ``needle`` in ``haystack`` whose span, mapped back onto ``text``, is bounded (and kept by
-    ``keep``, when given), with the number of such occurrences."""
+    ``keep``, when given), with the number of such occurrences. A mapped occurrence that begins or ends inside what one
+    character of ``text`` became ("ﬀ" folds to "ff") is no occurrence: "set of" is not found at "set oﬀ" (v11)."""
     first: tuple[int, int] | None = None
     count = 0
+    n = len(needle)
     at = haystack.find(needle)
     while at >= 0:
         if index_map is None:
-            start, end = at, at + len(needle)
+            start, end = at, at + n
         else:
-            start, end = index_map[at], index_map[at + len(needle) - 1] + 1
-        if bounded(text, start, end) and (keep is None or keep(start, end)):
+            start, end = index_map[at], index_map[at + n - 1] + 1
+        inside_a_fold = index_map is not None and (
+            (at > 0 and index_map[at - 1] == index_map[at]) or (at + n < len(index_map) and index_map[at + n] == index_map[at + n - 1])
+        )
+        if not inside_a_fold and bounded(text, start, end) and (keep is None or keep(start, end)):
             count += 1
             if first is None:
                 first = (start, end)
@@ -329,14 +362,16 @@ def _read_caseless(text: str) -> str:
     return caseless(text.translate(_DELETED))
 
 
-def _ladder(quote: str, text: str) -> Located | None:
-    return None if _cannot_hold(quote, text) else _tiers(quote, text)
+def _ladder(quote: str, text: str, whole: str | None = None) -> Located | None:
+    return None if _cannot_hold(quote, text) else _tiers(quote, text, whole)
 
 
-def _tiers(quote: str, text: str) -> Located | None:
+def _tiers(quote: str, text: str, whole: str | None = None) -> Located | None:
+    """The ladder over ``text``, every edge read in ``whole``, the text ``text`` begins (by default ``text`` itself)."""
     if not any(ch.isalnum() for ch in quote):
         return None  # punctuation alone says nothing the text could hold (v11)
-    found = _find_bounded(text, quote, None, text)
+    whole = text if whole is None else whole
+    found = _find_bounded(text, quote, None, whole)
     if found is not None:
         return Located(found[0], found[1], "exact", found[2])
 
@@ -344,18 +379,18 @@ def _tiers(quote: str, text: str) -> Located | None:
     norm_quote = _normalize_quote(quote)
     if not norm_quote:
         return None
-    found = _find_bounded(norm_text, norm_quote, norm_map, text)
+    found = _find_bounded(norm_text, norm_quote, norm_map, whole)
     if found is not None:
         return Located(found[0], found[1], "normalized", found[2])
 
     folded_text, folded_map = fold_with_map(norm_text, norm_map)
     # Case forgives "SECTION 2(a)" for "Section 2(a)", never a clause's letter: "(A)" and "(a)" name two clauses (v11).
     letters = _CLAUSE_LETTER.findall(quote)
-    found = _find_bounded(folded_text, norm_quote.casefold(), folded_map, text, lambda start, end: _CLAUSE_LETTER.findall(text[start:end]) == letters)
+    found = _find_bounded(folded_text, norm_quote.casefold(), folded_map, whole, lambda start, end: _CLAUSE_LETTER.findall(whole[start:end]) == letters)
     if found is not None:
         return Located(found[0], found[1], "casefold", found[2])
 
-    typed = locate_tokens(quote, text, _INVISIBLE, keep=lambda start, end: bounded(text, start, end))
+    typed = locate_tokens(quote, text, _INVISIBLE, keep=lambda start, end: bounded(whole, start, end))
     if typed is not None:
         return Located(typed.start, typed.end, "typed", typed.count)
     return None
@@ -388,6 +423,11 @@ def strip_label(quote: str, label: str) -> str | None:
     # begins a number written with a sign, a currency sign or a parenthesis, that character (v8): "Fees: -5%" leaves
     # "-5%", never "5%", which would cut the number's sign off and be refused.
     begin, heading_end = body_map[len(heading_alnum)], body_map[len(heading_alnum) - 1]
+    # A heading copied whole ends where a separator follows it (v11): "8 Supplier" is not the start of "Supplier's
+    # liability", whose rest, "'s liability", was found in "the Customer's liability"; nor "Schedule 1" of "Schedule 1,500".
+    separator = body[heading_end + 1 : heading_end + 2]
+    if separator and not (separator.isspace() or separator in _LABEL_ENDS):
+        return None
     begin = next((low for low, high in written_numbers(body) if heading_end < low < begin < high), begin)
     remainder = body[begin:].lstrip()
     return remainder or None
@@ -410,20 +450,22 @@ def _may_carry_label(quote: str, label: str) -> bool:
     return len(heading_alnum) >= 2 and heading_alnum in _alnum(quote)
 
 
-def locate(quote: str, text: str, label: str | None = None) -> Located | None:
-    """Find ``quote`` in ``text``; None when it is not there under the rules above."""
+def locate(quote: str, text: str, label: str | None = None, window: int | None = None) -> Located | None:
+    """Find ``quote`` in ``text``; None when it is not there under the rules above. With ``window``, only the first
+    ``window`` characters are searched (what the model was shown), and every edge is still read in the whole text: the
+    end of a window is not the end of the text, so "$1,500" is not found where the window cuts "$1,500,000" (v11)."""
     if not quote or not quote.strip():
         return None
     with verification_pass():
-        return _locate(quote, text, label)
+        return _locate(quote, text if window is None else text[:window], label, text)
 
 
-def _locate(quote: str, text: str, label: str | None) -> Located | None:
-    found = _ladder(quote, text)
+def _locate(quote: str, text: str, label: str | None, whole: str) -> Located | None:
+    found = _ladder(quote, text, whole)
     if found is None and label and _may_carry_label(quote, label):
         stripped = strip_label(quote, label)
         if stripped is not None:
-            found = _ladder(stripped, text)
+            found = _ladder(stripped, text, whole)
             if found is not None:
                 found = Located(found.start, found.end, f"unprefixed:{found.method}", found.count)
     return found

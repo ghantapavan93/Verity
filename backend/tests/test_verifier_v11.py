@@ -46,6 +46,8 @@ def test_this_is_verifier_v11() -> None:
         ("fees of $1,000,000", "fees of >$1,000,000"),
         ("uptime of 99.9%", "uptime of ≥99.9%"),
         ("approval of 2-3 of the Lenders", "approval of 2/3 of the Lenders"),
+        ("approval of 23 of the Lenders", "approval of 2/3 of the Lenders"),  # the joint is part of the value
+        ("a rate of 11/2% per month", "a rate of 1 1/2% per month"),
         ("a ratio of 3 1", "a ratio of 3:1"),
     ],
 )
@@ -310,3 +312,124 @@ def test_a_pack_checks_an_unprefixed_span_as_the_workbench_located_it(tmp_path: 
     assert found is not None and found.method == "unprefixed:exact", found
     kept = _pack(tmp_path / "kept", text, found.start, found.end, "Fees -5% interest", found.method, "v11")
     assert _verdict(kept), "control: a span the workbench located unprefixed passes its pack"
+
+
+# ------------------------------------------------------------------ the stress test of v11 (2026-10-30)
+# Seventeen adversarial finders, each finding reproduced by an independent skeptic. These are the verifier's.
+
+
+@pytest.mark.parametrize(
+    ("quote", "text"),
+    [
+        # What a reader does not see is not read: every default-ignorable code point, not four of them.
+        ("upon 9", "Provider may terminate upon 9\u061c0 days' notice."),
+        ("$1", "a fee of $1\u061c,500 per year"),
+        ("$1\u200d", "a fee of $1\u200d,500 per year"),
+        ("1.5\u200d", "a rate of 1.5\u200d% per month"),
+        # A typeset joint is a joint: fraction slashes, ratio colons, middle dots, fullwidth marks.
+        ("2% per month", "Overdue amounts bear interest at 1\u20442% per month."),
+        ("2% per month", "Overdue amounts bear interest at 1\u22152% per month."),
+        ("2% per month", "Overdue amounts bear interest at 1\uff0f2% per month."),
+        ("1 debt to equity", "a ratio of 3\u22361 debt to equity"),
+        ("1 debt to equity", "a ratio of 3\uff1a1 debt to equity"),
+        ("5% per month", "interest of 1\u00b75% per month"),
+        ("5% per month", "interest of 1\uff0e5% per month"),
+        ("500 per month", "a fee of $1\uff0c500 per month"),
+        # A whole number and its fraction are one number: the US late-fee idiom.
+        ("1/2% per month", "interest at the rate of 1 1/2% per month."),
+        ("1/2%) per month", "one and one-half percent (1 1/2%) per month."),
+        ("-1/2%) per month", "one and one-half percent (1-1/2%) per month."),
+        ("\u00bd times the fees paid", "liability is capped at 2 \u00bd times the fees paid."),
+        # A unit sign written against a number belongs to it.
+        ("interest of 5 per month", "Overdue sums bear interest of 5\u2030 per month."),
+        ("interest of 5 per month", "Overdue sums bear interest of 5\uff05 per month."),
+        ("interest of 5 per month", "Overdue sums bear interest of 5\u066a per month."),
+        ("rated at least A-1", "notes rated at least A-1+ by S&P"),
+        ("at least 5 years", "at least 5+ years of experience"),
+        # A casefold match never starts or ends inside one character's fold ("\ufb00" folds to "ff").
+        ("Customer may not set of", "Customer may not set o\ufb00 any amount."),
+        ("IVE DAY CURE PERIOD APPLIES", "A \ufb01ve day cure period applies."),
+        ("paid in full DAS", "the sum is paid in full da\u00df it is due"),
+    ],
+)
+def test_the_stress_test_s_cases_are_not_found(quote: str, text: str) -> None:
+    assert locate(quote, text) is None
+
+
+@pytest.mark.parametrize(
+    ("quote", "text"),
+    [
+        ("upon 90 days", "Provider may terminate upon 9\u061c0 days' notice."),  # the mark is invisible, so forgiven
+        ("1 1/2% per month", "interest at the rate of 1 1/2% per month."),
+        ("2 \u00bd times the fees paid", "liability is capped at 2 \u00bd times the fees paid."),
+        ("interest of 5\u2030 per month", "Overdue sums bear interest of 5\u2030 per month."),
+        ("USD 500 per month", "a fee of USD 500 per month"),
+        ("500 per month", "a fee of USD 500 per month"),  # a currency's code may still be left out, as since v9
+        ("SET OFF ANY AMOUNT", "Customer may not set o\ufb00 any amount."),
+        ("five day cure period", "A \ufb01ve day cure period applies."),
+        ("PAID IN FULL DASS", "the sum is paid in full da\u00df it is due"),
+    ],
+)
+def test_control_the_stress_test_s_cases_as_written_are_found(quote: str, text: str) -> None:
+    assert locate(quote, text) is not None
+
+
+def test_a_window_cut_is_never_a_boundary() -> None:
+    """The model is shown the first 6,000 characters of a section, and the search was made in that cut-out, whose end
+    was read as the text's end: "a licence fee of $1,500" verified exact where the section says "$1,500,000"."""
+    text = "x" * 5977 + " a licence fee of $1,500,000 per year."
+    cut = text.index(",000 per")
+    assert locate("a licence fee of $1,500", text, window=cut) is None
+    assert locate("a licence fee of $1,500", text[:cut]) is not None, "control: the old reading of the cut-out"
+    assert locate("a licence fee of", text, window=cut) is not None  # control: a quote that ends before the cut
+
+
+@pytest.mark.parametrize(
+    ("quote", "text", "label"),
+    [
+        (
+            "Supplier's liability under this Agreement is unlimited.",
+            "Except as stated, the Customer's liability under this Agreement is unlimited.",
+            "8 Supplier",
+        ),  # noqa: E501
+        ("Schedule 1,500 units per month", "The Customer may order up to 500 units per month.", "Schedule 1"),
+        ("Annex 10% discount", "Customers get a 0% discount.", "Annex 1"),
+    ],
+)
+def test_a_label_is_stripped_only_whole(quote: str, text: str, label: str) -> None:
+    """strip_label ended the heading inside a word or a number of the quote, and the rest verified at another party's
+    text: "Supplier's liability" under the label "8 Supplier" became "'s liability", found in "the Customer's liability"."""
+    assert locate(quote, text, label) is None
+
+
+def test_control_a_label_copied_whole_is_still_stripped() -> None:
+    found = locate("4 Fees: The Customer pays the Fees monthly.", "The Customer pays the Fees monthly.", "4 Fees")
+    assert found is not None and found.method == "unprefixed:exact", found
+
+
+def test_a_pack_reads_its_files_as_bytes(tmp_path: Path) -> None:
+    """verify.py read the model input in text mode, so a carriage return in a question or the guidance made a genuine
+    pack fail its input hash. It now decodes every file it reads from bytes, and its hash is of exactly those bytes."""
+    checker = _checker(tmp_path)
+    target = tmp_path / "user.txt"
+    target.write_bytes(b"line one\r\nline two\rthree")
+    assert checker.text_of(target) == "line one\r\nline two\rthree"
+
+
+@pytest.mark.parametrize(("recorded", "passes"), [("99.0.0", False), (None, True)])
+def test_a_pack_refuses_to_judge_what_its_unicode_cannot_read(tmp_path: Path, recorded: str | None, passes: bool) -> None:
+    """verify.py's verdict hung on the checker's Unicode database: a character assigned after it read as unassigned and
+    a genuine span failed, unexplained (stress test, 2026-10-30). The pack now records its Unicode version, and a span
+    holding a character the checker does not know is failed by name when the versions differ."""
+    import json
+    import unicodedata
+
+    unknown = chr(0x0378)  # unassigned in every Unicode so far: what a newer character looks like to an older database
+    text = f"The Lessor is {unknown} Holdings Limited."
+    quote = f"{unknown} Holdings Limited"
+    start = text.index(quote)
+    folder = _pack(tmp_path / "pack", text, start, start + len(quote), quote, "exact", "v11")
+    run = json.loads((folder / "run.json").read_text(encoding="utf-8"))
+    run["verifier"]["unicode"] = recorded or unicodedata.unidata_version
+    (folder / "run.json").write_text(json.dumps(run), encoding="utf-8")
+    assert _verdict(folder) is passes

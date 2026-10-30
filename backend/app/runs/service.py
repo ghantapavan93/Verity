@@ -154,11 +154,12 @@ def verify_evidence(
     a tail the model never saw is not evidence the model had (verifier v5; over the record before it, no verified
     span lay beyond the window). The one implementation; replay verification (application.reverify_run) uses it too."""
     section = by_label.get(cited_label)
-    located = locate(quote, section.text[:window], _label(section)) if section is not None else None
+    # The model was shown the first `window` characters; their end is not the text's end (verifier v11).
+    located = locate(quote, section.text, _label(section), window) if section is not None else None
     if located is not None:
         return section, located, located.method
     for candidate in chosen:
-        found = locate(quote, candidate.text[:window], _label(candidate))
+        found = locate(quote, candidate.text, _label(candidate), window)
         if found is not None:
             return candidate, found, f"relocated:{found.method}"
     return section, None, "none"

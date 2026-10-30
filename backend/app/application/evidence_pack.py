@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import unicodedata
 import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -35,7 +36,8 @@ from .create_memo import review_head
 from .ingest_document import coverage_of, document_suffix, original_path
 from .reconstruct_input import reconstruct_input
 
-QUOTE_MAP = {chr(k): v for k, v in verifier._QUOTE_MAP.items()}  # the one normalisation table, embedded in verify.py
+# The normalisation table, embedded in verify.py: v10's, from which the pack builds v11's with IGNORABLE_RANGES.
+QUOTE_MAP = {chr(k): v for k, v in verifier._QUOTE_MAP_V10.items()}
 
 # The standalone checker shipped in every pack. It lives in a text file so that the rule
 # 'only app/hashing.py imports hashlib' stays enforceable by a grep over the code.
@@ -67,6 +69,10 @@ def render_verify_py() -> str:
         "__JOINERS__": json.dumps(sorted(tokens._JOINERS), ensure_ascii=True),
         "__SENTENCE_END__": json.dumps(tokens._SENTENCE_END.pattern, ensure_ascii=True),
         "__CLAUSE_LETTER__": json.dumps(tokens._CLAUSE_LETTER.pattern, ensure_ascii=True),
+        "__IGNORABLE_RANGES__": json.dumps(verifier.IGNORABLE_RANGES),
+        "__JOINED__": json.dumps(sorted(tokens._JOINED), ensure_ascii=True),
+        "__ATTACHED_V11__": json.dumps(sorted(tokens._ATTACHED_V11), ensure_ascii=True),
+        "__LABEL_ENDS__": json.dumps(verifier._LABEL_ENDS, ensure_ascii=True),
     }
     text = VERIFY_PY
     for name, value in embedded.items():
@@ -269,6 +275,9 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
             "label_stripping": True,
             "boundary": "no edge splits a run of letters and digits; a typed match is whole tokens, words compared whole",
             "window_chars": window_of(json.loads(run.options_json or "{}")),
+            # A character Unicode assigned after the checker's own database reads as unassigned there (stress test,
+            # 2026-10-30): verify.py names the version it was built with and refuses to judge what it cannot read.
+            "unicode": unicodedata.unidata_version,
         },
         "workbench_link": f"{settings.app_url}/?document={document.id}&run={run.id}",
         # The contract's replacement and precedence statements the run recorded (runs.relations, policy-v11).

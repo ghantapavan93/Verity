@@ -64,8 +64,26 @@ import sys
 import unicodedata
 
 HERE = pathlib.Path(__file__).resolve().parent
-QUOTE_MAP = json.loads(__QUOTE_MAP__)
+QUOTE_MAP = json.loads(__QUOTE_MAP__)  # verifier v10's and before
 DELETED = frozenset(ch for ch, mapped in QUOTE_MAP.items() if mapped == "")
+# v11 reads every default-ignorable code point as absent (verify/spans.IGNORABLE_RANGES).
+IGNORABLE = frozenset(chr(code) for low, high in json.loads(__IGNORABLE_RANGES__) for code in range(low, high + 1))
+QUOTE_MAP_V11 = {**QUOTE_MAP, **{ch: "" for ch in IGNORABLE}}
+DELETED_V11 = DELETED | IGNORABLE
+
+
+def quote_map(version):
+    return QUOTE_MAP_V11 if version >= 11 else QUOTE_MAP
+
+
+def deleted(version):
+    return DELETED_V11 if version >= 11 else DELETED
+
+
+def text_of(path):
+    """A pack file's text, decoded from its bytes: read in text mode, a carriage return became a line feed and a genuine
+    model input failed its hash (stress test, 2026-10-30)."""
+    return path.read_bytes().decode("utf-8")
 # The workbench's typed tokens since verifier v7, and v8's number as it is written, its signs and digit marks: copied
 # from the workbench (verify/tokens.py).
 TOKEN_V7 = re.compile(json.loads(__TOKEN__), re.IGNORECASE | re.VERBOSE)
@@ -77,7 +95,9 @@ SIGN_OPENERS = frozenset(json.loads(__SIGN_OPENERS__))
 # v11's: the digit marks with "/" and ":", what else opens a number every edge inside splits, the joiners that belong to
 # a word, and where a sentence ends.
 DIGIT_MARKS_V11 = frozenset(json.loads(__DIGIT_MARKS_V11__))
-JOINED = DIGIT_MARKS_V11 - DIGIT_MARKS
+JOINED = frozenset(json.loads(__JOINED__))  # the marks that make a number one value
+ATTACHED_V11 = frozenset(json.loads(__ATTACHED_V11__))  # v9's and every unit sign
+LABEL_ENDS = json.loads(__LABEL_ENDS__)  # what may follow a heading copied in front of a quote
 SIGN_OPENERS_V11 = frozenset(json.loads(__SIGN_OPENERS_V11__))
 JOINERS = frozenset(json.loads(__JOINERS__))
 SENTENCE_END = re.compile(json.loads(__SENTENCE_END__))
@@ -99,11 +119,12 @@ def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def normalize(text):
+def normalize(text, version=0):
+    table = quote_map(version)
     out = []
     pending = False
     for ch in text:
-        mapped = QUOTE_MAP.get(ch, ch)
+        mapped = table.get(ch, ch)
         if mapped == "":
             continue
         if mapped.isspace():
@@ -182,6 +203,7 @@ def typed_tokens(text, version=0):
         # v9 (verify/tokens.signed): an amount word is a number too, what stands before a number is compared without
         # spaces or case, and a currency written as letters before it belongs to it.
         v9, v10, v11 = version >= 9, version >= 10, version >= 11
+        hidden = deleted(version)
 
         def amount(t):
             if not v9 or t[0] != "word":
@@ -222,16 +244,22 @@ def typed_tokens(text, version=0):
                 head = text[first[2]:first[3]] if first[0] == "section" else head
                 tail = text[last[2]:last[3]] if last[0] == "section" else tail
             if v9:
-                before = "".join(c for c in before if c not in DELETED and not c.isspace()).upper()
-                after = "".join(c for c in after if c not in DELETED)
+                before = "".join(c for c in before if c not in hidden and not c.isspace()).upper()
+                after = "".join(c for c in after if c not in hidden)
                 j = inside[0] - 1
                 while j >= 0 and tokens[j][2] >= low:
                     if tokens[j][0] == "word":
                         tokens[j][0] = "punct"
                     j -= 1
             if v11 and len(inside) > 1 and any(c in JOINED for c in text[first[3]:last[2]]):
-                middle = "".join(value(t) if t[0] == "word" else text[t[2]:t[3]] if t[0] == "section" else t[1] for t in tokens[inside[0] + 1:inside[-1]])
-                first[1:] = [before + head + middle + tail + after, low, high]
+                # One value, its joints included, a space before a fraction kept as one (verify/tokens.signed).
+                joined, previous = head, first
+                for t in tokens[inside[0] + 1:inside[-1] + 1]:
+                    gap = "".join(c for c in text[previous[3]:t[2]] if c not in hidden)
+                    joined += (" " if any(c.isspace() for c in gap) else "") + "".join(c for c in gap if not c.isspace())
+                    joined += tail if t is last else (value(t) if t[0] == "word" else text[t[2]:t[3]] if t[0] == "section" else t[1])
+                    previous = t
+                first[1:] = [before + joined + after, low, high]
                 for t in tokens[inside[0] + 1:inside[-1] + 1]:
                     t[0] = "punct"
             elif len(inside) == 1:
@@ -304,15 +332,16 @@ def typed(text, version=0):
     return items
 
 
-def seen(text, at, step):
+def seen(text, at, step, version=8):
     """The two characters a reader sees before (step -1) or after (step 1) the edge before text[at] (verify/spans._seen)."""
+    hidden = deleted(version)
     near = text[max(0, at - 2):at] if step < 0 else text[at:at + 2]
-    if DELETED.isdisjoint(near):
+    if hidden.isdisjoint(near):
         return near
     found = []
     i = at - 1 if step < 0 else at
     while 0 <= i < len(text) and len(found) < 2:
-        if text[i] not in DELETED:
+        if text[i] not in hidden:
             found.append(text[i])
         i += step
     return "".join(reversed(found)) if step < 0 else "".join(found)
@@ -320,7 +349,8 @@ def seen(text, at, step):
 
 def written_numbers(text, version=8):
     """Where each number of text lies as it is written, as the reader sees it (verify/spans._numbers)."""
-    shown = [i for i, ch in enumerate(text) if ch not in DELETED]
+    hidden = deleted(version)
+    shown = [i for i, ch in enumerate(text) if ch not in hidden]
     visible = "".join(text[i] for i in shown)
     pattern = WRITTEN_V11 if version >= 11 else WRITTEN_V10 if version >= 10 else WRITTEN_V9 if version >= 9 else WRITTEN
     return [(shown[m.start()], shown[m.end() - 1] + 1) for m in pattern.finditer(visible)]
@@ -328,7 +358,7 @@ def written_numbers(text, version=8):
 
 def sentence_ends(text):
     """Where a sentence ends, read as the reader sees the text (verify/tokens.sentence_ends, v11)."""
-    shown = [i for i, ch in enumerate(text) if ch not in DELETED]
+    shown = [i for i, ch in enumerate(text) if ch not in DELETED_V11]
     visible = "".join(text[i] for i in shown)
     return [shown[m.start()] for m in SENTENCE_END.finditer(visible) if ends_sentence(visible, m)]
 
@@ -351,14 +381,16 @@ def in_run(ch, version):
 
 def splits(text, at, numbers, version=8):
     """Whether the edge before text[at] falls inside a run of letters and digits or a number as written (verify/spans._splits)."""
-    before, after = seen(text, at, -1), seen(text, at, 1)
+    before, after = seen(text, at, -1, version), seen(text, at, 1, version)
     if not before or not after:
         return False
     b, a = before[-1:], after[:1]
     marks = DIGIT_MARKS_V11 if version >= 11 else DIGIT_MARKS
     if (in_run(b, version) and in_run(a, version)) or (b.isdigit() and a in marks and after[1:2].isdigit()) or (b in marks and before[-2:-1].isdigit() and a.isdigit()):
         return True
-    attached = ATTACHED_V9 if version >= 9 else ATTACHED
+    if version >= 11 and ((b.isdigit() and a == " " and fraction(after[1:2])) or (b == " " and before[-2:-1].isdigit() and fraction(a))):
+        return True
+    attached = ATTACHED_V11 if version >= 11 else ATTACHED_V9 if version >= 9 else ATTACHED
     if b in attached or a in attached:
         return any(low < at < high for low, high in numbers)
     if version < 9:
@@ -366,7 +398,13 @@ def splits(text, at, numbers, version=8):
     # v9: anywhere inside a number written with a sign or parentheses ("-USD 10K", "-Rs. 5M"); v11: or opened by a
     # comparator, a plus sign or a decimal point (">$1,000,000", ".5%").
     openers = SIGN_OPENERS_V11 if version >= 11 else SIGN_OPENERS
-    return any(low < at < high and text[low] in openers for low, high in numbers)
+    # v11: nor after a number's first digit ("1/2%" is not inside "1 1/2%").
+    return any(low < at < high and (text[low] in openers or (version >= 11 and any(c.isdigit() for c in text[low:at]))) for low, high in numbers)
+
+
+def fraction(ch):
+    """A vulgar fraction, which a space after a whole number joins to it (verify/tokens._fraction, v11)."""
+    return len(ch) == 1 and unicodedata.category(ch) == "No" and 0 < unicodedata.numeric(ch, 0) < 1
 
 
 def edges_hold(text, start, end, version=8):
@@ -395,7 +433,7 @@ def normalize_with_map(text):
     """The normalised text and each of its characters' index in the original (verify/spans.normalize_with_map)."""
     out, index_map, pending = [], [], False
     for i, ch in enumerate(text):
-        mapped = QUOTE_MAP.get(ch, ch)
+        mapped = QUOTE_MAP_V11.get(ch, ch)
         if mapped == "":
             continue
         if mapped.isspace():
@@ -444,6 +482,9 @@ def strip_label(quote, label):
     if not body_alnum.startswith(heading_alnum) or len(body_alnum) == len(heading_alnum):
         return None
     begin, heading_end = body_map[len(heading_alnum)], body_map[len(heading_alnum) - 1]
+    separator = body[heading_end + 1:heading_end + 2]
+    if separator and not (separator.isspace() or separator in LABEL_ENDS):
+        return None  # a heading copied whole ends where a separator follows it
     begin = next((low for low, high in (m.span() for m in WRITTEN_V11.finditer(body)) if heading_end < low < begin < high), begin)
     remainder = body[begin:].lstrip()
     return remainder or None
@@ -462,10 +503,10 @@ def same(found, quote, method, version=0, where=None, label=""):
     if base == "exact":
         return found == quote
     if base == "normalized":
-        return normalize(found) == normalize(quote).strip()
+        return normalize(found, version) == normalize(quote, version).strip()
     if base == "casefold":
         # v11: case is forgiven, never a clause's letter ("Section 2(A)" is not found at "Section 2(a)").
-        return normalize(found).casefold() == normalize(quote).strip().casefold() and (version < 11 or CLAUSE_LETTER.findall(found) == CLAUSE_LETTER.findall(quote))
+        return normalize(found, version).casefold() == normalize(quote, version).strip().casefold() and (version < 11 or CLAUSE_LETTER.findall(found) == CLAUSE_LETTER.findall(quote))
     if base == "alnum":
         return alnum(found) == alnum(quote)
     if base == "typed":
@@ -478,9 +519,9 @@ def same(found, quote, method, version=0, where=None, label=""):
 def main():
     # A section's number or heading the console cannot encode (cp1252 when piped on Windows) is escaped, never fatal.
     sys.stdout.reconfigure(errors="backslashreplace")
-    run = json.loads((HERE / "run.json").read_text(encoding="utf-8"))
-    sections = {s["id"]: s for s in json.loads((HERE / "sections.json").read_text(encoding="utf-8"))}
-    findings = json.loads((HERE / "findings.json").read_text(encoding="utf-8"))
+    run = json.loads(text_of(HERE / "run.json"))
+    sections = {s["id"]: s for s in json.loads(text_of(HERE / "sections.json"))}
+    findings = json.loads(text_of(HERE / "findings.json"))
     failures = 0
 
     def report(ok, label):
@@ -504,6 +545,9 @@ def main():
         report(sha256(HERE / run["guidance_file"]) == run.get("guidance_sha256"), f"guidance: sha256 {str(run.get('guidance_sha256'))[:16]}...")
 
     version = verifier_number(run)
+    recorded_unicode = (run.get("verifier") or {}).get("unicode")
+    if recorded_unicode and recorded_unicode != unicodedata.unidata_version:
+        print(f"NOTE the pack was made with Unicode {recorded_unicode}; this Python has {unicodedata.unidata_version}. A span holding a character this Python does not know is failed, not judged")
     v8 = version >= 8
     # The run searched each section within its window (what the prompt carried); its edges are read the same way.
     window = (run.get("verifier") or {}).get("window_chars") or run.get("prompt_window_chars")
@@ -527,16 +571,21 @@ def main():
             if v8 and WRITTEN is None:
                 report(False, f"{label}: {where}: a verifier v8 span needs Python 3.11 or later to be checked")
                 continue
+            unread = [c for c in found + span["quote"] if unicodedata.category(c) == "Cn"]
+            if unread and recorded_unicode != unicodedata.unidata_version:
+                report(False, f"{label}: {where}: holds characters this Python's Unicode {unicodedata.unidata_version} does not know; check it with a Python whose Unicode is {recorded_unicode} or later")
+                continue
             searched = section["text"][:window] if window else section["text"]
             in_place = (searched, span["start"], span["end"])
             label_text = f"{section['number']} {section['heading']}".strip()  # as the workbench named it (runs/service._label)
-            ok = same(found, span["quote"], span["method"], version, in_place, label_text) and (not v8 or edges_hold(searched, span["start"], span["end"], version))
+            edges_in = section["text"] if version >= 11 else searched  # v11: a window's end is not the text's end
+            ok = same(found, span["quote"], span["method"], version, in_place, label_text) and (not v8 or edges_hold(edges_in, span["start"], span["end"], version))
             report(ok, f"{label}: {where}")
     slices = {s["section_id"]: s for s in run.get("context_slices", [])}
     model_input = run.get("model_input") or {}
     if model_input.get("user_file") and model_input.get("system_file"):
-        system = (HERE / model_input["system_file"]).read_text(encoding="utf-8")
-        user = (HERE / model_input["user_file"]).read_text(encoding="utf-8")
+        system = text_of(HERE / model_input["system_file"])
+        user = text_of(HERE / model_input["user_file"])
         prompt_hex = hashlib.sha256(system.encode("utf-8")).hexdigest()
         recomputed = hashlib.sha256((prompt_hex + user).encode("utf-8")).hexdigest()
         report(recomputed == model_input.get("input_sha256_recorded"), f"model input: rebuilt messages hash to what the run recorded {str(model_input.get('input_sha256_recorded'))[:16]}...")
@@ -566,7 +615,7 @@ def main():
     # The contract's own replacement and precedence statements the run recorded: each end is where the record says it is.
     # A PASS says the words are there; it says nothing about their legal effect.
     if run.get("relations_file"):
-        relations = json.loads((HERE / run["relations_file"]).read_text(encoding="utf-8"))
+        relations = json.loads(text_of(HERE / run["relations_file"]))
         for index, relation in enumerate(relations):
             for end in ("statement", "replaced", "replacement"):
                 passage = relation.get(end)
