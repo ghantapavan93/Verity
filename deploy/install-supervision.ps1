@@ -72,8 +72,9 @@ New-Item -ItemType Directory -Force $logs | Out-Null
 $running = @($tasks.Values | Where-Object { (Get-ScheduledTask -TaskName $_ -ErrorAction SilentlyContinue).State -eq "Running" })
 if ($running.Count -gt 0) {
   & (Join-Path $root "deploy\down.ps1")
-  $until = (Get-Date).AddSeconds(60)
-  while ((Get-Date) -lt $until -and @($running | Where-Object { (Get-ScheduledTask -TaskName $_).State -eq "Running" }).Count -gt 0) { Start-Sleep -Seconds 2 }
+  # Waited on a Stopwatch, not Get-Date, which a DST change or a clock step moves (deploy/supervise.ps1, Watch-Server).
+  $waited = [Diagnostics.Stopwatch]::StartNew()
+  while ($waited.Elapsed.TotalSeconds -lt 60 -and @($running | Where-Object { (Get-ScheduledTask -TaskName $_).State -eq "Running" }).Count -gt 0) { Start-Sleep -Seconds 2 }
   $still = @($running | Where-Object { (Get-ScheduledTask -TaskName $_).State -eq "Running" })
   if ($still.Count -gt 0) { throw "still running after the stop: $($still -join ', '); nothing was restarted" }
 }
@@ -95,9 +96,9 @@ foreach ($name in $tasks.Keys) {
   Write-Host "task '$($tasks[$name])' registered at logon and started"
 }
 
-$deadline = (Get-Date).AddSeconds(90)
+$waited = [Diagnostics.Stopwatch]::StartNew()
 $api = $false; $web = $false
-while ((Get-Date) -lt $deadline -and -not ($api -and $web)) {
+while ($waited.Elapsed.TotalSeconds -lt 90 -and -not ($api -and $web)) {
   Start-Sleep -Seconds 3
   try { $api = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 http://127.0.0.1:8000/api/health).StatusCode -eq 200 } catch { $api = $false }
   try { $web = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 http://127.0.0.1:3900/).StatusCode -eq 200 } catch { $web = $false }

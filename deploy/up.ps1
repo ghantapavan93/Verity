@@ -74,9 +74,10 @@ $web = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "start", "--", "-p
 Write-Host "Interface starting (pid $($web.Id)) built for NEXT_PUBLIC_API_URL=$apiOrigin"
 
 # --- wait for both to answer
-$deadline = (Get-Date).AddSeconds(90)
+# Waited on a Stopwatch, not Get-Date, which a DST change or a clock step moves (deploy/supervise.ps1, Watch-Server).
+$waited = [Diagnostics.Stopwatch]::StartNew()
 $apiOk = $false; $webOk = $false
-while ((Get-Date) -lt $deadline -and -not ($apiOk -and $webOk)) {
+while ($waited.Elapsed.TotalSeconds -lt 90 -and -not ($apiOk -and $webOk)) {
   Start-Sleep -Seconds 2
   try { $apiOk = (Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8000/api/health" -TimeoutSec 5).StatusCode -eq 200 } catch { $apiOk = $false }
   try { $webOk = (Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:3900/" -TimeoutSec 5).StatusCode -eq 200 } catch { $webOk = $false }
