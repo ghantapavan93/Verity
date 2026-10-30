@@ -5,6 +5,9 @@ with its hashes, every finding with its located spans, and a dependency-free `ve
 re-hashes the document and the sections and re-locates every quote at its stored offsets under
 the same normalisation the workbench used. Anyone with Python can check the evidence on their
 own machine without this service. Nothing in the pack is computed by a model.
+
+run.json carries the run's stage rows as recorded, and verify.py recomputes each from the other files; every field
+the pack shows is either checked that way or printed UNCHECKED (stress test, 2026-10-30, K42).
 """
 
 from __future__ import annotations
@@ -20,17 +23,19 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ..analysis.service import window_of
+from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, window_of
 from ..config import settings
 from ..document_names import run_document_name
 from ..errors import NotFound
-from ..hashing import sha256_bytes
+from ..hashing import sha256_bytes, sha256_text
 from ..ingest import base_name
 from ..memo.visible import shown
-from ..models import Run, iso, utcnow
+from ..models import NOT_FOUND_CONCLUSION, Run, iso, utcnow
+from ..runs import prose
 from ..runs.account import account_of
 from ..runs.relations import load
 from ..runs.status import basis
+from ..runs.transitions import ALLOWED
 from ..verify import spans as verifier
 from ..verify import tokens
 from .clause_location import ClauseLocator
@@ -51,8 +56,22 @@ def render_verify_py() -> str:
     reading of a written number of verifier v8 to v11 (their patterns, v9's amount word, v10's labelled word, signs and
     digit marks), and v11's joiners and sentence ends, copied in, so the two cannot read a text differently: a pack
     checks each run as its verifier read it.
+    Since the stress test of 2026-10-30 it also carries what binds the pack's other files to the run's record: the
+    newest verifier it knows, the run's transition table, the window of a run recorded before the window was an
+    option, how the workbench writes a section handle as a label (runs.prose) and its not-found sentence, and the hash
+    of the README it ships with.
     Each is a JSON string literal inside a JSON string literal: valid Python, decoded by json.loads in the checker."""
     embedded = {
+        "__KNOWN_VERIFIER__": json.dumps(tokens.VERSION),
+        "__TRANSITIONS__": json.dumps({stage: sorted(after) for stage, after in ALLOWED.items()}),
+        "__LEGACY_WINDOW__": json.dumps(MAX_SECTION_CHARS_IN_PROMPT),
+        "__HANDLE__": json.dumps(prose.HANDLE.pattern, ensure_ascii=True),
+        "__EMPTY_BRACKETS__": json.dumps(prose._EMPTY_BRACKETS.pattern, ensure_ascii=True),
+        "__SPACE_BEFORE_STOP__": json.dumps(prose._SPACE_BEFORE_STOP.pattern, ensure_ascii=True),
+        "__SPACES__": json.dumps(prose._SPACES.pattern, ensure_ascii=True),
+        "__UNRESOLVED__": json.dumps(prose.UNRESOLVED, ensure_ascii=True),
+        "__NOT_FOUND__": json.dumps(NOT_FOUND_CONCLUSION, ensure_ascii=True),
+        "__README_SHA256__": json.dumps(sha256_text(README_TXT)),
         "__QUOTE_MAP__": json.dumps(QUOTE_MAP, ensure_ascii=True),
         "__TOKEN__": json.dumps(tokens._TOKEN.pattern, ensure_ascii=True),
         "__WRITTEN__": json.dumps(tokens._WRITTEN_V8.pattern, ensure_ascii=True),
@@ -85,6 +104,7 @@ def render_verify_py() -> str:
 README_TXT = """Evidence pack for one Verity run.
 
   run.json        the run: question, stage, hashes of the document, sections, prompt and options, model
+                  and its stage rows (`stages`): the hash of what each stage read and produced, as the run wrote them
   sections.json   the canonical sections the run read, exactly as stored (offsets index into these texts)
   findings.json   every finding the model proposed with its status and every quoted span, located or withheld;
                   `conclusion` is the model's own sentence as recorded, its section handles written as the sections'
@@ -120,10 +140,26 @@ README_TXT = """Evidence pack for one Verity run.
   guidance.txt    the legal guidance the run was given, when any
   verify.py       a dependency-free check: python3 verify.py
 
-The pack asserts nothing a machine cannot re-check. Run verify.py; every PASS line is a claim you
-have now checked yourself. A PASS on a span says its quote was found where the run recorded it; it says
-nothing about whether the finding's answer is right. The pack is not signed: it shows that its files agree with each other and
-with the hashes the run recorded, not that nobody changed them together.
+Run verify.py; every PASS line is a check that could have failed, and you have now made it yourself.
+What it checks, and against what. verify.py recomputes every stage hash in run.json from the files here: the
+document and the sections' text (reading); the question with the guidance's hash, and which sections were handed
+to the model, in order (finding evidence); the model's input and its answer (checking); every span's section,
+offsets, verified flag and tier (verifying). For a run that finished from 2026-10-30 on, the hash on its last stage
+covers the record it finished on: each finding's status and what set it, its relations and match counts, the
+relations the run located, the options (the verifier version and the window among them), the model and the run's
+identity. Each finding's words (topic, conclusion, the model's reading, every quote and the handle it cited) are
+checked against model_output.txt, and the question against the model input. A pointer emptied beside a hash the run
+recorded is a FAIL.
+What it does not check is printed as UNCHECKED, with why: a person's review (review_head names the review rows, not
+what they say), what the build that made this pack worked out from the record (decided_by, flagged, concerns,
+code_compared, unseen_reason, clause_label), times, the document's name and reading, the build's own description,
+and the model's call counts. A pack of a run that finished before 2026-10-30 cannot bind its statuses, relations or
+options: no hash the run recorded covers them, and verify.py says so. A run verified under a verifier this
+verify.py does not know is NOT CHECKED (exit 2).
+A PASS on a span says its quote was found where the run recorded it; nothing here says whether the finding's answer
+is right. The pack is not signed: it shows that its files agree with each other and with the stage hashes run.json
+carries, not that nobody changed run.json and the files together. To check run.json itself, compare its stage rows
+with the run's stages in the workbench (GET /api/runs/<run_id>/detail lists the same hashes).
 """
 
 
@@ -290,6 +326,16 @@ def build_evidence_pack(session: Session, run_id: str) -> EvidencePack:
             "sha256_recorded": next((s.output_hash for s in run.stages if s.stage == "checking"), None),
         },
         "context_slices": context_slices,
+        # The sections handed to the model, in rank order, as the run recorded them (candidates_json): the finding
+        # evidence stage hashed their ids, and the model's handles are their labels.
+        "candidates": json.loads(run.candidates_json or "[]"),
+        # Every stage row as the run recorded it, in the order written: what each stage read and produced, as hashes.
+        # verify.py recomputes each from the files here, so a file edited alone fails against the record; GET
+        # /api/runs/{id}/detail lists the same rows, which is how run.json itself is checked (stress test, 2026-10-30).
+        "stages": [
+            {"stage": s.stage, "input_hash": s.input_hash, "output_hash": s.output_hash, "attempt": s.attempt, "rounds": s.rounds}
+            for s in sorted(run.stages, key=lambda s: s.id)
+        ],
         # How the sections handed to the model were chosen. `mode` is null on a run recorded before it was a field.
         "retrieval": {"mode": run.retrieval_mode, "requested_k": options.get("retrieval_k"), "returned": len(context_slices) if rebuilt.slices else None},
         "provider": run.provider,

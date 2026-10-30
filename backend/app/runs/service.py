@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import partial
 
 from sqlalchemy.orm import Session
@@ -44,7 +44,7 @@ from .events import StageEvent, bus
 from .links import because, linked
 from .owner import this_process
 from .prose import label_handles, unresolved_handles
-from .relations import Note, Recorded, assess, dump, locate_relations, parts_of, relevant
+from .relations import Note, Recorded, assess, dump, load, locate_relations, parts_of, relevant
 from .status import (
     Decision,
     Grounds,
@@ -545,9 +545,51 @@ def _fail(session: Session, run: Run, error: str, reason: RunReasonName) -> None
     _finish(session, run, "failed", error=error, reason=reason)
 
 
+def finished_record(run: Run, stage: RunStageName) -> str:
+    """The hash of the record a run finished on, written as the input of its last stage: what no earlier stage's hash
+    covers. Each finding's status and what set it, the relations and what they mean for it, the options (the verifier
+    version and the window among them) and the run's identity. The evidence pack's verify.py recomputes it from
+    run.json, findings.json and relations.json, so an edited status or relation fails there (stress test, 2026-10-30:
+    a status turned to pass in findings.json was bound to nothing). Reviews come after the run, as rows of their own,
+    and are not in it. Runs finished before 2026-10-30 have none."""
+    recorded = load(run.relations_json)
+    record = {
+        "run": run.id,
+        "fingerprint": run.fingerprint,
+        "document": run.document_id,
+        "task": run.task,
+        "provider": run.provider,
+        "model": run.model,
+        "prompt_version": run.prompt_version,
+        "prompt_hash": run.prompt_hash,
+        "retrieval_mode": run.retrieval_mode,
+        "candidates": json.loads(run.candidates_json or "[]"),
+        "options": json.loads(run.options_json or "{}"),
+        "stage": stage,
+        "reason": run.reason,
+        "relations": [asdict(r) for r in recorded.relations] if run.relations_json else None,
+        "findings": [
+            {
+                "id": f.id,
+                "ordinal": f.ordinal,
+                "status": f.status,
+                "status_source": f.status_source,
+                "status_reason": f.status_reason,
+                "relations": [{"relation": n.relation, "effect": n.effect, "sentence": n.sentence} for n in recorded.notes.get(f.ordinal, ())],
+                "match_counts": [s.match_count for s in f.spans],
+            }
+            for f in run.findings
+        ],
+    }
+    return sha256_text(json.dumps(record, sort_keys=True))
+
+
 def _finish(session: Session, run: Run, stage: RunStageName, note: str | None = None, error: str | None = None, reason: RunReasonName | None = None) -> None:
     run.note = note
     run.error = error
     run.reason = reason
     run.finished_at = utcnow()
-    _set_stage(session, run, stage, note or error, error_code=reason if stage == "failed" else None)
+    # A failed run ends wherever it failed, with whatever it had written; only a run that finished its stages has a
+    # record to vouch for.
+    record = finished_record(run, stage) if stage != "failed" else None
+    _set_stage(session, run, stage, note or error, input_hash=record, error_code=reason if stage == "failed" else None)
