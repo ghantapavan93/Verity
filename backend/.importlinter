@@ -18,6 +18,7 @@ forbidden_modules =
     app.goldens
     app.hashing
     app.ingest
+    app.log_sink
     app.main
     app.memo
     app.models
@@ -56,4 +57,4 @@ layers =
     app.runs | app.routing | app.trust
     app.analysis | app.retrieval | app.verify | app.ingest | app.memo | app.policy
     app.providers
-    app.document_names : app.models : app.db : app.schemas : app.config : app.hashing : app.errors : app.unseen
+    app.document_names : app.models : app.db : app.schemas : app.config : app.hashing : app.errors : app.unseen : app.log_sink
