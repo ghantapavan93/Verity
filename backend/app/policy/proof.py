@@ -97,7 +97,7 @@ def pass_blockers(quotes: Sequence[str], guidance: str, rule: GuidanceRule, depe
     if not same_point(quotes, guidance):
         blockers.append("the quote and the guidance share too few words to show they speak of the same point")
 
-    guidance_counts_back = any(counts_back(guidance, m) for m in parse_durations(guidance) if m.duration is not None)
+    guidance_counts_back = any(counts_back(guidance, m) for m in parse_durations(guidance))
     for quote in quotes:
         for index, mention in enumerate(parse_durations(quote)):
             if mention.duration is None:

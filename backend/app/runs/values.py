@@ -26,16 +26,12 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Literal
 
-from ..policy.durations import words_to_number
+from ..policy.durations import NUMBER_WORDS, words_to_number
 from ..verify.tokens import Kind, tokenize
 
-_NUMBER_WORDS = (
-    "zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen"
-    "|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand"
-)
-# Atomic, as in policy.durations: a run of number words is consumed once and never re-split, so a hostile answer of
-# "one and one and …" is linear.
-_WORD_RUN = rf"(?>\b(?:{_NUMBER_WORDS})\b(?:[\s-]+(?:and[\s-]+)?\b(?:{_NUMBER_WORDS})\b)*)"
+# A number in words, by policy.durations' grammar: "thirty and sixty days" states thirty and sixty, never ninety
+# (policy-v17, stress test 2026-10-30). Atomic and bounded there, so a hostile answer of "one and one and …" is linear.
+_WORD_RUN = rf"\b{NUMBER_WORDS}"
 _UNIT = (
     r"(?:calendar\s+|business\s+|working\s+)?(?:days?|weeks?|fortnights?|months?|years?|hours?|minutes?|seconds?"
     r"|percent|per\s+cent|times|dollars?|euros?|pounds?)\b"
