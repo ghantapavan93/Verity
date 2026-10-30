@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./StateStory.module.css";
 import { errorMessage, getContractState } from "@/lib/api";
+import { safeDecode } from "@/lib/address";
 import { shortHash } from "@/lib/format";
 import type { ContractStateView, StateArrivalView } from "@/lib/types";
 import { INDEPENDENCE } from "@/lib/independence";
@@ -241,7 +242,7 @@ export function StateStory({ initial }: { initial?: ContractStateView }) {
   useEffect(() => {
     if (landed.current || !view?.available) return;
     landed.current = true;
-    const id = decodeURIComponent(window.location.hash.slice(1));
+    const id = safeDecode(window.location.hash.slice(1)); // a damaged fragment scrolls nowhere (lib/address)
     if (id) document.getElementById(id)?.scrollIntoView({ behavior: "auto", block: "start" });
   }, [view]);
 

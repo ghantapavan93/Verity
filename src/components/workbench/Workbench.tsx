@@ -39,6 +39,7 @@ import { Divider } from "./workspace/Divider";
 import { DocumentPane, type Highlight } from "./workspace/DocumentPane";
 import {
   ApiError,
+  RecordIdError,
   errorMessage,
   getDocument,
   getGuidance,
@@ -323,11 +324,14 @@ function WorkbenchSurface() {
   // ---- opening records from the Documents, Findings and Runs surfaces ----------------------
 
   /** Why a record could not be opened. A 404 says so in a sentence (the API's "run not found" read as a fault, QA
-   *  2026-10-15), and claims only what a 404 means here: not readable from this workspace, or gone. */
+   *  2026-10-15), and claims only what a 404 means here: not readable from this workspace, or gone. A link whose id is
+   *  not one asks the API nothing and says so (lib/api route; stress test, 2026-10-30). */
   const openFailure = (error: unknown, record: "run" | "contract"): string =>
-    error instanceof ApiError && error.status === 404
-      ? `This ${record} cannot be opened in this workspace: it belongs to another one, or no longer exists.`
-      : errorMessage(error);
+    error instanceof RecordIdError
+      ? `This link does not name a ${record}: it is damaged, or it was not made by Verity.`
+      : error instanceof ApiError && error.status === 404
+        ? `This ${record} cannot be opened in this workspace: it belongs to another one, or no longer exists.`
+        : errorMessage(error);
 
   const navigate = useCallback(
     (next: View) => {

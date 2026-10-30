@@ -5,6 +5,7 @@ import styles from "../Workbench.module.css";
 import door from "../landing/Landing.module.css";
 import { Brand } from "../shell/primitives";
 import { ACCESS_REQUIRED_EVENT, enterWithInvite, errorMessage, getAccess, health, visit, type Health } from "@/lib/api";
+import { safeDecode } from "@/lib/address";
 import type { AccessView } from "@/lib/types";
 import { modelPlace } from "@/lib/modelPlace";
 import { SOURCE, TopLinks } from "../landing/TopLinks";
@@ -30,13 +31,18 @@ type State = "checking" | "open" | "closed" | "unavailable" | "ended";
 
 const INVITE_IN_FRAGMENT = /(?:^#|&)invite=([^&]+)/;
 
-/** The invite in the address bar, if any, taken out of it at once so it is not left on screen or in a copied URL. */
-function takeInviteFromAddress(): string | null {
+/**
+ * The invite in the address bar, if any, taken out of it at once so it is not left on screen or in a copied URL; an
+ * invite that is not a valid escape sequence is taken out too, and comes back as `damaged` (lib/address safeDecode).
+ */
+function takeInviteFromAddress(): string | null | { damaged: true } {
   const found = INVITE_IN_FRAGMENT.exec(window.location.hash);
   if (!found) return null;
   window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
-  return decodeURIComponent(found[1]);
+  return safeDecode(found[1]) ?? { damaged: true };
 }
+
+const DAMAGED_INVITE = "This invite link is damaged. Open it again from the message it came in, or paste it below.";
 
 /**
  * Ask for a session one tab at a time. Two tabs opened at once each asked with no cookie, so the server made two
@@ -104,9 +110,12 @@ export function AccessGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const arrive = async () => {
-      const carried = takeInviteFromAddress();
+      // Whatever the address carried, the page ends at the door or in the workbench, never on "Opening the workbench".
       try {
-        if (carried) {
+        const carried = takeInviteFromAddress();
+        if (typeof carried === "object" && carried !== null) {
+          if (!cancelled) setProblem(DAMAGED_INVITE);
+        } else if (carried) {
           await enterWithInvite(carried);
           if (!cancelled) setProblem(null);
         }

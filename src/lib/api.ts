@@ -87,6 +87,37 @@ export function unreachable(apiUrl: string): string {
     : base;
 }
 
+/** A record id as the API issues them (models.new_id, within the 32 characters of its column): letters, digits, _ and -. */
+const RECORD_ID = /^[A-Za-z0-9_-]{1,32}$/;
+
+/** A value that is not a record id where one was expected: from a damaged or crafted link, never from the API. */
+export class RecordIdError extends Error {
+  readonly value: string;
+
+  constructor(value: string) {
+    super("This link does not name a record: it is damaged, or it was not made by Verity.");
+    this.name = "RecordIdError";
+    this.value = value;
+  }
+}
+
+/**
+ * The one way a path is built from ids, as a template tag: route`/api/runs/${id}/detail`. Each id must be a record id,
+ * and is encoded besides. Whatever the address carries, an id names one record and never chooses a route: ids from
+ * ?run and ?document were pasted in raw, so "R/evidence-pack?" or "../runs/R/evidence-pack?" made the reader's own
+ * browser build a pack and spend a pack download (stress test, 2026-10-30). Encoding alone would not have done: ".."
+ * and "%2e%2e" are dot segments to a URL.
+ */
+export function route(parts: TemplateStringsArray, ...ids: string[]): string {
+  return parts.reduce((path, part, i) => `${path}${encodeURIComponent(recordId(ids[i - 1]))}${part}`);
+}
+
+/** The value, when it is a record id; otherwise a RecordIdError. For an id that travels in a body, not a path. */
+export function recordId(value: string): string {
+  if (typeof value !== "string" || !RECORD_ID.test(value)) throw new RecordIdError(String(value));
+  return value;
+}
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 /** Fired on the window when the API refuses a request for want of a session; the access gate listens for it. */
@@ -103,9 +134,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (response.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event(ACCESS_REQUIRED_EVENT));
   if (!response.ok) throw new ApiError(response.status, await readError(response));
-  if (!(response.headers.get("content-type") ?? "").includes("json")) {
-    // A sign-in page in place of data: the session in front of the API has expired.
-    throw new Error("The workbench API answered with a page instead of data; your sign-in may have expired. Reload the page.");
+  const type = response.headers.get("content-type") ?? "";
+  if (!type.includes("json")) {
+    // A sign-in page in place of data: the session in front of the API has expired. Anything else that is not data (a
+    // file) is not blamed on the sign-in: a crafted link that reached the pack route was told the sign-in had expired.
+    if (type.includes("html") || !type)
+      throw new Error("The workbench API answered with a page instead of data; your sign-in may have expired. Reload the page.");
+    throw new Error(`The workbench API answered with ${type.split(";")[0].trim()}, not data. Reload the page.`);
   }
   return (await response.json()) as T;
 }
@@ -144,25 +179,25 @@ export function uploadDocument(file: File): Promise<DocumentView> {
 }
 
 /** Say that a document is the version after another. The statement is this workspace's own and is never edited. */
-export function recordSupersedes(documentId: string, previousDocumentId: string): Promise<DocumentVersionView> {
-  return request<DocumentVersionView>(`/api/documents/${documentId}/supersedes`, {
+export async function recordSupersedes(documentId: string, previousDocumentId: string): Promise<DocumentVersionView> {
+  return request<DocumentVersionView>(route`/api/documents/${documentId}/supersedes`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ previousDocumentId }),
+    body: JSON.stringify({ previousDocumentId: recordId(previousDocumentId) }),
   });
 }
 
 /** What a later version of the document does to a run's findings. The run is not changed by asking. */
-export function getRunTrustDiff(runId: string, documentId: string): Promise<TrustDiffView> {
-  return request<TrustDiffView>(`/api/runs/${runId}/trust/diff?documentId=${encodeURIComponent(documentId)}`);
+export async function getRunTrustDiff(runId: string, documentId: string): Promise<TrustDiffView> {
+  return request<TrustDiffView>(route`/api/runs/${runId}/trust/diff?documentId=${documentId}`);
 }
 
 export function listDocuments(): Promise<DocumentSummary[]> {
   return request<DocumentSummary[]>("/api/documents");
 }
 
-export function getDocument(id: string): Promise<DocumentView> {
-  return request<DocumentView>(`/api/documents/${id}`);
+export async function getDocument(id: string): Promise<DocumentView> {
+  return request<DocumentView>(route`/api/documents/${id}`);
 }
 
 export function createGuidance(text: string): Promise<GuidanceRecord> {
@@ -173,8 +208,8 @@ export function createGuidance(text: string): Promise<GuidanceRecord> {
   });
 }
 
-export function getGuidance(id: string): Promise<GuidanceRecord> {
-  return request<GuidanceRecord>(`/api/guidance/${id}`);
+export async function getGuidance(id: string): Promise<GuidanceRecord> {
+  return request<GuidanceRecord>(route`/api/guidance/${id}`);
 }
 
 export function createRun(input: { documentId: string; guidanceId: string | null; question: string }): Promise<RunView> {
@@ -185,26 +220,25 @@ export function createRun(input: { documentId: string; guidanceId: string | null
   });
 }
 
-export function getRun(id: string): Promise<RunView> {
-  return request<RunView>(`/api/runs/${id}`);
+export async function getRun(id: string): Promise<RunView> {
+  return request<RunView>(route`/api/runs/${id}`);
 }
 
 export function listRuns(): Promise<RunSummary[]> {
   return request<RunSummary[]>("/api/runs");
 }
 
-export function getRunDetail(id: string): Promise<RunDetailView> {
-  return request<RunDetailView>(`/api/runs/${id}/detail`);
+export async function getRunDetail(id: string): Promise<RunDetailView> {
+  return request<RunDetailView>(route`/api/runs/${id}/detail`);
 }
 
 /** Why this answer: the run explained from its record, assembled by the API; the interface renders it and decides nothing. */
-export function getRunExplanation(id: string): Promise<RunExplanationView> {
-  return request<RunExplanationView>(`/api/runs/${id}/explanation`);
+export async function getRunExplanation(id: string): Promise<RunExplanationView> {
+  return request<RunExplanationView>(route`/api/runs/${id}/explanation`);
 }
 
-export function listFindings(documentId?: string): Promise<FindingRecord[]> {
-  const query = documentId ? `?documentId=${encodeURIComponent(documentId)}` : "";
-  return request<FindingRecord[]>(`/api/findings${query}`);
+export async function listFindings(documentId?: string): Promise<FindingRecord[]> {
+  return request<FindingRecord[]>(documentId ? route`/api/findings?documentId=${documentId}` : "/api/findings");
 }
 
 export function getExperiments(): Promise<ExperimentsView> {
@@ -243,13 +277,13 @@ export function listBatches(): Promise<BatchSummary[]> {
   return request<BatchSummary[]>("/api/batches");
 }
 
-export function getBatch(id: string): Promise<BatchView> {
-  return request<BatchView>(`/api/batches/${encodeURIComponent(id)}`);
+export async function getBatch(id: string): Promise<BatchView> {
+  return request<BatchView>(route`/api/batches/${id}`);
 }
 
 /** Record a person's decision on a finding; `cleared` undoes. The API decides whether it changed anything. */
-export function reviewFinding(findingId: string, body: ReviewIn): Promise<FindingReviewOut> {
-  return request<FindingReviewOut>(`/api/findings/${encodeURIComponent(findingId)}/review`, {
+export async function reviewFinding(findingId: string, body: ReviewIn): Promise<FindingReviewOut> {
+  return request<FindingReviewOut>(route`/api/findings/${findingId}/review`, {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(body),
@@ -379,7 +413,7 @@ export function followRun(
   };
 
   if (typeof EventSource !== "undefined") {
-    source = new EventSource(`${API_URL}/api/runs/${id}/events`, { withCredentials: true });
+    source = new EventSource(`${API_URL}${route`/api/runs/${id}/events`}`, { withCredentials: true });
     source.addEventListener("stage", (event) => {
       if (cancelled) return;
       const data = JSON.parse((event as MessageEvent).data) as {

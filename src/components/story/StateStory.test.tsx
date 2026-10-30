@@ -100,6 +100,16 @@ describe("StateStory", () => {
     expect(scrolled).not.toHaveBeenCalled();
   });
 
+  it("a damaged fragment in the link leaves the page standing at its top (stress test, 2026-10-30)", () => {
+    // decodeURIComponent threw on "%E0%A4%A" in the landing effect, and React unmounted the whole page.
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    window.history.replaceState(null, "", "/state#%E0%A4%A");
+    render(<StateStory initial={VIEW} />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("One contract changes. What doesn’t need to move?");
+    expect(scrolled).not.toHaveBeenCalled();
+  });
+
   it("says when the record is not connected and never invents a page", () => {
     render(<StateStory initial={{ available: false, source: null, detail: "contract-state.json not found", evidence: {}, arrivals: [] }} />);
     expect(screen.getByRole("alert").textContent).toContain("The contract-state record is not connected.");

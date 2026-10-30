@@ -136,6 +136,7 @@ interface Held {
 }
 let held: Held[];
 let holding: (key: string) => boolean;
+let requested: string[];
 
 function answer(method: string, path: string, body: BodyInit | null | undefined): Response {
   if (path === "/api/access") return json({ required: false, entered: true, anonymous: false });
@@ -165,6 +166,7 @@ function route(url: string, init?: RequestInit): Promise<Response> {
   const method = init?.method ?? "GET";
   const path = new URL(url).pathname;
   const key = `${method} ${path}`;
+  requested.push(key);
   if (!holding(key)) return Promise.resolve(answer(method, path, init?.body));
   // A held request is answered from the record as it stands when it is let through, as a slow server would.
   return new Promise<Response>((resolve) => held.push({ key, release: () => resolve(answer(method, path, init?.body)) }));
@@ -240,6 +242,7 @@ beforeEach(() => {
   posts = [];
   held = [];
   holding = () => false;
+  requested = [];
   FakeSource.all = [];
   vi.stubGlobal("EventSource", FakeSource);
   vi.stubGlobal(
@@ -591,5 +594,32 @@ describe("one run at a time, whatever control asks", () => {
     await upload(container);
     await settle(600);
     expect(posts).toEqual([{ documentId: "docU", question: "What is the term of docU?" }]);
+  });
+});
+
+/**
+ * Whatever the address carries, the page opens the record it names or says it cannot. A crafted ?run= chose another API
+ * route ("R/evidence-pack?" built a pack in the reader's browser), then the page blamed the sign-in (stress test,
+ * 2026-10-30). The API client refuses any value that is not a record id, so nothing is asked for it.
+ */
+describe("a link that does not name a record", () => {
+  for (const search of [
+    "?run=runA%2Fevidence-pack%3F",
+    "?document=..%2Fruns%2FrunA%2Fevidence-pack%3F",
+    "?run=runA%2F..%2F..%2Fengineering%2Fexperiments%23",
+  ]) {
+    it(`says so and asks the API for nothing it names: ${search}`, async () => {
+      await mount(search);
+      // What the first screen asks for itself (its health, the recent contracts and runs, the citation record).
+      expect(requested.filter((key) => !/^GET \/api\/(access|health|documents|runs|findings|engineering\/citations)$/.test(key))).toEqual([]);
+      expect(screen.getByText(/This link does not name a (run|contract)/)).toBeTruthy();
+      expect(screen.queryByText(/sign-in may have expired/)).toBeNull();
+    });
+  }
+
+  it("control: a link that names a run opens it", async () => {
+    await mount("?run=runA");
+    expect(contractOnScreen()).toBe("docX");
+    expect(requested).toContain("GET /api/runs/runA/detail");
   });
 });
