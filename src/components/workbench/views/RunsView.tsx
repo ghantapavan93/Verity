@@ -394,6 +394,9 @@ function TimingTable({ rows }: { rows: TimingRow[] }) {
   );
 }
 
+/** The stages a finished run's record hash is written at: the last stage of a run that finished its stages. */
+const RECORDED_AT: ReadonlySet<string> = new Set(["complete", "unresolved"]);
+
 function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => void; onOpen: () => void }) {
   const first = run.stages[0]?.at;
   const options = Object.entries(run.options ?? {});
@@ -495,6 +498,15 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
                 {s.detail ?? ""}
                 {s.status === "failed" && s.errorCode ? ` · failed: ${s.errorCode}` : ""}
                 {s.status === "running" ? " · running" : ""}
+                {/* A finished run hashes the record it finished on as its last stage's input (backend runs.service
+                    finished_record); the pack's verify.py recomputes it. Named for what it is; a run finished before
+                    2026-10-30 has none, and none is claimed. */}
+                {RECORDED_AT.has(s.stage) && s.inputHash && (
+                  <span title="The hash of the record this run finished on: statuses, what set them, relations and options. The evidence pack's verify.py recomputes it.">
+                    {" · record "}
+                    <span className={styles.mono}>{shortHash(s.inputHash)}</span>
+                  </span>
+                )}
               </span>
             </li>
           ))}
@@ -624,6 +636,9 @@ function GoldenSet({ view, onOpenRun }: { view: GoldensView; onOpenRun: (runId: 
         <p className={styles.quiet}>{view.detail}</p>
       ) : (
         <>
+          {/* Which recording each prompt is judged on, and whether it is under today's rules (backend goldens.report):
+              said beside the table too, not only when there is none, or an older recording reads as today's (EVL-2). */}
+          {view.detail && <p className={styles.quiet}>{view.detail}</p>}
           <p className={styles.quiet}>
             {prompts
               .map(

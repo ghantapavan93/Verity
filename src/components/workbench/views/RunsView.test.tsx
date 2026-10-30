@@ -78,3 +78,95 @@ describe("runOutcome", () => {
     expect(runOutcome(undefined, true)).toBe("no finding");
   });
 });
+
+/**
+ * The golden report labels each prompt's recording with its reader and rules, and says when none is under today's rules
+ * (backend goldens.report, stress test EVL-2): the panel showed that sentence only when there was no recording at all,
+ * so a table judged on recordings older than today's rules read as today's.
+ */
+describe("RunsView, the golden set's recordings", () => {
+  beforeEach(() => {
+    for (const fn of Object.values(api)) fn.mockReset();
+    api.listRuns.mockResolvedValue([]);
+    for (const fn of [api.getExperiments, api.getContractState, api.getCitations, api.getFamilies]) fn.mockImplementation(never);
+    api.listBatches.mockResolvedValue([]);
+  });
+  afterEach(cleanup);
+
+  const LABEL =
+    "Shown for each prompt version, its most complete recording: answer-v4 · qwen3:8b · reader v14 · policy-v15 · k 6. None is under today's rules (policy-v17, verifier v12, reader v16), so a question asked today is answered anew.";
+
+  it("says, beside the table, which recording each prompt is judged on and that it predates today's rules", async () => {
+    api.getGoldens.mockResolvedValue({
+      available: true,
+      detail: LABEL,
+      setSha256: "a".repeat(64),
+      documentName: "sample.docx",
+      documentSha256: "b".repeat(64),
+      rules: "Each golden names the passage it expects.",
+      categories: {},
+      goldens: [],
+      prompts: [{ version: "answer-v4", hash: "c".repeat(64), runs: [], passes: 37, recorded: 44, byCategory: [] }],
+      compare: null,
+    });
+    render(<RunsView notice={null} onOpenRun={vi.fn()} />);
+    expect(await screen.findByText(/answer-v4: 37 of 44 pass/)).toBeTruthy();
+    expect(screen.getByText(LABEL)).toBeTruthy();
+  });
+});
+
+/**
+ * A finished run hashes the record it finished on as the input of its last stage (backend runs.service finished_record,
+ * K42): the pack's checker recomputes it. The stage list names that hash for what it is, a record hash; a run finished
+ * before 2026-10-30 has none, and nothing is claimed for it.
+ */
+describe("RunsView, the hash a finished run recorded", () => {
+  beforeEach(() => {
+    for (const fn of Object.values(api)) fn.mockReset();
+    for (const fn of [api.getExperiments, api.getContractState, api.getCitations, api.getFamilies, api.getGoldens]) fn.mockImplementation(never);
+    api.listBatches.mockResolvedValue([]);
+    api.listRuns.mockResolvedValue([
+      {
+        id: "run1",
+        question: "Which law governs?",
+        stage: "complete",
+        findings: 1,
+        outcomes: { pass: 1 },
+        documentName: "a.txt",
+        createdAt: "2026-10-30T10:00:00Z",
+        model: "m",
+        hasGuidance: false,
+        latencyMs: 1000,
+      },
+    ]);
+  });
+  afterEach(cleanup);
+
+  async function stagesOf(last: Record<string, unknown>) {
+    api.getRunDetail.mockResolvedValue({
+      id: "run1",
+      question: "Which law governs?",
+      stage: "complete",
+      findings: [],
+      withheld: [],
+      candidates: [],
+      options: {},
+      stages: [
+        { stage: "reading", at: "2026-10-30T10:00:00Z", detail: "4 sections", outputHash: "1".repeat(64) },
+        { stage: "complete", at: "2026-10-30T10:00:09Z", detail: null, ...last },
+      ],
+    });
+    render(<RunsView notice={null} onOpenRun={vi.fn()} />);
+    (await screen.findByText("Which law governs?")).closest("button")!.click();
+    return (await screen.findByText("Stages")).closest("section")!.textContent ?? "";
+  }
+
+  it("names the last stage's hash as the record's", async () => {
+    const text = await stagesOf({ inputHash: "f".repeat(64) });
+    expect(text).toMatch(/record ffffffff/);
+  });
+
+  it("control: a run finished before the record was hashed claims no record hash", async () => {
+    expect(await stagesOf({ inputHash: null })).not.toMatch(/record/);
+  });
+});
