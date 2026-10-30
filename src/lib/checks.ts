@@ -140,6 +140,16 @@ export function checkLedger(
   return rows;
 }
 
+/**
+ * What a run's record says of where its quoted passages were found: every passage shown was found in the document text,
+ * and how many proposals were withheld because no quote of them was. The one sentence for it: the first screen's receipt
+ * said "every quoted passage located in the document" as a constant, of runs whose record withheld a proposal for a quote
+ * code could not find (stress test, 2026-10-30).
+ */
+export function locatedNote(withheld: number): string {
+  return `every passage shown was found in the document text${withheld > 0 ? ` · ${withheld} withheld` : ""}`;
+}
+
 /** What a run concluded, from its findings by status: "1 needs review · 1 not found", never just "1 finding". */
 export function runOutcome(outcomes: Record<string, number> | undefined, hasGuidance: boolean): string {
   const words: Record<string, string> = {

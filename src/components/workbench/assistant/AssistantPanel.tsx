@@ -17,6 +17,7 @@ import { suggestionsFor, type SampleKind } from "../samples";
 import { RunOutcome, WithheldList } from "./RunOutcome";
 import { StageList } from "./StageList";
 import { absolute } from "@/lib/api";
+import { locatedNote } from "@/lib/checks";
 import {
   STAGE_LABELS,
   sectionsReadNote,
@@ -263,7 +264,7 @@ export function AssistantPanel({
                       <code>{run.model}</code> · prompt <code>{run.promptVersion}</code>
                       {run.latencyMs !== null ? ` · ${(run.latencyMs / 1000).toFixed(0)} s` : ""}
                     </span>
-                    <span>every passage shown was found in the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}</span>
+                    <span>{locatedNote(run.withheld.length)}</span>
                     {run.sectionsRead != null && doc && <span>{sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length)}</span>}
                   </p>
                   {doc && <RevisionCheck key={run.id} runId={run.id} documentId={doc.id} run={run} prepared={sample === "standard" ? SAMPLE_REVISION : null} />}
