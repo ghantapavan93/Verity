@@ -19,7 +19,7 @@ from ..ingest.bounded import READINGS_AT_ONCE
 from ..ingest.readers import SUFFIX_OF
 from ..models import Document, Finding, FindingReview, Run, Section, iso
 from ..schemas import CoverageReport, DocumentOut, DocumentSummary, SectionOut
-from .access import admit_upload, client_network, current_workspace
+from .access import admit_upload, client_network, current_workspace, limit_document_reads
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -163,6 +163,6 @@ def _iso_any(value: datetime | str | None) -> str | None:
     return iso(datetime.fromisoformat(str(value)))
 
 
-@router.get("/{document_id}", response_model=DocumentOut)
+@router.get("/{document_id}", response_model=DocumentOut, dependencies=[Depends(limit_document_reads)])
 def get_document(document_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> DocumentOut:
     return to_document_out(session, require_document(session, document_id, workspace), workspace)

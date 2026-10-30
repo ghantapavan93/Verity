@@ -146,3 +146,31 @@ def test_the_explanation_names_the_queue_wait_and_nothing_else(detail: str, note
     # The explanation took everything after the first "·", so a retried answer showed "attempt 2 · queued 12 s behind 3"
     # as its queue wait (fresh review, 2026-10-21).
     assert _queue_note(RunStage(stage="checking", detail=detail)) == note
+
+
+def test_a_missing_model_names_no_other_model_the_server_holds(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    # Health is answered to every visitor past the gate; the list of what else the model server holds is the operator's,
+    # for the log (security audit, 2026-10-30).
+    provider = OllamaProvider(model="qwen3:8b", base_url="http://127.0.0.1:11434")
+    monkeypatch.setattr(provider, "_tags", lambda timeout: [{"name": "private-finetune:latest"}, {"name": "llama3:70b"}])
+    with caplog.at_level(logging.WARNING, logger="app.providers.ollama"):
+        ok, detail = provider.healthy()
+    assert not ok and detail == "model qwen3:8b is not pulled"
+    assert any("private-finetune:latest" in record.getMessage() for record in caplog.records)  # control: the operator still sees it
+
+
+def test_health_asks_the_model_server_at_most_once_in_a_while(client: TestClient) -> None:
+    # Every visitor's health check asked the model server for its whole list of models (security audit, 2026-10-30).
+    calls: list[int] = []
+
+    class Counting:
+        name, model = "ollama", "qwen3:8b"
+
+        def healthy(self) -> tuple[bool, str]:
+            calls.append(1)
+            return True, "qwen3:8b ready"
+
+    client.app.state.provider = Counting()  # type: ignore[attr-defined]
+    for _ in range(5):
+        assert client.get("/api/health").json()["ok"] is True
+    assert len(calls) == 1

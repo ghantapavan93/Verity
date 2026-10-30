@@ -59,5 +59,7 @@ def public(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     access.address_runs.reset()
     access.workspace_writes.reset()
     access.address_writes.reset()
+    access.address_packs.reset()
+    access.address_document_reads.reset()
     client.base_url = ORIGIN
     return client

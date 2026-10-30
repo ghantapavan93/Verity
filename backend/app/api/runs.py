@@ -21,6 +21,7 @@ from ..application.start_run import start_run
 from ..application.workspace import require_run, visible_runs
 from ..db import SessionLocal, get_session
 from ..document_names import run_document_name
+from ..errors import Busy
 from ..models import Finding, Run, iso
 from ..providers import make_provider
 from ..providers.base import ModelProvider
@@ -44,7 +45,7 @@ from ..schemas import (
     StageOut,
     ValueChoiceOut,
 )
-from .access import current_workspace
+from .access import current_workspace, limit_pack_downloads, packs_building
 from .deps import get_provider
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
@@ -320,11 +321,17 @@ def get_run_explanation(run_id: str, session: Session = Depends(get_session), wo
     return explain_run(session, run_id)
 
 
-@router.get("/{run_id}/evidence-pack")
+@router.get("/{run_id}/evidence-pack", dependencies=[Depends(limit_pack_downloads)])
 def evidence_pack(run_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> Response:
     """A zip with the original bytes, the canonical sections, the run record, every located span and a stdlib verify.py."""
     require_run(session, run_id, workspace)
-    pack = build_evidence_pack(session, run_id)
+    # A few at a time: each holds the contract's bytes twice over while it is zipped (access.PACKS_AT_ONCE).
+    if not packs_building.acquire(blocking=False):
+        raise Busy("Evidence packs are being built for other readers; nothing was lost. Try again in a few seconds.", retry_after=5)
+    try:
+        pack = build_evidence_pack(session, run_id)
+    finally:
+        packs_building.release()
     return Response(content=pack.data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{pack.filename}"'})
 
 

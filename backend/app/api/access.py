@@ -214,6 +214,14 @@ address_uploads = SlidingWindow(ADDRESS_UPLOAD_LIMIT, ADDRESS_WINDOW_S)
 address_runs = SlidingWindow(ADDRESS_RUN_LIMIT, ADDRESS_WINDOW_S)
 workspace_writes = SlidingWindow(WORKSPACE_WRITE_LIMIT, ADDRESS_WINDOW_S)
 address_writes = SlidingWindow(ADDRESS_WRITE_LIMIT, ADDRESS_WINDOW_S)
+# Reads whose answer is large next to the request: a run's evidence pack carries the original file (up to 25 MB) and is
+# zipped on every request, and a document comes back with its whole text. Nothing bounded them, so one visitor who
+# uploaded once could ask for the same 26 MB pack in a loop, holding the upload link and the request threads the health
+# probe also needs (security audit, 2026-10-30). A reader opens a contract a few times an hour and a pack rarely.
+PACK_LIMIT, DOCUMENT_READ_LIMIT, PACKS_AT_ONCE = 30, 240, 2
+address_packs = SlidingWindow(PACK_LIMIT, ADDRESS_WINDOW_S)
+address_document_reads = SlidingWindow(DOCUMENT_READ_LIMIT, ADDRESS_WINDOW_S)
+packs_building = threading.BoundedSemaphore(PACKS_AT_ONCE)
 
 
 def client_address(request: Request) -> str:
@@ -224,8 +232,9 @@ def client_address(request: Request) -> str:
 def client_network(request: Request) -> str:
     """The network a request comes from, for the bounds on what one network has in flight at once (api/body_limit.py,
     api/documents.py): an IPv4 address itself, an IPv6 address's /64, the block one subscriber or one server is commonly
-    given, so a host cannot multiply its share by using more of its own addresses. The hourly windows (SlidingWindow)
-    still count by full address (war room F-32, the owner's decision)."""
+    given, so a host cannot multiply its share by using more of its own addresses. The hourly windows count by it too:
+    by full address, a host with a /64 took a fresh address for every visit and no window filled (security audit,
+    2026-10-30, reversing war room F-32 on the owner's instruction)."""
     address = client_address(request)
     try:
         ip = ipaddress.ip_address(address)
@@ -246,8 +255,8 @@ def limit_run_starts(request: Request) -> None:
         return
     refuse_if_paused()
     if is_public_workspace(getattr(request.state, "workspace", "")):
-        _take(address_runs, client_address(request), "questions were asked from your network")
-    wait = run_starts.take(getattr(request.state, "subject", None) or client_address(request))
+        _take(address_runs, client_network(request), "questions were asked from your network")
+    wait = run_starts.take(getattr(request.state, "subject", None) or client_network(request))
     if wait is not None:
         raise TooManyRequests(
             f"Too many runs were started in the last {RUN_WINDOW_S // 60} minutes. Try again in {int(wait) + 1} seconds.", retry_after=int(wait) + 1
@@ -287,7 +296,7 @@ def enter(body: InviteIn, request: Request, response: Response) -> AccessOut:
         return _out(None)
     if settings.anonymous_sessions:
         raise Forbidden("This demo opens without an invitation; an invite does not apply here.")
-    wait = exchanges.take(client_address(request))
+    wait = exchanges.take(client_network(request))
     if wait is not None:
         raise TooManyRequests(f"Too many attempts. Try again in {int(wait) + 1} seconds.", retry_after=int(wait) + 1)
     if not _same_origin(request):
@@ -366,7 +375,19 @@ def limit_public_writes(request: Request) -> None:
     refuse_if_paused()
     refuse_if_disk_low()
     _take(workspace_writes, str(workspace), "changes from this demo workspace")
-    _take(address_writes, client_address(request), "changes from your network")
+    _take(address_writes, client_network(request), "changes from your network")
+
+
+def limit_pack_downloads(request: Request) -> None:
+    """A public workspace's network may download so many evidence packs an hour."""
+    if is_public_workspace(getattr(request.state, "workspace", None)):
+        _take(address_packs, client_network(request), "evidence packs downloaded from your network")
+
+
+def limit_document_reads(request: Request) -> None:
+    """A public workspace's network may open so many contracts an hour; each answer carries a whole contract."""
+    if is_public_workspace(getattr(request.state, "workspace", None)):
+        _take(address_document_reads, client_network(request), "contract views from your network")
 
 
 def refuse_if_paused() -> None:
@@ -400,7 +421,7 @@ def admit_upload(request: Request, session: DbSession, workspace: str) -> None:
         return
     refuse_if_disk_low()
     refuse_if_spent(session, document_quotas(workspace))
-    _take(address_uploads, client_address(request), "uploads from your network")
+    _take(address_uploads, client_network(request), "uploads from your network")
 
 
 @router.post("/visit", response_model=AccessOut)
@@ -417,7 +438,7 @@ def visit(request: Request, response: Response, session: DbSession = Depends(get
     existing = current_session(request)
     if existing is not None and _session_serves_here(existing.subject):
         return _out(existing)
-    _take(visits, client_address(request), "new visits from your network")
+    _take(visits, client_network(request), "new visits from your network")
     subject = ANONYMOUS_PREFIX + secrets.token_urlsafe(24)
     lifetime = settings.anonymous_retention_days * 86400
     now = utcnow()

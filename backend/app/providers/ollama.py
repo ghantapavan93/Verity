@@ -126,7 +126,9 @@ class OllamaProvider:
             return False, "the model endpoint is not reachable"
         names = [m.get("name", "") for m in models]
         if self.model not in names and f"{self.model}:latest" not in names:
-            return False, f"model {self.model} is not pulled (have: {', '.join(names) or 'none'})"
+            # What else the server holds is the operator's to read, in the log; health is answered to every visitor.
+            log.warning("model %s is not pulled; the endpoint has: %s", self.model, ", ".join(names) or "none")
+            return False, f"model {self.model} is not pulled"
         problem = self._build_problem(models)
         if problem:
             return False, problem

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import os
 import shutil
+import threading
+import time
+import weakref
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -37,6 +40,27 @@ def storage_problem() -> str | None:
     return None
 
 
+# The model's answer to health, kept this long: every visitor's page asks for health, and each ask was a request for the
+# model server's whole list of models (security audit, 2026-10-30). A model that goes away is seen within the interval.
+HEALTH_PROBE_TTL_S = 10.0
+# Weakly keyed: a provider that is gone takes its answer with it, and a new one at the same address is asked afresh.
+_probes: weakref.WeakKeyDictionary[ModelProvider, tuple[float, tuple[bool, str]]] = weakref.WeakKeyDictionary()
+_probes_lock = threading.Lock()
+
+
+def probe_model(provider: ModelProvider) -> tuple[bool, str]:
+    """The provider's health, asked at most once per HEALTH_PROBE_TTL_S for each provider."""
+    now = time.monotonic()
+    with _probes_lock:
+        kept = _probes.get(provider)
+        if kept is not None and now - kept[0] < HEALTH_PROBE_TTL_S:
+            return kept[1]
+    answer = provider.healthy()
+    with _probes_lock:
+        _probes[provider] = (now, answer)
+    return answer
+
+
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 
 
@@ -67,7 +91,7 @@ def health(request: Request, provider: ModelProvider = Depends(get_provider)) ->
             fault="store" if problem is not None else "",
         )
     if settings.health_probes_model:
-        ok, detail = provider.healthy()
+        ok, detail = probe_model(provider)
     else:
         ok, detail = True, f"{provider.model}: checked before every answer, not by health"
     fault: Literal["", "store", "model"] = "" if ok else "model"
