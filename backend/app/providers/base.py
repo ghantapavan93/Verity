@@ -39,6 +39,12 @@ class ContextOverflow(ProviderError):
     the server has cut would be an answer about text the model did not read."""
 
 
+class AnswerCut(ContextOverflow):
+    """The server stopped the answer before it was complete (Ollama's done_reason "length"): the prompt and the answer
+    filled the context window, or the server capped the answer. Not the model's invalid output, and not asked again: the
+    same prompt is cut the same way, and a corrected round's longer prompt sooner (stress test, 2026-10-30)."""
+
+
 @dataclass
 class Generation:
     text: str

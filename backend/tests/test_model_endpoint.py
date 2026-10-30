@@ -21,6 +21,7 @@ from app.providers import ollama as ollama_module
 from app.providers.base import ProviderError
 from app.providers.ollama import OllamaProvider
 from app.retrieval import hybrid
+from tests.support import through_get_and_post
 
 PINNED = "500a1f067a9f"
 HEADERS = {"Modal-Key": "key-for-tests", "Modal-Secret": "secret-for-tests"}
@@ -56,6 +57,7 @@ def endpoint(monkeypatch: pytest.MonkeyPatch) -> Endpoint:
     server = Endpoint()
     monkeypatch.setattr(httpx, "get", server.get)
     monkeypatch.setattr(httpx, "post", server.post)
+    monkeypatch.setattr(httpx, "stream", through_get_and_post)
     monkeypatch.setattr(config.settings, "ollama_url", "https://model.example.invalid")
     return server
 
@@ -191,6 +193,7 @@ def test_a_redirect_to_another_host_is_refused_and_the_credentials_never_go_ther
         return httpx.Response(200, json=tags(PINNED), request=httpx.Request("GET", url))
 
     monkeypatch.setattr(httpx, "get", get)
+    monkeypatch.setattr(httpx, "stream", through_get_and_post)
     monkeypatch.setattr(config.settings, "ollama_url", "https://model.example.invalid")
     monkeypatch.setattr(config.settings, "ollama_headers", HEADERS)
     monkeypatch.setattr(config.settings, "model_digest", PINNED)
@@ -209,6 +212,7 @@ def test_health_reports_a_refused_redirect_as_not_ok_instead_of_failing(monkeypa
         return httpx.Response(302, headers={"location": "https://elsewhere.example.invalid/"}, request=httpx.Request("GET", url))
 
     monkeypatch.setattr(httpx, "get", get)
+    monkeypatch.setattr(httpx, "stream", through_get_and_post)
     monkeypatch.setattr(config.settings, "ollama_url", "https://model.example.invalid")
     ok, detail = OllamaProvider().healthy()
     assert ok is False and "not reachable" in detail

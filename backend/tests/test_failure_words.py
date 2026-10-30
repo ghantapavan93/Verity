@@ -22,7 +22,7 @@ from app.providers.base import ProviderError
 from app.providers.ollama import OllamaProvider
 from app.retrieval import hybrid
 from app.runs import service as run_service
-from tests.support import upload_and_ask
+from tests.support import through_get_and_post, upload_and_ask
 from tests.test_model_endpoint import PINNED, tags
 
 SECRET_URL = "https://model-7f3a.example.invalid"
@@ -53,6 +53,7 @@ def test_a_model_failure_names_what_failed_and_not_its_text(error: Exception, wo
     monkeypatch.setattr(config.settings, "ollama_url", SECRET_URL)
     monkeypatch.setattr(httpx, "get", _tags)
     monkeypatch.setattr(httpx, "post", _fail_with(error))
+    monkeypatch.setattr(httpx, "stream", through_get_and_post)
     with pytest.raises(ProviderError) as raised:
         OllamaProvider().generate_json("system", "user", {})
     message = str(raised.value)

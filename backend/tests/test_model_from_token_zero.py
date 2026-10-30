@@ -19,6 +19,7 @@ import pytest
 from app import config
 from app.providers.base import ProviderError
 from app.providers.ollama import NEVER_CUT, OllamaProvider
+from tests.support import through_get_and_post
 from tests.test_model_wake import Endpoint
 
 
@@ -27,6 +28,7 @@ def endpoint(monkeypatch: pytest.MonkeyPatch) -> Endpoint:
     server = Endpoint()
     monkeypatch.setattr(httpx, "get", server.get)
     monkeypatch.setattr(httpx, "post", server.post)
+    monkeypatch.setattr(httpx, "stream", through_get_and_post)
     monkeypatch.setattr(config.settings, "ollama_url", "https://model.example.invalid")
     return server
 
