@@ -17,14 +17,19 @@ say, and says why.
 
 from __future__ import annotations
 
+import bisect
 import calendar
 import re
-from collections.abc import Iterable
-from dataclasses import dataclass
+import unicodedata
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
+from typing import Literal
+
+from ..ingest.invisible import IGNORABLE
 
 
 class DurationUnit(StrEnum):
@@ -57,13 +62,20 @@ class Duration:
 
 @dataclass(frozen=True)
 class DurationMention:
-    """One duration as the text wrote it. ``duration`` is None when the mention is ambiguous."""
+    """One duration as the text wrote it. ``duration`` is None when the mention is ambiguous; ``readings`` are the values
+    it can be read as either way (its duration, or the words' and the digits' when they disagree), so no reader drops an
+    ambiguous period as if it were not there (stress test, 2026-10-30). ``in_range`` is its end of a range the text
+    writes as one ("between 30 and 90 days", "30-90 days"), and ``window`` the stretch of text its own comparison words
+    are read in: from the period before it to the period after it, so "at least" before 30 is not read as 90's."""
 
     surface: str
     start: int
     end: int
     duration: Duration | None
     ambiguity: str | None = None
+    readings: tuple[Duration, ...] = ()
+    in_range: Literal["low", "high"] | None = None
+    window: tuple[int, int | None] = (0, None)
 
 
 _UNITS = {
@@ -98,32 +110,109 @@ _ONES = {
     "nineteen": 19,
 }
 _TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
-# Number words only, longest first, so "within thirty (30) days" reads "thirty" and never "within thirty".
-_NUMBER_WORD = "|".join(sorted([*_ONES, *_TENS, "hundred", "thousand"], key=len, reverse=True))
-# Atomic: a run of number words is consumed once and never re-split by backtracking, so a hostile guidance of
-# "one and one and …" is linear in the run, not exponential (hostile review, 2026-10-01).
-_WORD = rf"(?:a|an|(?>(?:{_NUMBER_WORD})(?:[\s-]+(?:and[\s-]+)?(?:{_NUMBER_WORD}))*))"
-_NUMBER = r"\d+(?:\.\d+)?"
+# The words a number is written with: no word of them says what a sentence is about (policy.proof.concept_stems).
+NUMBER_WORD_NAMES = frozenset([*_ONES, *_TENS, "hundred", "thousand"])
+# A number written in words, by its grammar: "forty-five", "one hundred and twenty", "two thousand five hundred". Until
+# policy-v17 any run of number words was one number, with "and" anywhere in it, so "between thirty and sixty days" was
+# ninety days, a figure neither text states (stress test, 2026-10-30). Now "and" joins only after "hundred" or
+# "thousand", a tens word takes at most one ones word after it, and anything else ends the number: "thirty and sixty"
+# is two numbers. Longest word first, and each word whole, so "seventeen" is never "seven". The pattern is bounded and
+# atomic: a hostile run of "one and one and …" is read one word at a time, linear in the text (hostile review, 2026-10-01).
+_UNDER_TWENTY = "|".join(sorted(_ONES, key=len, reverse=True))
+_SMALL = rf"(?:(?:{'|'.join(_TENS)})\b(?:[\s-]+(?:one|two|three|four|five|six|seven|eight|nine)\b)?|(?:{_UNDER_TWENTY})\b)"
+_HUNDREDS = rf"(?:{_SMALL}[\s-]+)?hundred\b(?:[\s-]+(?:and[\s-]+)?{_SMALL})?"
+_BELOW_THOUSAND = rf"(?:{_HUNDREDS}|{_SMALL})"
+NUMBER_WORDS = rf"(?>{_BELOW_THOUSAND}[\s-]+thousand\b(?:[\s-]+(?:and[\s-]+)?{_BELOW_THOUSAND})?|(?:{_BELOW_THOUSAND}[\s-]+)?thousand\b|{_BELOW_THOUSAND})"
+_WORD = rf"(?:\ba\b|\ban\b|{NUMBER_WORDS})"
+_WORD_NUMBER = re.compile(rf"(?:a|an|{NUMBER_WORDS})", re.IGNORECASE)
+# Digits, grouped in thousands or not: "1,095 days" is 1,095 days, never 95 (the verifier's skeptic, 2026-10-30).
+_NUMBER = r"(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
 _UNIT = r"(?P<unit>calendar\s+days?|business\s+days?|working\s+days?|days?|weeks?|fortnights?|months?|years?)"
-# digits, optionally followed by the words in parentheses: "30 days", "30 (thirty) days"
-# "30 days", "30 (thirty) days", "30-day"
-_DIGITS_FIRST = re.compile(rf"(?<![\w.])(?P<digits>{_NUMBER})[\s-]*(?:\(\s*(?P<words>{_WORD})\s*\))?[\s-]*{_UNIT}\b", re.IGNORECASE)
+# digits, optionally followed by the words in parentheses: "30 days", "30 (thirty) days", "30-day"
+_DIGITS_FIRST = re.compile(rf"(?<![\w.,])(?P<digits>{_NUMBER})[\s-]*(?:\(\s*(?P<words>{_WORD})\s*\))?[\s-]*{_UNIT}\b", re.IGNORECASE)
 # words, optionally followed by the digits in parentheses: "thirty days", "thirty (30) days", "twenty-one (21) days"
 _WORDS_FIRST = re.compile(rf"\b(?P<words>{_WORD})\s*(?:\(\s*(?P<digits>{_NUMBER})\s*\))?[\s-]+{_UNIT}\b", re.IGNORECASE)
-# "not less than 30 nor more than 60 days", "30 to 60 days", "30-60 days": two durations sharing one unit.
-_RANGE = re.compile(rf"(?<![\w.])(?P<lo>{_NUMBER})\s*(?:(?:nor|or|and)\s+(?:more|less)\s+than|to|-|–)\s*(?P<hi>{_NUMBER})\s*{_UNIT}\b", re.IGNORECASE)
+# A number with no unit of its own, as written before another period that carries one: the 30 of "between 30 and 90
+# days", "30 to 90 days", "thirty (30) or sixty (60) days". Never an article: "a" is one only before a unit.
+_BARE = re.compile(
+    rf"(?<![\w.,])(?P<digits>{_NUMBER})(?:\s*\(\s*(?P<words>{NUMBER_WORDS})\s*\))?(?![\w%]|[.,]\d)"
+    rf"|\b(?P<words2>{NUMBER_WORDS})(?:\s*\(\s*(?P<digits2>{_NUMBER})\s*\))?(?!\w)",
+    re.IGNORECASE,
+)
+# What points or prices, not counts: "Section 12 and 30 days" is no period of twelve days.
+_POINTS_BEFORE = re.compile(
+    r"(?:§§?|\b(?:sections?|clauses?|articles?|schedules?|exhibits?|annex(?:es)?|appendix|paragraphs?|items?|parts?|rules?|nos?\.?|number)|[#$€£¥])\s*$",
+    re.IGNORECASE,
+)
+_PERCENT_AFTER = re.compile(r"\s*(?:%|percent\b|per\s*cent\b)", re.IGNORECASE)
+# What may stand between two periods the text writes together ("30 and 90", "30, 60 or 90", "30 but no more than 90"):
+# the words that join them and the words that compare, and nothing else, within one sentence and a few words.
+_JOINER = re.compile(r",|-|&|\b(?:and|or|to|through|thru|until|nor|but)\b", re.IGNORECASE)
+_COMPARING_GLUE = (
+    r"no|not|never|at|most|least|more|less|fewer|greater|longer|shorter|than|maximum|minimum|max|min|up|exceed\w*|under|over|above|below|within|equal"
+)
+_GLUE = re.compile(rf"(?:\s|['’]|{_JOINER.pattern}|\b(?:{_COMPARING_GLUE}|a|an|the|of)\b)*+", re.IGNORECASE)
+_COMPARES_IN_GLUE = re.compile(rf"\b(?:{_COMPARING_GLUE})\b", re.IGNORECASE)
+_RANGE_JOINER = re.compile(r"\s*(?:-|to|through|thru|until)\s*", re.IGNORECASE)
+_BETWEEN = re.compile(r"\b(?:between|from)\s+$", re.IGNORECASE)
+_MAX_GLUE = 40
 # Termination with no notice at all: a zero-day notice period, so a floor in the guidance can be compared with it.
 _ZERO = re.compile(r"\b(?:immediately|with immediate effect|without (?:prior )?notice|no notice)\b", re.IGNORECASE)
 # The words-first pattern is only worth running when a unit word exists at all.
 _ANY_UNIT = re.compile(_UNIT, re.IGNORECASE)
 _ARTICLE = re.compile(r"^(?:a|an|the)$", re.IGNORECASE)
 
+# ----------------------------------------------------------------------------- what code reads (policy-v17)
+#
+# Code reads a period from the characters a reader sees. The stress test of 2026-10-30 (hostile model, verifier): a
+# contract's "9\u200e0 days" displays as 90 and was read as 0, "15\u200d days" was read as no period, and
+# "forty‑five (45)" as "five", so a mark the reader keeps, or a dash a typesetter chose, made code assert a
+# shortfall the contract does not state or hide one it does. Before any number is read, every format character
+# (category Cf: direction marks, joiners, zero-width spaces, a byte-order mark) and every other default-ignorable code
+# point is deleted, and every dash is a hyphen. Offsets still index the text as written.
+_DASHES = dict.fromkeys(map(ord, "‐‑‒–—―−﹘﹣－"), "-")
+_DEFAULT_IGNORABLE = re.compile(f"[{IGNORABLE}]")
+
+
+def seen(text: str) -> tuple[str, list[int] | None]:
+    """The text as code reads values from it, and, for each of its characters, where it is in ``text`` (None when the
+    text is ASCII and nothing changes)."""
+    if text.isascii():
+        return text, None
+    kept: list[str] = []
+    where: list[int] = []
+    for index, char in enumerate(text):
+        if not char.isascii():
+            if unicodedata.category(char) == "Cf" or _DEFAULT_IGNORABLE.match(char):
+                continue
+            char = char.translate(_DASHES)
+        kept.append(char)
+        where.append(index)
+    return "".join(kept), where
+
+
+@lru_cache(maxsize=512)
+def without_unseen(text: str) -> str:
+    """The text without the characters a reader does not see, its dashes as written: what runs.values reads, which shows
+    a value as the answer writes it ("2024–01–01") and reads its own dashes."""
+    if text.isascii():
+        return text
+    return "".join(char for char in text if char.isascii() or not (unicodedata.category(char) == "Cf" or _DEFAULT_IGNORABLE.match(char)))
+
+
+@lru_cache(maxsize=512)
+def seen_text(text: str) -> str:
+    """`seen` without the map: the text as code reads values from it (read once per text: runs.values reads a run's
+    guidance for every finding)."""
+    return seen(text)[0]
+
 
 def words_to_number(text: str) -> Decimal | None:
-    """ "thirty", "forty-five", "twenty one", "one hundred twenty", "a" (as in "a month") → the number, else None."""
-    tokens = [t for t in re.split(r"[\s-]+", text.strip().lower()) if t and t != "and"]
-    if not tokens:
+    """ "thirty", "forty-five", "twenty one", "one hundred twenty", "a" (as in "a month") → the number; None for words that
+    are not one number by the grammar above ("several", "thirty and sixty")."""
+    if not _WORD_NUMBER.fullmatch(text.strip()):
         return None
+    tokens = [t for t in re.split(r"[\s-]+", text.strip().lower()) if t and t != "and"]
     if len(tokens) == 1 and _ARTICLE.match(tokens[0]):
         return Decimal(1)
     total = 0
@@ -149,48 +238,124 @@ def _unit(text: str) -> DurationUnit:
     return _UNITS[key]
 
 
-def _mention(match: re.Match[str]) -> DurationMention | None:
-    digits_text, words_text = match.group("digits"), match.group("words")
-    digits = Decimal(digits_text) if digits_text else None
-    words = words_to_number(words_text) if words_text else None
-    if words_text and words is None and digits is None:
-        return None  # "several days", "reasonable days": words that are not a number
-    surface = match.group(0)
-    unit_text = match.group("unit")
+@dataclass(frozen=True)
+class _Written:
+    """A number as the text writes it, in `seen` offsets, with the unit written after it, if one is."""
+
+    start: int
+    end: int
+    digits: str | None
+    words: str | None
+    unit: str | None
+
+
+def _covered(starts: list[int], ends: list[int], at: int) -> bool:
+    index = bisect.bisect_right(starts, at) - 1
+    return index >= 0 and at < ends[index]
+
+
+def _written(read: str) -> list[_Written]:
+    """Every period the text writes with its unit, and every number written without one; in order. The two patterns can
+    see the same period ("thirty (30) days"); the one that starts earlier covers it."""
+    found: list[_Written] = []
+    if not _ANY_UNIT.search(read):
+        return found
+    starts: list[int] = []
+    ends: list[int] = []
+
+    def add(item: _Written) -> None:
+        index = bisect.bisect_left(starts, item.start)
+        starts.insert(index, item.start)
+        ends.insert(index, item.end)
+        found.insert(index, item)
+
+    for pattern in (_DIGITS_FIRST, _WORDS_FIRST):
+        for match in pattern.finditer(read):
+            digits, words = match.group("digits"), match.group("words")
+            if words and words_to_number(words) is None and not digits:
+                continue  # "several days", "reasonable days": words that are not a number
+            if not _covered(starts, ends, match.start()):
+                add(_Written(match.start(), match.end(), digits, words, match.group("unit")))
+    if found:  # a number without a unit is read only beside a period
+        for match in _BARE.finditer(read):
+            if _covered(starts, ends, match.start()) or _POINTS_BEFORE.search(read[max(0, match.start() - 24) : match.start()]):
+                continue
+            if _PERCENT_AFTER.match(read, match.end()):
+                continue
+            add(_Written(match.start(), match.end(), match.group("digits") or match.group("digits2"), match.group("words") or match.group("words2"), None))
+    return found
+
+
+def _together(read: str, previous: _Written, item: _Written) -> bool:
+    """Whether two numbers are written as one statement of periods: only joining and comparing words between them."""
+    between = read[previous.end : item.start]
+    return len(between) <= _MAX_GLUE and _JOINER.search(between) is not None and _GLUE.fullmatch(between) is not None
+
+
+def _mention(read: str, item: _Written, unit_text: str, where: list[int] | None) -> DurationMention | None:
+    digits = Decimal(item.digits.replace(",", "")) if item.digits else None
+    words = words_to_number(item.words) if item.words else None
+    if item.words and words is None and digits is None:
+        return None
     fortnight = unit_text.strip().lower().startswith("fortnight")
     unit = DurationUnit.WEEK if fortnight else _unit(unit_text)
-    if digits is not None and words is not None and digits != words:
-        return DurationMention(surface, match.start(), match.end(), None, f"the words say {words} and the digits say {digits}")
-    value = digits if digits is not None else words
-    if value is None:
+    readings = tuple(dict.fromkeys(Duration(value * 2 if fortnight else value, unit) for value in (digits, words) if value is not None))
+    if not readings:
         return None
-    return DurationMention(surface, match.start(), match.end(), Duration(value * 2 if fortnight else value, unit))
+    start, end = (where[item.start], where[item.end - 1] + 1) if where is not None else (item.start, item.end)
+    surface = read[item.start : item.end] if item.unit else f"{read[item.start : item.end]} {unit_text}"
+    if digits is not None and words is not None and digits != words:
+        return DurationMention(surface, start, end, None, f"the words say {words} and the digits say {digits}", readings)
+    return DurationMention(surface, start, end, readings[0], None, readings)
 
 
 def parse_durations(text: str | None) -> list[DurationMention]:
     """Every duration mention in the text, in order of appearance, digits or words, with parenthesised restatements
-    checked against each other."""
+    checked against each other, read from the characters a reader sees (`seen`), offsets into ``text`` as written.
+
+    Periods written together share what is written once: "between 30 and 90 days", "30 to 90 days", "30, 60 or 90
+    days" and "at least 30 and no more than 90 days" state two or three periods in days, never only the last (stress
+    test, 2026-10-30: "between 30 and 90 days" was read as 90 days alone, a floor, and 60 days a shortfall of code's).
+    Two numbers joined by "to", "through" or a dash, or by "and" after "between", are the ends of one range."""
     if not text:
         return []
-    mentions: dict[int, DurationMention] = {}
-    for match in _RANGE.finditer(text):
-        unit = _unit(match.group("unit"))
-        # Both numbers share the unit; each mention ends where the range ends, so the later patterns skip it whole.
-        for name in ("lo", "hi"):
-            start = match.start(name)
-            surface = text[start : match.end()] if name == "lo" else match.group(name) + " " + match.group("unit")
-            mentions[start] = DurationMention(surface, start, match.end(), Duration(Decimal(match.group(name)), unit))
-    patterns = (_DIGITS_FIRST, _WORDS_FIRST) if _ANY_UNIT.search(text) else ()
-    for pattern in patterns:
-        for match in pattern.finditer(text):
-            mention = _mention(match)
-            if mention is None:
-                continue
-            # The two patterns can see the same mention ("thirty (30) days"); the one that starts earlier covers it.
-            if any(m.start <= mention.start < m.end for m in mentions.values()):
-                continue
-            mentions[mention.start] = mention
-    return [mentions[start] for start in sorted(mentions)]
+    return list(_parsed(text))
+
+
+@lru_cache(maxsize=512)
+def _parsed(text: str) -> tuple[DurationMention, ...]:
+    read, where = seen(text)
+    items = _written(read)
+    groups: list[list[_Written]] = []
+    for index, item in enumerate(items):
+        if index and _together(read, items[index - 1], item):
+            groups[-1].append(item)
+        else:
+            groups.append([item])
+    mentions: list[DurationMention] = []
+    for group in groups:
+        units: list[str | None] = []
+        carried: str | None = None
+        for item in reversed(group):  # a unit written once belongs to the numbers before it
+            carried = item.unit or carried
+            units.append(carried)
+        units.reverse()
+        ranged = len(group) == 2 and (
+            _RANGE_JOINER.fullmatch(read[group[0].end : group[1].start]) is not None
+            or (
+                read[group[0].end : group[1].start].strip().lower() == "and" and _BETWEEN.search(read[max(0, group[0].start - 12) : group[0].start]) is not None
+            )
+        )
+        read_here: list[DurationMention] = []
+        for item, unit in zip(group, units, strict=True):
+            mention = _mention(read, item, unit, where) if unit else None
+            if mention is not None:
+                read_here.append(mention)
+        if ranged and len(read_here) == 2:
+            read_here = [replace(read_here[0], in_range="low"), replace(read_here[1], in_range="high")]
+        mentions += read_here
+    # Each period's comparison words are its own: read from the period before it to the period after it.
+    return tuple(replace(m, window=(mentions[i - 1].end if i else 0, mentions[i + 1].start if i + 1 < len(mentions) else None)) for i, m in enumerate(mentions))
 
 
 @dataclass(frozen=True)
@@ -212,6 +377,9 @@ class GuidanceRule:
     surface: str
     # A ceiling stated in the same sentence as the floor ("at least 30 but no more than 90 days"): a range.
     maximum: Duration | None = None
+    # The other periods the same sentence states as rules of their own ("at least 30 days' notice, or 90 days for
+    # enterprise agreements"): which binds is a reading of the guidance, so code reports a shortfall only against them all.
+    alternatives: tuple[GuidanceRule, ...] = ()
 
 
 # A ceiling is never to be read as a floor (the holdout audit of 2026-10-09: "must not exceed 60 days" was): every
@@ -262,14 +430,27 @@ _SENTENCE_END = re.compile(r"(?<=[.;!?])\s+|\n+")
 _NOTICE = re.compile(r"\b(?:notice|notif|terminat|cancel)", re.IGNORECASE)
 _WINDOW_BEFORE = 40
 _WINDOW_AFTER = 24
+_PARTIAL_WORD = re.compile(r"^\w+")
+_PARTIAL_END = re.compile(r"\w+$")
 
 
 def window_before(text: str, mention: DurationMention) -> str:
-    return _WHITESPACE.sub(" ", text[max(0, mention.start - _WINDOW_BEFORE) : mention.start])
+    """The words before a period, back to the period before it, as code reads them (`seen`), whole words only: a window
+    cut inside "Termination" read "mination" as a comparing word (`_COMPARES`: "min…"; stress test, 2026-10-30)."""
+    start = max(mention.window[0], mention.start - _WINDOW_BEFORE)
+    words = text[start : mention.start]
+    if start > 0 and text[start - 1].isalnum():
+        words = _PARTIAL_WORD.sub("", words)
+    return _WHITESPACE.sub(" ", seen_text(words))
 
 
 def window_after(text: str, mention: DurationMention) -> str:
-    return _WHITESPACE.sub(" ", text[mention.end : mention.end + _WINDOW_AFTER])
+    """The words after a period, up to the period after it, as code reads them (`seen`)."""
+    stop = mention.end + _WINDOW_AFTER if mention.window[1] is None else min(mention.end + _WINDOW_AFTER, mention.window[1])
+    words = text[mention.end : stop]
+    if stop < len(text) and text[stop].isalnum() and stop > mention.end and text[stop - 1].isalnum():
+        words = _PARTIAL_END.sub("", words)
+    return _WHITESPACE.sub(" ", seen_text(words))
 
 
 def without_comparisons(text: str) -> str:
@@ -287,7 +468,7 @@ def explicit_operator(text: str, mention: DurationMention) -> Operator | None:
     ("or more", "or less") in the characters after it; None when the text states none. "No later than 30 days before"
     is a floor, because the thirty days are counted back from an event."""
     before = window_before(text, mention)
-    after = window_after(text, mention)
+    after = _closing(text, mention)
     if _EXACT.search(before):
         return Operator.EXACT
     candidates: list[tuple[int, Operator]] = []
@@ -311,6 +492,26 @@ def explicit_operator(text: str, mention: DurationMention) -> Operator | None:
     return min(candidates, key=lambda c: c[0])[1]
 
 
+# A comparison phrase that runs up to the next period opens that period: in "not less than 30 nor more than 60 days",
+# "nor more than" is 60's, never a suffix of 30's (stress test, 2026-10-30, once periods written together are read apart).
+_OPENS_NEXT = re.compile(
+    rf"(?:{_MAXIMUM.pattern}|{_MINIMUM.pattern}|{_EXACT.pattern}|(?:less|fewer|shorter|more|longer|greater) than|under|below|over|above|in excess of"
+    r"|exceed(?:ing|s)?|beyond)\s*\(?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _closing(text: str, mention: DurationMention) -> str:
+    """The words after a period that can close it ("or more", "at the most"): `window_after`, less the phrase that opens
+    the next period when that one follows within it."""
+    after = window_after(text, mention)
+    if mention.window[1] is not None and mention.window[1] <= mention.end + _WINDOW_AFTER:
+        opening = _OPENS_NEXT.search(after)
+        if opening is not None:
+            after = after[: opening.start()]
+    return after
+
+
 def stated_operator(text: str, mention: DurationMention) -> Operator | None:
     """The comparison the text states around a period: "less than 30 days" first (an upper bound), then the nearest
     comparison phrase; None when it states none. One reading for the guidance and the contract alike."""
@@ -322,25 +523,80 @@ def stated_operator(text: str, mention: DurationMention) -> Operator | None:
 def negation_near(text: str, mention: DurationMention, *, after: bool = True) -> str | None:
     """A negation word beside the period, once the comparison phrases that carry one ("not less than") are set aside;
     with ``after=False``, only one before it."""
-    found = NEGATION.search(without_comparisons(window_before(text, mention))) or (NEGATION.search(window_after(text, mention)) if after else None)
+    found = NEGATION.search(without_comparisons(window_before(text, mention))) or (
+        NEGATION.search(without_comparisons(window_after(text, mention))) if after else None
+    )
     return found.group(0).lower() if found else None
 
 
-def _operator_near(text: str, mention: DurationMention) -> Operator | None:
-    """The comparison a guidance sentence states around its duration. A duration with no comparison word is a floor:
-    a notice requirement states the least notice that will do (written here once). None where a negation code does not
-    read stands beside it: before a stated comparison ("must not be at least 60 days"), or on either side of a bare
+def _comparison(text: str, mention: DurationMention) -> tuple[Operator | None, bool]:
+    """The comparison a guidance sentence states around one of its periods, and whether code reads what stands beside it:
+    (operator, True) for a stated comparison, (None, True) for a bare period, (None, False) where a negation code does
+    not read stands beside it: before a stated comparison ("must not be at least 60 days"), or on either side of a bare
     period ("more than 60 days are not acceptable"); after a bare comparative ("less than 60 days", see _STRICT); and
     beside any comparing word the patterns did not recognise (_COMPARES). A guidance bound is read as written or not
     read at all."""
     if _STRICT.search(window_before(text, mention)):
-        return None
+        return None, False
     stated = explicit_operator(text, mention)
     if stated is not None:
-        return None if negation_near(text, mention, after=False) else stated
+        return (None, False) if negation_near(text, mention, after=False) else (stated, True)
     if negation_near(text, mention) or _COMPARES.search(f"{window_before(text, mention)} {window_after(text, mention)}"):
+        return None, False
+    return None, True
+
+
+def _in_order(low: Duration, high: Duration) -> bool:
+    """Whether a floor is no more than a ceiling, where code can tell; a pair it cannot put in order is left to evaluate."""
+    if low.unit == high.unit:
+        return low.value <= high.value
+    low_days, high_days = low.in_days(), high.in_days()
+    return low_days is None or high_days is None or low_days <= high_days
+
+
+def _sentence_rule(text: str, inside: Sequence[DurationMention]) -> GuidanceRule | None:
+    """The rule one sentence of the guidance states, or None when code does not read it whole.
+
+    One period with no comparison word is a floor: a notice requirement states the least notice that will do (written
+    here once). Where a sentence states several, each is read by its own words (`DurationMention.window`) and a bare one
+    is a floor only when it is alone. The ends of a range written as one are its floor and its ceiling ("between 30 and
+    90 days", "30-90 days"); a bare period after a stated comparison takes it ("at least 30 days' notice, or 90 days for
+    enterprise agreements"); several bare periods ("30, 60 or 90 days"), a period code cannot read (an ambiguous
+    "thirty (60) days", a negation it does not read) or floors and ceilings that do not pair are no rule, never part of
+    one: until policy-v17 the read periods of such a sentence were kept and the others dropped, so "between 30 and 90
+    days" was a floor of 90 (stress test, 2026-10-30). One floor and one ceiling are a range; other periods the
+    sentence states are the rule's `alternatives`."""
+    if not inside or any(m.duration is None for m in inside):
         return None
-    return Operator.MINIMUM
+    if len(inside) == 1:
+        operator, readable = _comparison(text, inside[0])
+        assert inside[0].duration is not None
+        return GuidanceRule(operator or Operator.MINIMUM, inside[0].duration, inside[0].surface) if readable else None
+    read: list[tuple[DurationMention, Operator]] = []
+    carried: Operator | None = None
+    for mention in inside:
+        operator, readable = _comparison(text, mention)
+        if not readable:
+            return None
+        if operator is not None:
+            carried = operator
+        elif mention.in_range is not None:
+            operator = Operator.MINIMUM if mention.in_range == "low" else Operator.MAXIMUM
+        elif carried is not None:
+            operator = carried
+        else:
+            return None
+        read.append((mention, operator))
+    floors = [m for m, op in read if op is Operator.MINIMUM]
+    ceilings = [m for m, op in read if op is Operator.MAXIMUM]
+    if len(read) == 2 and len(floors) == 1 and len(ceilings) == 1:
+        floor, ceiling = floors[0].duration, ceilings[0].duration
+        assert floor is not None and ceiling is not None
+        return GuidanceRule(Operator.MINIMUM, floor, floors[0].surface, maximum=ceiling) if _in_order(floor, ceiling) else None
+    if floors and ceilings:
+        return None
+    rules = [GuidanceRule(op, m.duration, m.surface) for m, op in read if m.duration is not None]
+    return replace(rules[0], alternatives=tuple(rules[1:]))
 
 
 def _sentence_spans(text: str) -> list[tuple[int, int]]:
@@ -354,12 +610,22 @@ def _sentence_spans(text: str) -> list[tuple[int, int]]:
     return spans
 
 
+def _periods_by_sentence(text: str) -> list[tuple[int, int, list[DurationMention]]]:
+    """Each sentence of the text that states a period, with its periods, ambiguous ones included."""
+    mentions = parse_durations(text)
+    out = []
+    for start, end in _sentence_spans(text) if mentions else []:
+        inside = [m for m in mentions if start <= m.start < end]
+        if inside:
+            out.append((start, end, inside))
+    return out
+
+
 def period_sentences(guidance: str | None) -> list[str]:
     """The sentences of the guidance that state a period: what a quote must be about before code compares it with one."""
     if not guidance:
         return []
-    starts = [m.start for m in parse_durations(guidance) if m.duration is not None]
-    return [guidance[start:end] for start, end in _sentence_spans(guidance) if any(start <= s < end for s in starts)]
+    return [guidance[start:end] for start, end, _ in _periods_by_sentence(guidance)]
 
 
 def _topic_tokens(topic: str | None) -> set[str]:
@@ -371,65 +637,76 @@ def parse_rule(guidance: str | None, topic: str | None = None) -> GuidanceRule |
 
     The guidance may carry several durations ("Payment terms are 30 days. Termination needs at least 90 days'
     notice."). The sentence that names the topic, or a notice period, is the one the rule comes from; the first
-    sentence with a duration otherwise. Within that sentence a floor and a ceiling together are a range. A notice
-    requirement with no comparison word is a floor ("30 days' notice" means at least 30), written down here, not
-    assumed elsewhere."""
+    sentence with a duration otherwise, an ambiguous one included: a sentence code cannot read is no rule, never
+    another sentence's (policy-v4; since policy-v17 a period written "thirty (60) days" no longer hands the choice to
+    the payment sentence). Within that sentence the rule is read by `_sentence_rule`."""
     if not guidance:
         return None
-    mentions = [m for m in parse_durations(guidance) if m.duration is not None]
-    if not mentions:
-        return None
-    sentences = _sentence_spans(guidance)
     wanted = _topic_tokens(topic)
-    best: tuple[int, int, list[DurationMention]] | None = None
-    for order, (start, end) in enumerate(sentences):
-        inside = [m for m in mentions if start <= m.start < end]
-        if not inside:
-            continue
+    best: tuple[int, list[DurationMention]] | None = None
+    for start, end, inside in _periods_by_sentence(guidance):
         sentence = guidance[start:end].lower()
         score = 2 * sum(1 for w in wanted if w in sentence) + (1 if _NOTICE.search(sentence) else 0)
         if best is None or score > best[0]:
-            best = (score, order, inside)
-    assert best is not None
-    chosen = best[2]
-    operators = [(m, op) for m, op in ((m, _operator_near(guidance, m)) for m in chosen) if op is not None]
-    if not operators:
-        return None  # the topic's sentence negates its period in a way code does not read: no rule, never another sentence's
-    floors = [m for m, op in operators if op is Operator.MINIMUM]
-    ceilings = [m for m, op in operators if op is Operator.MAXIMUM]
-    if floors and ceilings:
-        floor, ceiling = floors[0], ceilings[0]
-        assert floor.duration is not None and ceiling.duration is not None
-        return GuidanceRule(Operator.MINIMUM, floor.duration, floor.surface, maximum=ceiling.duration)
-    mention, operator = operators[0]
-    assert mention.duration is not None
-    return GuidanceRule(operator, mention.duration, mention.surface)
+            best = (score, inside)
+    return _sentence_rule(guidance, best[1]) if best is not None else None
 
 
 def stated_rules(guidance: str | None) -> list[GuidanceRule]:
-    """Every period the guidance states, each as a rule of its own with the comparison word nearest it. `parse_rule`
-    picks the one about the topic; this is what it picked from, so a caller can see whether the choice mattered
-    ("at least 30 days' notice, or 90 days for enterprise agreements" states two floors, and which applies to this
-    agreement is not something the text of the guidance settles). A period whose negation code does not read is not
-    a rule."""
+    """Every period the guidance states, as the rules its sentences state (a range is one rule). `parse_rule` picks the
+    one about the topic; this is what it picked from, so a caller can see whether the choice mattered ("at least 30
+    days' notice, or 90 days for enterprise agreements" states two floors, and which applies to this agreement is not
+    something the text of the guidance settles). A sentence code does not read states no rule here: `unread_periods`
+    names its periods."""
     if not guidance:
         return []
     rules: list[GuidanceRule] = []
-    for mention in parse_durations(guidance):
-        operator = _operator_near(guidance, mention)
-        if mention.duration is not None and operator is not None:
-            rules.append(GuidanceRule(operator, mention.duration, mention.surface))
+    for _, _, inside in _periods_by_sentence(guidance):
+        rule = _sentence_rule(guidance, inside)
+        if rule is not None:
+            rules += [replace(rule, alternatives=()), *rule.alternatives]
     return rules
 
 
+def unread_periods(guidance: str | None) -> list[DurationMention]:
+    """The periods of the sentences of the guidance that code does not read whole (`_sentence_rule` is None): a rule it
+    cannot read is still a rule, and a pass is not consistent with "the guidance" while one stands unread beside it."""
+    if not guidance:
+        return []
+    return [m for _, _, inside in _periods_by_sentence(guidance) if _sentence_rule(guidance, inside) is None for m in inside]
+
+
+def _zero(quote: str) -> tuple[str, int, int] | None:
+    """A phrase saying the notice is none ("immediately", "without notice"), as read (`seen`), with its offsets in ``quote``."""
+    read, where = seen(quote)
+    found = _ZERO.search(read)
+    if found is None:
+        return None
+    start, end = (where[found.start()], where[found.end() - 1] + 1) if where is not None else found.span()
+    return found.group(0), start, end
+
+
+_NO_NOTICE = Duration(Decimal(0), DurationUnit.CALENDAR_DAY)
+
+
 def stated_periods(quote: str) -> set[Duration]:
-    """Every period a quote states: its durations, and a period of zero days when it also says the notice is none
-    ("on 90 days' notice, except that Provider may terminate immediately"). `observed_fact` reads the zero only from a
-    quote with no other duration; here it stands beside them, because a carve-out with no number is still a period."""
-    periods = {m.duration for m in parse_durations(quote) if m.duration is not None}
-    if _ZERO.search(quote):
-        periods.add(Duration(Decimal(0), DurationUnit.CALENDAR_DAY))
+    """Every period a quote states: its durations, every reading of an ambiguous one ("sixty (20) days" states 60 and 20
+    as far as code can tell), and a period of zero days when it also says the notice is none ("on 90 days' notice,
+    except that Provider may terminate immediately"). `observed_fact` reads the zero only from a quote with no other
+    duration; here it stands beside them, because a carve-out with no number is still a period."""
+    periods = {reading for m in parse_durations(quote) for reading in m.readings}
+    if _zero(quote) is not None:
+        periods.add(_NO_NOTICE)
     return periods
+
+
+def same_period(a: Duration, b: Duration) -> bool:
+    """Whether two periods are one: equal, or the same number of calendar days ("8 weeks" and "56 days", stress test,
+    2026-10-30: the model writing a quote's eight weeks as 56 days was told its position is not in the quote)."""
+    if a == b:
+        return True
+    a_days, b_days = a.in_days(), b.in_days()
+    return a_days is not None and a_days == b_days
 
 
 def observed_fact(quote: str, stated: str | None = None) -> ObservedFact | None:
@@ -439,18 +716,44 @@ def observed_fact(quote: str, stated: str | None = None) -> ObservedFact | None:
     period of zero days; a quote whose only candidate is ambiguous yields an ambiguous fact."""
     mentions = parse_durations(quote)
     if not mentions:
-        zero = _ZERO.search(quote)
+        zero = _zero(quote)
         if zero is None:
             return None
-        return ObservedFact("notice_period", Duration(Decimal(0), DurationUnit.CALENDAR_DAY), zero.group(0), zero.start(), zero.end())
+        return ObservedFact("notice_period", _NO_NOTICE, *zero)
     chosen = mentions[0]
     if stated and len(mentions) > 1:
-        wanted = [m.duration for m in parse_durations(stated) if m.duration is not None]
-        for mention in mentions:
-            if mention.duration is not None and mention.duration in wanted:
-                chosen = mention
-                break
+        wanted = [reading for m in parse_durations(stated) for reading in m.readings]
+        chosen = next((m for m in mentions if m.duration is not None and any(same_period(m.duration, w) for w in wanted)), chosen)
     return ObservedFact("notice_period", chosen.duration, chosen.surface, chosen.start, chosen.end, chosen.ambiguity)
+
+
+def negation_beside(quote: str, fact: ObservedFact) -> str | None:
+    """A negation word beside the period a fact was read from, once the comparison phrases that carry one are set aside
+    ("Customer is not required to give thirty (30) days' notice", "Provider waives the 30 days' notice period"); for a
+    period of no notice, one before its phrase ("Provider may not terminate without prior notice"). None when there is
+    none. Code does not read what a negation negates, so it never claims such a period as what the contract provides.
+    "Without" denies the word after it ("without cause upon sixty (60) days' notice" states sixty days), so it counts
+    only right before the period ("without thirty (30) days' notice")."""
+    mention = next((m for m in parse_durations(quote) if m.start == fact.start and m.end == fact.end), None)
+    floor, ceiling = mention.window if mention is not None else (0, None)
+    # The rest of the period's sentence, a few words either way: "Thirty (30) days' notice of termination for convenience
+    # is not required" denies its period further on than a comparison word stands from the one it qualifies.
+    first = max(floor, fact.start - _DENIAL_WINDOW, max((m.end() for m in _SENTENCE_END.finditer(quote, 0, fact.start)), default=0))
+    stop = min(len(quote), fact.end + _DENIAL_WINDOW, ceiling if ceiling is not None else len(quote))
+    stop = next((m.start() for m in _CLAUSE_END.finditer(quote, fact.end, stop)), stop)
+    before = without_comparisons(_WHITESPACE.sub(" ", seen_text(quote[first : fact.start])))
+    after = without_comparisons(_WHITESPACE.sub(" ", seen_text(quote[fact.end : stop])))
+    found = _DENIES.search(before) or _DENIES.search(after) or (_WITHOUT_IT.search(before) if mention is not None else None)
+    return found.group(0).strip().lower() if found else None
+
+
+_DENIAL_WINDOW = 80
+_CLAUSE_END = re.compile(r"[.;!?](?=\s|$)")
+
+
+# The words that deny what stands beside them, for `negation_beside`: NEGATION less "without", which denies the next word.
+_DENIES = re.compile(r"\b(?:not|no|never|nor|neither|cannot|waives?|waived)\b", re.IGNORECASE)
+_WITHOUT_IT = re.compile(r"\bwithout\s+(?:(?:the|a|an|any|giving|providing)\s+)?$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -472,20 +775,31 @@ def evaluate(observed: ObservedFact | None, rule: GuidanceRule | None, week: Bus
     if observed.duration is None:
         return PolicyEvaluation("ambiguous", f"the quote is internally inconsistent: {observed.ambiguity}", observed, rule)
     left, right = observed.duration, rule.duration
-    if not all(_exact_pair(left, other) for other in (right, rule.maximum) if other is not None):
+    bounds = [d for d in (right, rule.maximum) if d is not None]
+    if not all(_exact_pair(left, other) for other in bounds):
         return _on_the_calendar(observed, rule, week)
-    if left.unit != right.unit:
-        left_days, right_days = left.in_days(), right.in_days()
-        assert left_days is not None and right_days is not None  # an exact pair
-        a, b = left_days, right_days
-    else:
-        a, b = left.value, right.value
+    # One unit for every number compared: the raw values when all three periods share one, calendar days otherwise.
+    # Until policy-v17 the floor was converted and the ceiling kept raw whenever its unit was the quote's, so 6 weeks
+    # against "at least 14 days and no more than 8 weeks" was compared as 42 days against 14 and 8 (stress test, 2026-10-30).
+    one_unit = all(d.unit == left.unit for d in bounds)
+
+    def number(duration: Duration) -> Decimal:
+        value = duration.value if one_unit else duration.in_days()
+        assert value is not None  # an exact pair
+        return value
+
+    a, b = number(left), number(right)
     left_unit, right_unit = left.unit.value.replace("_", " "), right.unit.value.replace("_", " ")
     if rule.maximum is not None:
-        top = rule.maximum.in_days() if left.unit != rule.maximum.unit else rule.maximum.value
-        assert top is not None  # an exact pair
+        top = number(rule.maximum)
         ok = b <= a <= top
-        reason = f"the contract provides {left.value} {left_unit}s; the guidance requires between {right.value} and {rule.maximum.value} {right_unit}s"
+        top_unit = rule.maximum.unit.value.replace("_", " ")
+        between = (
+            f"{right.value} and {rule.maximum.value} {right_unit}s"
+            if rule.maximum.unit == right.unit
+            else f"{right.value} {right_unit}s and {rule.maximum.value} {top_unit}s"
+        )
+        reason = f"the contract provides {left.value} {left_unit}s; the guidance requires between {between}"
         return PolicyEvaluation("pass" if ok else "needs_review", reason, observed, rule)
     if rule.operator is Operator.MINIMUM:
         ok, verb = a >= b, "at least"
@@ -757,6 +1071,9 @@ class DayConvention:
     unit: DurationUnit  # BUSINESS_DAY or CALENDAR_DAY
     sentence: str
     where: str
+    # The sentence limits it to a part of the contract ("In this Clause 5 only", "For the purposes of this Schedule"):
+    # code does not read which part a quote is in, so it reads a quote's "days" both ways (policy-v17).
+    scoped: bool = False
 
     @property
     def note(self) -> str:
@@ -770,13 +1087,25 @@ _DAYS_ARE = re.compile(
 )
 
 
+# A statement limited to one part of the contract: "In this Clause 5 only", "For the purposes of this Schedule", "except
+# in clause 7". Until policy-v17 such a convention was applied to every quote, so a §2 "thirty (30) days" was read as
+# Business Days by a §5 that spoke of itself, and code computed a shortfall, or a "consistent" pass, from it (stress
+# test, 2026-10-30). The boilerplate "unless the context otherwise requires" limits nothing.
+_SCOPED = re.compile(
+    r"\b(?:in|for\s+(?:the\s+)?purposes?\s+of|within|under)\s+this\s+(?:clause|section|schedule|part|annex(?:ure)?|exhibit|appendix|paragraph"
+    r"|article|sub-?clause)\b|\bonly\b|\bexcept\s+(?:in|where|as)\b",
+    re.IGNORECASE,
+)
+
+
 def day_convention(sections: Iterable[tuple[str, str]]) -> DayConvention | None:
     """The contract's own statement of what its bare "days" are; None when it makes none, or two that disagree."""
     found: list[DayConvention] = []
     for where, text in sections:
         for match in _DAYS_ARE.finditer(text):
             unit = DurationUnit.CALENDAR_DAY if match.group(1).casefold() == "calendar" else DurationUnit.BUSINESS_DAY
-            found.append(DayConvention(unit, _definition_at(text, match.start()), _clause_where(text, match.start(), where)))
+            sentence = _definition_at(text, match.start())
+            found.append(DayConvention(unit, sentence, _clause_where(text, match.start(), where), _SCOPED.search(sentence) is not None))
     if not found or len({c.unit for c in found}) != 1:
         return None
     return found[0]
@@ -803,11 +1132,10 @@ def periods_as_the_contract_reads(quote: str, convention: DayConvention | None) 
         return stated_periods(quote)
     periods: set[Duration] = set()
     for mention in parse_durations(quote):
-        if mention.duration is None:
-            continue
-        reading = read_as_the_contract_does(ObservedFact("notice_period", mention.duration, mention.surface, mention.start, mention.end), convention)
-        assert reading.duration is not None
-        periods.add(reading.duration)
-    if _ZERO.search(quote):
-        periods.add(Duration(Decimal(0), DurationUnit.CALENDAR_DAY))
+        for value in mention.readings:
+            reading = read_as_the_contract_does(ObservedFact("notice_period", value, mention.surface, mention.start, mention.end), convention)
+            assert reading.duration is not None
+            periods.add(reading.duration)
+    if _zero(quote) is not None:
+        periods.add(_NO_NOTICE)
     return periods

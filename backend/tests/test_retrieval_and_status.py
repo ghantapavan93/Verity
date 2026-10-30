@@ -132,10 +132,19 @@ def test_a_stated_position_the_quote_does_not_carry_lowers_the_status() -> None:
     assert decide("pass", "30 days' notice", "at least 45 days", True, True, quotes=[quote], guidance=guidance).source == "position_check"
     # Both positions are in the record: computed as before.
     assert decide("pass", "30 days' notice", "at least 30 days", True, True, quotes=[quote], guidance=guidance).source == "model_hint"
-    # A quote without a duration grounds nothing: the model's numbers compute nothing, and the hint stands as a hint.
+    # A quote without a duration grounds nothing: the model's numbers compute nothing. Since policy-v17 (stress test,
+    # 2026-10-30) a pass whose stated position names a period that no verified quote states is lowered, as this module's
+    # docstring has always said; until then a quote with no period let any stated count through as the model's pass.
     assert decide(
         "pass", "30 days' notice", "at least 30 days", True, True, quotes=["Either party may terminate for convenience."], guidance=guidance
-    ) == Decision("pass", "model_hint")
+    ) == Decision("needs_review", "position_check", "the position the model stated is not in the verified quote")
+    # The hint stands as a hint where the model states no period, or does not propose a pass.
+    assert decide("pass", "on notice", "at least 30 days", True, True, quotes=["Either party may terminate for convenience."], guidance=guidance) == Decision(
+        "pass", "model_hint"
+    )
+    assert decide(
+        "needs_review", "30 days' notice", "at least 30 days", True, True, quotes=["Either party may terminate for convenience."], guidance=guidance
+    ) == Decision("needs_review", "model_hint")
     # Without guidance the model's hint stands, as before, unless it states a count the quote does not carry.
     assert decide("pass", None, None, False, True, quotes=[quote]) == Decision("pass", "model_hint")
     assert decide("pass", "60 days", None, False, True, quotes=[quote]).source == "position_check"

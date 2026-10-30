@@ -41,12 +41,16 @@ from ..policy.durations import (
     Duration,
     ObservedFact,
     evaluate,
+    negation_beside,
     observed_fact,
     parse_durations,
     parse_rule,
     periods_as_the_contract_reads,
     read_as_the_contract_does,
+    same_period,
+    stated_periods,
     stated_rules,
+    unread_periods,
 )
 from ..policy.proof import CARVE_OUT, concept_stems, pass_blockers, same_point, unseen_reason
 from .prose import UNRESOLVED
@@ -131,7 +135,21 @@ from .values import frame_times, redaction_given_as_value, uniform_party_choices
 # with v15's false reason gone the challenge's wrong "ninety (90) days" stood as a pass. A status code computed on the
 # replacement stays. Relations no longer takes a clause's number for a value: the number a wording opens with is its
 # name, and an answer's pointers ("clause 1.2") and marked names are set aside, each pointer's own number only.
-POLICY_VERSION = "policy-v16"
+# policy-v17 (2026-10-30, the adversarial stress test): code reads a period as the text writes it, or not at all
+# (policy.durations). Periods written together share what is written once ("between 30 and 90 days", "30-90 days", "30,
+# 60 or 90 days"), the ends of a range are its floor and ceiling, number words are read by their grammar ("thirty and
+# sixty" is two numbers), digits by their grouping ("1,095"), and characters a reader does not see or a typeset dash
+# change no number. A sentence code cannot read whole is no rule; a shortfall is code's only against every period the
+# rule's sentence states; a range compares in one unit. A period whose words and digits disagree anywhere in the quotes
+# makes the finding an ambiguous fact; a period beside a negation is never what "the contract provides" (an ambiguous
+# fact, or a blocked pass); a stated position is compared by value ("56 days" is "8 weeks"), and a pass stating a
+# period no verified quote states is lowered whether or not the quotes state any. A "days" convention limited to one
+# part of the contract reads a quote both ways. Every check reads the contract text a verified quote was found at, never
+# the model's spelling of it (runs.service.located_text). A value only the guidance states supports an answer that
+# compares, never one that gives it as the contract's (`check_values`). Relations: a replaced definition is the replaced
+# text in every wording of the statement, and the conclusion alone is read for the replaced value (`old_value`). The
+# condition words read every way a contract opens one; a number written in words is no subject word.
+POLICY_VERSION = "policy-v17"
 
 
 @dataclass(frozen=True)
@@ -146,7 +164,12 @@ class Decision:
 
 
 def _durations(text: str | None) -> set[Duration]:
-    return {m.duration for m in parse_durations(text) if m.duration is not None}
+    """Every period the text states, each reading of an ambiguous one included."""
+    return {reading for m in parse_durations(text) for reading in m.readings}
+
+
+def _shares_a_period(stated: set[Duration], evidence: set[Duration]) -> bool:
+    return any(same_period(a, b) for a in stated for b in evidence)
 
 
 def _periods(durations: set[Duration]) -> str:
@@ -175,19 +198,25 @@ def decide(
     ``days`` what the contract says its bare "days" are (`policy.durations.day_convention`)."""
     if not all_spans_verified:
         return Decision("unresolved", "no_evidence")
-    # The model's stated positions are checked against the record before anything is computed.
-    stated, in_quotes = _durations(observed), set().union(*(_durations(q) for q in quotes)) if quotes else set()
-    if stated and in_quotes and not stated & in_quotes:
+    # The model's stated positions are checked against the record before anything is computed, by value: "56 days" is
+    # the quote's "eight (8) weeks". A pass whose stated position names a period no verified quote states is lowered
+    # whether or not the quotes state any period: until policy-v17 a quote with none let any stated count through, as
+    # the docstring above never allowed (stress test, 2026-10-30: "120 days' written notice" over "upon written notice").
+    stated, in_quotes = _durations(observed), set().union(*(stated_periods(q) for q in quotes)) if quotes else set()
+    if stated and quotes and (in_quotes or status_hint == "pass") and not _shares_a_period(stated, in_quotes):
         return Decision("needs_review", "position_check", "the position the model stated is not in the verified quote")
     stated_required, in_guidance = _durations(required), _durations(guidance)
-    if stated_required and in_guidance and not stated_required & in_guidance:
+    if stated_required and in_guidance and not _shares_a_period(stated_required, in_guidance):
         return Decision("needs_review", "position_check", "the requirement the model stated is not in the guidance")
     rule = parse_rule(guidance, topic) if guidance_present else None
-    fact = next((f for f in (observed_fact(q, stated=observed) for q in quotes) if f is not None), None)
-    read = read_as_the_contract_does(fact, days) if fact is not None else None
-    converted = read is not None and fact is not None and read.duration != fact.duration
+    found = next(((q, f) for q in quotes if (f := observed_fact(q, stated=observed)) is not None), None)
+    # A convention limited to a part of the contract is not applied to a quote code cannot place in that part: the quote's
+    # "days" are read both ways below, and as written otherwise.
+    scoped, days = (days, None) if days is not None and days.scoped else (None, days)
+    read = read_as_the_contract_does(found[1], days) if found is not None else None
+    converted = read is not None and found is not None and read.duration != found[1].duration
     fact = read
-    if rule is not None and fact is not None:
+    if rule is not None and fact is not None and found is not None:
         if status_hint == "missing":
             # The model reported the point as not found, and the prompt (rule 8) has it cite the closest provision it
             # read. That quote is not the contract's position, so there is nothing for code to compare: until
@@ -199,6 +228,22 @@ def decide(
                 "the model reported the point as not found, so the quoted passage is the closest provision read, not the contract's position; "
                 "code compared no periods",
             )
+        # A period whose words and digits disagree ("sixty (20) days") anywhere in the verified quotes leaves the quotes'
+        # account of the contract internally inconsistent, whichever period the model pointed at and in whatever order it
+        # quoted. Until policy-v17 only an inconsistent first period counted, so the model's `observed` or its quote
+        # order turned the same evidence into a pass with code's "consistent" sentence (stress test, 2026-10-30).
+        inconsistent = next((m.ambiguity for q in quotes for m in parse_durations(q) if m.ambiguity is not None), None)
+        if inconsistent is not None:
+            return Decision("needs_review", "ambiguous_fact", f"the quote is internally inconsistent: {inconsistent}")
+        if scoped is not None:
+            either = set().union(*(stated_periods(q) | periods_as_the_contract_reads(q, scoped) for q in quotes))
+            if len({evaluate(ObservedFact("notice_period", d, "", 0, 0), rule, week).outcome for d in either}) > 1:
+                return Decision(
+                    "needs_review",
+                    "ambiguous_fact",
+                    f"{scoped.note.replace(' in this contract', '')} only where that sentence says (“{scoped.sentence}”), and code does not read "
+                    f"which part the quote is in; read either way ({_periods(either)}), the quote does not meet the guidance alike",
+                )
         # A quote that states more than one period ("90 days' notice, unless …, in which case 10 days") may be decided
         # by code only when every period it states leads to the same result. Until 2026-10-02 the first period, or the
         # one the model pointed at, decided alone, and "90 days unless … 10 days" was a computed pass against a 90-day
@@ -215,7 +260,28 @@ def decide(
         if converted and days is not None:
             # The quote's "days" are the contract's Business Days: the reason says so, where every reader of it can check it.
             evaluation = replace(evaluation, reason=f"{evaluation.reason} ({days.note})")
+        # Code does not read what a negation negates, so a period beside one is never what "the contract provides" in
+        # code's sentence: "Customer is not required to give thirty (30) days' notice" was code's shortfall of 30 calendar
+        # days, and "Provider may not terminate … without prior notice" a pass whose zero days code found consistent with
+        # a ceiling (stress test, 2026-10-30). A shortfall so read goes to a person as an ambiguous fact; a pass is blocked.
+        negation = negation_beside(*found)
         if evaluation.outcome == "needs_review":
+            # A shortfall is code's only against every period the guidance's sentence states as a rule: "90 days' notice,
+            # or 30 days for small accounts" is not short of the guidance at 60 days, whichever binds (policy-v17).
+            if any(evaluate(fact, other, week).outcome != "needs_review" for other in rule.alternatives):
+                return Decision(
+                    status_hint,
+                    "model_hint",
+                    f"{evaluation.reason}, but code does not decide it: the guidance's sentence states more than one period "
+                    f"({_periods({rule.duration, *(other.duration for other in rule.alternatives)})}) and the quote does not fall short of them all",
+                )
+            if negation is not None:
+                return Decision(
+                    "needs_review",
+                    "ambiguous_fact",
+                    f'a negation ("{negation}") stands beside the period the quote states, and code does not read what it negates; '
+                    f"read without it, {evaluation.reason}",
+                )
             # A shortfall is code's to report: 60 days where the guidance requires 90 sends the finding to a person. What
             # code established is the conflict between the two periods. That the quoted period is the guidance's subject
             # (a termination notice, not a payment term) is the model's reading, and the reason says so (policy v3): the
@@ -232,9 +298,18 @@ def decide(
                 # "At least 30 days' notice; enterprise agreements require 90": which period binds this agreement is a
                 # reading of the guidance, and code does not make it.
                 blockers.append(f"the guidance states more than one period ({_periods(in_guidance)}) and the quote does not meet them all")
+            # A period of the guidance in a sentence code does not read is still a rule, unless it restates one code read
+            # ("Anything below 30 days requires review" beside "30 days' notice or more").
+            read_here = {d for other in stated_rules(guidance) for d in (other.duration, other.maximum) if d is not None}
+            unread = [m for m in unread_periods(guidance) if not all(any(same_period(r, d) for d in read_here) for r in m.readings)]
+            if unread:
+                blockers.append(f"the guidance states a period code does not read (“{unread[0].surface}”)")
             blockers += pass_blockers(quotes, guidance, rule, dependencies, passages)
+            if negation is not None:
+                blockers.append(f'a negation stands beside the period ("{negation}"), and code does not read what it negates')
             if blockers:
-                return Decision(status_hint, "model_hint", f"{evaluation.reason}, but code does not confirm that as a pass: {'; '.join(blockers)}")
+                said = "; ".join(dict.fromkeys(blockers))
+                return Decision(status_hint, "model_hint", f"{evaluation.reason}, but code does not confirm that as a pass: {said}")
             # Policy v3: code no longer owns a pass. The checks above are lexical (shared word stems, operators, negation,
             # carve-outs), and a lexical check cannot establish that a quote and a guidance sentence concern the same
             # point: "Following a material breach, Company shall provide 30 days' written notice of an audit" passed every
@@ -554,10 +629,13 @@ def check_values(
     computed from quoted figures, a period stated elsewhere in the contract): code says only that the evidence shown does
     not establish it, never that it is wrong.
 
-    The guidance is a standard the reader set and the answer is compared with, so its values count as stated. The
-    question does not: it is what the reader asked, not what the contract says, and a value an answer takes from it
-    ("the Buyer's $1,000,000 cash payment") is a premise repeated, which the reason names as such. Other statuses already
-    ask a person to look, and a finding with no verified quote was decided before this."""
+    The guidance is a standard the reader set: its values support an answer that compares a quoted value with it ("90
+    days meets the 45-day minimum"), and since policy-v17 nothing else. An answer that gives the guidance's figure as the
+    contract's ("on 90 days' notice, which meets the guidance" over a quote with no period) has repeated the standard,
+    not quoted the contract (stress test, 2026-10-30). The question is not evidence either: it is what the reader asked,
+    and a value an answer takes from it ("the Buyer's $1,000,000 cash payment") is a premise repeated. The reason names
+    each as such. Other statuses already ask a person to look, and a finding with no verified quote was decided before
+    this."""
     if decision.status != "pass" or not quotes:
         return decision
     mark = redaction_given_as_value(conclusion)
@@ -568,7 +646,8 @@ def check_values(
             f"the answer gives {mark}, a redaction mark, as its value: this copy of the contract withholds the figure, so the evidence cannot establish it",
         )
     # The time the question asks at is not a figure taken from it (policy-v12): repeated, it says when the answer is for.
-    unsupported = unquoted_values(conclusion, quotes, [guidance or "", *frame_times(question)], clause_numbers)
+    frames = frame_times(question)
+    unsupported = unquoted_values(conclusion, quotes, frames, clause_numbers, standards=[guidance] if guidance else [])
     if not unsupported:
         uniform = uniform_party_choices(conclusion, quotes, [question or ""], [guidance] if guidance else [])
         if not uniform:
@@ -583,12 +662,17 @@ def check_values(
                 decision,
             ),
         )
+    # Where each came from: read again with the guidance counted as stated, and with the question too.
+    beside_guidance = set(unquoted_values(conclusion, quotes, [guidance or "", *frames], clause_numbers))
     beyond_question = set(unquoted_values(conclusion, quotes, [question or "", guidance or ""], clause_numbers))
-    from_question = [v for v in unsupported if v not in beyond_question]
+    from_guidance = [v for v in unsupported if v not in beside_guidance]
+    from_question = [v for v in unsupported if v in beside_guidance and v not in beyond_question]
     elsewhere = [v for v in unsupported if v in beyond_question]
     reasons = []
     if elsewhere:
         reasons.append(f"the evidence shown does not establish {', '.join(elsewhere)}: no verified quote or guidance states it")
     if from_question:
         reasons.append(f"{', '.join(from_question)} comes from the question, and no verified quote states it")
+    if from_guidance:
+        reasons.append(f"{', '.join(from_guidance)} comes from the guidance, and no verified quote states it")
     return Decision("needs_review", "position_check", "; ".join(reasons))
