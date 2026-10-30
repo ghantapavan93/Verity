@@ -17,8 +17,8 @@ every invite and every session at once.
 
 Both tokens are `v1.<claims>.<mac>`: the claims as base64url JSON (subject, audience, issued, expires) and an
 HMAC-SHA256 over them under `WORKBENCH_ACCESS_SECRET`. Nothing is stored: a token is valid when its MAC is, its
-audience is the one asked for, its time has come and not passed, and its subject is not revoked. There is no
-password, so there is nothing to hash, guess or forget; no account, no signup, no reset.
+audience is the one asked for, it has not expired, an invite's time has come, and its subject is not revoked. There is
+no password, so there is nothing to hash, guess or forget; no account, no signup, no reset.
 
 With no secret configured the gate is off and every request is let through, which is how a laptop, the tests and
 the browser flows run. `/api/health` says which it is.
@@ -38,7 +38,7 @@ import time
 import weakref
 from collections import deque
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import ClassVar, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -50,7 +50,7 @@ from ..config import settings
 from ..db import SessionLocal, get_session
 from ..errors import AccessRequired, Conflict, Forbidden, InvalidInput, NotFound, Paused, TooManyRequests
 from ..hashing import mac_sha256
-from ..models import VisitorWorkspace, as_utc, utcnow
+from ..models import CLOCK_SKEW, VisitorWorkspace, as_utc, issued_in_future, utcnow
 from ..schemas import AccessOut, InviteIn
 
 SESSION_COOKIE = "__Host-verity_session"
@@ -58,7 +58,7 @@ TOKEN_VERSION = "v1"
 Audience = Literal["verity-invite", "verity-session"]
 MIN_SECRET_CHARS = 32
 MAX_TOKEN_CHARS = 1024
-CLOCK_SKEW_S = 60
+CLOCK_SKEW_S = int(CLOCK_SKEW.total_seconds())
 
 # The two operations worth a limit once the host is reachable without Cloudflare Access: guessing at the exchange,
 # and starting model runs, each of which holds the one GPU for half a minute or more. Per client address for the
@@ -111,8 +111,15 @@ def mint(subject: str, audience: Audience, lifetime_s: int, secret: str, now: fl
 
 
 def verify(token: str | None, audience: Audience, secret: str, now: float | None = None) -> Session | None:
-    """The session a token stands for, or None: malformed, signed by another secret, for another audience, not yet
-    valid, expired or revoked are all the same answer, and none of them is told apart to the caller."""
+    """The session a token stands for, or None: malformed, signed by another secret, for another audience, expired,
+    revoked, or an invite not yet valid, are all the same answer, and none of them is told apart to the caller.
+
+    A session is never refused for an issued-at time ahead of the clock. This server minted it (the MAC says so), and its
+    expiry and, for a visit, its workspace's row decide its life. Refused, a clock step back of more than a session's age
+    plus the skew closed every open visit, and the page's reload then swapped the cookie for an empty workspace (stress
+    test, 2026-10-30, time 4). An invite is minted by scripts/access.py, outside this process, so its not-before is kept:
+    the cost, accepted, is that after a step back an invite minted on this host in the last (step - skew) is refused
+    until the clock catches up."""
     if not token or not secret or len(token) > MAX_TOKEN_CHARS:
         return None
     body, _, mac = token.rpartition(".")
@@ -131,7 +138,9 @@ def verify(token: str | None, audience: Audience, secret: str, now: float | None
     if not isinstance(subject, str) or not subject or type(issued) is not int or type(expires) is not int or claims.get("aud") != audience:
         return None
     current = time.time() if now is None else now
-    if issued > current + CLOCK_SKEW_S or expires <= current or subject in settings.access_revoked:
+    if expires <= current or subject in settings.access_revoked:
+        return None
+    if audience == "verity-invite" and issued_in_future(datetime.fromtimestamp(issued, UTC), datetime.fromtimestamp(current, UTC)):
         return None
     return Session(subject, expires)
 

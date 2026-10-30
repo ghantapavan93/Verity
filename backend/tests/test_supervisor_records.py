@@ -359,3 +359,72 @@ def test_the_unsupervised_record_is_held_to_the_same_rule(tmp_path: Path) -> Non
         assert ours.wait(10) is not None, "the recorded api is stopped"
         assert other.poll() is None, "a pid another process holds now, with or without a start time, is left alone"
     assert not (logs / "pids.json").exists()
+
+
+# Elapsed time in the deploy scripts is the monotonic clock's (stress test, 2026-10-30, time 5). The supervisor measured
+# the watchdog's grace and a server's run with local Get-Date; .NET subtracts local times tick by tick, so across the
+# fall-back (2026-11-01, 02:00 CDT) a server restarted in the hour before read -2,400 s old, the watchdog skipped a hung
+# API for up to an hour, and the exit line said "after -3269 s" and doubled the backoff. A clock step of S did the same
+# for S. The watchdog is run here against a process that never answers, under a Get-Date stepped back an hour after its
+# first reading.
+
+STEPPED_GET_DATE = """
+$script:readings = 0
+function Get-Date { $script:readings++; $now = [DateTime]::Now; if ($script:readings -gt 1) { $now = $now.AddSeconds(-3600) }; return $now }
+"""
+
+
+def run_watchdog(tmp_path: Path, clock: str) -> tuple[subprocess.CompletedProcess[str], str]:
+    script = SUPERVISE.read_text(encoding="utf-8")
+    log = tmp_path / "t.supervisor.log"
+    body = "\n".join(
+        [
+            "$ErrorActionPreference = 'Stop'",
+            f"$supervisorLog = '{log}'",
+            f"$stopFile = '{tmp_path / 't.stop'}'",
+            "$droppedLines = 0",
+            "$Name = 'api'",
+            "$HEALTH_EVERY_SECONDS = 1; $HEALTH_GRACE_SECONDS = 1; $HEALTH_MISSES = 2",
+            clock,
+            function_source(script, "Write-Record"),
+            function_source(script, "Write-Line"),
+            function_source(script, "Watch-Server"),
+            "$server = Start-Process -FilePath powershell -ArgumentList '-NoProfile','-Command','Start-Sleep 20' -WindowStyle Hidden -PassThru",
+            "$null = $server.Handle",
+            f"$ran = Watch-Server $server 'http://127.0.0.1:{free_port()}/api/health'",
+            "if (-not $server.HasExited) { Stop-Process -Id $server.Id -Force }",
+            "'ran ' + $ran",
+        ]
+    )
+    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", body], capture_output=True, text=True, timeout=90)
+    return result, log.read_text(encoding="utf-8-sig") if log.exists() else ""
+
+
+@pytest.mark.parametrize("clock", [STEPPED_GET_DATE, ""], ids=["stepped-back-an-hour", "control-steady"])
+def test_a_silent_server_is_stopped_after_its_misses_whatever_the_clock_does(tmp_path: Path, clock: str) -> None:
+    result, log = run_watchdog(tmp_path, clock)
+    assert result.returncode == 0, result.stderr
+    assert "(2 of 2)" in log and "is running but not answering: stopping it" in log
+    ran = int(re.findall(r"ran (-?\d+)", result.stdout)[-1])
+    assert 0 <= ran < 15, f"the server ran {ran} s by the monotonic clock: stopped after its grace and two misses"
+
+
+DEPLOY = SUPERVISE.parent
+
+
+def test_no_deploy_script_measures_a_duration_or_a_deadline_with_the_wall_clock() -> None:
+    """A static guard over every script in deploy/: no Get-Date subtraction, no Get-Date deadline in seconds or minutes,
+    no comparison against one. A calendar cutoff for file times (Remove-OldLogs' 14 days, AddDays) is not a duration."""
+    banned = [
+        r"\(Get-Date\)\s*-\s*\$",  # (Get-Date) - $began
+        r"\(Get-Date\)\s*-(lt|le|gt|ge)\b",  # (Get-Date) -lt $deadline
+        r"\(Get-Date\)\.Add(Seconds|Minutes|Milliseconds|Hours|Ticks)\(",  # a deadline in time units
+        r"=\s*Get-Date\s*$",  # $began = Get-Date
+    ]
+    found = [
+        f"{path.name}:{number}: {line.strip()}"
+        for path in sorted(DEPLOY.glob("*.ps1"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if any(re.search(pattern, line) for pattern in banned)
+    ]
+    assert not found, "measure elapsed time with [Diagnostics.Stopwatch]:\n" + "\n".join(found)

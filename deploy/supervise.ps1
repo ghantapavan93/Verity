@@ -125,6 +125,36 @@ $HEALTH_EVERY_SECONDS = 30
 $HEALTH_GRACE_SECONDS = 60  # a server starting up is not probed
 $HEALTH_MISSES = 3          # about ninety seconds of silence
 
+# Alive is not answering: on 2026-10-09 the API's accept loop died (asyncio, WinError 64) and the process stayed up, so a
+# supervisor that waited only for an exit left the public API at 502 for 33 minutes. The server is probed on its own
+# loopback port; after HEALTH_MISSES failed probes in a row it is stopped, and the restart brings it back. Returns how
+# many seconds the server ran. Elapsed time is a Stopwatch's, never Get-Date's: local times subtract tick by tick, so
+# across the fall-back a server restarted in the hour before read -2,400 s old and was not probed for up to an hour, and
+# a clock step of S blinded the watchdog for S (stress test, 2026-10-30, time 5). Get-Date is for log stamps only.
+function Watch-Server($process, [string]$probe) {
+  $age = [Diagnostics.Stopwatch]::StartNew()
+  $misses = 0
+  while (-not $process.WaitForExit($HEALTH_EVERY_SECONDS * 1000)) {
+    if ($age.Elapsed.TotalSeconds -lt $HEALTH_GRACE_SECONDS) { continue }
+    if (Test-Path $stopFile) { continue }  # a stop is under way (deploy/down.ps1): it ends the server; the watchdog must not race it
+    try { $answered = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 $probe).StatusCode -eq 200 } catch { $answered = $false }
+    if ($answered) {
+      if ($misses -gt 0) { Write-Line "$Name pid $($process.Id) answering again after $misses missed probe(s)" }
+      $misses = 0
+      continue
+    }
+    $misses++
+    Write-Line "$Name pid $($process.Id) did not answer $probe ($misses of $HEALTH_MISSES)"
+    if ($misses -ge $HEALTH_MISSES) {
+      Write-Line "$Name pid $($process.Id) is running but not answering: stopping it so it is restarted"
+      & taskkill.exe /PID $process.Id /T /F | Out-Null
+      $null = $process.WaitForExit()
+      break
+    }
+  }
+  return [int]$age.Elapsed.TotalSeconds
+}
+
 $backoff = 5
 # Only the stop file ends this loop. Each pass runs inside try: a failure anywhere in it (a missing executable, an
 # unreadable secret, a path that cannot be made) is logged, a server it started is stopped so the next pass owns the
@@ -195,31 +225,8 @@ while ($true) {
       $pidNote = if ($cleared) { "; pid file not written: down.ps1 cannot stop this server by pid" } else { "; pid file not written and still names an earlier server: do not run down.ps1 until it is removed" }
     }
     Write-Line "started $Name pid $($process.Id) (output $Tag.$stamp.out.log)$pidNote"
-    $began = Get-Date
-    # Alive is not answering: on 2026-10-09 the API's accept loop died (asyncio, WinError 64) and the process stayed up,
-    # so a supervisor that waited only for an exit left the public API at 502 for 33 minutes. The server is probed on its
-    # own loopback port; after HEALTH_MISSES failed probes in a row it is stopped, and the restart below brings it back.
     $probe = if ($Name -eq "api") { "http://127.0.0.1:$Port/api/health" } else { "http://127.0.0.1:${Port}/" }
-    $misses = 0
-    while (-not $process.WaitForExit($HEALTH_EVERY_SECONDS * 1000)) {
-      if (((Get-Date) - $began).TotalSeconds -lt $HEALTH_GRACE_SECONDS) { continue }
-      if (Test-Path $stopFile) { continue }  # a stop is under way (deploy/down.ps1): it ends the server; the watchdog must not race it
-      try { $answered = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 $probe).StatusCode -eq 200 } catch { $answered = $false }
-      if ($answered) {
-        if ($misses -gt 0) { Write-Line "$Name pid $($process.Id) answering again after $misses missed probe(s)" }
-        $misses = 0
-        continue
-      }
-      $misses++
-      Write-Line "$Name pid $($process.Id) did not answer $probe ($misses of $HEALTH_MISSES)"
-      if ($misses -ge $HEALTH_MISSES) {
-        Write-Line "$Name pid $($process.Id) is running but not answering: stopping it so it is restarted"
-        & taskkill.exe /PID $process.Id /T /F | Out-Null
-        $process.WaitForExit()
-        break
-      }
-    }
-    $ran = [int]((Get-Date) - $began).TotalSeconds
+    $ran = Watch-Server $process $probe
     Write-Line "exited $Name pid $($process.Id) code $($process.ExitCode)$(Get-ExitMeaning $process.ExitCode) after $ran s"
     $lastLine = Get-LastServerLine $err
     if ($lastLine) { Write-Line "last line of $Tag.$stamp.err.log or its log: $lastLine" }

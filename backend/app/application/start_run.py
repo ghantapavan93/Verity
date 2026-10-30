@@ -203,9 +203,11 @@ def start_run(
         session.add(run)
         return run
 
-    # A question asked before is handed its run before any quota is counted: it creates nothing and calls no model.
+    # A question asked before is handed its run before any quota is counted: it creates nothing and calls no model. The
+    # daily quotas count the run on the day of its own `now`: counted on the clock read inside the lock, a run stamped
+    # before midnight and admitted after it was counted against no day (stress test, 2026-10-30, time 2).
     try:
-        written, created = admit(session, run_quotas(workspace), write, find=lambda: active_run(session, key))
+        written, created = admit(session, run_quotas(workspace, at=now), write, find=lambda: active_run(session, key))
     except BaseException:
         run_ended(run.id)  # never written
         raise
