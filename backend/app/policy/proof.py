@@ -54,10 +54,19 @@ _WORD = re.compile(r"[a-z]{4,}")
 # How many of a guidance sentence's own words the quotes must carry before code treats them as being about the same point.
 CONCEPT_WORDS_NEEDED = 2
 
-# A condition or an exception anywhere in the quote. A bare "if" is not listed: it is how most rights are granted.
+# A condition or an exception anywhere in the quote. A bare "if" is not listed: it is how most rights are granted. Since
+# policy-v17 the inflections and phrases a contract also opens one with are read ("Excepting", "With the exception of",
+# "Conditional upon", "Save where", "Absent", "Barring", "Only after", "Solely where"), and a bare "Provided" that opens a
+# clause ("Provided Customer has paid all undisputed Fees,"), never "provided" as a verb ("provided by", "as provided
+# in"): a quote trimmed after any of them left a condition out that no check saw (stress test, 2026-10-30; about a
+# third as many CUAD sentences as a bare "except").
 CARVE_OUT = re.compile(
-    r"\b(?:unless|except|excluding|provided(?:,)? (?:that|however)|notwithstanding|subject to|save (?:as|that|for)|other than|only if"
-    r"|so long as|as long as|in which case|however|but not|to the extent)\b",
+    r"\b(?:unless|with the exception of|except\w*|excluding|provided(?:,)? (?:that|however)|notwithstanding|subject to"
+    r"|save (?:as|that|for|where|if|when|to the extent)|other than|only (?:if|after|when|where|upon)|solely (?:if|where|when|to the extent)"
+    r"|so long as|as long as|in which case|however|but not|to the extent|conditional(?:ly)? (?:up)?on|conditioned (?:up)?on"
+    r"|on (?:the )?condition that|absent|barring)\b"
+    r"|(?:(?<=[,;:(])|(?<![\s\S]))\s*provided\b(?!,? (?:that|however)\b)(?=,?\s+(?!(?:by|in|to|for|under|herein|hereunder|hereby|below|above|on|with|at|as"
+    r"|from|pursuant|through|via|that|however)\b)\w)",
     re.IGNORECASE,
 )
 
