@@ -107,11 +107,13 @@ def test_the_pack_refuses_the_sign_drops_for_a_v10_run_and_reads_a_v9_run_as_v9_
     assert checker.edges_hold(text, start, start + len(span), 10)
 
 
-def test_the_verifier_is_v10_and_v8_and_v9_read_as_they_did() -> None:
-    assert VERIFIER_VERSION == "v10" and tokens.VERSION == 10
+def test_the_verifier_is_v10_or_later_and_v8_to_v10_read_as_they_did() -> None:
+    assert VERIFIER_VERSION in ("v10", "v11") and tokens.VERSION >= 10  # v11 keeps every v10 rule (test_verifier_v11.py)
     assert hashlib.sha256(tokens._WRITTEN_V8.pattern.encode()).hexdigest().startswith("cc4fe06d")
     # v9's pattern exactly as every v9 pack carries it (the legal pilot's packs among them).
     assert hashlib.sha256(tokens._WRITTEN_V9.pattern.encode()).hexdigest() == "204a64ef69f50410410ba5585dfc48fe4194dbb0263a82844125528e52b29a2d"
+    # v10's, as every v10 pack carries it (the release of 2026-10-21 among them).
+    assert hashlib.sha256(tokens._WRITTEN_V10.pattern.encode()).hexdigest() == "1d5c12756e3de640b889d3420015d16944ec04a3d5517373bd6cffbac68d16e9"
     assert tokens.written_numbers("is -Ksh 5M now", 9) == [(8, 10)] and tokens.written_numbers("is -Ksh 5M now", 10) == [(3, 10)]
 
 
@@ -141,22 +143,22 @@ def test_an_amount_with_any_label_is_found_exactly_when_its_sign_agrees(label: s
 
 @settings(max_examples=300 * FUZZ_SCALE, deadline=None)
 @given(text=st.text(alphabet="0123456789,.%$()-−– KshRMpTkNoUSDbn‎", min_size=1, max_size=24), data=st.data())
-def test_the_pack_reads_every_edge_as_the_workbench_does_under_v10(tmp_path_factory: pytest.TempPathFactory, text: str, data: st.DataObject) -> None:
+def test_the_pack_reads_every_edge_of_a_labelled_amount_as_the_workbench_does(tmp_path_factory: pytest.TempPathFactory, text: str, data: st.DataObject) -> None:
     checker = _checker(tmp_path_factory.mktemp("edges-v10"))
     start = data.draw(st.integers(0, len(text)))
     end = data.draw(st.integers(start, len(text)))
-    assert checker.edges_hold(text, start, end, 10) == bounded(text, start, end), (text, start, end)
+    assert checker.edges_hold(text, start, end, tokens.VERSION) == bounded(text, start, end), (text, start, end)
 
 
 @settings(max_examples=300 * FUZZ_SCALE, deadline=None)
 @given(a=st.text(alphabet="0123456789,.$()-− KshRMpTk", min_size=1, max_size=20), b=st.text(alphabet="0123456789,.$()-− KshRMpTk", min_size=1, max_size=20))
-def test_the_pack_compares_values_as_the_workbench_does_under_v10(tmp_path_factory: pytest.TempPathFactory, a: str, b: str) -> None:
+def test_the_pack_compares_labelled_amounts_as_the_workbench_does(tmp_path_factory: pytest.TempPathFactory, a: str, b: str) -> None:
     checker = _checker(tmp_path_factory.mktemp("typed-v10"))
 
     def runtime(text: str) -> list[tuple[str, str]]:
-        return [(str(t.kind), t.canonical) for t in tokens.significant(tokens.signed(text, tokens.tokenize(text)))]
+        return [(str(t.kind), t.canonical) for t in tokens.compared(text)]
 
-    assert checker.same(a, b, "typed", 10) == (bool(runtime(a)) and runtime(a) == runtime(b)), (a, b)
+    assert checker.same(a, b, "typed", tokens.VERSION) == (bool(runtime(a)) and runtime(a) == runtime(b)), (a, b)
 
 
 # ------------------------------------------------------------------------------------------------ 2. reader v14, DOCX numbers
@@ -503,5 +505,5 @@ def test_the_stage_a_answers_are_untouched_by_this_repair() -> None:
     from app.runs.versions import SEMANTIC_VERSIONS
 
     # policy-v11 (2026-10-14) keeps every v10 decision and adds the contract's own replacement statements (runs.relations).
-    assert SEMANTIC_VERSIONS["verifier_version"] == "v10" and SEMANTIC_VERSIONS["policy_version"] == "policy-v16"
+    assert SEMANTIC_VERSIONS["verifier_version"] == VERIFIER_VERSION and SEMANTIC_VERSIONS["policy_version"] == "policy-v16"
     assert json.dumps(SEMANTIC_VERSIONS, sort_keys=True)

@@ -35,6 +35,14 @@ sign is never dropped for want of knowing a currency's name. Inside such a numbe
 part of its value, so "(RM5M)" and "(RM 5M)" are one value, and neither is "RM5M". As with v8's parentheses around any
 number, a quote that leaves out the parentheses of "(No 1)" is withheld; one that keeps them is found.
 
+Until v11 a number opened only with a minus sign or a parenthesis, so a late fee of ".5%" was found as "5%", "±5%" and
+"+/-5%" as "5%" and "-5%", ">$1,000,000" as "$1,000,000" and "≥99.9%" as "99.9%" (the break audit, 2026-10-30). From
+v11 a comparator or a plus or plus-minus sign directly before a number, and a decimal point with no digit before it,
+are part of the number (`_written_v11`), as a minus sign is: written apart from the number by a space, each stays
+punctuation, as a minus sign does. Digits joined by "/" or ":" are one number and one value ("2/3", "3:1",
+"12/31/2026"), so "2/3" is not "2-3". And the typed tier no longer forgives a sentence's end (`sentence_ends`): it
+compared "terminate. Without cause" as "terminate without cause".
+
 Every token keeps the offsets of its surface in the original text, so a match is reported as exact
 character offsets and the interface highlights what was found.
 """
@@ -55,6 +63,7 @@ class Kind(StrEnum):
     PERCENT = "percent"
     SECTION = "section"  # "8.1.2", "12.4(a)": an identifier made of numbers, never a quantity
     PUNCT = "punct"
+    BREAK = "break"  # v11: the mark that ends a sentence, which the typed tier compares (`compared`); `tokenize` makes none
 
 
 @dataclass(frozen=True)
@@ -148,6 +157,17 @@ _LABEL = r"[^\W\d_]{1,4}(?![^\W\d_])"
 # The value of a word inside a number once a label has joined it ("RM5M", "Ksh5"): its letters, digits and magnitude.
 _LABELLED_WORD = re.compile(r"([^\W\d_]*)(\d+)(mln|bln|mm|mn|bn|tn|k|m|b|t)?", re.IGNORECASE)
 
+# Verifier v11: what else a number may open with, directly before its digits or its label (a comparator, a plus or
+# plus-minus sign), the marks that join its digits into one value, and what every edge inside a number splits it after.
+_COMPARATORS = frozenset("+±∓<>≤≥≦≧~≈")
+_JOINED = frozenset("/:")
+_DIGIT_MARKS_V11 = _DIGIT_MARKS | _JOINED
+SIGN_OPENERS_V11 = SIGN_OPENERS | _COMPARATORS | frozenset(".")
+# Where a sentence ends: a full stop, a question or an exclamation mark that a space and a letter not in lower case
+# follow, past closing and opening quotation marks and brackets ("Inc. shall" goes on, "terminate. Without" does not),
+# and every semicolon.
+_SENTENCE_END = re.compile(r"""[.!?](?=["'”’)\]»]*\s+["'“‘(\[«]*(?P<next>[^\W\d_]))|;""")
+
 
 def _one_of(characters: frozenset[str]) -> str:
     return "[" + "".join(re.escape(c) for c in sorted(characters)) + "]"
@@ -181,27 +201,46 @@ def _written_v10(one: str) -> re.Pattern[str]:
     return re.compile(pattern, re.IGNORECASE | re.VERBOSE)
 
 
+def _written_v11(one: str) -> re.Pattern[str]:
+    """v11's number as written: v10's, opened also by a comparator or a plus sign, alone or before a minus sign, or by
+    "+/-" ("≥99.9%", ">$1,000,000", "±5%", "+/-5%"), and by a decimal point before its digits (".5%", "-.5%"); and its
+    digits joined by "/" or ":" as well ("2/3", "3:1")."""
+    minus = _one_of(_MINUS_SIGNS)
+    pattern = rf"""
+    (?:(?P<open>\()|(?<![^\W_]))
+    (?:(?<![^\W_])(?P<sign>\+/{minus}|(?:[<>]=|{_one_of(_COMPARATORS)}){minus}?|{minus}))?
+    (?:(?(sign){_LABEL}\.?\s?|(?(open){_LABEL}\.?\s?|(?!))))?
+    (?:\.(?=\d))?
+    {one}(?:{_one_of(_DIGIT_MARKS_V11)}{one})*+%?+
+    (?(open)\))
+    """
+    return re.compile(pattern, re.IGNORECASE | re.VERBOSE)
+
+
 # A number as it is written: the one definition that both the typed tier (`signed`) and the verifier's edges
 # (`written_numbers`, spans.bounded) read. `_WRITTEN_V8` is verifier v8's, kept for the evidence packs of runs verified
 # under v8 (application/evidence_pack); `_WRITTEN_V9` is v9's, which also reads an amount with a magnitude letter and a
-# currency written as letters against a dollar sign, kept for the packs of runs verified under v9; `_WRITTEN` is v10's,
-# which also reads a label after a minus sign or inside a parenthesis as part of the number.
+# currency written as letters against a dollar sign, kept for the packs of runs verified under v9; `_WRITTEN_V10` is
+# v10's, which also reads a label after a minus sign or inside a parenthesis as part of the number, kept for the packs of
+# runs verified under v10; `_WRITTEN` is v11's, which also reads a comparator, a plus sign and a leading decimal point as
+# part of the number, and "/" and ":" between its digits.
 _WRITTEN_V8 = _written(rf"(?>(?:{_SECTION}|{_MONEY}|{_PERCENT}|{_PLAIN})(?![^\W_]))")
 # v9's begins by looking ahead for a digit within the widest currency's width, so that the many words where no number
 # begins are passed over at once rather than tried against every currency (it changes no match: every way v9 writes a
 # number puts a digit within twelve characters of where the number begins).
 _V9_ONE = rf"(?=\D{{0,12}}\d)(?>(?:{_AMOUNT}|{_SECTION}|{_MONEY_V9}|{_PERCENT}|{_PLAIN})(?![^\W_]))"
 _WRITTEN_V9 = _written(_V9_ONE)
-_WRITTEN = _written_v10(_V9_ONE)
-VERSION = 10  # the verifier version these definitions are (spans.VERIFIER_VERSION)
+_WRITTEN_V10 = _written_v10(_V9_ONE)
+_WRITTEN = _written_v11(_V9_ONE)
+VERSION = 11  # the verifier version these definitions are (spans.VERIFIER_VERSION)
 
 
 def written_numbers(text: str, version: int = VERSION, invisible: frozenset[str] = frozenset()) -> list[tuple[int, int]]:
     """Where each number of ``text`` lies as it is written, its sign, parentheses, groups, currency, magnitude letter
-    and percent sign included, under the verifier ``version`` (8, 9 or 10): in order, never overlapping. Characters in
+    and percent sign included, under the verifier ``version`` (8 to 11): in order, never overlapping. Characters in
     ``invisible`` (those normalisation deletes, spans._INVISIBLE) are read as absent, as a reader sees the text, and the
     offsets returned are the original text's: "-‎$5M" is one number, its sign included (v9)."""
-    pattern = _WRITTEN if version >= 10 else _WRITTEN_V9 if version >= 9 else _WRITTEN_V8
+    pattern = _WRITTEN if version >= 11 else _WRITTEN_V10 if version >= 10 else _WRITTEN_V9 if version >= 9 else _WRITTEN_V8
     if not invisible or invisible.isdisjoint(text):
         return [match.span() for match in pattern.finditer(text)]
     kept = [i for i, ch in enumerate(text) if ch not in invisible]
@@ -211,9 +250,9 @@ def written_numbers(text: str, version: int = VERSION, invisible: frozenset[str]
 
 def joins_digits(before: str, after: str) -> bool:
     """Whether the joint between ``before`` and ``after``, the characters a reader sees on each side of an edge, is a
-    digit mark between two digits: "1,500|,000", "Section 5|.2", "1| 500" with a narrow space (verifier v8)."""
+    digit mark between two digits: "1,500|,000", "Section 5|.2", "1| 500" with a narrow space (verifier v8), "2|/3" (v11)."""
     b, a = before[-1:], after[:1]
-    return (b.isdigit() and a in _DIGIT_MARKS and after[1:2].isdigit()) or (b in _DIGIT_MARKS and before[-2:-1].isdigit() and a.isdigit())
+    return (b.isdigit() and a in _DIGIT_MARKS_V11 and after[1:2].isdigit()) or (b in _DIGIT_MARKS_V11 and before[-2:-1].isdigit() and a.isdigit())
 
 
 def attaches(b: str, a: str) -> bool:
@@ -310,8 +349,9 @@ def signed(text: str, tokens: list[Token], version: int = VERSION, invisible: fr
     letters before it ("USD", "US" of "US$") belongs to it rather than standing as a word of its own. ``version`` 8
     reads as v8 did, for the evidence packs of runs verified under v8. ``invisible`` (v9): characters a reader does not
     see, which neither part a sign from its number nor count as written ("-‎$5M" is "-$5M"). From v10 a word holding
-    digits inside a number ("RM5M" of "(RM5M)") is part of its value, and a label before it is joined like a currency."""
-    v9, v10 = version >= 9, version >= 10
+    digits inside a number ("RM5M" of "(RM5M)") is part of its value, and a label before it is joined like a currency.
+    From v11 a number whose digits "/" or ":" join is one token, its value read whole: "2/3" is not "2 3"."""
+    v9, v10, v11 = version >= 9, version >= 10, version >= 11
     out = list(tokens)
     starts = [t.start for t in out]
     numbers = [
@@ -345,12 +385,41 @@ def signed(text: str, tokens: list[Token], version: int = VERSION, invisible: fr
                 head = _number_word_value(text, first) if v10 else _amount_value(text, first)
             if last.kind is Kind.WORD:
                 tail = _number_word_value(text, last) if v10 else _amount_value(text, last)
-        if len(inside) == 1:
+        if v11 and len(inside) > 1 and not _JOINED.isdisjoint(text[first.end : last.start]):
+            middle = "".join(t.canonical if t.kind is not Kind.WORD else _number_word_value(text, t) for t in out[inside[0] + 1 : inside[-1]])
+            out[inside[0]] = Token(first.kind, before + head + middle + tail + after, low, high)
+            for j in range(inside[0] + 1, inside[-1] + 1):
+                out[j] = Token(Kind.PUNCT, out[j].canonical, out[j].start, out[j].end)
+        elif len(inside) == 1:
             out[inside[0]] = Token(first.kind, before + head + after, low, high)
         else:
             out[inside[0]] = Token(first.kind, before + head, low, first.end)
             out[inside[-1]] = Token(last.kind, tail + after, last.start, high)
     return out
+
+
+def sentence_ends(text: str, invisible: frozenset[str] = frozenset()) -> set[int]:
+    """The offsets of the marks that end a sentence in ``text`` (`_SENTENCE_END`, verifier v11), read as a reader sees
+    the text: characters in ``invisible`` are read as absent."""
+    if not invisible or invisible.isdisjoint(text):
+        kept, visible = None, text
+    else:
+        kept = [i for i, ch in enumerate(text) if ch not in invisible]
+        visible = "".join(text[i] for i in kept)
+    ends = (m.start() for m in _SENTENCE_END.finditer(visible) if m["next"] is None or not m["next"].islower())
+    return set(ends) if kept is None else {kept[at] for at in ends}
+
+
+def compared(text: str, version: int = VERSION, invisible: frozenset[str] = frozenset()) -> list[Token]:
+    """What the typed tier compares of ``text``: its significant tokens, each number with what is written against it
+    (`signed`), and from v11 the end of each sentence, so that a quote cannot join the end of one sentence to the start
+    of the next. A mark that ends a sentence is often no token at all (no token starts against a letter), so each end is
+    put among the tokens where it stands."""
+    kept = significant(signed(text, tokenize(text), version, invisible))
+    if version < 11:
+        return kept
+    ends = [Token(Kind.BREAK, "", at, at + 1) for at in sentence_ends(text, invisible)]
+    return sorted(kept + ends, key=lambda t: t.start)
 
 
 @dataclass(frozen=True)
@@ -363,16 +432,16 @@ class TokenMatch:
 def locate_tokens(quote: str, text: str, invisible: frozenset[str] = frozenset()) -> TokenMatch | None:
     """The first place the quote's tokens occur, in order and next to each other, among the text's, with the number of
     such places. Every token must be identical: a number its value and its minus sign or parentheses (v8), an amount
-    its currency, a percentage its sign, a section identifier its dots, a word its letters. A match therefore never
-    starts or ends inside a word or a number, never forgives a changed digit, and never forgives a space moved inside
-    the letters.
+    its currency, a percentage its sign, a section identifier its dots, a word its letters, and from v11 a sentence's
+    end where the text has one. A match therefore never starts or ends inside a word or a number, never forgives a
+    changed digit, never forgives a space moved inside the letters, and never runs one sentence into the next.
 
     Until v6 a run of consecutive words was compared as its joined letters, so that a space the reader lost or added
     ("advisedof", "speci fying") was forgiven. The same rule made "the rapist" equal to "therapist" and "un able" to
     "unable": two different texts called the same. Replayed over the record on 2026-10-02, 7 of 1,475 verified spans
     (5 runs, none a golden) had needed the forgiveness; from v6 such a quote is withheld instead."""
-    needle = [(t.kind, t.canonical) for t in significant(signed(quote, tokenize(quote), invisible=invisible))]
-    hay = significant(signed(text, tokenize(text), invisible=invisible))
+    needle = [(t.kind, t.canonical) for t in compared(quote, invisible=invisible)]
+    hay = compared(text, invisible=invisible)
     if not needle or len(needle) > len(hay):
         return None
     keys = [(t.kind, t.canonical) for t in hay]

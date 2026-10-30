@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.hashing import sha256_bytes, sha256_file
+from app.verify.spans import VERIFIER_VERSION
 from tests.support import upload_and_ask
 
 
@@ -32,7 +33,7 @@ def test_the_pack_verifies_itself_and_a_tampered_pack_fails(client: TestClient, 
 
     record = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     assert record["run_id"] == result["run_id"] and record["document"]["sha256"] == result["document"]["sha256"]
-    assert record["verifier"]["ladder"] == ["exact", "normalized", "casefold", "typed"] and record["verifier"]["version"] == "v10"
+    assert record["verifier"]["ladder"] == ["exact", "normalized", "casefold", "typed"] and record["verifier"]["version"] == VERIFIER_VERSION
 
     verified = run_verify(folder)
     assert verified.returncode == 0, verified.stdout + verified.stderr

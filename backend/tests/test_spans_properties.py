@@ -62,7 +62,7 @@ def text_with_numbered_quote(draw: st.DrawFn) -> tuple[str, str, int]:
 @given(text_and_substring())
 def test_a_verbatim_substring_is_found_exactly_and_the_offsets_return_it(pair: tuple[str, str]) -> None:
     text, quote = pair
-    assume(quote.strip())
+    assume(any(ch.isalnum() for ch in quote))  # punctuation alone is never found (verifier v11)
     start = text.index(quote)
     assume(bounded(text, start, start + len(quote)))  # a substring cut inside a word or a number is refused on purpose
     found = locate(quote, text)

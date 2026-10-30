@@ -154,7 +154,7 @@ def test_a_repeated_amount_counts_only_its_unsigned_places() -> None:
 
 
 def test_the_verifier_is_v9_or_later_and_v8_reads_as_it_did() -> None:
-    assert VERIFIER_VERSION in ("v9", "v10")  # v10 keeps every v9 rule (test_post_pilot_repair.py)
+    assert VERIFIER_VERSION in ("v9", "v10", "v11")  # v10 and v11 keep every v9 rule (test_post_pilot_repair.py, test_verifier_v11.py)
     # v8's pattern is the one its evidence packs carry, to the character (its sha256 as de1f6de2 shipped it).
     assert hashlib.sha256(tokens._WRITTEN_V8.pattern.encode()).hexdigest() == "cc4fe06d589f0f21c6c1fe5bc2a57cdf35698eaef68305251fecd5e03a019119"
     v8 = [t.canonical for t in tokens.significant(tokens.signed(SOURCE, tokens.tokenize(SOURCE), 8))]
@@ -236,8 +236,9 @@ def test_the_pack_reads_every_edge_of_an_amount_as_the_workbench_does(tmp_path_f
     checker = _checker(tmp_path_factory.mktemp("edges-v9"))
     start = data.draw(st.integers(0, len(text)))
     end = data.draw(st.integers(start, len(text)))
-    # The runtime reads at its own version (v10 since 2026-10-14: "-D0" is a signed number there, not under v9). That the
-    # pack still reads a v9 run as v9 did is pinned by the v9 pattern's hash (test_post_pilot_repair.py).
+    # The runtime reads at its own version (v10 since 2026-10-14: "-D0" is a signed number there, not under v9; v11 since
+    # 2026-10-30: ".0" is a number there). That the pack still reads a v9 run as v9 did is pinned by the v9 pattern's
+    # hash (test_post_pilot_repair.py).
     assert checker.edges_hold(text, start, end, tokens.VERSION) == bounded(text, start, end), (text, start, end)
 
 
@@ -250,7 +251,7 @@ def test_the_pack_compares_amounts_as_the_workbench_does(tmp_path_factory: pytes
     # the sibling test above reads the edges. Without them this compared a reading no run makes: "-​0" read as 0, and
     # the pack (rightly) as -0 (found by a random draw in the acceptance test's suite run, 2026-10-14).
     def runtime(text: str) -> list[tuple[str, str]]:
-        return [(str(t.kind), t.canonical) for t in tokens.significant(tokens.signed(text, tokens.tokenize(text), invisible=INVISIBLE))]
+        return [(str(t.kind), t.canonical) for t in tokens.compared(text, invisible=INVISIBLE)]
 
     expected = bool(runtime(a)) and runtime(a) == runtime(b)
     assert checker.same(a, b, "typed", tokens.VERSION) == expected, (a, b)

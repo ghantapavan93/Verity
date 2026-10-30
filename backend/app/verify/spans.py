@@ -37,6 +37,15 @@ Nor may a sign be lost from an amount written with a magnitude letter (verifier 
 was found word for word inside "-$5M". From v9 such an amount is a number like any other, and inside a number written
 with a sign or parentheses every edge splits it, a space included: "10K" is not found inside "-USD 10K".
 
+Nor may it split a word at a combining mark or a joiner, or say anything without a letter or a digit (verifier v11, the
+break audit, 2026-10-30). A mark written after its letter (a decomposed "é" is "e" and U+0301) and a zero-width joiner or
+non-joiner inside a word (Persian writes "non-" as "غیر" and U+200C before the word it negates) belong to that word, as
+Unicode's word boundaries read them: "paye" was found inside a decomposed "payé", and "قابل" ("refundable") inside
+"non-refundable", written so. A quote of punctuation alone, "." from an empty answer, was found exact in any text with a
+full stop.
+From v11 a number also keeps a comparator, a plus sign or a leading decimal point, and "/" or ":" joins its digits
+(verify/tokens.py), and inside a number opened by any of them every edge splits it: "5%" is not inside ".5%".
+
 Offsets always index the ORIGINAL text, so the interface highlights the characters that matched.
 
 What is worked out about a text along the way (where its numbers are, a quote's words, letters and digits) is
@@ -51,6 +60,7 @@ from __future__ import annotations
 
 import bisect
 import re
+import unicodedata
 from array import array
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -58,7 +68,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import cast
 
-from .tokens import SIGN_OPENERS, VERSION, Kind, attaches, is_amount, joins_digits, locate_tokens, tokenize, written_numbers
+from .tokens import SIGN_OPENERS_V11, VERSION, Kind, attaches, is_amount, joins_digits, locate_tokens, tokenize, written_numbers
 
 VERIFIER_VERSION = f"v{VERSION}"
 
@@ -168,7 +178,7 @@ def _splits(text: str, at: int) -> bool:
     before, after = _seen(text, at, -1), _seen(text, at, 1)
     if not before or not after:
         return False  # the start and the end of the text
-    if (before[-1].isalnum() and after[0].isalnum()) or joins_digits(before, after):
+    if (_in_run(before[-1]) and _in_run(after[0])) or joins_digits(before, after):
         return True
     attached = attaches(before[-1], after[0])
     starts, ends = _numbers(text)
@@ -177,8 +187,17 @@ def _splits(text: str, at: int) -> bool:
         return False
     # Inside a number: at what is written against it, always (v8); anywhere else (a space, the full stop of "Rs."), only
     # in a number written with a sign or parentheses, so a quote cannot drop "-USD " from "-USD 10K" (v9) while "500"
-    # still stands alone in "USD 500".
-    return attached or text[starts[last]] in SIGN_OPENERS
+    # still stands alone in "USD 500"; from v11 also a comparator, a plus sign or a leading decimal point.
+    return attached or text[starts[last]] in SIGN_OPENERS_V11
+
+
+_JOINERS = frozenset("\u200c\u200d")  # zero-width non-joiner and joiner
+
+
+def _in_run(ch: str) -> bool:
+    """Whether ``ch`` belongs to a run of letters and digits: a letter or a digit, or (v11) a combining mark or a joiner,
+    which belong to the letters they are written between or after."""
+    return ch.isalnum() or ch in _JOINERS or unicodedata.category(ch)[0] == "M"
 
 
 def _seen(text: str, at: int, step: int) -> str:
@@ -297,6 +316,8 @@ def _ladder(quote: str, text: str) -> Located | None:
 
 
 def _tiers(quote: str, text: str) -> Located | None:
+    if not any(ch.isalnum() for ch in quote):
+        return None  # punctuation alone says nothing the text could hold (v11)
     found = _find_bounded(text, quote, None, text)
     if found is not None:
         return Located(found[0], found[1], "exact", found[2])

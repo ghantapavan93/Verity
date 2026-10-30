@@ -43,16 +43,18 @@ VERIFY_PY = (Path(__file__).with_name("verify_template.txt")).read_text(encoding
 
 
 def render_verify_py() -> str:
-    """The checker as a pack carries it: the workbench's normalisation table, its typed-token pattern (v7 on), and the
-    reading of a written number of verifier v8, v9 and v10 (their patterns, v9's amount word, v10's labelled word, signs
-    and digit marks) copied in, so the two cannot read a text differently: a pack checks each run as its verifier read it.
+    """The checker as a pack carries it: the workbench's normalisation table, its typed-token pattern (v7 on), the
+    reading of a written number of verifier v8 to v11 (their patterns, v9's amount word, v10's labelled word, signs and
+    digit marks), and v11's joiners and sentence ends, copied in, so the two cannot read a text differently: a pack
+    checks each run as its verifier read it.
     Each is a JSON string literal inside a JSON string literal: valid Python, decoded by json.loads in the checker."""
     embedded = {
         "__QUOTE_MAP__": json.dumps(QUOTE_MAP, ensure_ascii=True),
         "__TOKEN__": json.dumps(tokens._TOKEN.pattern, ensure_ascii=True),
         "__WRITTEN__": json.dumps(tokens._WRITTEN_V8.pattern, ensure_ascii=True),
         "__WRITTEN_V9__": json.dumps(tokens._WRITTEN_V9.pattern, ensure_ascii=True),
-        "__WRITTEN_V10__": json.dumps(tokens._WRITTEN.pattern, ensure_ascii=True),
+        "__WRITTEN_V10__": json.dumps(tokens._WRITTEN_V10.pattern, ensure_ascii=True),
+        "__WRITTEN_V11__": json.dumps(tokens._WRITTEN.pattern, ensure_ascii=True),
         "__LABELLED_WORD__": json.dumps(tokens._LABELLED_WORD.pattern, ensure_ascii=True),
         "__AMOUNT_WORD__": json.dumps(tokens._AMOUNT_WORD.pattern, ensure_ascii=True),
         "__MINUS_SIGNS__": json.dumps(sorted(tokens._MINUS_SIGNS), ensure_ascii=True),
@@ -60,6 +62,10 @@ def render_verify_py() -> str:
         "__ATTACHED__": json.dumps(sorted(tokens._ATTACHED_V8), ensure_ascii=True),
         "__ATTACHED_V9__": json.dumps(sorted(tokens._ATTACHED), ensure_ascii=True),
         "__SIGN_OPENERS__": json.dumps(sorted(tokens.SIGN_OPENERS), ensure_ascii=True),
+        "__DIGIT_MARKS_V11__": json.dumps(sorted(tokens._DIGIT_MARKS_V11), ensure_ascii=True),
+        "__SIGN_OPENERS_V11__": json.dumps(sorted(tokens.SIGN_OPENERS_V11), ensure_ascii=True),
+        "__JOINERS__": json.dumps(sorted(verifier._JOINERS), ensure_ascii=True),
+        "__SENTENCE_END__": json.dumps(tokens._SENTENCE_END.pattern, ensure_ascii=True),
     }
     text = VERIFY_PY
     for name, value in embedded.items():

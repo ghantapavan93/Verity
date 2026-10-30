@@ -43,6 +43,11 @@ no edge falls at a space either ("10K" is not inside "-USD 10K"). A v8 run is st
 For a run verified under verifier v10 or later, a short label after a minus sign or inside an opening parenthesis
 ("-Ksh 5M", "(RM5M)", "(Rp 5M)") is part of the number written after it, whatever currency it names, and a word
 holding digits inside such a number ("RM5M") is part of its value. A v9 run is still checked as v9 read it.
+For a run verified under verifier v11 or later, a comparator, a plus or plus-minus sign and a decimal point written
+against a number are part of it (">$1,000,000", "≥99.9%", "±5%", "+/-5%", ".5%"), and digits joined by "/" or ":" are
+one number ("2/3" is not "2-3"); the typed check compares the end of each sentence, so a quote cannot run one sentence
+into the next; no edge splits a word at a combining mark or a joiner; and a quote with no letter or digit is never
+found. A v10 run is still checked as v10 read it.
 This verifier establishes integrity between the original input, the canonical reading, the context
 given to the model and the stored spans. It does not, and cannot, say the conclusions are right. The
 pack is not signed: it shows that its files agree with each other and with the hashes the run recorded,
@@ -55,6 +60,7 @@ import json
 import pathlib
 import re
 import sys
+import unicodedata
 
 HERE = pathlib.Path(__file__).resolve().parent
 QUOTE_MAP = json.loads(__QUOTE_MAP__)
@@ -67,6 +73,13 @@ DIGIT_MARKS = frozenset(json.loads(__DIGIT_MARKS__))
 ATTACHED = frozenset(json.loads(__ATTACHED__))  # verifier v8's
 ATTACHED_V9 = frozenset(json.loads(__ATTACHED_V9__))  # v9's: every currency sign
 SIGN_OPENERS = frozenset(json.loads(__SIGN_OPENERS__))
+# v11's: the digit marks with "/" and ":", what else opens a number every edge inside splits, the joiners that belong to
+# a word, and where a sentence ends.
+DIGIT_MARKS_V11 = frozenset(json.loads(__DIGIT_MARKS_V11__))
+JOINED = DIGIT_MARKS_V11 - DIGIT_MARKS
+SIGN_OPENERS_V11 = frozenset(json.loads(__SIGN_OPENERS_V11__))
+JOINERS = frozenset(json.loads(__JOINERS__))
+SENTENCE_END = re.compile(json.loads(__SENTENCE_END__))
 # v9's amount word: the token an amount's digits and magnitude letter make ("5m", "usd10k").
 AMOUNT_WORD = re.compile(json.loads(__AMOUNT_WORD__), re.IGNORECASE)
 # v10's value of a word holding digits inside a number ("RM5M"): its letters, digits and magnitude letter.
@@ -74,9 +87,10 @@ LABELLED_WORD = re.compile(json.loads(__LABELLED_WORD__), re.IGNORECASE)
 try:
     WRITTEN = re.compile(json.loads(__WRITTEN__), re.IGNORECASE | re.VERBOSE)  # verifier v8's number as written
     WRITTEN_V9 = re.compile(json.loads(__WRITTEN_V9__), re.IGNORECASE | re.VERBOSE)  # v9's
-    WRITTEN_V10 = re.compile(json.loads(__WRITTEN_V10__), re.IGNORECASE | re.VERBOSE)  # and v10's
+    WRITTEN_V10 = re.compile(json.loads(__WRITTEN_V10__), re.IGNORECASE | re.VERBOSE)  # v10's
+    WRITTEN_V11 = re.compile(json.loads(__WRITTEN_V11__), re.IGNORECASE | re.VERBOSE)  # and v11's
 except re.error:
-    WRITTEN = WRITTEN_V9 = WRITTEN_V10 = None  # before Python 3.11: no atomic groups or possessive quantifiers
+    WRITTEN = WRITTEN_V9 = WRITTEN_V10 = WRITTEN_V11 = None  # before Python 3.11: no atomic groups or possessive quantifiers
 
 
 def sha256(path):
@@ -141,7 +155,8 @@ def typed_tokens(text, version=0):
     """The workbench's typed tokens (verify/tokens.py) in standard-library form, each [kind, canonical, start, end]. For
     a run verified under v7 or later, its own pattern: no token ends inside a run of letters and digits, and a number
     keeps its written precision. Under v8 a number also carries its sign and parentheses, and starts and ends where it
-    is written (verify/tokens.signed). For an earlier run, the pack's reading before v7."""
+    is written (verify/tokens.signed). Under v11 a number whose digits "/" or ":" join is one token, and the end of each
+    sentence is a token of kind "break" (verify/tokens.compared). For an earlier run, the pack's reading before v7."""
     v7, v8 = version >= 7, version >= 8
     tokens = []
     for match in (TOKEN_V7 if v7 else TOKEN).finditer(text):
@@ -164,7 +179,7 @@ def typed_tokens(text, version=0):
     if v8:
         # v9 (verify/tokens.signed): an amount word is a number too, what stands before a number is compared without
         # spaces or case, and a currency written as letters before it belongs to it.
-        v9, v10 = version >= 9, version >= 10
+        v9, v10, v11 = version >= 9, version >= 10, version >= 11
 
         def amount(t):
             if not v9 or t[0] != "word":
@@ -209,11 +224,18 @@ def typed_tokens(text, version=0):
                     if tokens[j][0] == "word":
                         tokens[j][0] = "punct"
                     j -= 1
-            if len(inside) == 1:
+            if v11 and len(inside) > 1 and any(c in JOINED for c in text[first[3]:last[2]]):
+                middle = "".join(value(t) if t[0] == "word" else t[1] for t in tokens[inside[0] + 1:inside[-1]])
+                first[1:] = [before + head + middle + tail + after, low, high]
+                for t in tokens[inside[0] + 1:inside[-1] + 1]:
+                    t[0] = "punct"
+            elif len(inside) == 1:
                 first[1:] = [before + head + after, low, high]
             else:
                 first[1:3] = [before + head, low]
                 last[1], last[3] = tail + after, high
+    if version >= 11:
+        tokens = sorted(tokens + [["break", "", at, at + 1] for at in sentence_ends(text)], key=lambda t: t[2])
     return tokens
 
 
@@ -255,8 +277,20 @@ def written_numbers(text, version=8):
     """Where each number of text lies as it is written, as the reader sees it (verify/spans._numbers)."""
     shown = [i for i, ch in enumerate(text) if ch not in DELETED]
     visible = "".join(text[i] for i in shown)
-    pattern = WRITTEN_V10 if version >= 10 else WRITTEN_V9 if version >= 9 else WRITTEN
+    pattern = WRITTEN_V11 if version >= 11 else WRITTEN_V10 if version >= 10 else WRITTEN_V9 if version >= 9 else WRITTEN
     return [(shown[m.start()], shown[m.end() - 1] + 1) for m in pattern.finditer(visible)]
+
+
+def sentence_ends(text):
+    """Where a sentence ends, read as the reader sees the text (verify/tokens.sentence_ends, v11)."""
+    shown = [i for i, ch in enumerate(text) if ch not in DELETED]
+    visible = "".join(text[i] for i in shown)
+    return [shown[m.start()] for m in SENTENCE_END.finditer(visible) if m.group("next") is None or not m.group("next").islower()]
+
+
+def in_run(ch, version):
+    """A letter or a digit; from v11 also a combining mark or a joiner, which belong to their word (verify/spans._in_run)."""
+    return ch.isalnum() or (version >= 11 and (ch in JOINERS or unicodedata.category(ch)[0] == "M"))
 
 
 def splits(text, at, numbers, version=8):
@@ -265,15 +299,18 @@ def splits(text, at, numbers, version=8):
     if not before or not after:
         return False
     b, a = before[-1:], after[:1]
-    if (b.isalnum() and a.isalnum()) or (b.isdigit() and a in DIGIT_MARKS and after[1:2].isdigit()) or (b in DIGIT_MARKS and before[-2:-1].isdigit() and a.isdigit()):
+    marks = DIGIT_MARKS_V11 if version >= 11 else DIGIT_MARKS
+    if (in_run(b, version) and in_run(a, version)) or (b.isdigit() and a in marks and after[1:2].isdigit()) or (b in marks and before[-2:-1].isdigit() and a.isdigit()):
         return True
     attached = ATTACHED_V9 if version >= 9 else ATTACHED
     if b in attached or a in attached:
         return any(low < at < high for low, high in numbers)
     if version < 9:
         return False
-    # v9: anywhere inside a number written with a sign or parentheses ("-USD 10K", "-Rs. 5M").
-    return any(low < at < high and text[low] in SIGN_OPENERS for low, high in numbers)
+    # v9: anywhere inside a number written with a sign or parentheses ("-USD 10K", "-Rs. 5M"); v11: or opened by a
+    # comparator, a plus sign or a decimal point (">$1,000,000", ".5%").
+    openers = SIGN_OPENERS_V11 if version >= 11 else SIGN_OPENERS
+    return any(low < at < high and text[low] in openers for low, high in numbers)
 
 
 def edges_hold(text, start, end, version=8):
@@ -299,6 +336,8 @@ def typed_at(text, start, end, version):
 
 
 def same(found, quote, method, version=0, where=None):
+    if version >= 11 and not any(ch.isalnum() for ch in quote):
+        return False  # v11: punctuation alone is never found
     base = method.split(":")[-1]
     if "unprefixed" in method:
         return bool(alnum(found)) and alnum(quote).endswith(alnum(found))

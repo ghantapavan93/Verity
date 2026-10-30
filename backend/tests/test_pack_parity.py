@@ -29,8 +29,8 @@ from hypothesis import strategies as st
 
 from app.application.evidence_pack import render_verify_py
 from app.hashing import sha256_bytes
-from app.verify.spans import bounded, locate
-from app.verify.tokens import VERSION, Token, signed, significant, tokenize
+from app.verify.spans import _INVISIBLE, bounded, locate
+from app.verify.tokens import VERSION, Token, compared, significant, tokenize
 from tests.support import FUZZ_SCALE
 
 
@@ -126,6 +126,14 @@ def _checker(tmp_path: Path) -> types.ModuleType:
     return module
 
 
+def _compared(text: str, version: int) -> list[Token]:
+    """What the typed tier of ``version`` compares, as the workbench calls it (tokens.locate_tokens): from v8 with what is
+    written against each number, from v9 with invisible marks read as absent."""
+    if version < 8:
+        return significant(tokenize(text))
+    return compared(text, version, _INVISIBLE if version >= 9 else frozenset())
+
+
 NUMBERISH = st.text(alphabet="0123456789,.%$()-− Sa", min_size=1, max_size=24)
 NUMBERS_ONLY = st.text(alphabet="0123456789,.%$()-− ", min_size=1, max_size=24)
 
@@ -144,10 +152,10 @@ def test_the_pack_reads_every_edge_as_the_workbench_does(tmp_path_factory: pytes
 def test_the_pack_compares_numbers_as_the_workbench_does(tmp_path_factory: pytest.TempPathFactory, a: str, b: str) -> None:
     checker = _checker(tmp_path_factory.mktemp("typed"))
 
-    for version in (8, 9, 10):
+    for version in (8, 9, 10, 11):
 
         def runtime(text: str) -> list[str]:
-            return [t.canonical for t in significant(signed(text, tokenize(text), version))]  # noqa: B023 - read at once
+            return [t.canonical for t in _compared(text, version)]  # noqa: B023 - read at once
 
         assert (checker.typed(a, version) == checker.typed(b, version)) == (runtime(a) == runtime(b)), (a, b, version)
 
@@ -194,15 +202,14 @@ WORDS_AND_NUMBERS = st.text(alphabet="0123456789,.%$€()-− aMKxUSDb", min_siz
 
 
 @settings(max_examples=400 * FUZZ_SCALE, deadline=None)
-@given(a=WORDS_AND_NUMBERS, b=WORDS_AND_NUMBERS, version=st.sampled_from([7, 8, 9]))
+@given(a=WORDS_AND_NUMBERS, b=WORDS_AND_NUMBERS, version=st.sampled_from([7, 8, 9, 10, 11]))
 def test_the_pack_compares_typed_tokens_as_the_workbench_does(tmp_path_factory: pytest.TempPathFactory, a: str, b: str, version: int) -> None:
-    """For v7, v8 and v9 runs, with letters against digits: the pack's typed check and the workbench's (as that version
+    """For v7 to v11 runs, with letters against digits: the pack's typed check and the workbench's (as that version
     read) agree, both ways."""
     checker = _checker(tmp_path_factory.mktemp("typed-words"))
 
     def runtime(text: str) -> list[tuple[str, str]]:
-        read: list[Token] = tokenize(text)
-        return [(str(t.kind), t.canonical) for t in significant(signed(text, read, version) if version >= 8 else read)]
+        return [(str(t.kind), t.canonical) for t in _compared(text, version)]
 
     expected = bool(runtime(a)) and runtime(a) == runtime(b)
     assert checker.same(a, b, "typed", version) == expected, (a, b, version)
@@ -212,22 +219,17 @@ PLACED = st.text(alphabet="0123456789,.%$€()-− aMKUSD​", min_size=1, max_s
 
 
 @settings(max_examples=400 * FUZZ_SCALE, deadline=None)
-@given(text=PLACED, quote=PLACED, version=st.sampled_from([7, 8, 9]), data=st.data())
+@given(text=PLACED, quote=PLACED, version=st.sampled_from([7, 8, 9, 10, 11]), data=st.data())
 def test_the_pack_reads_a_typed_span_in_place_as_the_workbench_does(
     tmp_path_factory: pytest.TempPathFactory, text: str, quote: str, version: int, data: st.DataObject
 ) -> None:
-    """For v7, v8 and v9 runs: the pack accepts a typed span at its offsets exactly when that version's typed tier
-    reports the quote's tokens there, read from the whole text the workbench searched."""
+    """For v7 to v11 runs: the pack accepts a typed span at its offsets exactly when that version's typed tier reports
+    the quote's tokens there, read from the whole text the workbench searched."""
     checker = _checker(tmp_path_factory.mktemp("typed-placed"))
     start = data.draw(st.integers(0, len(text)))
     end = data.draw(st.integers(start, len(text)))
-
-    def significant_of(value: str) -> list[Token]:
-        read = tokenize(value)
-        return significant(signed(value, read, version) if version >= 8 else read)
-
-    needle = [(t.kind, t.canonical) for t in significant_of(quote)]
-    hay = significant_of(text)
+    needle = [(t.kind, t.canonical) for t in _compared(quote, version)]
+    hay = _compared(text, version)
     n = len(needle)
     expected = bool(needle) and any(
         hay[i].start == start and hay[i + n - 1].end == end and [(t.kind, t.canonical) for t in hay[i : i + n]] == needle for i in range(len(hay) - n + 1)
