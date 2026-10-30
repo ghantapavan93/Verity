@@ -33,12 +33,15 @@ export function CommandPalette({ getCommands, onClose, reduceMotion }: { getComm
     return commands.filter((c) => terms.every((t) => `${c.group} ${c.label} ${c.hint ?? ""}`.toLowerCase().includes(t))).slice(0, 40);
   }, [commands, query]);
 
-  // Focus returns to what held it when the palette closes; a command that moves focus (the evidence sheet) does so after.
+  // Focus returns to what held it when the palette closes, unless a command already moved it: the evidence sheet focuses
+  // its close button before this cleanup runs, and taking focus back put it on the rail (fresh review, 2026-10-30).
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     inputRef.current?.focus();
     return () => {
-      if (opener?.isConnected) opener.focus();
+      const now = document.activeElement;
+      const lost = now === null || now === document.body || !now.isConnected;
+      if (opener?.isConnected && lost) opener.focus();
     };
   }, []);
 
