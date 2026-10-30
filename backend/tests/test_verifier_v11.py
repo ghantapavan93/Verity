@@ -433,3 +433,12 @@ def test_a_pack_refuses_to_judge_what_its_unicode_cannot_read(tmp_path: Path, re
     run["verifier"]["unicode"] = recorded or unicodedata.unidata_version
     (folder / "run.json").write_text(json.dumps(run), encoding="utf-8")
     assert _verdict(folder) is passes
+
+
+@pytest.mark.parametrize("sign", sorted(tokens._CURRENCY_SYMBOLS))
+def test_every_currency_sign_belongs_to_its_number(sign: str) -> None:
+    """The rule that a currency sign belongs to its number was pinned for four of the signs the verifier knows; with it
+    narrowed, "500 per seat" verified inside a rupee amount (mutation run of the stress test, 2026-10-30)."""
+    text = f"The fee is {sign}500 per seat per year."
+    assert locate("500 per seat", text) is None
+    assert locate(f"{sign}500 per seat", text) is not None  # control: the amount with its sign
