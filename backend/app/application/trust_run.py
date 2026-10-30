@@ -204,10 +204,10 @@ def _work_out(session: Session, run: Run) -> tuple[TrustManifest, bool]:
         for finding in run.findings
     ]
     options = json.loads(run.options_json or "{}")
-    again = None if document.parser_version == PARSER_VERSION else current_reading(session, document)
-    # A reading made by a reader this build does not know is not compared with this build's reading (trust.compile).
-    reader_unknown = compare_version(document.parser_version, PARSER_VERSION) == "unknown"
-    unknown_reader = [f"reader {document.parser_version} then, {PARSER_VERSION} now"] if reader_unknown else []
+    unknown = unknown_to_this_build(run, document)
+    # A reading by a reader this build does not know is not compared with this build's own: it is not even made.
+    known = compare_version(document.parser_version, PARSER_VERSION) != "unknown"
+    again = None if document.parser_version == PARSER_VERSION or not known else current_reading(session, document)
     manifest = compile_manifest(
         run_id=run.id,
         document_id=document.id,
@@ -216,7 +216,7 @@ def _work_out(session: Session, run: Run) -> tuple[TrustManifest, bool]:
         current_reader=PARSER_VERSION,
         rule_versions={name: str(options.get(name) or "not recorded") for name in SEMANTIC_VERSIONS},
         stale_rules=earlier_versions(options),
-        unknown_rules=[*unknown_versions(options), *unknown_reader],
+        unknown_rules=unknown,
         sections=sections_of(document),
         findings=findings,
         current_reading=again,
@@ -224,11 +224,23 @@ def _work_out(session: Session, run: Run) -> tuple[TrustManifest, bool]:
     return manifest, document.parser_version == PARSER_VERSION or again is not None
 
 
+def unknown_to_this_build(run: Run, document: Document) -> list[str]:
+    """The rules and the reader a run was recorded under that this build does not know, as after a rollback: what of the
+    run this build's own verifier and reader may not judge (trust.compile)."""
+    unknown = unknown_versions(json.loads(run.options_json or "{}"))
+    if compare_version(document.parser_version, PARSER_VERSION) == "unknown":
+        unknown.append(f"reader {document.parser_version} then, {PARSER_VERSION} now")
+    return unknown
+
+
 def later_version(session: Session, workspace: str, run: Run, document_id: str) -> Document:
     """The document a run may be compared with: the run's own, or one recorded as a later version of it in this
     workspace. Two unrelated documents can be compared by a machine, and the answer would be that everything is stale;
     calling a finding stale is a statement about the same contract, so it is made only where a person has said it is
     the same contract. Asked before the comparison is built, so a refused one costs nothing (api/trust.py)."""
+    if unknown := unknown_to_this_build(run, run.document):
+        # Comparing would locate the run's quotes again with this build's verifier (the re-check, 2026-10-30).
+        raise Conflict(f"This run was recorded under rules this build does not know ({'; '.join(unknown)}): it is not compared with a revision here.")
     later = require_document(session, document_id, workspace)
     if later.id != run.document_id and not is_later_version(session, workspace, run.document_id, later.id):
         raise Conflict("That document has not been recorded as a later version of the one this run read. Record it as one first.")

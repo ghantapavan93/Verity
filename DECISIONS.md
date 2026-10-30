@@ -1860,7 +1860,7 @@ Fixed, by teams in their own worktrees, each test written first and red, then me
   pinned model build is part of a run's identity.
 - **The store across releases**: versions are compared by number, so a build rolled back to opens records made under
   rules it does not know and says so on their trust page, judging none of their evidence with its own verifier or
-  reader; its pack prints NOT CHECKED and exits 2; `status.py` counts such runs and documents. An old store's table
+  reader, and comparing none with a revision; its pack prints NOT CHECKED and exits 2; `status.py` counts such runs and documents. An old store's table
   whose CHECKs differ from the models', by name or by body, is rebuilt by SQLite's documented procedure, foreign keys
   off before the transaction and every trigger dropped and put back, its counts asserted and no new dangling reference
   allowed; a row the models' CHECKs or NOT NULLs refuse stops the opening and is named. Stores created by
@@ -1870,9 +1870,9 @@ Fixed, by teams in their own worktrees, each test written first and red, then me
   imports and a model's field types (the executor's, for the policy, short of the other versions' entry points and a
   named list of what records rather than decides), never a list of files: five planted edits outside the old list now
   each move a fingerprint. Code reached only through a method of an object cannot be followed and is named as an entry
-  point (the provider's request). A fourth version, `input-v1`, names what the model is handed of the sections, the
-  request that carries it and the schema its answer is read by; the reader's version is held to its code the same way.
-  A run's window is an argument everywhere it is used, never a default.
+  point (the provider's request, and its reading of the reply). A fourth version, `input-v1`, names what the model is
+  handed of the sections, the request that carries it and the schema its answer is read by; the reader's version is
+  held to its code the same way. A run's window is an argument everywhere it is used, never a default.
 - **The interface** shows a run only beside its own contract, shows every model- or file-written string through one
   display primitive, keys a memo by what it says, asks before an invite replaces a working session, runs no script
   without the response's nonce, and joins sections only where the reader recorded a split.

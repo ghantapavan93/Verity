@@ -52,6 +52,7 @@ ENTRY_POINTS: dict[str, tuple[Symbol, ...]] = {
         ("analysis/service.py", "load_prompt"),
         ("document_names.py", "run_prompt_name"),  # the contract's name as the model reads it
         ("providers/ollama.py", "OllamaProvider.chat_request"),  # the request: the schema as its format, thinking, no cut
+        ("providers/ollama.py", "OllamaProvider.generate_json"),  # how the reply is read: a cut answer, a refusal for size
     ),
     "policy_version": (("runs/service.py", "execute_run"),),
     "parser_version": (("ingest/__init__.py", "ingest"),),
@@ -185,7 +186,7 @@ RECORDED: dict[str, str] = {
     "retrieval-v3": "272c76e0c6991632",
     # input-v1, 2026-10-30: the first version of what the model is handed. Recorded with the boundaries' move to closures,
     # which changed every fingerprint's definition; the versions above it are kept as they were recorded.
-    "input-v1": "9579eac90fa902fa",
+    "input-v1": "f3535f0a6d1058e6",
     # reader v17, 2026-10-30: the first reader version held to its code (columns, fields, branches, cells, checkboxes and
     # text boxes read as Word displays them; the PDF page read by position).
     "reader v17": "3a4543713ac44436",
@@ -257,6 +258,7 @@ def test_every_symbol_named_non_deciding_exists_and_is_reached_by_the_executor()
         ("analysis/schema.py", "EvidenceOut"),
         ("providers/ollama.py", "OllamaProvider.chat_request"),
         ("providers/ollama.py", "NEVER_CUT"),
+        ("providers/ollama.py", "OllamaProvider.generate_json"),  # the re-check's plant: "length" read as "stop"
     ],
 )
 def test_the_stress_tests_planted_rule_changes_each_move_a_fingerprint(planted: Symbol) -> None:

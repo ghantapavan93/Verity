@@ -18,8 +18,9 @@ from hypothesis import given
 from hypothesis import strategies as st
 from sqlalchemy import select, text
 
-from app.application.trust_run import manifest_of
+from app.application.trust_run import later_version, manifest_of
 from app.db import SessionLocal
+from app.errors import Conflict
 from app.models import Run
 from app.runs.versions import SEMANTIC_VERSIONS, compare_version, earlier_versions, stale_versions, unknown_versions
 from app.trust.compile import FindingRecord, SpanRecord, compile_manifest
@@ -143,6 +144,20 @@ def test_a_run_recorded_by_a_newer_build_is_named_so_on_its_trust_page(client: T
         manifest = manifest_of(session, run)
     reasons = [o.reason for f in manifest.findings for o in f.obligations if o.need is Need.RULES_COMPATIBLE]
     assert reasons and all("this build does not know" in r and "earlier" not in r for r in reasons)
+
+
+def test_a_run_recorded_by_a_newer_build_is_not_compared_with_a_revision_here(client: TestClient) -> None:
+    """The re-check (2026-10-30): the revision diff re-located every quote of such a run with this build's verifier, and
+    could call one gone. It is refused before anything is built, as a comparison with an unrelated document is."""
+    run_id = upload_and_ask(client, "Is there an arbitration clause?")["run_id"]
+    with SessionLocal() as session:
+        run = session.scalars(select(Run).where(Run.id == run_id)).one()
+        assert later_version(session, run.workspace_id or "", run, run.document_id).id == run.document_id  # control
+    _record_under(run_id, verifier_version="v99")
+    with SessionLocal() as session:
+        run = session.scalars(select(Run).where(Run.id == run_id)).one()
+        with pytest.raises(Conflict, match="rules this build does not know"):
+            later_version(session, run.workspace_id or "", run, run.document_id)
 
 
 def test_status_counts_records_made_under_rules_this_build_does_not_know(client: TestClient, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
