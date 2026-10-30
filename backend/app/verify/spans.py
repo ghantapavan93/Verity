@@ -60,7 +60,6 @@ from __future__ import annotations
 
 import bisect
 import re
-import unicodedata
 from array import array
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -68,7 +67,21 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import cast
 
-from .tokens import SIGN_OPENERS_V11, VERSION, Kind, attaches, is_amount, joins_digits, locate_tokens, tokenize, written_numbers
+from .tokens import (
+    _CLAUSE_LETTER,
+    SIGN_OPENERS_V11,
+    VERSION,
+    Kind,
+    attaches,
+    caseless,
+    is_amount,
+    joins_digits,
+    locate_tokens,
+    marked,
+    tokenize,
+    whole_words,
+    written_numbers,
+)
 
 VERIFIER_VERSION = f"v{VERSION}"
 
@@ -191,13 +204,10 @@ def _splits(text: str, at: int) -> bool:
     return attached or text[starts[last]] in SIGN_OPENERS_V11
 
 
-_JOINERS = frozenset("\u200c\u200d")  # zero-width non-joiner and joiner
-
-
 def _in_run(ch: str) -> bool:
     """Whether ``ch`` belongs to a run of letters and digits: a letter or a digit, or (v11) a combining mark or a joiner,
-    which belong to the letters they are written between or after."""
-    return ch.isalnum() or ch in _JOINERS or unicodedata.category(ch)[0] == "M"
+    which belong to the letters they are written between or after (tokens.marked)."""
+    return ch.isalnum() or marked(ch)
 
 
 def _seen(text: str, at: int, step: int) -> str:
@@ -296,21 +306,27 @@ def _quote_words(quote: str) -> tuple[str, ...]:
 
 
 def _read_quote_words(quote: str) -> tuple[str, ...]:
-    # An amount word ("usd10k") is a number to the typed tier (v9), which may find it written apart ("USD 10K").
-    return tuple(sorted({t.canonical for t in tokenize(quote) if t.kind is Kind.WORD and not is_amount(quote, t)}, key=len, reverse=True))
+    # An amount word ("usd10k") is a number to the typed tier (v9), which may find it written apart ("USD 10K"). A word
+    # is read whole and compared caseless as the typed tier reads it (v11): "ou" with U+0300 is the word "où".
+    words = whole_words(quote, tokenize(quote))
+    return tuple(sorted({caseless(quote[t.start : t.end]) for t in words if t.kind is Kind.WORD and not is_amount(quote, t)}, key=len, reverse=True))
 
 
 def _cannot_hold(quote: str, text: str) -> bool:
-    """A condition every tier needs, checked at C speed: each word of the quote stands in the text, casefolded, once
-    the characters normalisation deletes are deleted. No tier changes a letter (exact, normalized and casefold keep
-    words whole; typed compares words whole, casefolded), so a text without one of the words cannot hold the quote.
-    Counting a quote's places across a 1.25M-character document ran every tier on every section: 1.9 s a quote; with
-    this, 0.11 s, and outcomes identical on 212,248 pairs (2026-10-09)."""
+    """A condition every tier needs, checked at C speed: each word of the quote stands in the text, both in their
+    canonical caseless form (tokens.caseless), once the characters normalisation deletes are deleted. No tier changes a
+    letter (exact, normalized and casefold keep words whole; typed compares words whole, caseless), so a text without one
+    of the words cannot hold the quote. Counting a quote's places across a 1.25M-character document ran every tier on
+    every section: 1.9 s a quote; with this, 0.11 s, and outcomes identical on 212,248 pairs (2026-10-09)."""
     words = _quote_words(quote)
     if not words:
         return False
-    folded = text.translate(_DELETED).casefold()
+    folded = _remembered("caseless", text, _read_caseless)
     return not all(word in folded for word in words)
+
+
+def _read_caseless(text: str) -> str:
+    return caseless(text.translate(_DELETED))
 
 
 def _ladder(quote: str, text: str) -> Located | None:
@@ -333,8 +349,9 @@ def _tiers(quote: str, text: str) -> Located | None:
         return Located(found[0], found[1], "normalized", found[2])
 
     folded_text, folded_map = fold_with_map(norm_text, norm_map)
-    written = _sections(quote)  # case forgives "SECTION 2(a)" for "Section 2(a)", never a clause's letter (v11)
-    found = _find_bounded(folded_text, norm_quote.casefold(), folded_map, text, lambda start, end: _sections(text[start:end]) == written)
+    # Case forgives "SECTION 2(a)" for "Section 2(a)", never a clause's letter: "(A)" and "(a)" name two clauses (v11).
+    letters = _CLAUSE_LETTER.findall(quote)
+    found = _find_bounded(folded_text, norm_quote.casefold(), folded_map, text, lambda start, end: _CLAUSE_LETTER.findall(text[start:end]) == letters)
     if found is not None:
         return Located(found[0], found[1], "casefold", found[2])
 
@@ -342,11 +359,6 @@ def _tiers(quote: str, text: str) -> Located | None:
     if typed is not None:
         return Located(typed.start, typed.end, "typed", typed.count)
     return None
-
-
-def _sections(text: str) -> list[str]:
-    """The section identifiers written in ``text``, as written: "2(A)" and "2(a)" name two clauses (verifier v11)."""
-    return [text[t.start : t.end] for t in tokenize(text) if t.kind is Kind.SECTION]
 
 
 def strip_label(quote: str, label: str) -> str | None:

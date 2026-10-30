@@ -81,6 +81,7 @@ JOINED = DIGIT_MARKS_V11 - DIGIT_MARKS
 SIGN_OPENERS_V11 = frozenset(json.loads(__SIGN_OPENERS_V11__))
 JOINERS = frozenset(json.loads(__JOINERS__))
 SENTENCE_END = re.compile(json.loads(__SENTENCE_END__))
+CLAUSE_LETTER = re.compile(json.loads(__CLAUSE_LETTER__))
 # v9's amount word: the token an amount's digits and magnitude letter make ("5m", "usd10k").
 AMOUNT_WORD = re.compile(json.loads(__AMOUNT_WORD__), re.IGNORECASE)
 # v10's value of a word holding digits inside a number ("RM5M"): its letters, digits and magnitude letter.
@@ -229,7 +230,7 @@ def typed_tokens(text, version=0):
                         tokens[j][0] = "punct"
                     j -= 1
             if v11 and len(inside) > 1 and any(c in JOINED for c in text[first[3]:last[2]]):
-                middle = "".join(value(t) if t[0] == "word" else t[1] for t in tokens[inside[0] + 1:inside[-1]])
+                middle = "".join(value(t) if t[0] == "word" else text[t[2]:t[3]] if t[0] == "section" else t[1] for t in tokens[inside[0] + 1:inside[-1]])
                 first[1:] = [before + head + middle + tail + after, low, high]
                 for t in tokens[inside[0] + 1:inside[-1] + 1]:
                     t[0] = "punct"
@@ -239,8 +240,48 @@ def typed_tokens(text, version=0):
                 first[1:3] = [before + head, low]
                 last[1], last[3] = tail + after, high
     if version >= 11:
+        tokens = whole_words(text, tokens)
         tokens = sorted(tokens + [["break", "", at, at + 1] for at in sentence_ends(text)], key=lambda t: t[2])
     return tokens
+
+
+def caseless(text):
+    """Unicode's canonical caseless form, composed (verify/tokens.caseless, v11)."""
+    return unicodedata.normalize("NFC", unicodedata.normalize("NFD", text).casefold())
+
+
+def marked(ch):
+    """A combining mark or a joiner: part of the letters it is written in (verify/tokens.marked, v11)."""
+    return ch in JOINERS or unicodedata.category(ch)[0] == "M"
+
+
+def whole_words(text, tokens):
+    """v11's words, read whole through their marks and joiners and compared caseless; a clause's letter alone in
+    parentheses keeps its case (verify/tokens.whole_words)."""
+    out = []
+    k = 0
+    while k < len(tokens):
+        token = tokens[k]
+        k += 1
+        if token[0] != "word":
+            out.append(token)
+            continue
+        end = token[3]
+        while end < len(text) and marked(text[end]):
+            end += 1
+            while end < len(text) and (text[end].isalnum() or marked(text[end])):
+                end += 1
+        while k < len(tokens) and tokens[k][2] < end:
+            k += 1
+        surface = text[token[2]:end]
+        if end > token[3] or token[1] == surface.casefold():
+            if text[token[2] - 1:token[2]] == "(" and CLAUSE_LETTER.fullmatch(text, token[2] - 1, end + 1):
+                out.append(["word", surface, token[2], end])
+            else:
+                out.append(["word", caseless(surface), token[2], end])
+        else:
+            out.append(token)
+    return out
 
 
 def typed(text, version=0):
@@ -289,12 +330,23 @@ def sentence_ends(text):
     """Where a sentence ends, read as the reader sees the text (verify/tokens.sentence_ends, v11)."""
     shown = [i for i, ch in enumerate(text) if ch not in DELETED]
     visible = "".join(text[i] for i in shown)
-    return [shown[m.start()] for m in SENTENCE_END.finditer(visible) if m.group("next") is None or not m.group("next").islower()]
+    return [shown[m.start()] for m in SENTENCE_END.finditer(visible) if ends_sentence(visible, m)]
+
+
+def ends_sentence(visible, m):
+    """A semicolon always; after a space, a letter not in lower case; with no space, a capital between two lower-case
+    letters (verify/tokens._ends_sentence)."""
+    if m.group("next") is not None:
+        return not m.group("next").islower()
+    if m.group("tight") is not None:
+        at = m.start("tight")
+        return m.group("tight").isupper() and visible[m.start() - 1:m.start()].islower() and visible[at + 1:at + 2].islower()
+    return True
 
 
 def in_run(ch, version):
     """A letter or a digit; from v11 also a combining mark or a joiner, which belong to their word (verify/spans._in_run)."""
-    return ch.isalnum() or (version >= 11 and (ch in JOINERS or unicodedata.category(ch)[0] == "M"))
+    return ch.isalnum() or (version >= 11 and marked(ch))
 
 
 def splits(text, at, numbers, version=8):
@@ -339,16 +391,73 @@ def typed_at(text, start, end, version):
     return [(t[0], t[1]) for t in inside]
 
 
-def sections(text):
-    """The section identifiers written in text, as written (verify/spans._sections, v11)."""
-    return [m.group(0) for m in TOKEN_V7.finditer(text) if m.lastgroup == "section"]
+def normalize_with_map(text):
+    """The normalised text and each of its characters' index in the original (verify/spans.normalize_with_map)."""
+    out, index_map, pending = [], [], False
+    for i, ch in enumerate(text):
+        mapped = QUOTE_MAP.get(ch, ch)
+        if mapped == "":
+            continue
+        if mapped.isspace():
+            pending = True
+            continue
+        if pending and out:
+            out.append(" ")
+            index_map.append(index_map[-1] + 1 if index_map else i)
+        pending = False
+        out.append(mapped)
+        index_map.append(i)
+    return "".join(out), index_map
 
 
-def same(found, quote, method, version=0, where=None):
+def alnum_with_map(text):
+    """Letters and digits casefolded, a decimal point between digits kept, each mapped to its index (verify/spans)."""
+    out, index_map, last = [], [], len(text) - 1
+    for i, ch in enumerate(text):
+        if ch.isalnum():
+            folded = ch.casefold()
+            out.append(folded)
+            index_map.extend([i] * len(folded))
+        elif ch == "." and 0 < i < last and text[i - 1].isdigit() and text[i + 1].isdigit():
+            out.append(ch)
+            index_map.append(i)
+    return "".join(out), index_map
+
+
+def strip_label(quote, label):
+    """The quote without the section label copied in front of it, or None (verify/spans.strip_label, v11)."""
+    first, _, rest = label.partition(" ")
+    number, heading = (first, rest) if re.fullmatch(r"\d+(?:\.\d+)*", first) else ("", label)
+    norm_quote, norm_map = normalize_with_map(quote)
+    start = 0
+    if number:
+        written = re.match(re.escape(number) + r"[.):\]]?(?:\s|$)", norm_quote)
+        if written is not None:
+            if written.end() >= len(norm_quote):
+                return None
+            start = norm_map[written.end()]
+    heading_alnum, _ = alnum_with_map(heading)
+    if len(heading_alnum) < 2:
+        return None
+    body = quote[start:]
+    body_alnum, body_map = alnum_with_map(body)
+    if not body_alnum.startswith(heading_alnum) or len(body_alnum) == len(heading_alnum):
+        return None
+    begin, heading_end = body_map[len(heading_alnum)], body_map[len(heading_alnum) - 1]
+    begin = next((low for low, high in (m.span() for m in WRITTEN_V11.finditer(body)) if heading_end < low < begin < high), begin)
+    remainder = body[begin:].lstrip()
+    return remainder or None
+
+
+def same(found, quote, method, version=0, where=None, label=""):
     if version >= 11 and not any(ch.isalnum() for ch in quote):
         return False  # v11: punctuation alone is never found
     base = method.split(":")[-1]
     if "unprefixed" in method:
+        if version >= 11:
+            # The label stripped as the workbench strips it, the rest compared under the span's own tier.
+            rest = strip_label(quote, label)
+            return rest is not None and same(found, rest, base, version, where)
         return bool(alnum(found)) and alnum(quote).endswith(alnum(found))
     if base == "exact":
         return found == quote
@@ -356,7 +465,7 @@ def same(found, quote, method, version=0, where=None):
         return normalize(found) == normalize(quote).strip()
     if base == "casefold":
         # v11: case is forgiven, never a clause's letter ("Section 2(A)" is not found at "Section 2(a)").
-        return normalize(found).casefold() == normalize(quote).strip().casefold() and (version < 11 or sections(found) == sections(quote))
+        return normalize(found).casefold() == normalize(quote).strip().casefold() and (version < 11 or CLAUSE_LETTER.findall(found) == CLAUSE_LETTER.findall(quote))
     if base == "alnum":
         return alnum(found) == alnum(quote)
     if base == "typed":
@@ -420,7 +529,8 @@ def main():
                 continue
             searched = section["text"][:window] if window else section["text"]
             in_place = (searched, span["start"], span["end"])
-            ok = same(found, span["quote"], span["method"], version, in_place) and (not v8 or edges_hold(searched, span["start"], span["end"], version))
+            label_text = f"{section['number']} {section['heading']}".strip()  # as the workbench named it (runs/service._label)
+            ok = same(found, span["quote"], span["method"], version, in_place, label_text) and (not v8 or edges_hold(searched, span["start"], span["end"], version))
             report(ok, f"{label}: {where}")
     slices = {s["section_id"]: s for s in run.get("context_slices", [])}
     model_input = run.get("model_input") or {}

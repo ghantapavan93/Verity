@@ -64,8 +64,9 @@ def render_verify_py() -> str:
         "__SIGN_OPENERS__": json.dumps(sorted(tokens.SIGN_OPENERS), ensure_ascii=True),
         "__DIGIT_MARKS_V11__": json.dumps(sorted(tokens._DIGIT_MARKS_V11), ensure_ascii=True),
         "__SIGN_OPENERS_V11__": json.dumps(sorted(tokens.SIGN_OPENERS_V11), ensure_ascii=True),
-        "__JOINERS__": json.dumps(sorted(verifier._JOINERS), ensure_ascii=True),
+        "__JOINERS__": json.dumps(sorted(tokens._JOINERS), ensure_ascii=True),
         "__SENTENCE_END__": json.dumps(tokens._SENTENCE_END.pattern, ensure_ascii=True),
+        "__CLAUSE_LETTER__": json.dumps(tokens._CLAUSE_LETTER.pattern, ensure_ascii=True),
     }
     text = VERIFY_PY
     for name, value in embedded.items():

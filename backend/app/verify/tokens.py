@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import bisect
 import re
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -160,14 +161,26 @@ _LABELLED_WORD = re.compile(r"([^\W\d_]*)(\d+)(mln|bln|mm|mn|bn|tn|k|m|b|t)?", r
 
 # Verifier v11: what else a number may open with, directly before its digits or its label (a comparator, a plus or
 # plus-minus sign), the marks that join its digits into one value, and what every edge inside a number splits it after.
-_COMPARATORS = frozenset("+±∓<>≤≥≦≧~≈")
+# A sign of relation may stand against a letter ("Margin>5%"); the others, like a minus sign, may not ("A+" is a grade,
+# "3+4" a sum, "COVID-19" a name).
+_RELATIONS = frozenset("<>≤≥≦≧≠⩽⩾≶≷")
+_COMPARATORS = _RELATIONS | frozenset("+±∓~≈")
 _JOINED = frozenset("/:")
 _DIGIT_MARKS_V11 = _DIGIT_MARKS | _JOINED
 SIGN_OPENERS_V11 = SIGN_OPENERS | _COMPARATORS | frozenset(".")
-# Where a sentence ends: a full stop, a question or an exclamation mark that a space and a letter not in lower case
-# follow, past closing and opening quotation marks and brackets ("Inc. shall" goes on, "terminate. Without" does not),
-# and every semicolon.
-_SENTENCE_END = re.compile(r"""[.!?](?=["'”’)\]»]*\s+["'“‘(\[«]*(?P<next>[^\W\d_]))|;""")
+# Where a sentence ends: a full stop, an ellipsis, a question or an exclamation mark, past closing quotation marks and
+# brackets, that a space and a letter not in lower case follow ("Inc. shall" goes on, "terminate. Without" does not), or,
+# with no space, a capitalised word after a lower-case letter ("terminate.Without"); and every semicolon.
+_SENTENCE_END = re.compile(r"""[.!?…](?=["'”’)\]»]*(?:\s+["'“‘(\[«]*(?P<next>[^\W\d_])|(?P<tight>[^\W\d_])[^\W\d_]))|;""")
+# A clause's letter or numeral standing in parentheses, "(a)", "(A)", "(iv)", "(IV)": its case names a different clause.
+_CLAUSE_LETTER = re.compile(r"\((?:[^\W\d_]|[ivxlcdm]+|[IVXLCDM]+)\)")
+# A combining mark or a zero-width (non-)joiner belongs to the word it is written in, as Unicode's word boundaries read it.
+_JOINERS = frozenset("\u200c\u200d")
+
+
+def marked(ch: str) -> bool:
+    """Whether ``ch`` is a combining mark or a joiner: part of the letters it is written between or after (v11)."""
+    return ch in _JOINERS or unicodedata.category(ch)[0] == "M"
 
 
 def _one_of(characters: frozenset[str]) -> str:
@@ -204,12 +217,14 @@ def _written_v10(one: str) -> re.Pattern[str]:
 
 def _written_v11(one: str) -> re.Pattern[str]:
     """v11's number as written: v10's, opened also by a comparator or a plus sign, alone or before a minus sign, or by
-    "+/-" ("≥99.9%", ">$1,000,000", "±5%", "+/-5%"), and by a decimal point before its digits (".5%", "-.5%"); and its
-    digits joined by "/" or ":" as well ("2/3", "3:1")."""
+    "+/-" ("≥99.9%", ">$1,000,000", "±5%", "+/-5%"), a sign of relation even against a letter ("Margin>5%"), and by a
+    decimal point before its digits (".5%", "-.5%", "$.50"); and its digits joined by "/" or ":" as well ("2/3", "3:1")."""
     minus = _one_of(_MINUS_SIGNS)
+    loose = _one_of(_COMPARATORS - _RELATIONS)
+    relation = _one_of(_RELATIONS)
     pattern = rf"""
-    (?:(?P<open>\()|(?<![^\W_]))
-    (?:(?<![^\W_])(?P<sign>\+/{minus}|(?:[<>]=|{_one_of(_COMPARATORS)}){minus}?|{minus}))?
+    (?:(?P<open>\()|(?<![^\W_])|(?={relation}))
+    (?:(?P<sign>(?<![^\W_])(?:\+/{minus}|{loose}{minus}?|{minus})|(?:[<>]=|{relation}){minus}?))?
     (?:(?(sign){_LABEL}\.?\s?|(?(open){_LABEL}\.?\s?|(?!))))?
     (?:\.(?=\d))?
     {one}(?:{_one_of(_DIGIT_MARKS_V11)}{one})*+%?+
@@ -230,9 +245,15 @@ _WRITTEN_V8 = _written(rf"(?>(?:{_SECTION}|{_MONEY}|{_PERCENT}|{_PLAIN})(?![^\W_
 # begins are passed over at once rather than tried against every currency (it changes no match: every way v9 writes a
 # number puts a digit within twelve characters of where the number begins).
 _V9_ONE = rf"(?=\D{{0,12}}\d)(?>(?:{_AMOUNT}|{_SECTION}|{_MONEY_V9}|{_PERCENT}|{_PLAIN})(?![^\W_]))"
+# v11's: an amount may carry a decimal point before its digits after its currency, "$.50", "€.50", "$.5M".
+_DIGITS_V11 = r"(?:\d+(?:,\d+)*(?:\.\d+)?|\.\d+)"
+_V11_ONE = (
+    rf"(?=\D{{0,12}}\d)(?>(?:(?:(?:{_CURRENCY_V9})\s?)?{_DIGITS_V11}{_MAGNITUDE}|{_SECTION}"
+    rf"|(?:{_CURRENCY_V9})\s?{_DIGITS_V11}|{_PERCENT}|{_PLAIN})(?![^\W_]))"
+)
 _WRITTEN_V9 = _written(_V9_ONE)
 _WRITTEN_V10 = _written_v10(_V9_ONE)
-_WRITTEN = _written_v11(_V9_ONE)
+_WRITTEN = _written_v11(_V11_ONE)
 VERSION = 11  # the verifier version these definitions are (spans.VERIFIER_VERSION)
 
 
@@ -391,7 +412,7 @@ def signed(text: str, tokens: list[Token], version: int = VERSION, invisible: fr
             head = text[first.start : first.end] if first.kind is Kind.SECTION else head
             tail = text[last.start : last.end] if last.kind is Kind.SECTION else tail
         if v11 and len(inside) > 1 and not _JOINED.isdisjoint(text[first.end : last.start]):
-            middle = "".join(t.canonical if t.kind is not Kind.WORD else _number_word_value(text, t) for t in out[inside[0] + 1 : inside[-1]])
+            middle = "".join(_joined_value(text, t) for t in out[inside[0] + 1 : inside[-1]])
             out[inside[0]] = Token(first.kind, before + head + middle + tail + after, low, high)
             for j in range(inside[0] + 1, inside[-1] + 1):
                 out[j] = Token(Kind.PUNCT, out[j].canonical, out[j].start, out[j].end)
@@ -403,6 +424,25 @@ def signed(text: str, tokens: list[Token], version: int = VERSION, invisible: fr
     return out
 
 
+def _joined_value(text: str, token: Token) -> str:
+    """The value a token inside a number joined by "/" or ":" adds (v11): a section as written, its letters' case kept;
+    a word holding digits as `_number_word_value` reads it; anything else its canonical form."""
+    if token.kind is Kind.SECTION:
+        return text[token.start : token.end]
+    return _number_word_value(text, token) if token.kind is Kind.WORD else token.canonical
+
+
+def _ends_sentence(visible: str, match: re.Match[str]) -> bool:
+    """Whether a `_SENTENCE_END` candidate ends a sentence: a semicolon always; after a space, a letter not in lower
+    case; with no space, a capital between two lower-case letters ("terminate.Without", never "U.S.A" or "e.G")."""
+    if match["next"] is not None:
+        return not match["next"].islower()
+    if match["tight"] is not None:
+        at = match.start("tight")
+        return match["tight"].isupper() and visible[match.start() - 1 : match.start()].islower() and visible[at + 1 : at + 2].islower()
+    return True
+
+
 def sentence_ends(text: str, invisible: frozenset[str] = frozenset()) -> set[int]:
     """The offsets of the marks that end a sentence in ``text`` (`_SENTENCE_END`, verifier v11), read as a reader sees
     the text: characters in ``invisible`` are read as absent."""
@@ -411,7 +451,7 @@ def sentence_ends(text: str, invisible: frozenset[str] = frozenset()) -> set[int
     else:
         kept = [i for i, ch in enumerate(text) if ch not in invisible]
         visible = "".join(text[i] for i in kept)
-    ends = (m.start() for m in _SENTENCE_END.finditer(visible) if m["next"] is None or not m["next"].islower())
+    ends = (m.start() for m in _SENTENCE_END.finditer(visible) if _ends_sentence(visible, m))
     return set(ends) if kept is None else {kept[at] for at in ends}
 
 
@@ -419,12 +459,49 @@ def compared(text: str, version: int = VERSION, invisible: frozenset[str] = froz
     """What the typed tier compares of ``text``: its significant tokens, each number with what is written against it
     (`signed`), and from v11 the end of each sentence, so that a quote cannot join the end of one sentence to the start
     of the next. A mark that ends a sentence is often no token at all (no token starts against a letter), so each end is
-    put among the tokens where it stands."""
+    put among the tokens where it stands. From v11 a word is read whole (`whole_words`)."""
     kept = significant(signed(text, tokenize(text), version, invisible))
     if version < 11:
         return kept
     ends = [Token(Kind.BREAK, "", at, at + 1) for at in sentence_ends(text, invisible)]
-    return sorted(kept + ends, key=lambda t: t.start)
+    return sorted(whole_words(text, kept) + ends, key=lambda t: t.start)
+
+
+def caseless(text: str) -> str:
+    """Unicode's canonical caseless form (The Unicode Standard, section 3.13, D145), composed: two texts are a canonical
+    caseless match exactly when theirs are equal. "OU" with U+0300 and "où" are one; "ou" and "où" are two (v11)."""
+    return unicodedata.normalize("NFC", unicodedata.normalize("NFD", text).casefold())
+
+
+def whole_words(text: str, tokens: list[Token]) -> list[Token]:
+    """v11's words as the typed tier compares them, by canonical caseless match (`caseless`). A word runs on through the
+    combining marks and joiners written in it and the letters after them (a decomposed "payément" is one word, never
+    "paye" and "ment"), so a decomposed "où" is "où", never "ou"; and a clause's letter or numeral alone in parentheses
+    keeps its case, so "(A)" is not "(a)". A word `signed` made part of a number keeps the value it was given there."""
+    out: list[Token] = []
+    k = 0
+    while k < len(tokens):
+        token = tokens[k]
+        k += 1
+        if token.kind is not Kind.WORD:
+            out.append(token)
+            continue
+        end = token.end
+        while end < len(text) and marked(text[end]):
+            end += 1
+            while end < len(text) and (text[end].isalnum() or marked(text[end])):
+                end += 1
+        while k < len(tokens) and tokens[k].start < end:
+            k += 1  # the letters after a mark, which `tokenize` read as a word of their own
+        surface = text[token.start : end]
+        if end > token.end or token.canonical == surface.casefold():
+            if text[token.start - 1 : token.start] == "(" and _CLAUSE_LETTER.fullmatch(text, token.start - 1, end + 1):
+                out.append(Token(Kind.WORD, surface, token.start, end))
+            else:
+                out.append(Token(Kind.WORD, caseless(surface), token.start, end))
+        else:
+            out.append(token)
+    return out
 
 
 @dataclass(frozen=True)

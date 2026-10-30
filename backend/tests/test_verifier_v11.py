@@ -100,9 +100,9 @@ def test_control_a_composed_accented_word_is_found() -> None:
     assert locate("payé", "Customer will payé the fee.") is not None
 
 
-@pytest.mark.parametrize("quote", [".", "…", " - ", "“”"])
+@pytest.mark.parametrize("quote", [".", "\u2026", " - ", "“”"])
 def test_a_quote_with_no_letter_or_digit_is_never_found(quote: str) -> None:
-    assert locate(quote, "The term is one year. - “Agreement” …") is None
+    assert locate(quote, "The term is one year. - “Agreement” \u2026") is None
 
 
 # ------------------------------------------------------------------------------------------------- as properties
@@ -240,9 +240,73 @@ def test_whatever_the_workbench_locates_its_pack_accepts(tmp_path_factory: pytes
     start = data.draw(st.integers(0, len(text) - 1))
     end = data.draw(st.integers(start + 1, len(text)))
     quote = data.draw(st.sampled_from(VARIANTS))(text[start:end])
-    found = locate(quote, text)
+    # Some quotes copy the section's label in front, as models do, and reach the unprefixed tiers.
+    label = data.draw(st.sampled_from(["", "4 Fees", "12.1 Term and Renewal", "Fees"]))
+    if label and data.draw(st.booleans()):
+        quote = f"{label} {quote}"
+    found = locate(quote, text, label or None)
     if found is None:
         return
     span = text[found.start : found.end]
-    assert checker.same(span, quote, found.method, 11, (text, found.start, found.end)), (text, quote, found)
+    assert checker.same(span, quote, found.method, 11, (text, found.start, found.end), label), (text, quote, label, found)
     assert checker.edges_hold(text, found.start, found.end, 11), (text, quote, found)
+
+
+# ------------------------------------------------------------------ the fresh review of v11 (2026-10-30)
+# Each was found against the v11 candidate and also held on v10: the same classes v11 closed, reached another way.
+GRAVE = "\u0300"
+
+
+@pytest.mark.parametrize(
+    ("quote", "text"),
+    [
+        ("ou le bailleur", f"le locataire ou{GRAVE} le bailleur"),  # "où" (where) written decomposed, quoted as "ou" (or)
+        ("paye ment", f"le pay{NFD_E}ment est dû"),  # a mark inside a word does not part it in two
+        ("$.50", "a fee of -$.50 per unit"),
+        ("$.50", "a fee of ($.50) per unit"),
+        ("par value $.01 per share", "par value ($.01) per share"),
+        ("a fee of €.50 per unit", "a fee of $.50 per unit"),
+        ("5%", "Margin>5% applies"),
+        ("Leverage Ratio 3.50:1.00", "Leverage Ratio≤3.50:1.00"),
+        ("5%", "a fee ≠5% applies"),
+        ("5%", "a rate ⩾5% applies"),
+        ("may terminate without cause", "The Customer may terminate.Without cause, the Supplier may suspend."),
+        ("may terminate without cause", "The Customer may terminate.\u200bWithout cause, the Supplier may suspend."),
+        ("may terminate without cause", "The Customer may terminate\u2026 Without cause, the Supplier may suspend."),
+        ("clause (A) above", "as in clause (a) above"),
+        ("Article IV(A) applies", "Article IV(a) applies"),
+        ("Sections 2(a)/2(B)/2(c) apply", "Sections 2(a)/2(b)/2(c) apply"),
+    ],
+)
+def test_the_review_s_cases_are_not_found(quote: str, text: str) -> None:
+    assert locate(quote, text) is None
+
+
+@pytest.mark.parametrize(
+    ("quote", "text"),
+    [
+        ("où le bailleur", f"le locataire ou{GRAVE} le bailleur"),  # composed in the quote, decomposed in the text
+        ("$.50 per unit", "a fee of $.50 per unit"),
+        ("Margin>5% applies", "Margin>5% applies"),
+        ("i.e. the Customer", "that is, i.e. the Customer, pays"),  # an abbreviation is no sentence end
+        ("clause (a) above", "as in Clause (a) above"),
+        ("U.S. Dollars", "payable in U.S. Dollars only"),
+    ],
+)
+def test_control_the_review_s_cases_as_written_are_found(quote: str, text: str) -> None:
+    assert locate(quote, text) is not None
+
+
+def test_a_pack_checks_an_unprefixed_span_as_the_workbench_located_it(tmp_path: Path) -> None:
+    """The pack checked an unprefixed:* span by a letters-and-digits suffix alone, so it passed "-5%" for the quote
+    "Fees 5%" (label "4 Fees") that the workbench refuses. From v11 it strips the label as the workbench does and
+    compares the rest under the span's own tier."""
+    text = "Late payment carries -5% interest."
+    start = text.index("-5%")
+    assert locate("Fees 5%", text, "4 Fees") is None
+    refused = _pack(tmp_path / "refused", text, start, start + 3, "Fees 5%", "unprefixed:exact", "v11")
+    assert not _verdict(refused)
+    found = locate("Fees -5% interest", text, "4 Fees")
+    assert found is not None and found.method == "unprefixed:exact", found
+    kept = _pack(tmp_path / "kept", text, found.start, found.end, "Fees -5% interest", found.method, "v11")
+    assert _verdict(kept), "control: a span the workbench located unprefixed passes its pack"
