@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from app.analysis.service import PromptPackage, SectionForPrompt, analyze, build_user_message
-from app.batch.cuad_match import hits, retrieved_carries
+from app.batch.cuad_match import answer_index, retrieved_carries
+from app.batch.cuad_match import outcome as cuad_outcome
 from app.config import settings
 from app.hashing import sha256_text
 from app.ingest import ingest
@@ -67,12 +68,14 @@ def retrieve(sections: list[Sec], question: str, k: int) -> list[Sec]:
     return [sections[c.index] for c in candidates]
 
 
-def classify(answered: bool, located: list[str], experts: list[str]) -> str:
-    if answered and not experts:
-        return "asserted where experts found none"
-    if answered:
-        return "correct" if any(hits(text, experts) for text in located) else "cited elsewhere"
-    return "missed" if experts else "correct absence"
+def scored(decided: list[tuple[str, list[str]]], experts: list[str]) -> tuple[str, int | None]:
+    """The outcome of one proposal and which finding was its answer, by the unit and rule scripts/score_cuad.py applies
+    to a batch's run (app.batch.cuad_match). ``decided`` is (status, located texts) per finding, in the model's order.
+    The statuses here come from decide() alone, without the production checks that can lower a pass to needs review;
+    both statuses answer, so the unit is the same, but a status can differ."""
+    index = answer_index(decided)
+    texts = decided[index][1] if index is not None else []
+    return cuad_outcome("answered" if index is not None else "not_found", texts, experts), index
 
 
 def rollout_one(item: dict[str, Any], skill: str, prediction_dir: Path) -> dict[str, Any]:
@@ -102,6 +105,8 @@ def rollout_one(item: dict[str, Any], skill: str, prediction_dir: Path) -> dict[
             outcome = "invalid output"
             detail = result.validation_error or ""
         else:
+            decided: list[tuple[str, list[str]]] = []
+            found_by_finding: list[list[Sec]] = []
             for finding in result.proposal.findings:
                 all_verified = bool(finding.evidence)
                 found: list[tuple[Sec, str]] = []
@@ -112,16 +117,20 @@ def rollout_one(item: dict[str, Any], skill: str, prediction_dir: Path) -> dict[
                     else:
                         found.append((section, section.text[located.start : located.end]))
                 decision = decide(finding.status_hint, finding.observed, finding.required, False, all_verified)
-                if decision.status in ("pass", "needs_review") and found and not answered:
-                    answered = True
-                    conclusion = finding.conclusion
-                    first = found[0][0]
-                    citation = f"§{first.number}" if first.number else first.heading
-                    located_texts = [text for _section, text in found]
-                elif decision.status == "missing":
-                    not_found = True
-                    conclusion = conclusion or finding.conclusion
-            outcome = classify(answered, located_texts, experts)
+                decided.append((decision.status, [text for _section, text in found]))
+                found_by_finding.append([section for section, _text in found])
+            outcome, index = scored(decided, experts)
+            if index is not None:
+                answered = True
+                answer = result.proposal.findings[index]
+                conclusion = answer.conclusion
+                first = found_by_finding[index][0]
+                citation = f"§{first.number}" if first.number else first.heading
+                located_texts = decided[index][1]
+            else:
+                missing = [f for f, (status, _texts) in zip(result.proposal.findings, decided, strict=True) if status == "missing"]
+                not_found = bool(missing)
+                conclusion = missing[0].conclusion if missing else ""
     except ProviderError as error:
         outcome = "failed"
         detail = str(error)

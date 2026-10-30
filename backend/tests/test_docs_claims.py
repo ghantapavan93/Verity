@@ -18,9 +18,12 @@ from __future__ import annotations
 
 import ast
 import html
+import importlib.util
 import re
+import sys
 from collections.abc import Iterator
 from pathlib import Path
+from types import ModuleType
 from typing import NamedTuple
 
 import pytest
@@ -166,6 +169,43 @@ def test_what_the_readme_says_the_gate_does_not_run_it_does_not_run(step: str, i
     assert (step in not_run[0]) != (in_gate in gate), (
         f"scripts/release-gate.sh {'runs' if in_gate in gate else 'does not run'} {step}, and the README says otherwise"
     )
+
+
+# ----------------------------------------------------------------------------- measured figures, derived by code
+#
+# A figure written into prose is derived by code from committed inputs, or labelled with what it was measured on and
+# when. The stress test of 2026-10-30 found that none of the measured figures was held anywhere: CUAD-30's table was the
+# scorer's output on an unfaithful unit (0.85 published, 0.81 on the reported answer, EVL-4), the golden figure had no
+# code that derived it at all (EVL-2), and the retrieval figure was a superseded configuration's (EVL-6).
+
+
+def _script(name: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(f"docs_claims_{name}", BACKEND / "scripts" / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+CUAD_RECORDING = BACKEND / "app" / "batch" / "recordings" / "cuad-30-51398ed416634c15.json"
+
+
+def test_the_cuad_30_table_is_the_committed_recording_scored_by_the_scorer_in_force() -> None:
+    """docs/CUAD.md's table and verdict are what scripts/score_cuad.py prints for the committed recording of batch
+    51398ed416634c15, row by row, so a change to the unit, the rule or the population that moves a cell fails here."""
+    score_cuad = _script("score_cuad")
+    recording = score_cuad.load_recording(CUAD_RECORDING)
+    scored = score_cuad.score_recording(recording)
+    cuad = (ROOT / "docs" / "CUAD.md").read_text(encoding="utf-8")
+    for row in score_cuad.table(scored).splitlines():
+        assert row in cuad, f"docs/CUAD.md does not carry this row of the scored recording: {row}"
+    first, second = score_cuad.verdict(scored, score_cuad.refusals(recording)).splitlines()[:2]
+    figures = re.search(r"citation precision (\d\.\d\d) \(floor (\d\.\d\d)\), recall (\d\.\d\d) \(floor (\d\.\d\d)\)", first)
+    assert figures, first
+    stated = f"citation precision {figures.group(1)} (floor {figures.group(2)}) and recall {figures.group(3)} (floor {figures.group(4)})"
+    assert stated in cuad, f"docs/CUAD.md should state the scored verdict's figures: {stated}"
+    assert second == "verdict: fit to draft a repository review of these categories" and "so the\nclause lookup is fit to draft" in cuad
 
 
 def _env_example() -> dict[str, str]:

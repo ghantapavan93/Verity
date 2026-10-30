@@ -24,10 +24,11 @@ from ..application.start_run import start_run
 from ..errors import InvalidInput, NotFound
 from ..hashing import sha256_bytes
 from ..ingest import SUPPORTED
-from ..models import Batch, BatchItem, Document, Run, as_utc, iso, utcnow
+from ..models import Batch, BatchItem, Document, EvidenceSpan, Finding, Run, as_utc, iso, utcnow
 from ..providers.base import ModelProvider
 from ..runs.service import execute_run
 from ..schemas import BatchField, BatchOut, BatchRow, BatchSummary, BatchValue
+from .cuad_match import answer_index
 
 log = logging.getLogger(__name__)
 TASKS_DIR = Path(__file__).with_name("tasks")
@@ -151,6 +152,24 @@ def _percentile(values: list[float], fraction: float) -> float | None:
     return round(ordered[index], 1)
 
 
+def _located(finding: Finding) -> list[EvidenceSpan]:
+    """The finding's quotes that verified, with the section and offsets the verifier found them at, in order."""
+    return [span for span in finding.spans if span.verified and span.section is not None and span.start >= 0]
+
+
+def located_texts(finding: Finding) -> list[str]:
+    """The text the verifier located for each of the finding's verified quotes: what the CUAD rule compares."""
+    return [span.section.text[span.start : span.end] for span in _located(finding) if span.section is not None]
+
+
+def answer_of(run: Run) -> Finding | None:
+    """The finding a run's value is: the one cuad_match.answer_index picks, which the CUAD scorer and the SkillOpt
+    rollout score too, so the value reported and the value scored are one (stress test EVL-4, 2026-10-30)."""
+    findings = list(run.findings)
+    index = answer_index([(finding.status, located_texts(finding)) for finding in findings])
+    return None if index is None else findings[index]
+
+
 def value_for(run: Run) -> BatchValue:
     """The extracted value for one run: the first finding whose citation verified, or why there is none."""
     if run.stage == "failed":
@@ -159,12 +178,13 @@ def value_for(run: Run) -> BatchValue:
         if run.stage == "unresolved":
             return BatchValue(run_id=run.id, outcome="withheld" if run.reason == "citations_unverified" else "not_found", reason=run.reason)
         return BatchValue(run_id=run.id, outcome="in_progress")
-    for finding in run.findings:
-        if finding.status in ("pass", "needs_review"):
-            located = next((s for s in finding.spans if s.verified and s.section is not None), None)
-            if located is not None and located.section is not None:
-                citation = f"§{located.section.number}" if located.section.number else located.section.heading
-                return BatchValue(run_id=run.id, outcome="answered", value=finding.conclusion, status=finding.status, citation=citation, method=located.method)
+    answer = answer_of(run)
+    if answer is not None:
+        located = _located(answer)[0]
+        section = located.section
+        assert section is not None  # _located keeps only quotes found in a section
+        citation = f"§{section.number}" if section.number else section.heading
+        return BatchValue(run_id=run.id, outcome="answered", value=answer.conclusion, status=answer.status, citation=citation, method=located.method)
     if any(f.status == "missing" for f in run.findings):
         first = next(f for f in run.findings if f.status == "missing")
         # The product's sentence, not the model's: its own may state the absence about the whole agreement (models.NOT_FOUND_CONCLUSION).
