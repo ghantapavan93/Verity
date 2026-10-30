@@ -44,14 +44,15 @@ class ClauseLocator:
 
     def __init__(self, sections: Sequence[Section]) -> None:
         ordered = sorted(sections, key=lambda s: s.ordinal)
-        self._rows = [(s.number, s.heading, s.text) for s in ordered]
+        # With the part each section records (None for a reading stored before parts were): clause_label_in reads it.
+        self._rows = [(s.number, s.heading, s.text, getattr(s, "part", None)) for s in ordered]
         self._index = {s.id: i for i, s in enumerate(ordered)}
         self._reading = tuple(s.id for s in ordered)
 
     @property
     def clause_numbers(self) -> frozenset[str]:
         """The document's clause numbers: its sections' and those its text opens a clause with, read once per reading."""
-        return _document_clause_numbers(self._reading, self._rows)
+        return _document_clause_numbers(self._reading, [(n, h, t) for n, h, t, _ in self._rows])
 
     def label(self, span: EvidenceSpan) -> str | None:
         if not span.verified or span.section_id not in self._index or span.start < 0:

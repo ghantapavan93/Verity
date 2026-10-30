@@ -107,7 +107,9 @@ MAX_TEXT_CHARS = 3 * 4_400_000
 # its term where up to three words stand before the verb ('"Subsidiary" of any entity shall mean'), with "will have the
 # meaning", in any of the quotes a contract is drafted with, and never by a word of construction ('"including" means').
 # Measured against v16: 6 of 5,739 texts (8 headings) and 3 of 30 DOCX (Common Paper's "Personal Data" will have the
-# meaning …, labelled "Definitions" by its parent before) read differently; no PDF.
+# meaning …, labelled "Definitions" by its parent before) read differently; no PDF. Each section records which part of a
+# section the reader split for size it is (ParsedSection.part, 0 for none), so a document's own "X (part 2)" heading is
+# never taken for the reader's split.
 PARSER_VERSION = "v17"
 
 

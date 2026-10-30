@@ -73,8 +73,9 @@ def inline_clause(paragraph: str, last_top: int) -> tuple[str, str] | None:
     return number, title.group(1).strip()
 
 
-# A section longer than MAX_SECTION_CHARS is stored as parts headed "<heading> (part N)"; `_push` writes the heading and
-# `clause_label_in` reads it back, through these two definitions only.
+# A section longer than MAX_SECTION_CHARS is stored as parts headed "<heading> (part N)", and each part says which it is
+# as data (ParsedSection.part, stored on the section; reader v17): the heading's words alone could not tell the reader's
+# split from a document that writes such headings itself (second wave of the stress test, 2026-10-30).
 PART_HEADING = re.compile(r"^(?P<base>.*) \(part (?P<index>\d+)\)$")
 
 
@@ -82,27 +83,46 @@ def part_heading(heading: str, index: int) -> str:
     return f"{heading} (part {index})"
 
 
-def clause_label_in(sections: Sequence[tuple[str, str, str]], index: int, start: int) -> str | None:
-    """``clause_label`` for a passage at ``start`` of ``sections[index]`` (each section as number, heading, text, in
-    reading order). A part after the first is read after the parts before it, because they are one section of the source
-    split for size: a clause that opened in part 2 still holds a passage at the top of part 3, unless a numbered paragraph
-    outside it came between, which ends it as within one part."""
-    number, heading, text = sections[index]
-    texts = [text]
-    part = PART_HEADING.match(heading)
-    if part:
-        expected, i = int(part.group("index")) - 1, index - 1
-        while expected >= 1 and i >= 0:
-            earlier_number, earlier_heading, earlier_text = sections[i]
-            earlier = PART_HEADING.match(earlier_heading)
-            first = expected == 1 and earlier_heading == part.group("base")
-            if earlier_number != number or not (first or (earlier and earlier.group("base") == part.group("base") and int(earlier.group("index")) == expected)):
-                break
-            texts.insert(0, earlier_text)
-            expected, i = expected - 1, i - 1
+def clause_label_in(sections: Sequence[Sequence[object]], index: int, start: int) -> str | None:
+    """``clause_label`` for a passage at ``start`` of ``sections[index]``, each section as (number, heading, text, part) in
+    reading order, ``part`` as the reading recorded it. A part after the first is read after the parts before it, because
+    they are one section of the source split for size: a clause that opened in part 2 still holds a passage at the top of
+    part 3, unless a numbered paragraph outside it came between, which ends it as within one part (`_earlier_parts`)."""
+    number, _, text = (str(field) for field in sections[index][:3])
+    texts = [text, *(earlier for earlier in _earlier_parts(sections, index))]
+    texts = [*reversed(texts[1:]), texts[0]]
     offset = sum(len(t) + len(PARAGRAPH_SEPARATOR) for t in texts[:-1])
     top = number.split(".", 1)[0]
     return clause_label(PARAGRAPH_SEPARATOR.join(texts), offset + start, int(top) if top.isdigit() else 0)
+
+
+def _earlier_parts(sections: Sequence[Sequence[object]], index: int) -> list[str]:
+    """The texts of the parts before ``sections[index]`` of the one section the reader split, nearest first. Where the
+    reading recorded parts (a fourth field, reader v17), the parts it made: the same number, parts running down by one to
+    1; a section it did not split (part 0) has none, whatever its heading says. A reading stored before parts were
+    recorded (no fourth field, or None) is read by its headings, strictly: an explicit "(part k)" after "(part k-1)" of
+    the same base and number, down to "(part 1)". A bare heading is never part 1: no reading has written one, and the
+    branch that took it joined headings a document wrote ("Recitals" and "Recitals (part 2)"; interface corner, 2026-10-30)."""
+    number, heading = str(sections[index][0]), str(sections[index][1])
+    recorded = sections[index][3] if len(sections[index]) > 3 else None
+    found: list[str] = []
+    if isinstance(recorded, int):
+        expected, i = recorded - 1, index - 1
+        while expected >= 1 and i >= 0 and str(sections[i][0]) == number and len(sections[i]) > 3 and sections[i][3] == expected:
+            found.append(str(sections[i][2]))
+            expected, i = expected - 1, i - 1
+        return found if expected == 0 else []
+    part = PART_HEADING.match(heading)
+    if not part:
+        return found
+    expected, i = int(part.group("index")) - 1, index - 1
+    while expected >= 1 and i >= 0:
+        earlier = PART_HEADING.match(str(sections[i][1]))
+        if str(sections[i][0]) != number or not earlier or earlier.group("base") != part.group("base") or int(earlier.group("index")) != expected:
+            break
+        found.append(str(sections[i][2]))
+        expected, i = expected - 1, i - 1
+    return found if expected == 0 else []
 
 
 def _ends_clause(number: str, clause: str) -> bool:
@@ -265,6 +285,9 @@ class ParsedSection:
     heading: str
     paragraphs: list[str] = field(default_factory=list)
     number_computed: bool = False
+    # Which part of a section the reader split for size this is, from 1 (its heading then ends " (part N)"); 0 for a
+    # section not split, whatever its heading says (reader v17).
+    part: int = 0
 
     @property
     def text(self) -> str:
@@ -665,21 +688,26 @@ def _push(sections: list[ParsedSection], section: ParsedSection) -> None:
     for paragraph in section.paragraphs:
         if len(paragraph) > MAX_SECTION_CHARS:
             if part:
-                sections.append(ParsedSection(section.number, part_heading(section.heading, index), part, section.number_computed))
+                sections.append(ParsedSection(section.number, part_heading(section.heading, index), part, section.number_computed, index))
                 index += 1
                 part, size = [], 0
             for chunk in split_paragraph(paragraph, MAX_SECTION_CHARS):
-                sections.append(ParsedSection(section.number, part_heading(section.heading, index), [chunk], section.number_computed))
+                sections.append(ParsedSection(section.number, part_heading(section.heading, index), [chunk], section.number_computed, index))
                 index += 1
             continue
         if part and size + len(paragraph) > MAX_SECTION_CHARS:
-            sections.append(ParsedSection(section.number, part_heading(section.heading, index), part, section.number_computed))
+            sections.append(ParsedSection(section.number, part_heading(section.heading, index), part, section.number_computed, index))
             index += 1
             part, size = [], 0
         part.append(paragraph)
         size += len(paragraph) + len(PARAGRAPH_SEPARATOR)
     if part:
-        sections.append(ParsedSection(section.number, part_heading(section.heading, index) if index > 1 else section.heading, part, section.number_computed))
+        split = index > 1
+        sections.append(
+            ParsedSection(
+                section.number, part_heading(section.heading, index) if split else section.heading, part, section.number_computed, index if split else 0
+            )
+        )
 
 
 def split_paragraph(text: str, cap: int) -> list[str]:
