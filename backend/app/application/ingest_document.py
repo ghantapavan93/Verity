@@ -145,9 +145,11 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
     parse_ms = round((time.perf_counter() - started) * 1000, 1)
 
     document = Document(
-        # In a public workspace the shared row is named by its type only: identical bytes from another visitor share
-        # it, and the uploader's name lives on the uploader's grant, deleted with it (application/retention.py).
-        name=f"document{SUFFIX_OF.get(parsed.media_type, '')}" if is_public(workspace) else parsed.name,
+        # The shared row of a workspace's upload is named by its type only, in every store: identical bytes from another
+        # workspace share it, and the uploader's name lives on the uploader's grant (deleted with it in a public store,
+        # application/retention.py). An invited store's row took the uploader's name until 2026-10-30, and showed it to
+        # other workspaces through curated runs (document_names). The project's own uploads (no workspace) keep theirs.
+        name=f"document{SUFFIX_OF.get(parsed.media_type, '')}" if workspace is not None else parsed.name,
         media_type=parsed.media_type,
         sha256=parsed.sha256,
         pages=parsed.pages,

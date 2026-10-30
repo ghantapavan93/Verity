@@ -142,3 +142,18 @@ def test_a_not_found_finding_and_a_withheld_proposal_are_each_said_as_what_they_
     for text in _texts(client, run_id):
         assert f"{WITHHELD_HEAD} (1)" in text and f"The model wrote, withheld: {WITHHELD_SENTENCE}" in text
         assert "Most favoured nation" in text and "The model also wrote" in text and UNFOUND not in text
+
+
+def test_the_runs_list_says_how_many_answers_were_withheld(client: TestClient) -> None:
+    # The receipt names the withheld proposals; the list of runs counted only the shown findings, so a run with two
+    # answers withheld read as a run of one (stress test, 2026-10-30, wave 2).
+    run_id = _ask(client, WithheldProvider(extra=2), guidance=None)
+    summary = next(r for r in client.get("/api/runs").json() if r["id"] == run_id)
+    assert (summary["findings"], summary["withheld"]) == (1, 2)
+    assert summary["withheld"] == len(client.get(f"/api/runs/{run_id}").json()["withheld"])
+
+
+def test_control_a_run_with_nothing_withheld_says_none(client: TestClient) -> None:
+    run_id = _ask(client, FakeProvider(), guidance=None)
+    summary = next(r for r in client.get("/api/runs").json() if r["id"] == run_id)
+    assert (summary["findings"], summary["withheld"]) == (1, 0)

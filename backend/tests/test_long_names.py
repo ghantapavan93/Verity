@@ -101,4 +101,6 @@ def test_control_a_document_with_an_ordinary_name_is_where_it_always_was(client:
     with db_module.SessionLocal() as session:
         document = session.get(Document, stored["id"])
         assert document is not None
-        assert original_path(document).name == f"{document.sha256}.txt" and reading_name(document) == "terms.txt"
+        # The shared row is named by its type since 2026-10-30 (document_names); the name given is the grant's, and shown.
+        assert original_path(document).name == f"{document.sha256}.txt" and reading_name(document) == "document.txt"
+    assert stored["name"] == "terms.txt"

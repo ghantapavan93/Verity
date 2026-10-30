@@ -12,8 +12,10 @@ from ..errors import NotFound
 from ..models import Memo
 from ..schemas import MemoIn, MemoOut
 from .access import current_workspace
+from .contract import CONFLICT, FOUND, GATED, INVALID, WRITES, held_or_created, media, merged
 
-router = APIRouter(prefix="/api/memos", tags=["memos"])
+router = APIRouter(prefix="/api/memos", tags=["memos"], responses=GATED)
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def _out(memo: Memo) -> MemoOut:
@@ -27,7 +29,7 @@ def _out(memo: Memo) -> MemoOut:
     )
 
 
-@router.post("", response_model=MemoOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=MemoOut, status_code=status.HTTP_201_CREATED, responses=merged(WRITES, INVALID, FOUND, CONFLICT, held_or_created(MemoOut)))
 def create_memo(body: MemoIn, response: Response, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> MemoOut:
     """201 with a memo for the run's current review state, or 200 with the one already written under it and under the
     rules in force (application.create_memo.content_key). A review after a memo, or a change to what a memo would say,
@@ -45,12 +47,12 @@ def create_memo(body: MemoIn, response: Response, session: Session = Depends(get
 MEMO_POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 
-@router.get("/{memo_id}/html", response_class=HTMLResponse)
+@router.get("/{memo_id}/html", response_class=HTMLResponse, responses=FOUND)
 def memo_as_html(memo_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> HTMLResponse:
     return HTMLResponse(require_memo(session, memo_id, workspace).html, headers={"Content-Security-Policy": MEMO_POLICY})
 
 
-@router.get("/{memo_id}/docx")
+@router.get("/{memo_id}/docx", response_class=FileResponse, responses=merged(FOUND, media(DOCX, "The memo as a Word document.")))
 def memo_as_docx(memo_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> FileResponse:
     memo = require_memo(session, memo_id, workspace)
     path = memo_file(memo)
@@ -59,6 +61,6 @@ def memo_as_docx(memo_id: str, session: Session = Depends(get_session), workspac
         raise NotFound("memo file", memo_id)
     return FileResponse(
         path,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        media_type=DOCX,
         filename=f"review-memo-{memo.run_id}.docx",
     )

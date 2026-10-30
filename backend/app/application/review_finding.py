@@ -34,8 +34,11 @@ class Reviewed:
 
 
 def latest_review_id(finding: Finding) -> int:
-    """The id of the finding's latest review row, a cleared one included; 0 when it has none."""
-    return finding.reviews[-1].id if finding.reviews else 0
+    """The finding's own count of review rows, a cleared one included; 0 when it has none: what a reviewer saw, and sends
+    back as basedOn. Reviews are appended, never edited, so the count names the latest. It was the store-wide row id, and
+    one visitor's id moved by exactly the number of decisions another visitor made in between (stress test, 2026-10-30,
+    authz 3). The memo's review head keeps the row ids, so a memo's identity is unchanged (application/create_memo.py)."""
+    return len(finding.reviews)
 
 
 def review_finding(

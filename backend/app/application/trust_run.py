@@ -23,7 +23,7 @@ from ..models import TERMINAL_STAGES, Document, Run
 from ..runs.versions import SEMANTIC_VERSIONS, stale_versions
 from ..trust.compile import FindingRecord, SpanRecord, compile_manifest
 from ..trust.diff import TrustDiff, trust_diff
-from ..trust.model import SectionText, TrustManifest, snapshot_hash
+from ..trust.model import TRUST_VERSION, SectionText, TrustManifest, snapshot_hash
 from .ingest_document import original_path, reading_name, stored_document
 from .versions import is_later_version
 from .workspace import require_document
@@ -108,9 +108,33 @@ def _read_once(path: Path, name: str, sha256: str = "") -> Reading:
 
 
 def forget_readings() -> None:
-    """Drop every reading kept: after each retention pass, and in tests, which change the reader under the same path."""
+    """Drop every reading and manifest kept: after each retention pass, and in tests, which change the reader under the
+    same path. Both hold a contract's text."""
     with _readings_lock:
         _readings.clear()
+    with _manifests_lock:
+        _manifests.clear()
+
+
+# A finished run's manifest depends only on its record, its document's sections and today's rules, yet every GET of
+# /trust and /trust/diff located every span in every section again: 10 s per GET on a real 2.8 MB filing with three
+# spans, 62 to 73 s with fifteen (stress test, 2026-10-30, performance 6). It is worked out once per run and the rules it
+# was worked out under, one request at a time, and kept like a reading: the latest MANIFESTS_KEPT, for minutes, dropped
+# by every retention pass. One that could not read its document again is not kept (current_reading: a reading timed out
+# under load must not stay "could not be read again").
+MANIFESTS_KEPT = 64
+ManifestKey = tuple[str, str, str, str, tuple[tuple[str, str], ...]]
+_manifests: OrderedDict[ManifestKey, tuple[TrustManifest, float]] = OrderedDict()
+_manifests_lock = threading.Lock()
+_working_out: dict[ManifestKey, threading.Lock] = {}
+
+
+def _kept_manifest(key: ManifestKey, now: float) -> TrustManifest | None:
+    kept = _manifests.get(key)
+    if kept is None or now - kept[1] > READING_KEPT_SECONDS:
+        return None
+    _manifests.move_to_end(key)
+    return kept[0]
 
 
 def current_reading(session: Session, document: Document) -> tuple[SectionText, ...] | None:
@@ -128,6 +152,33 @@ def manifest_of(session: Session, run: Run) -> TrustManifest:
     """The trust manifest of a finished run, from its record."""
     if run.stage not in TERMINAL_STAGES:
         raise Conflict("This run has not finished. There is nothing to account for yet.")
+    key: ManifestKey = (run.id, run.document_sha256, PARSER_VERSION, TRUST_VERSION, tuple(sorted((k, str(v)) for k, v in SEMANTIC_VERSIONS.items())))
+    with _manifests_lock:
+        kept = _kept_manifest(key, time.monotonic())
+        if kept is not None:
+            return kept
+        working = _working_out.setdefault(key, threading.Lock())
+    with working:
+        try:
+            with _manifests_lock:
+                kept = _kept_manifest(key, time.monotonic())  # worked out by the request this one waited for
+            if kept is not None:
+                return kept
+            manifest, whole = _work_out(session, run)
+            if whole:
+                with _manifests_lock:
+                    _manifests[key] = (manifest, time.monotonic())
+                    while len(_manifests) > MANIFESTS_KEPT:
+                        _manifests.popitem(last=False)
+            return manifest
+        finally:
+            with _manifests_lock:
+                _working_out.pop(key, None)
+
+
+def _work_out(session: Session, run: Run) -> tuple[TrustManifest, bool]:
+    """The manifest, and whether it may be kept: not when its document, read by an earlier reader, could not be read
+    again now."""
     document = run.document
     index_of = {section.id: index for index, section in enumerate(document.sections)}
     findings = [
@@ -153,7 +204,8 @@ def manifest_of(session: Session, run: Run) -> TrustManifest:
         for finding in run.findings
     ]
     options = json.loads(run.options_json or "{}")
-    return compile_manifest(
+    again = None if document.parser_version == PARSER_VERSION else current_reading(session, document)
+    manifest = compile_manifest(
         run_id=run.id,
         document_id=document.id,
         document_sha256=run.document_sha256,
@@ -163,8 +215,9 @@ def manifest_of(session: Session, run: Run) -> TrustManifest:
         stale_rules=stale_versions(options),
         sections=sections_of(document),
         findings=findings,
-        current_reading=None if document.parser_version == PARSER_VERSION else current_reading(session, document),
+        current_reading=again,
     )
+    return manifest, document.parser_version == PARSER_VERSION or again is not None
 
 
 def later_version(session: Session, workspace: str, run: Run, document_id: str) -> Document:

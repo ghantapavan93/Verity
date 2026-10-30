@@ -9,15 +9,16 @@ from ..db import get_session
 from ..models import Guidance
 from ..schemas import GuidanceIn, GuidanceOut
 from .access import current_workspace
+from .contract import FOUND, GATED, INVALID, WRITES, held_or_created, merged
 
-router = APIRouter(prefix="/api/guidance", tags=["guidance"])
+router = APIRouter(prefix="/api/guidance", tags=["guidance"], responses=GATED)
 
 
 def _out(guidance: Guidance) -> GuidanceOut:
     return GuidanceOut(id=guidance.id, sha256=guidance.sha256, text=guidance.text)
 
 
-@router.post("", response_model=GuidanceOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=GuidanceOut, status_code=status.HTTP_201_CREATED, responses=merged(WRITES, INVALID, held_or_created(GuidanceOut)))
 def create_guidance(body: GuidanceIn, response: Response, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> GuidanceOut:
     """201 with a new guidance record in this workspace, or 200 with the one it may already use that holds these words."""
     saved = save_guidance(session, body.text, workspace=workspace)
@@ -26,6 +27,6 @@ def create_guidance(body: GuidanceIn, response: Response, session: Session = Dep
     return _out(saved.guidance)
 
 
-@router.get("/{guidance_id}", response_model=GuidanceOut)
+@router.get("/{guidance_id}", response_model=GuidanceOut, responses=FOUND)
 def get_guidance(guidance_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> GuidanceOut:
     return _out(require_guidance(session, guidance_id, workspace))

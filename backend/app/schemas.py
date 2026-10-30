@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,11 +15,36 @@ class ApiModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
 
 
+def added_later(*fields: str) -> Callable[[dict[str, Any]], None]:
+    """A model's JSON schema with these fields (by their wire names) optional: fields added to an answer after the
+    interface was written, which a server from before does not send. The API always sends them; a client must not need
+    them. Neither required nor given a default, which the interface's type generator would read as always present."""
+
+    def optional(schema: dict[str, Any]) -> None:
+        schema["required"] = [name for name in schema.get("required", []) if name not in fields]
+        for name in fields:
+            schema.get("properties", {}).get(name, {}).pop("default", None)
+
+    return optional
+
+
+class ErrorOut(ApiModel):
+    """Every refusal: the API's own sentence, or FastAPI's list of what in the request failed validation (api/contract.py)."""
+
+    detail: str | list[dict[str, Any]]
+
+
 class SectionOut(ApiModel):
     id: str
     number: str
     heading: str
     text: str
+    # Which part of a section the reader split for size this is, from 1; 0 for a section not split; None for a reading
+    # stored before parts were recorded (reader v17, models.Section.part). The interface reads this, not "(part N)" in a
+    # heading, which a document may write itself.
+    part: int | None = None
+
+    model_config = ConfigDict(json_schema_extra=added_later("part"))
 
 
 class CoverageOut(ApiModel):
@@ -290,10 +316,15 @@ class RunSummary(ApiModel):
     # The shown findings by status ("needs_review": 1, "missing": 1): what the run concluded, so a list of runs never
     # shows two different outcomes as the same "Complete" (2026-10-09 review).
     outcomes: dict[str, int] = {}
+    # Proposals code withheld (their quotes were not found): kept on the run and named on its receipt, never shown as
+    # answers. Counted here so the list says what the receipt says (stress test, 2026-10-30, wave 2).
+    withheld: int = 0
     has_guidance: bool
     document_id: str
     document_name: str
     created_at: str
+
+    model_config = ConfigDict(json_schema_extra=added_later("withheld"))
 
 
 class FindingRecord(ApiModel):
@@ -1104,6 +1135,10 @@ class TrustSectionChangesOut(ApiModel):
     changed: list[str]
     removed: list[str]
     added: list[str]
+    # Of the removed, how many were not compared by their wording: the comparison is bounded (trust/diff.align).
+    not_compared: int = 0
+
+    model_config = ConfigDict(json_schema_extra=added_later("notCompared"))
 
 
 class TrustDiffOut(ApiModel):

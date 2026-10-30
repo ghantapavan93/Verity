@@ -37,6 +37,11 @@ export interface paths {
         /**
          * Enter
          * @description Exchange an invite for a session. The invite may be the bare token or the whole link it came in.
+         *
+         *     A browser holding another reader's working session keeps it, 409 and no cookie, unless the request says the person
+         *     chose to switch (``?replace=true``). An invite in the address silently replaced the session held, on arrival and on
+         *     a change of the address, and what the reader added next went into the inviter's workspace (stress test, 2026-10-30,
+         *     authz 1). A session of the same reader is renewed; an expired or revoked one is no session.
          */
         post: operations["enter_api_access_session_post"];
         delete?: never;
@@ -111,7 +116,8 @@ export interface paths {
         };
         /**
          * Batch Values Csv
-         * @description One row per document and field: the value, its status, the citation and how it was located, and the run.
+         * @description One row per document and field: the value, its status, the citation and how it was located, and the run. For
+         *     spreadsheets: a cell that would be evaluated is escaped (spreadsheet_cell); GET /api/batches/{id} has the exact values.
          */
         get: operations["batch_values_csv_api_batches__batch_id__values_csv_get"];
         put?: never;
@@ -389,6 +395,11 @@ export interface paths {
          *     the model and its state; before it, only whether the workbench is up and that the gate is on. A store that cannot
          *     take a write is not healthy, whatever the model's state. A visitor who has not entered never makes it ask the
          *     model, and a deployment whose model bills by the second can leave the model to the answer itself.
+         *
+         *     It answers on the event loop and takes none of the request threads, not even for a dependency: declared `def`, it
+         *     waited behind them, and one visitor's 120 concurrent reads of its own run held it for 21 s, past the supervisor's
+         *     10 s, so the probe that restarts the API measured the queue, not the process (stress test, 2026-10-30). What it
+         *     does here is a check of the file system and a token's MAC; the model's probe has its own thread.
          */
         get: operations["health_api_health_get"];
         put?: never;
@@ -410,8 +421,9 @@ export interface paths {
         put?: never;
         /**
          * Create Memo
-         * @description 201 with a memo for the run's current review state, or 200 with the one already written under it. A review
-         *     after a memo makes the next request write a new memo; the earlier one is kept as it was.
+         * @description 201 with a memo for the run's current review state, or 200 with the one already written under it and under the
+         *     rules in force (application.create_memo.content_key). A review after a memo, or a change to what a memo would say,
+         *     makes the next request write a new memo; the earlier one is kept as it was, and served by its id.
          */
         post: operations["create_memo_api_memos_post"];
         delete?: never;
@@ -1046,6 +1058,16 @@ export interface components {
             snapshotHash: string;
             /** Supersedesdocumentid */
             supersedesDocumentId: string | null;
+        };
+        /**
+         * ErrorOut
+         * @description Every refusal: the API's own sentence, or FastAPI's list of what in the request failed validation (api/contract.py).
+         */
+        ErrorOut: {
+            /** Detail */
+            detail: string | {
+                [key: string]: unknown;
+            }[];
         };
         /** ExperimentPage */
         ExperimentPage: {
@@ -2211,6 +2233,8 @@ export interface components {
              * @enum {string}
              */
             stage: "reading" | "finding_evidence" | "checking" | "verifying" | "complete" | "unresolved" | "failed";
+            /** Withheld */
+            withheld?: number;
         };
         /** SectionOut */
         SectionOut: {
@@ -2220,6 +2244,8 @@ export interface components {
             id: string;
             /** Number */
             number: string;
+            /** Part */
+            part?: number | null;
             /** Text */
             text: string;
         };
@@ -2838,6 +2864,8 @@ export interface components {
             changed: string[];
             /** Identical */
             identical: number;
+            /** Notcompared */
+            notCompared?: number;
             /** Removed */
             removed: string[];
         };
@@ -2902,7 +2930,9 @@ export interface operations {
     };
     enter_api_access_session_post: {
         parameters: {
-            query?: never;
+            query?: {
+                replace?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2971,6 +3001,42 @@ export interface operations {
                     "application/json": components["schemas"]["BatchSummary"][];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
         };
     };
     batch_api_batches__batch_id__get: {
@@ -2993,6 +3059,33 @@ export interface operations {
                     "application/json": components["schemas"]["BatchOut"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3000,6 +3093,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3015,13 +3117,40 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description One row per document and field. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": string;
+                    "text/csv": string;
+                };
+            };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description Validation Error */
@@ -3031,6 +3160,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3053,6 +3191,33 @@ export interface operations {
                     "application/json": components["schemas"]["DocumentSummary"][];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
         };
     };
     upload_document_api_documents_post: {
@@ -3068,6 +3233,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already held: the record these inputs name, unchanged; nothing was written. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {
@@ -3077,13 +3251,67 @@ export interface operations {
                     "application/json": components["schemas"]["DocumentOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description The upload stopped arriving, or arrived slower than 256 kbit/s. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooLarge: The body or the file is larger than the route takes. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description InvalidInput: The input cannot be used: an unsupported or unreadable file, for example. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Paused: The owner has paused new uploads and runs (a `public.paused` file in the data directory); reading still works. Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3108,6 +3336,33 @@ export interface operations {
                     "application/json": components["schemas"]["DocumentOut"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3115,6 +3370,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3134,6 +3407,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already held: the record these inputs name, unchanged; nothing was written. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentVersionOut"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {
@@ -3143,13 +3425,76 @@ export interface operations {
                     "application/json": components["schemas"]["DocumentVersionOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Conflict: The request is well-formed but the record is not in a state that allows it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooLarge: The body or the file is larger than the route takes. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description InvalidInput: The input cannot be used: an unsupported or unreadable file, for example. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Paused: The owner has paused new uploads and runs (a `public.paused` file in the data directory); reading still works. Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3174,6 +3519,33 @@ export interface operations {
                     "application/json": components["schemas"]["DocumentVersionOut"][];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3181,6 +3553,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3201,6 +3582,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CitationRecordOut"];
+                };
+            };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3243,6 +3651,33 @@ export interface operations {
                     "application/json": components["schemas"]["ExperimentsOut"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
         };
     };
     families_api_engineering_families_get: {
@@ -3265,6 +3700,24 @@ export interface operations {
                     "application/json": components["schemas"]["FamiliesOut"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3272,6 +3725,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3292,6 +3754,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoldensOut"];
+                };
+            };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3316,6 +3805,24 @@ export interface operations {
                     "application/json": components["schemas"]["FindingRecord"][];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3323,6 +3830,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3342,6 +3858,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already held: the record these inputs name, unchanged; nothing was written. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingReviewOut"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {
@@ -3351,13 +3876,76 @@ export interface operations {
                     "application/json": components["schemas"]["FindingReviewOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Conflict: The request is well-formed but the record is not in a state that allows it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooLarge: The body or the file is larger than the route takes. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description InvalidInput: The input cannot be used: an unsupported or unreadable file, for example. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Paused: The owner has paused new uploads and runs (a `public.paused` file in the data directory); reading still works. Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3375,6 +3963,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already held: the record these inputs name, unchanged; nothing was written. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuidanceOut"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {
@@ -3384,13 +3981,58 @@ export interface operations {
                     "application/json": components["schemas"]["GuidanceOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooLarge: The body or the file is larger than the route takes. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description InvalidInput: The input cannot be used: an unsupported or unreadable file, for example. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Paused: The owner has paused new uploads and runs (a `public.paused` file in the data directory); reading still works. Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3415,6 +4057,33 @@ export interface operations {
                     "application/json": components["schemas"]["GuidanceOut"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3422,6 +4091,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3459,6 +4137,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already held: the record these inputs name, unchanged; nothing was written. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoOut"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {
@@ -3468,13 +4155,76 @@ export interface operations {
                     "application/json": components["schemas"]["MemoOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Conflict: The request is well-formed but the record is not in a state that allows it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooLarge: The body or the file is larger than the route takes. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description InvalidInput: The input cannot be used: an unsupported or unreadable file, for example. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Paused: The owner has paused new uploads and runs (a `public.paused` file in the data directory); reading still works. Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3490,13 +4240,40 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The memo as a Word document. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                };
+            };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description Validation Error */
@@ -3506,6 +4283,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3530,6 +4316,33 @@ export interface operations {
                     "text/html": string;
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3537,6 +4350,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3559,6 +4381,33 @@ export interface operations {
                     "application/json": components["schemas"]["ModelWakeOut"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
         };
     };
     list_runs_api_runs_get: {
@@ -3579,6 +4428,33 @@ export interface operations {
                     "application/json": components["schemas"]["RunSummary"][];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
         };
     };
     create_run_api_runs_post: {
@@ -3594,6 +4470,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already held: the record these inputs name, unchanged; nothing was written. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
             /** @description Successful Response */
             202: {
                 headers: {
@@ -3603,13 +4488,67 @@ export interface operations {
                     "application/json": components["schemas"]["RunOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooLarge: The body or the file is larger than the route takes. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description InvalidInput: The input cannot be used: an unsupported or unreadable file, for example. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Paused: The owner has paused new uploads and runs (a `public.paused` file in the data directory); reading still works. Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3634,6 +4573,33 @@ export interface operations {
                     "application/json": components["schemas"]["RunOut"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3641,6 +4607,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3665,6 +4640,33 @@ export interface operations {
                     "application/json": components["schemas"]["RunDetail"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3672,6 +4674,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3687,13 +4698,40 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The run's stages as server-sent events, until it ends. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "text/event-stream": string;
+                };
+            };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description Validation Error */
@@ -3703,6 +4741,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3718,13 +4774,40 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The evidence pack, a zip with its own verify.py. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/zip": string;
+                };
+            };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description Validation Error */
@@ -3734,6 +4817,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3758,6 +4859,33 @@ export interface operations {
                     "application/json": components["schemas"]["RunExplanation"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3765,6 +4893,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3789,6 +4926,42 @@ export interface operations {
                     "application/json": components["schemas"]["TrustManifestOut"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Conflict: The request is well-formed but the record is not in a state that allows it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3796,6 +4969,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -3822,6 +5013,42 @@ export interface operations {
                     "application/json": components["schemas"]["TrustDiffOut"];
                 };
             };
+            /** @description AccessRequired: No valid session: the reader has not come through an invite, or the session has ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden: The request did not come from the workbench's own pages, or asks to change a curated record. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description NotFound: The record does not exist, or this workspace may not read it: the two are answered alike. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Conflict: The request is well-formed but the record is not in a state that allows it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3829,6 +5056,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description TooManyRequests: A bound on how often was reached; Retry-After says when it lifts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Busy: What the request needs (the store's write lock, a reading slot) is held by others for longer than it waits; nothing was written, and a retry may pass. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };

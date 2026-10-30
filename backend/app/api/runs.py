@@ -22,7 +22,7 @@ from ..application.start_run import start_run
 from ..application.workspace import require_run, visible_runs
 from ..db import SessionLocal, get_session
 from ..document_names import run_document_name
-from ..errors import Busy
+from ..errors import Busy, TooManyRequests
 from ..models import Finding, Run, iso
 from ..providers import make_provider
 from ..providers.base import ModelProvider
@@ -47,9 +47,10 @@ from ..schemas import (
     ValueChoiceOut,
 )
 from .access import current_workspace, limit_pack_downloads, packs_building
+from .contract import FOUND, GATED, INVALID, WRITES, error_responses, held_or_created, media, merged
 from .deps import get_provider
 
-router = APIRouter(prefix="/api/runs", tags=["runs"])
+router = APIRouter(prefix="/api/runs", tags=["runs"], responses=GATED)
 HEARTBEAT_SECONDS = 15
 log = logging.getLogger(__name__)
 
@@ -233,6 +234,7 @@ def run_summary(run: Run, document_name: str | None = None) -> RunSummary:
         reason=run.reason,
         findings=len(shown),
         outcomes=dict(Counter(f.status for f in shown)),
+        withheld=sum(1 for f in run.findings if f.status == "unresolved"),
         has_guidance=run.guidance_id is not None,
         document_id=run.document_id,
         document_name=run_document_name(run) if document_name is None else document_name,
@@ -276,7 +278,7 @@ def provider_for(run: Run | None, default: ModelProvider) -> ModelProvider:
     return make_provider(default.name, run.model, workload=getattr(default, "workload", "interactive"))
 
 
-@router.post("", response_model=RunOut, status_code=status.HTTP_202_ACCEPTED)
+@router.post("", response_model=RunOut, status_code=status.HTTP_202_ACCEPTED, responses=merged(WRITES, INVALID, FOUND, held_or_created(RunOut)))
 def create_run(
     body: RunIn,
     response: Response,
@@ -330,19 +332,19 @@ def list_runs(session: Session = Depends(get_session), workspace: str = Depends(
     return [run_summary(r, names[(r.workspace_id, r.document_id)]) for r in runs]
 
 
-@router.get("/{run_id}", response_model=RunOut)
+@router.get("/{run_id}", response_model=RunOut, responses=FOUND)
 def get_run(run_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> RunOut:
     recover_interrupted_runs(session)
     return run_out(require_run(session, run_id, workspace))
 
 
-@router.get("/{run_id}/detail", response_model=RunDetail)
+@router.get("/{run_id}/detail", response_model=RunDetail, responses=FOUND)
 def get_run_detail(run_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> RunDetail:
     recover_interrupted_runs(session)
     return run_detail(require_run(session, run_id, workspace))
 
 
-@router.get("/{run_id}/explanation", response_model=RunExplanation)
+@router.get("/{run_id}/explanation", response_model=RunExplanation, responses=FOUND)
 def get_run_explanation(run_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> RunExplanation:
     """Why this answer: what was read, what retrieval chose, the exact model input, the model's proposal, each
     SourceMatch and the recorded policy evaluation, all from the record. Read-only; nothing is recomputed as fact."""
@@ -351,7 +353,11 @@ def get_run_explanation(run_id: str, session: Session = Depends(get_session), wo
     return explain_run(session, run_id)
 
 
-@router.get("/{run_id}/evidence-pack")
+@router.get(
+    "/{run_id}/evidence-pack",
+    response_class=Response,
+    responses=merged(FOUND, error_responses(TooManyRequests), media("application/zip", "The evidence pack, a zip with its own verify.py.")),
+)
 def evidence_pack(run_id: str, request: Request, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> Response:
     """A zip with the original bytes, the canonical sections, the run record, every located span and a stdlib verify.py."""
     require_run(session, run_id, workspace)
@@ -385,7 +391,13 @@ def _in_the_record(run_id: str) -> tuple[str | None, int | None]:
         return None, runs_ahead(run)
 
 
-@router.get("/{run_id}/events")
+@router.get(
+    "/{run_id}/events",
+    response_class=StreamingResponse,
+    responses=merged(
+        FOUND, error_responses(TooManyRequests), media("text/event-stream", "The run's stages as server-sent events, until it ends.", {"type": "string"})
+    ),
+)
 async def run_events(run_id: str, request: Request) -> StreamingResponse:
     """Stage transitions only. Replays what already happened, then streams until the run ends, by this process's
     bus or, at the latest, one heartbeat after the record says it ended."""

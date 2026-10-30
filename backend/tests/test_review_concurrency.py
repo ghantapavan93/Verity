@@ -185,3 +185,17 @@ def test_the_same_decision_sent_at_once_without_a_base_is_written_once(client: T
             thread.join(timeout=30)
         assert sorted(created) == [False, False, False, True], (round_, created)
         assert rows(finding) == before + 1
+
+
+def test_a_finding_s_review_counter_counts_its_own_reviews_only(client: TestClient) -> None:
+    # latestReviewId was the store-wide row id: one visitor's id jumped by exactly the number of reviews another visitor
+    # made in between (stress test, 2026-10-30, authz 3). It is now the finding's own count of reviews.
+    first = answered(client)
+    second = str(upload_and_ask(client, "Which law governs this agreement?")["run"]["findings"][0]["id"])
+    assert review(client, first, "confirmed", "X", based_on=0).json()["latestReviewId"] == 1
+    for n in range(4):
+        verdict = "confirmed" if n % 2 == 0 else "dismissed"
+        assert review(client, second, verdict, "Y", based_on=n).status_code == 201
+    assert review(client, first, "dismissed", "X", based_on=1).json()["latestReviewId"] == 2
+    stale = review(client, first, "confirmed", "X", based_on=1)
+    assert stale.status_code == 409, "a decision against a state that has moved on is still refused"
