@@ -23,7 +23,9 @@ Checks, in order:
      an input the run did not keep, which is not reconstructable; this checker then says so and
      prints no PASS for the model input;
   6. a located span that lies beyond the slice the model was shown is reported: the quote exists
-     in the document, but the model never saw those characters (a NOTE, not a failure);
+     in the document, but the model never saw those characters (a NOTE, not a failure). From
+     verifier v5 the workbench searched only that window, so for such a run a span that ends
+     beyond it fails;
   7. when the pack carries the model's output (model_output.txt), its bytes hash to what the run recorded
      when the model answered: the findings' sentences are that output with section handles written as
      labels, and this file keeps the model's own words.
@@ -49,11 +51,30 @@ one number ("2/3" is not "2-3"); the typed check compares the end of each senten
 into the next; neither it nor the casefold check forgives the case of a clause's letter ("2(A)" is not "2(a)"); no
 edge splits a word at a combining mark or a joiner; and a quote with no letter or digit is never found. A v10 run is
 still checked as v10 read it.
+Since the stress test of 2026-10-30 every field of findings.json, relations.json and run.json is either checked or
+printed UNCHECKED, with why. run.json carries the run's stage rows as the run wrote them (stages: what each stage read
+and produced, as hashes), and this file recomputes each one from the files here:
+  8. reading: the document's hash and the sections' text; finding evidence: the question with the guidance's hash,
+     and which sections were handed to the model, in order (run.json candidates); checking: the model's input and its
+     answer; verifying: every span's section, offsets, verified flag and tier;
+  9. the run's last stage, for a run that finished from 2026-10-30 on: the record it finished on, that is each
+     finding's id, status, what set it and why, its relations and match counts, the relations the run located, its
+     options (the verifier version and the window among them), and the run's identity, model and retrieval;
+ 10. each finding's words (topic, conclusion, the model's reading, every quote and the handle it cited) are the
+     model's answer in model_output.txt with its section handles written as the sections' labels, and the question
+     is the one in the model's input;
+ 11. a pointer emptied beside a hash the run recorded is a FAIL: a check the record says applies cannot be switched
+     off by emptying the field that names its file. Only the original document's bytes may be truly absent, and
+     their absence is printed UNCHECKED.
+What no hash covers is printed UNCHECKED: a person's review, what the build that made the pack worked out from the
+record (decided_by, flagged, concerns, clause_label), when the run ran and was packed and, on a run finished before
+2026-10-30, its statuses, relations and options.
 This verifier establishes integrity between the original input, the canonical reading, the context
-given to the model and the stored spans. It does not, and cannot, say the conclusions are right. The
-pack is not signed: it shows that its files agree with each other and with the hashes the run recorded,
-not that nobody changed them together.
-Exit code 0 when every check passes, 1 otherwise.
+given to the model, the model's answer and the stored findings. It does not, and cannot, say the conclusions are
+right. The pack is not signed: it shows that its files agree with each other and with the stage hashes run.json
+carries, not that nobody changed them together; compare run.json's stage rows with the run's in the workbench.
+Exit code 0 when every check passes, 1 when one fails, and 2 when the run was verified under a verifier this file
+does not know: it then judges nothing (NOT CHECKED).
 """
 import decimal
 import hashlib
@@ -113,10 +134,50 @@ try:
     WRITTEN_V11 = re.compile(json.loads(__WRITTEN_V11__), re.IGNORECASE | re.VERBOSE)  # and v11's
 except re.error:
     WRITTEN = WRITTEN_V9 = WRITTEN_V10 = WRITTEN_V11 = None  # before Python 3.11: no atomic groups or possessive quantifiers
+# What binds the pack's other files to the run's record (stress test, 2026-10-30), copied from the workbench when the
+# pack was made: the newest verifier this file knows, the run's transition table (runs/transitions.ALLOWED), the window
+# of every run recorded before the window was an option, how a section handle is written as its label
+# (runs/prose.label_handles), the sentence shown for a point the model did not find, and the README's hash.
+KNOWN_VERIFIER = json.loads(__KNOWN_VERIFIER__)
+TRANSITIONS = json.loads(__TRANSITIONS__)
+LEGACY_WINDOW = json.loads(__LEGACY_WINDOW__)
+HANDLE = re.compile(json.loads(__HANDLE__))
+EMPTY_BRACKETS = re.compile(json.loads(__EMPTY_BRACKETS__))
+SPACE_BEFORE_STOP = re.compile(json.loads(__SPACE_BEFORE_STOP__))
+SPACES = re.compile(json.loads(__SPACES__))
+UNRESOLVED = json.loads(__UNRESOLVED__)
+NOT_FOUND = json.loads(__NOT_FOUND__)
+README_SHA256 = json.loads(__README_SHA256__)
+# The fields the verifying stage's hash covers, and those the last stage's covers (runs/service.finished_record): named
+# in an UNCHECKED line when the run's record carries no such hash.
+LOCATED_FIELDS = "findings.json spans.section_id, spans.start, spans.end, spans.verified, spans.method"
+ENDINGS = ("complete", "unresolved", "failed")  # a run's last stages: none of them produces anything to hash
+RECORD_FIELDS = (
+    "run.json run_id, fingerprint, document.id, task, provider, model, prompt_version, {prompt}retrieval.mode, options, candidates.label, "
+    "candidates.linked, reason, relations_file, stages.input_hash; findings.json id, status, status_source, status_reason, relations, "
+    "spans.match_count; relations.json every field"
+)
 
 
 def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def sha256_text(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def file_hash(here, name):
+    """The sha256 of a file run.json names, or None when the pack has no such file."""
+    path = here / name
+    return sha256(path) if path.is_file() else None
+
+
+def holds(here, name, expected):
+    """Whether the pack holds the file run.json names and it hashes to `expected`: a file that is not there matches
+    nothing, not even a hash that is null."""
+    found = file_hash(here, name)
+    return found is not None and found == expected
 
 
 def normalize(text, version=0):
@@ -413,8 +474,138 @@ def edges_hold(text, start, end, version=8):
 
 
 def verifier_number(run):
-    found = re.fullmatch(r"v(\d+)", str((run.get("options") or {}).get("verifier_version") or ""))
-    return int(found.group(1)) if found else 0
+    """The verifier the run recorded (options.verifier_version): 0 for a run recorded before versions were, None for a
+    name this file cannot read."""
+    named = (run.get("options") or {}).get("verifier_version")
+    if not named:
+        return 0
+    found = re.fullmatch(r"v(\d+)", str(named))
+    return int(found.group(1)) if found else None
+
+
+def window_of(options):
+    """The window a run searched each section in: its recorded option, or the window of every run recorded before the
+    option existed (analysis/service.window_of)."""
+    value = options.get("section_window", LEGACY_WINDOW)
+    return int(value) if isinstance(value, (int, float, str)) else LEGACY_WINDOW
+
+
+def follows(names):
+    """Whether stage rows are a way through the run's transition table from its creation (runs/transitions.ALLOWED)."""
+    at = "created"
+    for name in names:
+        if name not in TRANSITIONS.get(at, ()):
+            return False
+        at = name
+    return True
+
+
+def located(findings):
+    """What the verifying stage hashed: each span's section, offsets, verified flag and tier, in finding order
+    (runs/service.execute_run)."""
+    spans = [[s["section_id"], s["start"], s["end"], s["verified"], s["method"]] for f in findings for s in f["spans"]]
+    return sha256_text(json.dumps(spans, sort_keys=True))
+
+
+def record_of(run, findings, relations):
+    """The record the run finished on, as the workbench hashed it when the run ended (runs/service.finished_record):
+    what no earlier stage's hash covers. `relations` is relations.json as read, or None when the pack has none."""
+    record = {
+        "run": run["run_id"],
+        "fingerprint": run["fingerprint"],
+        "document": run["document"]["id"],
+        "task": run["task"],
+        "provider": run["provider"],
+        "model": run["model"],
+        "prompt_version": run["prompt_version"],
+        "prompt_hash": run["prompt_hash"],
+        "retrieval_mode": run["retrieval"]["mode"],
+        "candidates": run["candidates"],
+        "options": run["options"],
+        "stage": run["stage"],
+        "reason": run["reason"],
+        "relations": relations,
+        "findings": [
+            {
+                "id": f["id"],
+                "ordinal": f["ordinal"],
+                "status": f["status"],
+                "status_source": f["status_source"],
+                "status_reason": f["status_reason"],
+                "relations": f["relations"],
+                "match_counts": [s["match_count"] for s in f["spans"]],
+            }
+            for f in findings
+        ],
+    }
+    return sha256_text(json.dumps(record, sort_keys=True))
+
+
+def slices_of(candidates, sections, window):
+    """The part of each candidate section the model was shown, in rank order (application/reconstruct_input)."""
+    slices = []
+    for rank, candidate in enumerate(candidates, start=1):
+        text = sections[candidate["section_id"]]["text"]
+        end = min(len(text), window)
+        slices.append(
+            {"label": candidate["label"], "section_id": candidate["section_id"], "rank": rank, "start": 0, "end": end, "truncated": len(text) > window, "sha256": sha256_text(text[:end])}
+        )
+    return slices
+
+
+def labels_of(candidates, sections):
+    """What each handle the model was given reads as once its prose reaches a person: "§" and the section's number, or
+    its heading when it has none (runs/service.execute_run)."""
+    labels = {}
+    for candidate in candidates:
+        section = sections[candidate["section_id"]]
+        labels[candidate["label"]] = f"§{section['number']}" if section["number"] else section["heading"]
+    return labels
+
+
+def label_handles(text, labels):
+    """The model's sentence as the workbench stores it: each sec_N handle written as its section's label, and one that
+    names no section it was handed, or carries a sub-reference, as UNRESOLVED (runs/prose.label_handles)."""
+    if text is None:
+        return None
+
+    def label(match):
+        if match.group("bracketed_sub") or match.group("bare_sub"):
+            return UNRESOLVED
+        return labels.get("sec_" + (match.group("bracketed") or match.group("bare"))) or UNRESOLVED
+
+    cleaned = SPACE_BEFORE_STOP.sub(r"\1", EMPTY_BRACKETS.sub("", HANDLE.sub(label, text)))
+    return SPACES.sub(" ", cleaned).strip()
+
+
+def proposed(answer):
+    """The findings the model's answer proposes, as the run made findings of them: none when it says the sections hold
+    no answer, or when it is not JSON (runs/service.execute_run)."""
+    try:
+        parsed = json.loads(answer)
+    except ValueError:
+        return []
+    if not isinstance(parsed, dict) or parsed.get("insufficient_evidence") or not parsed.get("findings"):
+        return []
+    return parsed["findings"]
+
+
+def differences(finding, ordinal, item, labels):
+    """The fields of one finding that are not the model's item as the workbench stored it: its handles written as the
+    sections' labels, its topic cut to 255 characters, each quote and cited handle as given (runs/service)."""
+    different = []
+    expected = {"ordinal": ordinal, "topic": label_handles(item["topic"], labels)[:255], "conclusion": label_handles(item["conclusion"], labels)}
+    for name in ("observed", "required", "guidance_reference", "suggested_position"):
+        expected[f"model.{name}"] = label_handles(item.get(name), labels) or None
+    shown = {**finding, **{f"model.{name}": value for name, value in finding["model"].items()}}
+    different += [name for name, value in expected.items() if shown[name] != value]
+    if finding["shown_conclusion"] != (NOT_FOUND if finding["status"] == "missing" else finding["conclusion"]):
+        different.append("shown_conclusion")
+    if len(finding["spans"]) != len(item["evidence"]):
+        different.append("spans")
+    for k, (span, quoted) in enumerate(zip(finding["spans"], item["evidence"])):
+        different += [f"span {k + 1} {name}" for name, value in (("ordinal", k), ("quote", quoted["quote"]), ("cited_label", quoted["section_id"])) if span[name] != value]
+    return different
 
 
 
@@ -516,41 +707,244 @@ def same(found, quote, method, version=0, where=None, label=""):
     return False
 
 
-def main():
+def main(here=HERE):
     # A section's number or heading the console cannot encode (cp1252 when piped on Windows) is escaped, never fatal.
-    sys.stdout.reconfigure(errors="backslashreplace")
-    run = json.loads(text_of(HERE / "run.json"))
-    sections = {s["id"]: s for s in json.loads(text_of(HERE / "sections.json"))}
-    findings = json.loads(text_of(HERE / "findings.json"))
-    failures = 0
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="backslashreplace")
+    try:
+        return check(here)
+    except (KeyError, IndexError, TypeError, AttributeError, ValueError, OSError) as error:
+        # A file edited out of the shape this checker reads (a field removed, a pointer to no file) fails, named, and is
+        # never a traceback a reader could take for the checker's own fault.
+        print(f"FAIL the pack's files are not in the shape this checker reads: {type(error).__name__} {error}")
+        return 1
+
+
+def check(here):
+    run = json.loads(text_of(here / "run.json"))
+    version = verifier_number(run)
+    if version is None or version > KNOWN_VERIFIER:
+        # A newer verifier's rules are not this file's: judged by its own, a run recorded as "v99" printed PASS (stress
+        # test, 2026-10-30). Nothing is judged then, not even a hash: the reader is sent to a checker that knows them.
+        named = run["options"]["verifier_version"]
+        print(
+            f"NOT CHECKED this run was verified under {named!r}, and this checker knows the verifier up to v{KNOWN_VERIFIER}: "
+            f"it judges nothing it does not know. Check the pack with the verify.py of a Verity build that knows {named!r}."
+        )
+        return 2
+    sections = {s["id"]: s for s in json.loads(text_of(here / "sections.json"))}
+    findings = json.loads(text_of(here / "findings.json"))
+    failures = left = 0
 
     def report(ok, label):
         nonlocal failures
         failures += 0 if ok else 1
         print(("PASS " if ok else "FAIL ") + label)
 
-    document = run["document"]
-    if document.get("file"):
-        report(sha256(HERE / document["file"]) == document["sha256"], f"document bytes: sha256 {document['sha256'][:16]}...")
-    else:
-        print("NOTE the original document bytes are not in this pack; the sections hash below still ties the record to what was read")
-    report(sha256(HERE / "sections.json") == run["sections_sha256"], f"canonical sections: sha256 {run['sections_sha256'][:16]}...")
-    recorded = run.get("sections_text_sha256_recorded")
-    if recorded:
-        joined = chr(31).join(s["text"] for s in sorted(sections.values(), key=lambda s: s["ordinal"]))
-        report(hashlib.sha256(joined.encode("utf-8")).hexdigest() == recorded, f"sections are what the run read: recorded {recorded[:16]}...")
-    else:
-        print("NOTE the run recorded no reading hash (older record); the sections hash above ties the pack to itself only")
-    if run.get("guidance_file"):
-        report(sha256(HERE / run["guidance_file"]) == run.get("guidance_sha256"), f"guidance: sha256 {str(run.get('guidance_sha256'))[:16]}...")
+    def unchecked(fields, why):
+        """A field nothing here can check, said so: `<file> <field>, <field>; <file> <field>`, then why."""
+        nonlocal left
+        left += 1
+        print(f"UNCHECKED {fields}: {why}")
 
-    version = verifier_number(run)
+    # The run's record. run.json carries the stage rows the run wrote (stages), each with the hash of what the stage
+    # read and produced, and every one is recomputed below from the files here. Until 2026-10-30 the pack carried none,
+    # and findings.json and most of run.json were bound to nothing (stress test, 2026-10-30).
+    stages = run.get("stages")
+    bound = stages is not None
+    rows = {row["stage"]: row for row in stages} if bound else {}
+    order = [row["stage"] for row in stages] if bound else []
+    # Every stage of a run written since 2026-09-28 hashed what it read and produced; a run older than that hashed nothing.
+    era = any(row["input_hash"] or row["output_hash"] for row in stages) if bound else False
+    if bound:
+        # Every hash a row carries is one some check below recomputes: a hash on a row no stage writes it on is no record.
+        stray = [row["stage"] for row in stages if (row["input_hash"] is not None and row["stage"] == "failed") or (row["output_hash"] is not None and row["stage"] in ENDINGS)]
+        report(
+            follows(order) and order[-1:] == [run["stage"]] and len(rows) == len(order) and not stray,
+            f"stage rows: {' > '.join(order)}, a way through the run's stages that ends where run.json says it ended",
+        )
+    elif run.get("run_id"):
+        report(False, f"stage rows: run.json names run {run['run_id']} but carries none of its stage rows (stages); every pack made with this checker carries them")
+    else:
+        unchecked(
+            "run.json every field; findings.json every field; relations.json every field",
+            "this run.json names no run and carries no stage rows, so the files below are checked against each other, not against what a run recorded",
+        )
+    model_input = run.get("model_input") or {}
+    output = run.get("model_output") or {}
+    # A pack without stage rows (made by hand, as the tests of this file make them) is read from run.json's own copies.
+    copies = {
+        ("reading", "output_hash"): run.get("sections_text_sha256_recorded"),
+        ("checking", "input_hash"): model_input.get("input_sha256_recorded"),
+        ("checking", "output_hash"): output.get("sha256_recorded"),
+    }
+
+    def recorded(stage, which):
+        return (rows.get(stage) or {}).get(which) if bound else copies.get((stage, which))
+
+    if bound:
+        # run.json's own copies are the rows' hashes, or the pack says two things about one record.
+        for (stage, which), name in (
+            (("reading", "output_hash"), "sections_text_sha256_recorded"),
+            (("checking", "input_hash"), "model_input.input_sha256_recorded"),
+            (("checking", "output_hash"), "model_output.sha256_recorded"),
+        ):
+            if copies[(stage, which)] != recorded(stage, which):
+                report(False, f"run.json {name} is not the {which} its {stage} stage row carries")
+
+    def required(stage, which):
+        """Whether the run must have written this hash. On a run that wrote stage hashes at all, a stage records the hash
+        of its input when it opens and of its output when it ends; it ends without an output hash only when it failed,
+        or when verifying found no passage (runs/service.execute_run). The last stage's record is new on 2026-10-30,
+        so it is never required: its absence is UNCHECKED."""
+        if not era or stage not in rows:
+            return False
+        if which == "input_hash":
+            return stage in ("reading", "finding_evidence", "checking", "verifying")
+        later = order[order.index(stage) + 1 :]
+        return bool(later) and later[0] != "failed" and not (stage == "verifying" and not findings)
+
+    def against(stage, which, computed, label, binds, why=None):
+        """One recorded stage hash against what the files here give. A hash the run recorded is checked, and is a FAIL
+        when the pack does not carry what it covers: a pointer emptied beside it does not switch the check off (stress
+        test, 2026-10-30: it turned into a NOTE that said "older record"). A hash the row lacks is a FAIL when the run
+        must have written it; otherwise what it would bind is UNCHECKED."""
+        value = recorded(stage, which)
+        if value is None:
+            if required(stage, which):
+                report(False, f"{label}: the run wrote its stage hashes, but run.json's {stage} row carries no {which}")
+            elif bound and computed is not None:
+                unchecked(binds, why or f"run.json's {stage} stage row carries no {which} (stages.{which}), so nothing here is checked against it")
+            return
+        if computed is None:
+            report(False, f"{label} {value[:16]}..., but the pack does not carry what that hash covers")
+            return
+        report(computed == value, f"{label} {value[:16]}...")
+
+    # What the reading stage read and produced: the document, and the sections' text.
+    document = run["document"]
+    if bound:
+        against("reading", "input_hash", document["sha256"], "reading: the document run.json names is the one the run read, recorded", "run.json document.sha256")
+    if document.get("file"):
+        report(holds(here, document["file"], document["sha256"]), f"document bytes: sha256 {str(document['sha256'])[:16]}...")
+    else:
+        unchecked(
+            "run.json document.file",
+            "the original document's bytes are not in this pack, so nothing here checks them against document.sha256; the reading stage's hash still ties the sections to what the run read",
+        )
+    report(holds(here, "sections.json", run["sections_sha256"]), f"canonical sections: sha256 {str(run['sections_sha256'])[:16]}...")
+    joined = sha256_text(chr(31).join(s["text"] for s in sorted(sections.values(), key=lambda s: s["ordinal"])))
+    against("reading", "output_hash", joined, "sections are what the run read: recorded", "sections.json text")
+    guidance_file = run["guidance_file"] if bound else run.get("guidance_file")  # a pack made with this file names it, null or not
+    guidance = text_of(here / guidance_file) if guidance_file and (here / guidance_file).is_file() else None
+    if guidance_file:
+        report(holds(here, guidance_file, run.get("guidance_sha256")), f"guidance: sha256 {str(run.get('guidance_sha256'))[:16]}...")
+    elif run.get("guidance_sha256"):
+        report(False, "guidance: run.json records the run's guidance (guidance_sha256) but the pack carries no guidance file (guidance_file)")
+
+    # What finding evidence read and chose: the question with the guidance's hash, and the sections handed to the model.
+    candidates = run.get("candidates")
+    options = run.get("options") or {}
+    if bound:
+        asked = sha256_text(f"{run['question']}{chr(31)}{run['guidance_sha256'] or ''}")
+        against("finding_evidence", "input_hash", asked, "question and guidance: what the run was asked with, recorded", "run.json question, guidance_sha256")
+        chosen = sha256_text(chr(31).join(c["section_id"] for c in candidates)) if candidates is not None else None
+        against("finding_evidence", "output_hash", chosen, "candidates: the sections handed to the model, in order, are the ones the run chose, recorded", "run.json candidates.section_id")
+        for c in candidates or []:
+            section = sections.get(c["section_id"])
+            if section is None or (c["number"], c["heading"]) != (section["number"], section["heading"]):
+                report(False, f"candidates: {c['label']} is not section {c['section_id']} of sections.json as run.json names it")
+        # The window and the number of sections asked for are the options' (bound below by the run's record).
+        window = window_of(options)
+        said = {
+            "verifier.window_chars": ((run.get("verifier") or {}).get("window_chars"), window),
+            "model_input.prompt_window_chars": (model_input.get("prompt_window_chars"), window),
+            "retrieval.requested_k": ((run.get("retrieval") or {}).get("requested_k"), options.get("retrieval_k")),
+        }
+        wrong = [name for name, (value, expected) in said.items() if value != expected]
+        report(not wrong, f"window and retrieval: run.json's window ({window} characters) and the sections it asked for are its options'" + (f"; not {', '.join(wrong)}" if wrong else ""))
+    else:
+        # The run searched each section within its window (what the prompt carried); its edges are read the same way.
+        window = (run.get("verifier") or {}).get("window_chars") or run.get("prompt_window_chars")
+
+    # What checking was given and answered: the model's input, when the pack can carry it, and the model's answer.
+    user = None
+    if model_input.get("user_file") and model_input.get("system_file"):
+        system = text_of(here / model_input["system_file"])
+        user = text_of(here / model_input["user_file"])
+        prompt_hex = sha256_text(system)
+        against("checking", "input_hash", sha256_text(prompt_hex + user), "model input: rebuilt messages hash to what the run recorded", "run.json model_input")
+        report(prompt_hex == run["prompt_hash"], f"prompt {run['prompt_version']}: system text hashes to the recorded prompt hash")
+        given = f"LEGAL GUIDANCE: {guidance.strip()}" if guidance and guidance.strip() else "LEGAL GUIDANCE: none supplied"
+        report(user.startswith(f"QUESTION: {str(run['question']).strip()}\n\n{given}\n\nCONTRACT: "), "question: run.json's question and the guidance are the ones the model was asked, in model_input/user.txt")
+        if bound and model_input.get("reconstructable") is not True:
+            report(False, "model input: run.json says the messages behind the answer cannot be rebuilt (model_input.reconstructable), yet carries them")
+    else:
+        if model_input:
+            print(f"NOTE the model input could not be rebuilt from the record: {model_input.get('problem')}")
+        if bound and model_input.get("reconstructable") is not False:
+            report(False, "model input: run.json says the messages behind the answer are in this pack (model_input.reconstructable), but names no file for them")
+        if recorded("checking", "input_hash"):
+            unchecked("run.json model_input", f"the messages behind the answer are not in this pack, so the hash the run recorded when it called the model, {recorded('checking', 'input_hash')[:16]}..., is checked against nothing here")
+    answer = text_of(here / output["file"]) if output.get("file") and (here / output["file"]).is_file() else None
+    answered = file_hash(here, output["file"]) if output.get("file") else None
+    against("checking", "output_hash", answered, "model output: the recorded answer hashes to what the run recorded", "run.json model_output.file")
+    if bound and "verifying" in rows:
+        against("verifying", "input_hash", answered, "verifying: the answer it read is the one recorded", "run.json model_output.file")
+
+    # The model's words in findings.json are its answer, its handles written as the sections' labels (runs/prose).
+    if bound and "verifying" in rows and candidates is not None and answer is not None:
+        labels = labels_of(candidates, sections)
+        items = proposed(answer)
+        report(len(findings) == len(items), f"findings: {len(findings)}, as many as the model's answer in model_output.txt proposes ({len(items)})")
+        for ordinal, (finding, item) in enumerate(zip(findings, items)):
+            different = differences(finding, ordinal, item, labels)
+            report(not different, f"finding {ordinal + 1}: its words are the model's answer in model_output.txt, its handles written as the sections' labels" + (f"; not {', '.join(different)}" if different else ""))
+    elif bound and "verifying" not in rows and findings:
+        report(False, "findings: findings.json holds findings, but the run never reached the verifying stage that makes them")
+    # Where each span was located, and whether: what the verifying stage produced.
+    if bound:
+        spans = any(f["spans"] for f in findings)
+        against("verifying", "output_hash", located(findings) if spans else None, "located spans: every span's section, offsets, verified flag and tier are what the run recorded", LOCATED_FIELDS)
+    # The record the run finished on: what no earlier stage covers, hashed as its last stage's input from 2026-10-30.
+    if bound:
+        relations = json.loads(text_of(here / run["relations_file"])) if run.get("relations_file") else None
+        fields = RECORD_FIELDS.format(prompt="" if user is not None else "prompt_hash, ")
+        last = order[-1] if order else None
+        if last in ("complete", "unresolved"):
+            against(
+                last,
+                "input_hash",
+                record_of(run, findings, relations),
+                "the record the run finished on: each finding's status and what set it, the relations, the options, the model and the run's identity hash to what its last stage recorded",
+                fields,
+                f"run.json's {last} stage row carries no hash of the record the run finished on (stages.input_hash); a run that finished before 2026-10-30 recorded none, so its statuses, relations and options are the pack's word only",
+            )
+        else:
+            unchecked(fields, "the run did not finish its stages, so it recorded no hash of a finished record; its statuses, relations and options are the pack's word only")
+
+    # The part of each candidate the model was shown: worked out here from the candidates, the sections and the window.
+    if bound:
+        slices = slices_of(candidates, sections, window) if candidates is not None else []
+        copy = run.get("context_slices")
+        returned = (run.get("retrieval") or {}).get("returned")
+        report((copy == slices if copy else user is None) and returned == (len(copy) if copy else None), "context slices: run.json's are the parts of the candidate sections the model was shown, and as many as it says were returned")
+    else:
+        slices = run.get("context_slices", [])
+    if user is not None:
+        for s in slices:
+            section = sections.get(s["section_id"])
+            if section is None:
+                report(False, f"context slice {s['label']}: section missing from the pack")
+                continue
+            shown = section["text"][s["start"] : s["end"]]
+            ok = sha256_text(shown) == s["sha256"] and shown in user
+            report(ok, f"context slice {s['label']} (rank {s['rank']}): {s['end'] - s['start']} characters{' of a truncated section' if s['truncated'] else ''}, in the user message")
+
     recorded_unicode = (run.get("verifier") or {}).get("unicode")
     if recorded_unicode and recorded_unicode != unicodedata.unidata_version:
         print(f"NOTE the pack was made with Unicode {recorded_unicode}; this Python has {unicodedata.unidata_version}. A span holding a character this Python does not know is failed, not judged")
     v8 = version >= 8
-    # The run searched each section within its window (what the prompt carried); its edges are read the same way.
-    window = (run.get("verifier") or {}).get("window_chars") or run.get("prompt_window_chars")
     if v8:
         print(f"NOTE verified under {run['options']['verifier_version']}: spans are checked with its edges and its signed numbers")
     checked = withheld = 0
@@ -575,47 +969,28 @@ def main():
             if unread and recorded_unicode != unicodedata.unidata_version:
                 report(False, f"{label}: {where}: holds characters this Python's Unicode {unicodedata.unidata_version} does not know; check it with a Python whose Unicode is {recorded_unicode} or later")
                 continue
+            if version >= 5 and window and span["end"] > window:
+                # Since v5 the workbench searches only the window the prompt carried: a span past it is not one it found.
+                report(False, f"{label}: {where}: ends beyond the {window} characters of its section the run searched")
+                continue
             searched = section["text"][:window] if window else section["text"]
             in_place = (searched, span["start"], span["end"])
             label_text = f"{section['number']} {section['heading']}".strip()  # as the workbench named it (runs/service._label)
             edges_in = section["text"] if version >= 11 else searched  # v11: a window's end is not the text's end
             ok = same(found, span["quote"], span["method"], version, in_place, label_text) and (not v8 or edges_hold(edges_in, span["start"], span["end"], version))
             report(ok, f"{label}: {where}")
-    slices = {s["section_id"]: s for s in run.get("context_slices", [])}
-    model_input = run.get("model_input") or {}
-    if model_input.get("user_file") and model_input.get("system_file"):
-        system = text_of(HERE / model_input["system_file"])
-        user = text_of(HERE / model_input["user_file"])
-        prompt_hex = hashlib.sha256(system.encode("utf-8")).hexdigest()
-        recomputed = hashlib.sha256((prompt_hex + user).encode("utf-8")).hexdigest()
-        report(recomputed == model_input.get("input_sha256_recorded"), f"model input: rebuilt messages hash to what the run recorded {str(model_input.get('input_sha256_recorded'))[:16]}...")
-        report(prompt_hex == run["prompt_hash"], f"prompt {run['prompt_version']}: system text hashes to the recorded prompt hash")
-        for s in run.get("context_slices", []):
-            section = sections.get(s["section_id"])
-            if section is None:
-                report(False, f"context slice {s['label']}: section missing from the pack")
-                continue
-            shown = section["text"][s["start"] : s["end"]]
-            ok = hashlib.sha256(shown.encode("utf-8")).hexdigest() == s["sha256"] and shown in user
-            report(ok, f"context slice {s['label']} (rank {s['rank']}): {s['end'] - s['start']} characters{' of a truncated section' if s['truncated'] else ''}, in the user message")
-    elif model_input:
-        print(f"NOTE the model input could not be rebuilt from the record: {model_input.get('problem')}")
-    output = run.get("model_output") or {}
-    if output.get("file") and output.get("sha256_recorded"):
-        report(sha256(HERE / output["file"]) == output["sha256_recorded"], f"model output: the recorded answer hashes to what the run recorded {output['sha256_recorded'][:16]}...")
-    elif output.get("file"):
-        print("NOTE the run recorded no hash of the model's output (older record); model_output.txt is the record's copy, unchecked")
+    shown_to_model = {s["section_id"]: s for s in slices}
     beyond = 0
     for finding in findings:
         for span in finding["spans"]:
-            s = slices.get(span["section_id"])
+            s = shown_to_model.get(span["section_id"])
             if span["verified"] and s is not None and span["end"] > s["end"]:
                 beyond += 1
                 print(f"NOTE finding {finding['ordinal'] + 1} span {span['ordinal'] + 1} lies beyond the {s['end']} characters of its section the model was shown")
     # The contract's own replacement and precedence statements the run recorded: each end is where the record says it is.
     # A PASS says the words are there; it says nothing about their legal effect.
     if run.get("relations_file"):
-        relations = json.loads(text_of(HERE / run["relations_file"]))
+        relations = json.loads(text_of(here / run["relations_file"]))
         for index, relation in enumerate(relations):
             for end in ("statement", "replaced", "replacement"):
                 passage = relation.get(end)
@@ -626,7 +1001,28 @@ def main():
                 report(ok, f"relation {index + 1} ({relation['kind']}) {end}: {passage['label']} characters {passage['start']}-{passage['end']}")
     elif "relations_file" in run:
         print(f"NOTE {run.get('relations_note')}")
-    print(f"\n{checked} located span(s) checked, {withheld} withheld, {beyond} beyond the model-seen slice, {failures} failure(s)")
+
+    if bound:
+        # A person's review is a row of its own, written after the run; review_head names the latest review row of each
+        # finding, so with none recorded it is worked out from the findings' ids alone, and an invented review fails.
+        unreviewed = sha256_text(chr(31).join(f"{f['id']}:" for f in findings))
+        if run.get("review_head") == unreviewed:
+            report(all(f["review"] is None for f in findings), "reviews: none was recorded when the pack was made (review_head), and findings.json shows none")
+        else:
+            unchecked("findings.json review; run.json review_head", "a person's review is recorded after the run, and no hash covers what it says")
+        report(holds(here, "README.txt", README_SHA256), "README.txt: the README this checker came with")
+        unchecked(
+            "run.json created_at, finished_at, packed_at, document.name, document.parser_version, document.parse_coverage, workbench_link, "
+            "verifier.describes, verifier.version, verifier.ladder, verifier.label_stripping, verifier.boundary, verifier.unicode, relations_note, "
+            "model_input.problem, model_input.model_calls, model_input.validation_rounds, stages.attempt, stages.rounds",
+            "no hash the run recorded covers them: when it ran and was packed, the document's name and reading, the build that made this pack, "
+            "how many calls the model took and why an input could not be rebuilt",
+        )
+        unchecked(
+            "findings.json decided_by, flagged, concerns, code_compared, unseen_reason, spans.clause_label",
+            "worked out from the fields above when this pack was made, by the build that made it; this file does not work them out again",
+        )
+    print(f"\n{checked} located span(s) checked, {withheld} withheld, {beyond} beyond the model-seen slice, {failures} failure(s), {left} line(s) of fields unchecked")
     return 1 if failures else 0
 
 
