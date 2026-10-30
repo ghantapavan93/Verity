@@ -68,17 +68,21 @@ def refuse_a_store_with_owner_records() -> None:
 
 async def _retain_hourly() -> None:
     while True:
+        # Each step on its own: a purge that raised skipped the hour's sweep with it (stress test, 2026-10-30, time 6). A
+        # failed step is logged and tried again next hour; it never takes the API down.
         try:
-            try:
-                await asyncio.to_thread(purge_expired_workspaces, db_module.engine)
-            finally:
-                # Nothing derived from a deleted document, and no address past its window, outlives a pass, even one
-                # that failed midway (stress test, 2026-10-30).
-                forget_process_state()
-                access.prune_windows()
-            await asyncio.to_thread(sweep_orphaned_files, db_module.engine)
-        except Exception:  # a failed pass is logged and tried again next hour; it never takes the API down
+            await asyncio.to_thread(purge_expired_workspaces, db_module.engine)
+        except Exception:
             log.exception("retention pass failed")
+        finally:
+            # Nothing derived from a deleted document, and no address past its window, outlives a pass, even one that
+            # failed midway (stress test, 2026-10-30).
+            forget_process_state()
+            access.prune_windows()
+        try:
+            await asyncio.to_thread(sweep_orphaned_files, db_module.engine)
+        except Exception:
+            log.exception("retention sweep failed")
         await asyncio.sleep(3600)
 
 

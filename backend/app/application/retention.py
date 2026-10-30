@@ -22,16 +22,25 @@ refuses to delete one (db.immutability_triggers). This is the one, scoped except
   wall clock ran ahead when it was made, or stepped back since. A visit made while the clock ran 30 days ahead kept its
   end 37 days out once the clock was corrected, and lived to real day 37 (stress test, 2026-10-30, time 3). The two
   cases cannot be told apart on the wall clock, so neither is cut short: a step back deletes nothing, and a visit lives
-  at most its days plus the time the clock ran ahead plus one pass.
+  at most its days plus the time the clock ran ahead plus one pass;
+- one file a pass cannot remove (another handle holds it, as Windows refuses; it vanished since the folder was listed)
+  is kept for the next pass, counted and logged, and the pass goes on: the first PermissionError ended the pass, so every
+  file after it, the memos, the drafts, the handoff files and the purge's checkpoint waited an hour (stress test,
+  2026-10-30, time 6). The checkpoint runs whatever the pass met;
+- a file is abandoned, for the sweep, when this process has seen it unchanged for the grace by its monotonic clock, or,
+  while the wall clock has not stepped since the process started, when its mtime is past the grace: by mtime alone, a
+  forward step of over an hour took a partial upload being written for abandoned (the same review).
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
+import stat
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -49,6 +58,15 @@ log = logging.getLogger(__name__)
 
 # A file younger than this is never swept: an upload writes its bytes before its row commits.
 SWEEP_GRACE = timedelta(hours=1)
+# How far the wall clock may move against this process's monotonic clock (drift, a slewed correction) before the sweep
+# stops trusting file times; past it, a file goes only once this process has seen it unchanged for the grace.
+WALL_STEP_TOLERANCE = timedelta(minutes=5)
+_monotonic = time.monotonic
+# The wall clock's reading less the monotonic clock's, when this process started: a step since moves it.
+_WALL_AT_START = time.time() - time.monotonic()
+# What each candidate file was when this process first saw it as it is now: (size, mtime) and the monotonic instant.
+_seen: dict[Path, tuple[tuple[int, int], float]] = {}
+_reported_step = 0.0
 # The pause after each of a pass's transactions: at least this, or as long as the transaction held the lock, at most the
 # second bound.
 PURGE_GAP_S, PURGE_GAP_MAX_S = 0.05, 1.0
@@ -58,6 +76,7 @@ PURGE_GAP_S, PURGE_GAP_MAX_S = 0.05, 1.0
 class PurgeReport:
     workspaces: list[str] = field(default_factory=list)
     skipped_in_progress: list[str] = field(default_factory=list)
+    kept: int = 0  # files that could not be removed this pass, left for the next
     counted_from_now: list[str] = field(default_factory=list)  # visits that began after the clock's reading (_reanchor)
     runs: int = 0
     documents: int = 0
@@ -130,8 +149,25 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None, gap_s:
             for table in workspace_tables()
         )
         candidates = sorted(set(_ids(connection, unlisted, public=PUBLIC_WORKSPACE_LIKE)) - set(expired)) + expired
-    for workspace in candidates:
-        _purge_workspace(engine, workspace, moment, report, gap_s)
+    try:
+        for workspace in candidates:
+            _purge_workspace(engine, workspace, moment, report, gap_s)
+    finally:
+        _checkpoint(engine, report)
+    log.info(
+        "retention purged workspaces=%d runs=%d documents=%d files=%d kept=%d skipped_in_progress=%d checkpointed=%s",
+        len(report.workspaces),
+        report.runs,
+        report.documents,
+        report.files,
+        report.kept,
+        len(report.skipped_in_progress),
+        report.checkpointed,
+    )
+    return report
+
+
+def _checkpoint(engine: Engine, report: PurgeReport) -> None:
     # secure_delete zeroes what the rows held in the pages they leave; the write-ahead log still holds the frames written
     # before, until a checkpoint copies the zeroed pages back and truncates it. A reader holding an old snapshot can keep
     # the checkpoint from finishing (checkpointed=False); every hourly pass checkpoints, whether or not it purged. It does
@@ -144,16 +180,6 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None, gap_s:
         finally:
             connection.exec_driver_sql(f"PRAGMA busy_timeout={int(waits or 0)}")
         report.checkpointed = busy == 0
-    log.info(
-        "retention purged workspaces=%d runs=%d documents=%d files=%d skipped_in_progress=%d checkpointed=%s",
-        len(report.workspaces),
-        report.runs,
-        report.documents,
-        report.files,
-        len(report.skipped_in_progress),
-        report.checkpointed,
-    )
-    return report
 
 
 @contextmanager
@@ -216,7 +242,7 @@ def _purge_workspace(engine: Engine, workspace: str, moment: str, report: PurgeR
         connection.execute(text("DELETE FROM document_versions WHERE workspace_id = :w"), {"w": workspace})
     report.runs += len(runs)
     for recorded in memo_files:
-        report.files += _unlink(settings.data_dir / "memos" / PureWindowsPath(recorded).name)  # a memo's file is its own
+        _count(report, _remove(settings.data_dir / "memos" / PureWindowsPath(recorded).name))  # a memo's file is its own
     for document_id in held:
         with _locked(engine, gap_s) as connection:
             connection.execute(text("DELETE FROM document_access WHERE workspace_id = :w AND document_id = :d"), {"w": workspace, "d": document_id})
@@ -236,60 +262,130 @@ def _purge_workspace(engine: Engine, workspace: str, moment: str, report: PurgeR
             connection.execute(text("DELETE FROM documents WHERE id = :d"), {"d": document_id})
             report.documents += 1
             if row is not None:
-                report.files += _unlink_original_if_unused(connection, str(row[0]), str(row[1]))
+                _count(report, _unlink_original_if_unused(connection, str(row[0]), str(row[1])))
     with _locked(engine, gap_s) as connection:
         connection.execute(text("DELETE FROM document_access WHERE workspace_id = :w"), {"w": workspace})
         connection.execute(text("DELETE FROM visitor_workspaces WHERE workspace_id = :w"), {"w": workspace})
     report.workspaces.append(workspace)
 
 
-def _unlink_original_if_unused(connection: Connection, sha256: str, media_type: str) -> int:
+def _count(report: PurgeReport, removed: bool | None) -> None:
+    if removed:
+        report.files += 1
+    elif removed is None:
+        report.kept += 1
+
+
+def _unlink_original_if_unused(connection: Connection, sha256: str, media_type: str) -> bool | None:
     """Delete the original of these bytes when no document row names them, inside the caller's transaction under the
     write lock: decided after its commit, an upload that found the row first kept the file it saw and the purge then
     deleted it, leaving a live row with no original (stress test, 2026-10-30, concurrency 1). An upload decides reuse
     under the same lock (application/ingest_document.py), so the two never interleave."""
     if connection.execute(text("SELECT 1 FROM documents WHERE sha256 = :s LIMIT 1"), {"s": sha256}).first():
-        return 0
-    return _unlink(settings.data_dir / "documents" / f"{sha256}{SUFFIX_OF.get(media_type, '')}")
+        return False
+    return _remove(settings.data_dir / "documents" / f"{sha256}{SUFFIX_OF.get(media_type, '')}")
+
+
+class _Abandoned:
+    """Whether a file is past the grace, judged once per pass. A file is abandoned when this process has seen it unchanged
+    (its size and mtime) for the grace by the monotonic clock; or, while the wall clock has not stepped since the process
+    started, when its mtime is past the grace by the wall clock. By mtime alone, after a forward step of over an hour, a
+    partial upload being written was abandoned (stress test, 2026-10-30, time 6); and after a step back, an abandoned file
+    looked young until the clock caught up. After a step, a file goes once this process has seen it for the grace."""
+
+    def __init__(self, now: datetime) -> None:
+        global _reported_step
+        self.seen_at = _monotonic()
+        self.cutoff = now.timestamp() - SWEEP_GRACE.total_seconds()
+        step = now.timestamp() - self.seen_at - _WALL_AT_START
+        self.stepped = abs(step) > WALL_STEP_TOLERANCE.total_seconds()
+        self.examined: set[Path] = set()
+        if self.stepped and abs(step - _reported_step) > WALL_STEP_TOLERANCE.total_seconds():
+            _reported_step = step
+            log.warning("retention: the wall clock is %.0f s off its reading against this process's clock at start; files are judged by what it saw", step)
+
+    def __call__(self, path: Path, status: os.stat_result) -> bool:
+        shape = (status.st_size, status.st_mtime_ns)
+        self.examined.add(path)
+        first = _seen.get(path)
+        if first is None or first[0] != shape:
+            first = _seen[path] = (shape, self.seen_at)
+        if self.seen_at - first[1] >= SWEEP_GRACE.total_seconds():
+            return True
+        return not self.stepped and status.st_mtime < self.cutoff
+
+    def forget_the_rest(self) -> None:
+        for path in [p for p in _seen if p not in self.examined]:
+            del _seen[path]
 
 
 def sweep_orphaned_files(engine: Engine, now: datetime | None = None) -> int:
-    """Files in the public store that no row names any more, older than SWEEP_GRACE: what a crash would leave, an
+    """Files in the public store that no row names any more, past SWEEP_GRACE (_Abandoned): what a crash would leave, an
     upload's partial file left by a crash before its rename (no row ever names a partial, and none is still being written
-    after the grace), a memo's draft, and a reading's handed-over file."""
-    cutoff = (now or utcnow()).timestamp() - SWEEP_GRACE.total_seconds()
-    removed = 0
+    after the grace), a memo's draft, and a reading's handed-over file. A file it cannot remove is kept for the next pass
+    (_remove). Returns how many it removed."""
+    abandoned = _Abandoned(now or utcnow())
+    outcomes: list[bool | None] = []
     with engine.connect() as connection:
         hashes = {str(r[0]) for r in connection.execute(text("SELECT sha256 FROM documents"))}
         memos = {PureWindowsPath(str(r[0])).name for r in connection.execute(text("SELECT docx_path FROM memos"))}
-    for path in (settings.data_dir / "documents").glob("*"):
-        if not (path.is_file() and path.stat().st_mtime < cutoff):
-            continue
+
+    def unnamed_under_the_lock(path: Path) -> bool | None:
+        # Decided again under the write lock, one file at a time: an upload of these bytes may have stored them since the
+        # names were read (stress test, 2026-10-30, concurrency 1).
+        with _locked(engine, PURGE_GAP_S) as connection:
+            if connection.execute(text("SELECT 1 FROM documents WHERE sha256 = :s LIMIT 1"), {"s": path.name.split(".")[0]}).first():
+                return False
+            return _remove(path)
+
+    for path in _listed(settings.data_dir / "documents", "*"):
         if path.name.endswith(".part"):
-            removed += _unlink(path)
+            outcomes.append(_remove_if(path, abandoned))
         elif path.name.split(".")[0] not in hashes:
-            # Decided again under the write lock, one file at a time: an upload of these bytes may have stored them since
-            # the names were read (stress test, 2026-10-30, concurrency 1).
-            with _locked(engine, PURGE_GAP_S) as connection:
-                if not connection.execute(text("SELECT 1 FROM documents WHERE sha256 = :s LIMIT 1"), {"s": path.name.split(".")[0]}).first():
-                    removed += _unlink(path)
-    for path in (settings.data_dir / "memos").glob("*"):
-        if path.is_file() and path.stat().st_mtime < cutoff and path.name not in memos:
-            removed += _unlink(path)
+            outcomes.append(_remove_if(path, abandoned, then=unnamed_under_the_lock))
+    for path in _listed(settings.data_dir / "memos", "*"):
+        if path.name not in memos:
+            outcomes.append(_remove_if(path, abandoned))
     # A memo is written in memos/pending/<token>/ and moved out before its row exists (create_memo); a process killed in
     # between leaves the visitor's draft there, below the loop above (cloud readiness review, 2026-10-12). No request
     # writes a draft for longer than the grace.
-    for folder in (settings.data_dir / "memos" / "pending").glob("*"):
-        drafts = [p for p in folder.rglob("*") if p.is_file()] if folder.is_dir() else []
-        if folder.is_dir() and all(p.stat().st_mtime < cutoff for p in [folder, *drafts]):
-            removed += sum(_unlink(p) for p in drafts)
-            shutil.rmtree(folder, ignore_errors=True)
+    for folder in _listed(settings.data_dir / "memos" / "pending", "*"):
+        outcomes.append(_remove_draft(folder, abandoned))
     # A file handed to a reading's child (ingest/bounded.py) lives for the reading, at most seconds; one older than the
     # grace was left by a process killed mid-reading. The API's start empties the folder too.
-    for path in handoff_folder(settings.data_dir).glob(f"{HANDOFF_PREFIX}*"):
-        if path.is_file() and path.stat().st_mtime < cutoff:
-            removed += _unlink(path)
-    return removed
+    for path in _listed(handoff_folder(settings.data_dir), f"{HANDOFF_PREFIX}*"):
+        outcomes.append(_remove_if(path, abandoned))
+    abandoned.forget_the_rest()
+    if None in outcomes:
+        log.warning("retention sweep kept %d file(s) it could not remove; the next pass tries again", outcomes.count(None))
+    return outcomes.count(True)
+
+
+def _listed(folder: Path, pattern: str) -> list[Path]:
+    try:
+        return list(folder.glob(pattern))
+    except OSError as error:
+        log.warning("retention could not list %s this pass: %s", folder.name, type(error).__name__)
+        return []
+
+
+def _remove_draft(folder: Path, abandoned: _Abandoned) -> bool | None:
+    """A pending memo folder whose files and the folder itself are all abandoned, removed with them."""
+    try:
+        if not stat.S_ISDIR(folder.stat().st_mode):
+            return False
+        drafts = [p for p in folder.rglob("*") if stat.S_ISREG(p.stat().st_mode)]
+        seen = [abandoned(p, p.stat()) for p in [folder, *drafts]]  # each one judged, so each one's clock starts
+        if not all(seen):
+            return False
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        log.warning("retention kept a draft in memos/pending this pass: %s", type(error).__name__)
+        return None
+    removed = [_remove(p) for p in drafts]
+    shutil.rmtree(folder, ignore_errors=True)
+    return None if None in removed else True
 
 
 def forget_process_state() -> None:
@@ -310,9 +406,32 @@ def forget_process_state() -> None:
     re.purge()
 
 
-def _unlink(path: Path) -> int:
+def _remove_if(path: Path, abandoned: Callable[[Path, os.stat_result], bool], then: Callable[[Path], bool | None] | None = None) -> bool | None:
+    """Remove ``path`` if it is a file and abandoned: its stat, the decision and the unlink inside one guard, so a file
+    renamed after the folder was listed (6 of 1,102 passes against a busy writer ended there) or refused is kept, never
+    raised. True when removed; False when kept on purpose or already gone; None when the system refused it. ``then``,
+    when given, makes the last decision and removes it (under the store's lock)."""
+    try:
+        status = path.stat()
+        if not stat.S_ISREG(status.st_mode) or not abandoned(path, status):
+            return False
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        log.warning("retention kept a file in %s this pass: %s", path.parent.name, type(error).__name__)
+        return None
+    return then(path) if then is not None else _remove(path)
+
+
+def _remove(path: Path) -> bool | None:
+    """Unlink ``path``: True when removed, False when already gone, None when the system refused, logged and kept for the
+    next pass. Windows refuses to delete a file another handle holds (a pack being read, a trust re-read, an antivirus
+    scan); that PermissionError ended the whole pass (stress test, 2026-10-30, time 6)."""
     try:
         path.unlink()
-        return 1
+        return True
     except FileNotFoundError:
-        return 0
+        return False
+    except OSError as error:
+        log.warning("retention kept a file in %s this pass: %s", path.parent.name, type(error).__name__)
+        return None
