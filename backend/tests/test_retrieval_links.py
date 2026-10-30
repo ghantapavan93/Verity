@@ -14,6 +14,8 @@ from dataclasses import dataclass
 
 import pytest
 from fastapi.testclient import TestClient
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from app.runs.links import MAX_LINKS, _definitions, because, linked, links_of
 from app.runs.service import FrozenOptions, _retrieve
@@ -168,3 +170,149 @@ def test_a_term_is_used_in_capitals_and_in_its_plural() -> None:
     ]
     assert {link.by for link in links_of(sections, 1) if link.kind == "definition"} == {"Fees", "Party"}
     assert {link.by for link in links_of(sections, 2) if link.kind == "definition"} == {"Party"}, "an acronym in mixed text is not the term"
+
+
+# retrieval-v3 (stress test 2026-10-30, retrieval corner, finding 2): an amendment that changes what is handed is handed
+# with it. Links were followed one hop from the top three ranked sections, and an amendment matched only the clause
+# numbers its target opened, so a definition or a cited clause reached the model as a link in its superseded wording and
+# the amendment never did: a pass with both quotes verified on a maturity date the contract had moved two years.
+
+RENEWAL = """RENEWAL SERVICES AGREEMENT
+
+1. Definitions
+1.1 "Effective Date" means the date both parties sign this Agreement.
+1.2 "Initial Term" means three years from the Effective Date.
+1.3 "Cut-Off Date" means the date sixty (60) days before the end of the then-current term.
+
+2. Fees
+2.1 Fees are payable monthly in arrears.
+
+3. Renewal
+3.1 This Agreement renews for successive periods of one year after the Initial Term.
+3.2 The Customer may prevent a renewal by written notice to the Supplier given on or before the Cut-Off Date.
+
+4. Termination for Cause
+4.1 Either party may terminate this Agreement for a material breach not cured within thirty (30) days, subject to Section 22.
+{filler}
+22. Remedies
+22.1 On an uncured material breach, liquidated damages of five thousand dollars ($5,000) are payable.
+
+AMENDMENT NO. 1
+The parties agree as follows. {amendment}
+All other terms remain in full force and effect.
+"""
+_MISCELLANEOUS = "".join(
+    f"""
+{n}. Miscellaneous {n}
+This clause {n} concerns unrelated administrative matter number {n}.
+"""
+    for n in range(5, 22)
+)
+NEW_DEFINITION = '"Cut-Off Date" means the date one hundred twenty (120) days before the end of the then-current term.'
+DEFINITION_AMENDED = {
+    "amended by amending and restating": (
+        'Section 1.3 of the Agreement is hereby amended by amending and restating the definition of "Cut-Off Date" in its entirety as follows: '
+    ),
+    "definition in a section, restated": 'The definition of "Cut-Off Date" in Section 1.3 of the Agreement is amended and restated to read as follows: ',
+    "section deleted and replaced": "Section 1.3 of the Agreement is hereby deleted in its entirety and replaced with the following: ",
+    "no section named": 'The definition of "Cut-Off Date" is hereby amended to read as follows: ',
+    "the parent clause named": "Section 1 of the Agreement is amended by replacing the definition of Cut-Off Date with the following: ",
+}
+
+
+def _read(amendment: str) -> list[S]:
+    from app.ingest import ingest
+
+    text = RENEWAL.format(filler=_MISCELLANEOUS, amendment=amendment)
+    return [S(s.number, s.heading, s.text, f"s{i}") for i, s in enumerate(ingest("agreement.txt", text.encode("utf-8")).sections)]
+
+
+def _amendment_of(sections: list[S]) -> S:
+    return next(s for s in sections if s.heading.startswith("AMENDMENT"))
+
+
+@pytest.mark.parametrize("wording", sorted(DEFINITION_AMENDED))
+def test_a_linked_definition_brings_the_amendment_that_restates_it(wording: str) -> None:
+    sections = _read(DEFINITION_AMENDED[wording] + NEW_DEFINITION)
+    chosen, mode, why = _retrieve(sections, "How late can the Customer give notice to prevent a renewal?", None, FROZEN)  # type: ignore[arg-type]
+    amendment = _amendment_of(sections)
+    assert mode == "lexical_match" and amendment in chosen, [(s.number, s.heading, why.get(s.id)) for s in chosen]
+    assert "amend" in why[amendment.id], "handed as a link: it shares no word with the question"
+
+
+def test_a_cited_clause_brings_its_amendment() -> None:
+    sections = _read("Section 22.1 of the Agreement is amended to read as follows: the other party may claim liquidated damages of $9,000.")
+    chosen, _, why = _retrieve(sections, "When is termination for cause allowed?", None, FROZEN)  # type: ignore[arg-type]
+    remedies = next(s for s in sections if s.number == "22")
+    assert remedies in chosen and why[remedies.id] == "§4 refers to §22"
+    assert _amendment_of(sections) in chosen and why[_amendment_of(sections).id] == "it amends or overrides §22.1, handed as §22"
+
+
+def test_an_amendment_naming_a_sub_clause_the_reader_left_inside_its_section_is_found() -> None:
+    sections = [
+        S("1", "Definitions", '1.1 "Fees" means the charges. 1.3 "Cut-Off Date" means sixty days before renewal.'),
+        S("", "Amendment No. 1", "Section 1.3 of the Agreement is deleted and replaced: the Cut-Off Date is ninety days before renewal."),
+        *FILLER,
+    ]
+    assert ("amendment", 1) in {(link.kind, link.index) for link in links_of(sections, 0)}
+
+
+def test_a_ranked_section_beyond_the_top_three_brings_its_amendment() -> None:
+    sections = _sections()  # the Amendment No. 1 section (index 4) replaces §4 (index 1)
+    added = linked(sections, [5, 6, 7, 1, 8, 9], window=6000)  # §4 ranked fourth
+    assert [(link.kind, link.index) for link in added][:1] == [("amendment", 4)]
+
+
+def test_control_an_unamended_definition_is_linked_as_before() -> None:
+    sections = _read(DEFINITION_AMENDED["no section named"] + NEW_DEFINITION)
+    _, _, why = _retrieve(sections, "How long is each renewal?", None, FROZEN)  # type: ignore[arg-type]
+    assert 'the definition of "Initial Term", used in §3' in why.values(), why
+
+
+def test_control_citing_a_clause_is_not_amending_it() -> None:
+    sections = [S("1", "Definitions", '"Fees" means the charges.'), S("7", "Invoices", "Invoices are issued as set out in Section 1."), *FILLER]
+    assert ("amendment", 1) not in {(link.kind, link.index) for link in links_of(sections, 0)}
+
+
+# A generated agreement: a definitions clause (each definition after the first opened mid-line, as TXT and PDF readings
+# leave them), clauses that use the terms, and amending instruments that change some of them by clause number, by
+# sub-clause, or by the name of a definition. Whatever is ranked, each handed section's amendments are handed, unless the
+# two places are full or an amendment would take the text past what the ranked sections may carry.
+_TERMS = ["Fees", "Term", "Territory", "Products", "Notice Period", "Cap"]
+
+
+@st.composite
+def _agreements(draw: st.DrawFn) -> tuple[list[S], list[int], dict[int, set[int]]]:
+    clauses = draw(st.integers(min_value=3, max_value=9))
+    definitions = " ".join(f'1.{i + 1} "{term}" means the {term.lower()} of the parties.' for i, term in enumerate(_TERMS))
+    sections = [S("1", "Definitions", definitions, "d")]
+    for n in range(2, clauses + 2):
+        used = draw(st.lists(st.sampled_from(_TERMS), max_size=3, unique=True))
+        sections.append(S(str(n), f"Clause {n}", f"{n}.1 The supplier delivers under clause {n}. " + " ".join(f"The {t} applies." for t in used), f"c{n}"))
+    amends: dict[int, set[int]] = {}
+    for a in range(draw(st.integers(min_value=1, max_value=3))):
+        kind = draw(st.sampled_from(["clause", "sub-clause", "definition"]))
+        if kind == "definition":
+            term = draw(st.sampled_from(_TERMS))
+            sentence, target = f'The definition of "{term}" is hereby amended and restated in its entirety.', 0
+        else:
+            target = draw(st.integers(min_value=1, max_value=clauses))
+            named = sections[target].number + (".4" if kind == "sub-clause" else "")
+            sentence = f"Section {named} of the Agreement is hereby deleted and replaced with new text."
+        sections.append(S("", f"Amendment No. {a + 1}", sentence, f"a{a}"))
+        amends.setdefault(target, set()).add(len(sections) - 1)
+    sections += FILLER
+    ranked = draw(st.lists(st.integers(min_value=0, max_value=len(sections) - 1), min_size=1, max_size=6, unique=True))
+    return sections, ranked, amends
+
+
+@settings(max_examples=300, deadline=None)
+@given(_agreements())
+def test_every_handed_section_brings_its_amendments_while_places_remain(agreement: tuple[list[S], list[int], dict[int, set[int]]]) -> None:
+    sections, ranked, amends = agreement
+    added = linked(sections, ranked, window=6000)
+    handed = set(ranked) | {link.index for link in added}
+    assert len(added) <= MAX_LINKS
+    for target in sorted(handed):
+        for amendment in sorted(amends.get(target, set()) - handed):
+            assert len(added) == MAX_LINKS, (target, amendment, [because(link, sections) for link in added])

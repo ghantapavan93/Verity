@@ -76,7 +76,8 @@ HEADING_WEIGHT = 3
 # folded and casefolded, a possessive its word; every section that shares a word with the query is ranked while places
 # remain, not only those scored above zero, and the opening sections go only when none shares one; an alias group fires
 # only on a phrase that names its concept (retrieval.aliases WORDING); a definition is read in every pair of quotation
-# marks, a word of construction is not a term, and a term is used in capitals too (runs.links).
+# marks, a word of construction is not a term, and a term is used in capitals too; the amendments of every handed
+# section are handed with it, a linked one's included (runs.links).
 RETRIEVAL_VERSION = "retrieval-v3"
 
 
