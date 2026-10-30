@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
+import { connection } from "next/server";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -21,7 +22,11 @@ export const metadata: Metadata = {
   twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Every page is rendered per request, so Next can put the response's script nonce (src/proxy.ts, lib/csp) on its own
+  // scripts: a page built ahead of time carries none, and the policy would refuse its scripts. The static /state export
+  // has no server, so no request and no proxy; it is built ahead of time as before (K64, 2026-10-30).
+  if (!PUBLIC_STATE) await connection();
   return (
     <html lang="en" className={`${inter.variable} ${sourceSerif.variable} ${jetbrains.variable}`}>
       <body>
