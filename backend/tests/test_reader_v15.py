@@ -270,5 +270,5 @@ def test_property_furniture_at_the_page_edge_is_left_out_and_every_clause_reads_
     assert left + still == sum(page.count(furniture) for page in pages), "every printing is either read or counted as left out"
 
 
-def test_the_reader_version_is_v15() -> None:
-    assert PARSER_VERSION == "v15"
+def test_the_reader_keeps_v15s_rules() -> None:
+    assert PARSER_VERSION in ("v15", "v16")  # v16 (test_reader_v16_*.py) keeps every rule tested here

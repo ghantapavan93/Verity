@@ -13,6 +13,14 @@ from .sections import ParsedSection, build_sections
 __all__ = ["PARSER_VERSION", "SUPPORTED", "Ingested", "TooLargeToRead", "UnsupportedFile", "ingest"]
 
 MAX_NAME = 255
+# What a reading may hand on, checked where it is made: in the reading's child, so a refusal costs the API nothing. Every
+# cost after a reading grows with its sections, and none of it was bounded: one 5.9 MB text of 100,000 short headings
+# held the store's write lock for 16.5 s and took 416 MB in the API process, outside the child's bounds (stress test,
+# 2026-10-30). The largest real contract read so far, a 4.4 MB file, has 7,174 sections (ingest/bounded.py); the
+# limits are three times that, the margin the child's own bounds keep. Sections are counted after a long paragraph
+# is split into parts, and the text is counted too, so a wall of text that splits into parts is held by the same rule.
+MAX_SECTIONS = 3 * 7_174
+MAX_TEXT_CHARS = 3 * 4_400_000
 
 # Stored on every document so a run record says which reader produced the text its citations
 # point into. Bump it whenever the reader changes what a file's text is.
@@ -69,7 +77,32 @@ MAX_NAME = 255
 # lines named, as a Word file's headers and footers are (sections.page_edge_furniture); v12 kept such lines as text where
 # they stood, so they sat inside clauses and broke the sentence a page break fell in. The document's own heading printed
 # at the head of its first page stays. DOCX is read as in v14 but for unstyled lines naming a part. Measured: DECISIONS.md.
-PARSER_VERSION = "v15"
+# v16 (2026-10-30, the adversarial stress test): every format. A long paragraph is cut into parts only where a passage
+# ends and nothing is split (sections.split_paragraph; v15 cut at the 6,000th character inside "$350,|000,000"); an
+# invisible mark inside an ASCII number is removed ("9\u061c0"); a reading of more sections or text than three times the
+# largest real contract is refused in the reader's child. DOCX is read as Word displays it (ingest/word_display.py): one
+# branch of an mc:AlternateContent, no text inside a field's instruction, a legacy check box as ☒/☐ and a drop-down as
+# its entry, a w:sym or symbol-font text as its glyph, a data-bound control as its bound value, a w:bdo or w:dir with its
+# direction controls (removed and counted), text boxes once each after their paragraph, block w:customXml and controls
+# around cells entered; text drawn so it cannot be seen (white on nothing shaded, 1 pt or less) is left out and counted.
+# A table row has one slot per grid column, empty and repeated cells kept: v15 dropped them, so values moved columns.
+# Measured on the 31 DOCX of the corpus: tables in 19 (empty and repeated cells), check boxes in two, nothing else.
+# Plain text and PDF (and unstyled DOCX lines): a line in capitals is judged on its words, not its case, which it has
+# none of: one stating "shall", "in no event", "is" or the like, stopping on a comma or a semicolon, or opening with a
+# function word ("SECTION 9 OF THIS AGREEMENT, IN NO EVENT …") is no heading; an unnumbered title line inside a paragraph
+# that goes on is its next line; a capitals title that wraps is one heading. CUAD's eGain agreement read its exclusion
+# of consequential damages in headings only, as §9. Measured on 5,739 EDGAR and CUAD texts against v16's first commit:
+# 3,052 read differently; texts holding operative capitals words only in headings, 332 to 57; 105,132 words moved from
+# headings into section text; clause numbers lost 51 in 36 texts (wrapped sentences that open with a number), gained 802.
+# PDF: a page is read from its own operators (ingest/pdf_layout.py) and laid out by pypdf's own fixed-width code, so a
+# page with none of the following reads as v15 read it (424 of 427 corpus pages identical): side-by-side prose columns,
+# found from the page's geometry, are read one after the other, never joined line by line ("Customer may terminate this
+# Agreement Supplier may terminate …"); strings drawn out of order read by position ("09" was stored where "90" shows);
+# form XObjects are read; text that cannot be seen (render mode 3 or 7, white on nothing painted, 1 pt or less, off the
+# page) is left out and counted, invisible text over an image (a scan's OCR layer) read and counted; a digit whose
+# ToUnicode entry names another than the glyph a non-embedded font draws is read as U+FFFD and counted; rotated text,
+# filled form fields and free-text notes are counted; a page is a scan only when nothing on it draws text.
+PARSER_VERSION = "v16"
 
 
 @dataclass
@@ -101,7 +134,12 @@ def base_name(filename: str) -> str:
 
 def ingest(filename: str, data: bytes) -> Ingested:
     result: ReadResult = read(filename, data)
+    characters = sum(len(block.text) for block in result.blocks)
+    if characters > MAX_TEXT_CHARS:
+        raise TooLargeToRead(f"the file's text is {characters:,} characters; no contract needs more than {MAX_TEXT_CHARS:,}")
     sections = build_sections(result.blocks, title=result.title)
+    if len(sections) > MAX_SECTIONS:
+        raise TooLargeToRead(f"the file reads as {len(sections):,} sections; no contract needs more than {MAX_SECTIONS:,}")
     if not sections or not any(s.text for s in sections):
         # A PDF whose every page has no text layer is a scan: say so, since "no readable text" left the reader to guess why.
         scanned = next((part.count for part in result.coverage if part.part == "scanned_pages"), 0)

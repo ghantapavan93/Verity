@@ -14,8 +14,12 @@ import io
 import re
 import zipfile
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .pdf_layout import PageText
 
 # Every part a reading accounts for, in the order they are reported.
 PARTS: tuple[str, ...] = (
@@ -85,8 +89,30 @@ def _text_bearing(members: list[bytes], minimum: int = 1) -> int:
     return sum(1 for data in members if len(_strip_tags(data.decode("utf-8", "replace")).strip()) >= minimum)
 
 
-def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs: int, style_hidden_runs: int = 0) -> list[PartCoverage]:
-    """The coverage of the accepted-view DOCX reading. ``body_xml`` is the serialised w:body the reader walked."""
+@dataclass(frozen=True)
+class DocxWalkCounts:
+    """What the DOCX walk itself met (reader v16), so that these parts are reported from what was read, not from a
+    pattern over the body's XML: a control the walk never entered had been reported "read" (stress test, 2026-10-30)."""
+
+    tables: int = 0
+    content_controls: int = 0
+    form_fields: int = 0  # legacy check boxes and drop-downs, read as ☒/☐ and as their chosen entry
+    fields_balanced: bool = True
+    bound_read: int = 0
+    bound_unknown: int = 0
+    symbols: int = 0
+    unknown_symbols: int = 0
+    text_boxes: int = 0
+    drawn: int = 0  # pictures, shapes without text and embedded objects
+    invisible_runs: int = 0
+    unread: tuple[tuple[str, int], ...] = ()
+
+
+def docx_coverage(
+    data: bytes, body_xml: str, tracked_changes: int, hidden_runs: int, style_hidden_runs: int = 0, walked: DocxWalkCounts | None = None
+) -> list[PartCoverage]:
+    """The coverage of the accepted-view DOCX reading. ``body_xml`` is the serialised w:body the reader walked;
+    ``walked`` what the walk met, which decides the tables, content controls, fields and embedded objects reported."""
     with zipfile.ZipFile(io.BytesIO(data)) as package:
         names = set(package.namelist())
 
@@ -120,10 +146,27 @@ def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs:
     real_endnotes = sum(len(re.findall(r'<w:endnote\b[^>]*w:id="[1-9]\d*"', part.decode("utf-8", "replace"))) for part in endnotes)
     real_comments = sum(len(re.findall(r"<w:comment\b", part.decode("utf-8", "replace"))) for part in comments)
 
+    if walked is not None:
+        tables, controls = walked.tables, walked.content_controls
+        drawn = max(len(embeddings), walked.drawn)
+        fields_part = (
+            counted("fields", fields, Status.PARTIAL, FIELDS_NOTE)
+            if walked.fields_balanced
+            else PartCoverage(
+                "fields", Status.UNKNOWN, fields, "the file's field marks do not balance, so all text inside its fields is read, instructions included"
+            )
+        )
+    else:
+        controls, drawn = block_controls + inline_controls, len(embeddings)
+        fields_part = counted("fields", fields, Status.PARTIAL, "the cached result of a field is read; its instruction is not evaluated")
     return [
         PartCoverage("main_body", Status.READ, note="paragraphs and tables of the body, in document order"),
         counted(
-            "tables", tables, Status.READ, "rows as text, cells joined with ' | '; nested tables inside their cell; merged cells once; deleted rows skipped"
+            "tables",
+            tables,
+            Status.READ,
+            "rows as text, one slot per grid column joined with ' | ' (an empty cell kept empty, a merged cell in its first column); "
+            "nested tables inside their cell; deleted rows skipped",
         ),
         counted("tracked_insertions", insertions, Status.ACCEPTED, "kept, as Word shows them once every change is accepted"),
         counted("tracked_deletions", deletions, Status.EXCLUDED, "left out; a deleted paragraph mark joins its paragraphs"),
@@ -140,16 +183,59 @@ def docx_coverage(data: bytes, body_xml: str, tracked_changes: int, hidden_runs:
         counted("footnotes", real_footnotes, Status.OMITTED, "footnote text is not read; the reference marks are not in the sections"),
         counted("endnotes", real_endnotes, Status.OMITTED, "endnote text is not read"),
         counted("comments", real_comments, Status.OMITTED, "comments are not read"),
-        counted("content_controls", block_controls + inline_controls, Status.READ, "controls are read through their content, block-level and inline alike"),
-        counted("fields", fields, Status.PARTIAL, "the cached result of a field is read; its instruction is not evaluated"),
+        counted("content_controls", controls, Status.READ, "controls are read through their content, block-level, row, cell and inline alike"),
+        fields_part,
         counted("automatic_numbering", numbered, Status.OMITTED, "numbers Word generates are not rendered; headings are numbered from their outline level"),
-        counted("embedded_objects", len(embeddings), Status.OMITTED, "embedded objects and drawings are not read"),
+        counted("embedded_objects", drawn, Status.OMITTED, "embedded objects, pictures, charts and shapes without text are not read"),
         counted("external_chunks", alt_chunks, Status.OMITTED, "content imported by reference (altChunk) is not read"),
     ] + (
         [PartCoverage("tracked_changes_total", Status.ACCEPTED, tracked_changes, "revisions the file carried, all resolved to the accepted view")]
         if tracked_changes
         else []
     )
+
+
+FIELDS_NOTE = (
+    "the result a field displays is read, never its instruction or text inside it; a check box is read as ☒ or ☐ and a "
+    "drop-down as its chosen entry; no field is evaluated"
+)
+
+
+def docx_more_coverage(walked: DocxWalkCounts) -> list[PartCoverage]:
+    """The parts of a DOCX reading beyond PARTS (reader v16), each reported only when the file has it."""
+    more: list[PartCoverage] = []
+    if walked.text_boxes:
+        more.append(PartCoverage("text_boxes", Status.READ, walked.text_boxes, "each text box is read once, as text after the paragraph it is anchored in"))
+    if walked.symbols:
+        more.append(
+            PartCoverage("symbols", Status.PARTIAL, walked.unknown_symbols, "symbols in a font this reader does not know are read as \ufffd")
+            if walked.unknown_symbols
+            else PartCoverage("symbols", Status.READ, walked.symbols, "symbols (w:sym, Symbol and Wingdings text) are read as the glyphs those fonts draw")
+        )
+    if walked.bound_read or walked.bound_unknown:
+        more.append(
+            PartCoverage(
+                "bound_controls",
+                Status.PARTIAL if walked.bound_unknown else Status.READ,
+                walked.bound_unknown or walked.bound_read,
+                "controls whose bound value is shown through a format this reader does not apply are read as \ufffd"
+                if walked.bound_unknown
+                else "controls bound to a part of the package are read as the bound value Word displays",
+            )
+        )
+    if walked.invisible_runs:
+        more.append(
+            PartCoverage(
+                "invisible_text",
+                Status.EXCLUDED,
+                walked.invisible_runs,
+                "runs Word draws so that they cannot be seen (white with nothing shaded beneath, 1 pt or smaller) are left out",
+            )
+        )
+    if walked.unread:
+        kinds = ", ".join(f"{kind} ({count})" for kind, count in walked.unread)
+        more.append(PartCoverage("other_content", Status.OMITTED, sum(c for _, c in walked.unread), f"displayed content this reader does not render: {kinds}"))
+    return more
 
 
 MAX_NAMED_LINES = 3
@@ -168,21 +254,95 @@ def _left_out(edge: str, lines: Sequence[str], unknown: str) -> PartCoverage:
     return PartCoverage(f"{edge}s", Status.OMITTED, len(lines), f"lines printed at the {where} of most pages, left out of the reading: {named}")
 
 
-def pdf_coverage(pages: int | None, textless_pages: int = 0, headers: Sequence[str] = (), footers: Sequence[str] = ()) -> list[PartCoverage]:
+@dataclass
+class PdfTally:
+    """What reading a PDF's pages met, summed over the pages (reader v16, ingest/pdf_layout.py)."""
+
+    hidden: dict[str, int] = field(default_factory=dict)  # characters left out because they cannot be seen, by why
+    rotated: int = 0
+    image_text: int = 0
+    disagreements: int = 0
+    unreadable: int = 0
+    column_pages: int = 0
+    side_by_side_pages: int = 0
+    as_given: int = 0  # pages the walk could not finish, read as pypdf's layout mode reads them
+    annotations: int = 0
+
+    def add(self, page: PageText) -> None:
+        for why, count in page.hidden.items():
+            self.hidden[why] = self.hidden.get(why, 0) + count
+        self.rotated += page.rotated
+        self.image_text += page.image_text
+        self.disagreements += page.disagreements
+        self.unreadable += page.unreadable
+        self.column_pages += page.columns
+        self.side_by_side_pages += page.side_by_side
+
+
+_HIDDEN_WHY = {"render": "render mode 3 or 7", "white": "white on nothing painted", "tiny": "1 pt or smaller", "off_page": "off the page"}
+
+
+def pdf_coverage(
+    pages: int | None, textless_pages: int = 0, headers: Sequence[str] = (), footers: Sequence[str] = (), tally: PdfTally | None = None
+) -> list[PartCoverage]:
     scanned = (
         PartCoverage("scanned_pages", Status.OMITTED, textless_pages, "pages with no text layer; nothing is read from them and no OCR is run")
         if textless_pages
         else PartCoverage("scanned_pages", Status.ABSENT, 0, "every page has a text layer")
     )
-    return [
-        PartCoverage("main_body", Status.READ, pages or 0, "the text layer of every page, in reading order as the PDF gives it"),
-        PartCoverage("tables", Status.PARTIAL, note="table cells come out as running text; columns are not reconstructed"),
+    tally = tally or PdfTally()
+    order = "the text layer of every page, each line read left to right by position; side-by-side columns of prose are read one column after the other"
+    if tally.as_given:
+        order += f"; {tally.as_given} page(s) the reader could not walk are read in the order the PDF gives"
+    parts = [
+        PartCoverage("main_body", Status.READ, pages or 0, order),
+        PartCoverage("tables", Status.PARTIAL, note="table cells come out as running text, a row at a time; columns are not reconstructed"),
         _left_out("header", headers, "a PDF does not mark headers; page furniture may be in the text"),
         _left_out("footer", footers, "a PDF does not mark footers; page numbers may be in the text"),
         PartCoverage("footnotes", Status.UNKNOWN, note="footnotes are text on the page like any other"),
         scanned,
-        PartCoverage("embedded_objects", Status.OMITTED, note="images and attachments are not read"),
+        PartCoverage("embedded_objects", Status.OMITTED, note="images, attachments and marks drawn as graphics (such as check boxes) are not read"),
     ]
+    if tally.column_pages or tally.side_by_side_pages:
+        parts.append(
+            PartCoverage(
+                "columns",
+                Status.PARTIAL if tally.side_by_side_pages else Status.READ,
+                tally.column_pages + tally.side_by_side_pages,
+                f"pages with side-by-side text: prose read one column after the other on {tally.column_pages}; short cells read "
+                f"a line at a time across the columns on {tally.side_by_side_pages}",
+            )
+        )
+    if tally.hidden:
+        why = ", ".join(f"{_HIDDEN_WHY.get(k, k)} ({v})" for k, v in sorted(tally.hidden.items()))
+        left_out = f"characters drawn so that they cannot be seen are left out: {why}"
+        parts.append(PartCoverage("invisible_text", Status.EXCLUDED, sum(tally.hidden.values()), left_out))
+    if tally.image_text:
+        parts.append(
+            PartCoverage(
+                "image_text",
+                Status.PARTIAL,
+                tally.image_text,
+                "characters laid invisibly over an image (a scan's OCR layer) are read as the PDF gives them; the image may show otherwise",
+            )
+        )
+    if tally.rotated:
+        parts.append(PartCoverage("rotated_text", Status.OMITTED, tally.rotated, "characters of rotated text are not read"))
+    if tally.disagreements:
+        parts.append(
+            PartCoverage(
+                "text_layer",
+                Status.PARTIAL,
+                tally.disagreements,
+                "digits, currency signs and % whose text layer names another character than the glyph drawn are read as \ufffd",
+            )
+        )
+    if tally.unreadable:
+        unmapped = "characters in a font whose glyphs cannot be mapped to text are not read"
+        parts.append(PartCoverage("unreadable_fonts", Status.OMITTED, tally.unreadable, unmapped))
+    if tally.annotations:
+        parts.append(PartCoverage("annotations", Status.OMITTED, tally.annotations, "form-field values and annotation text shown on the page are not read"))
+    return parts
 
 
 def txt_coverage(encoding: str = "UTF-8") -> list[PartCoverage]:
