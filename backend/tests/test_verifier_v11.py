@@ -199,7 +199,7 @@ def test_control_a_v11_pack_passes_what_v11_finds(tmp_path: Path) -> None:
 # casefold and typed tiers found "Section 2(A)" at "Section 2(a)": another clause. And the typed tier tried only the
 # first place its tokens occur, so a quote whose first place lay inside a number ("1 500" with a narrow space) was
 # withheld though the text says it, word for word, further on (a false negative, the safe way round).
-NNBSP = " "
+NNBSP = "\u202f"
 
 
 @pytest.mark.parametrize(
@@ -229,7 +229,7 @@ def test_a_later_place_is_found_when_the_first_lies_inside_a_number() -> None:
 # The headline invariant, held by two implementations: whatever the workbench locates, at whatever tier, the evidence
 # pack's own checker accepts at the same offsets under the same version. Quotes are cut from the text, then put in
 # capitals, stripped of punctuation or given doubled spaces, so every tier is reached.
-CONTRACTISH = st.text(alphabet="0123456789,.%$()-−+±>/: aAbBeT́‌;! ", min_size=1, max_size=40)
+CONTRACTISH = st.text(alphabet="0123456789,.%$()-−+±>/: aAbBeT\u0301\u200c;!\u202f", min_size=1, max_size=40)
 VARIANTS = [str, str.upper, lambda q: "".join(c for c in q if c.isalnum() or c.isspace()), lambda q: q.replace(" ", "  ")]
 
 
