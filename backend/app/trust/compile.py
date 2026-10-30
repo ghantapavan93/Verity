@@ -165,7 +165,7 @@ def reader_obligation(
     )  # fmt: skip
 
 
-def rules_obligation(prefix: str, stale_rules: Sequence[str], evidence: Sequence[Evidence]) -> Obligation:
+def rules_obligation(prefix: str, stale_rules: Sequence[str], evidence: Sequence[Evidence], unknown_rules: Sequence[str] = ()) -> Obligation:
     """Whether the finding's evidence holds under today's rules.
 
     The same principle as for the reader. A run keeps the rule versions it was decided under, and a version that
@@ -176,6 +176,8 @@ def rules_obligation(prefix: str, stale_rules: Sequence[str], evidence: Sequence
         decided under today's rules                               established
         earlier rules, and today's verifier finds every quote     established, and what differs is named
         earlier rules, and today's verifier does not find one     not established
+        rules this build does not know (a newer build's, as       not established: nothing is asked of a verifier
+          after a rollback)                                       older than the one that decided it
 
     What this does not cover, and says so: the recorded *status* (pass, needs review) is the one the policy of the
     time decided, and the sections handed to the model are the ones the retrieval of the time chose. This layer
@@ -183,6 +185,13 @@ def rules_obligation(prefix: str, stale_rules: Sequence[str], evidence: Sequence
     """
     obligation_id = f"{prefix}/{Need.RULES_COMPATIBLE.value}"
     code = (Dependency(On.CODE),)
+    if unknown_rules:
+        # A newer verifier's spans re-checked by this one were established while the same build's pack failed them
+        # (stress test, 2026-10-30): an older verifier is no judge of rules it has never seen.
+        return Obligation(
+            obligation_id, Need.RULES_COMPATIBLE, Standing.NOT_ESTABLISHED,
+            f"recorded under rules this build does not know ({'; '.join(unknown_rules)}); not re-checked here: open it with a build that knows them", code,
+        )  # fmt: skip
     if not stale_rules:
         return Obligation(obligation_id, Need.RULES_COMPATIBLE, Standing.ESTABLISHED, "decided under the current rules", code)
     earlier = f"recorded under earlier rules ({'; '.join(stale_rules)})"
@@ -213,6 +222,7 @@ def compile_manifest(
     sections: Sequence[SectionText],
     findings: Sequence[FindingRecord],
     current_reading: Sequence[SectionText] | None = None,
+    unknown_rules: Sequence[str] = (),
 ) -> TrustManifest:
     """``current_reading`` is the same document as today's reader reads it; it is consulted only when the run was read
     by an earlier reader, and None means no such reading could be made."""
@@ -225,7 +235,7 @@ def compile_manifest(
         for item in evidence:
             obligations += span_obligations(f"{prefix}.{item.span}", item, names)
         obligations.append(reader_obligation(prefix, reader_version, current_reader, evidence, current_reading))
-        obligations.append(rules_obligation(prefix, stale_rules, evidence))
+        obligations.append(rules_obligation(prefix, stale_rules, evidence, unknown_rules))
         proofs.append(
             FindingProof(finding.finding_id, finding.ordinal, finding.topic, finding.status, derive(tuple(obligations)), evidence, tuple(obligations))
         )

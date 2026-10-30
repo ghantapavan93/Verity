@@ -19,6 +19,13 @@ running `next start` deletes files the server may still load. After `down.ps1`, 
 before `npm ci`. The site is down from the stop to the restart. A rollback across such a release is the same three
 steps at the previous commit: the old build needs the old `node_modules`.
 
+A rollback leaves the store as it was, so the older build opens records made under rules it does not know. From
+2026-10-30 a build names them rather than misreading them: its trust page says "recorded under rules this build does not
+know" and re-checks nothing, its pack's `verify.py` prints NOT CHECKED and exits 2 for a verifier newer than its own, and
+`backend/scripts/status.py` counts such runs and documents on its `rules` line. Builds before it cannot: a844ebf and
+2e8fe68 call verifier v11 "earlier rules", and their packs of v11 runs can FAIL a span the candidate verified (a typed
+span ending at ';'). After rolling back to one of them, export no pack of a v11 run; roll forward and export it again.
+
 It builds into `.next-staging` while the old release serves, stops the servers and waits for their supervisors, then
 swaps the build in (`.next-previous` keeps the last one; a failed build changes nothing that serves), and
 `-PublicDataDir` implies an empty `-ProofRun`. The owner's store (`backend/data`, every historical run) is left as it was. The API refuses to start with anonymous

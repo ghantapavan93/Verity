@@ -13,6 +13,7 @@ says what to do about each.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -30,7 +31,9 @@ from sqlalchemy.orm import Session  # noqa: E402
 
 from app.api.health import MIN_FREE_BYTES  # noqa: E402
 from app.config import settings  # noqa: E402
-from app.models import TERMINAL_STAGES, Run, RunStage, as_utc  # noqa: E402
+from app.ingest import PARSER_VERSION  # noqa: E402
+from app.models import TERMINAL_STAGES, Document, Run, RunStage, as_utc  # noqa: E402
+from app.runs.versions import SEMANTIC_VERSIONS, compare_version  # noqa: E402
 
 TIMEOUT_S = 5.0
 # A run whose stage has made no progress for longer than this is worth a look; recovery declares it failed later
@@ -117,6 +120,40 @@ def check_runs(database: Path, ceiling: int) -> bool:
     warning = f"; {len(stuck)} without progress for over {int(STUCK_AFTER.total_seconds() // 60)} min" if stuck else ""
     ok = not stuck and (not ceiling or today < ceiling)
     return line("runs", ok, f"{budget}; {len(open_runs)} open{oldest}{warning}")
+
+
+def check_rules(database: Path) -> bool:
+    """How many runs and documents the store holds under rules this build does not know, as after the documented rollback
+    to an older build. They open, and nothing of them is re-checked by the older rules (runs.versions.compare_version);
+    an older build's own pack checker may fail their spans. Named here rather than refused at start: the rollback is the
+    emergency path, and a build that refused the store would leave no site at all (stress test, 2026-10-30)."""
+    if not database.exists():
+        return line("rules", False, f"no store at {database}")
+    engine = read_only(database)
+    with Session(engine) as session:
+        recorded = session.scalars(select(Run.options_json)).all()
+        readers = session.execute(select(Document.parser_version, func.count(Document.id)).group_by(Document.parser_version)).all()
+    engine.dispose()
+    unknown: set[str] = set()
+    runs = 0
+    for options_json in recorded:
+        options = json.loads(options_json or "{}")
+        names = {f"{name} {options.get(name)}" for name, current in SEMANTIC_VERSIONS.items() if compare_version(options.get(name), current) == "unknown"}
+        runs += bool(names)
+        unknown |= names
+    documents = 0
+    for version, count in readers:
+        if compare_version(version, PARSER_VERSION) == "unknown":
+            documents += count
+            unknown.add(f"reader {version}")
+    if not unknown:
+        return line("rules", True, "every run and document recorded under rules this build knows")
+    return line(
+        "rules",
+        False,
+        f"{runs} run(s) and {documents} document(s) recorded under rules this build does not know ({', '.join(sorted(unknown))}): "
+        "they open but are not re-checked; roll forward, or export their packs from a build that knows them",
+    )
 
 
 def check_tunnel(metrics: str) -> bool:
@@ -207,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
         check_disk(args.data_dir, args.public),
         check_store(args.data_dir / "workbench.db"),
         check_runs(args.data_dir / "workbench.db", args.max_runs_per_day if args.max_runs_per_day is not None else ceiling),
+        check_rules(args.data_dir / "workbench.db"),
         check_tunnel(args.metrics.rstrip("/")),
         check_supervisor(args.logs, "api"),
         check_supervisor(args.logs, "web"),

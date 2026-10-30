@@ -20,7 +20,7 @@ from ..hashing import sha256_bytes
 from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile
 from ..ingest.bounded import read_file
 from ..models import TERMINAL_STAGES, Document, Run
-from ..runs.versions import SEMANTIC_VERSIONS, stale_versions
+from ..runs.versions import SEMANTIC_VERSIONS, earlier_versions, unknown_versions
 from ..trust.compile import FindingRecord, SpanRecord, compile_manifest
 from ..trust.diff import TrustDiff, trust_diff
 from ..trust.model import TRUST_VERSION, SectionText, TrustManifest, snapshot_hash
@@ -212,7 +212,8 @@ def _work_out(session: Session, run: Run) -> tuple[TrustManifest, bool]:
         reader_version=document.parser_version or "",
         current_reader=PARSER_VERSION,
         rule_versions={name: str(options.get(name) or "not recorded") for name in SEMANTIC_VERSIONS},
-        stale_rules=stale_versions(options),
+        stale_rules=earlier_versions(options),
+        unknown_rules=unknown_versions(options),
         sections=sections_of(document),
         findings=findings,
         current_reading=again,

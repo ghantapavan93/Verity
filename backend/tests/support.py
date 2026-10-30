@@ -39,8 +39,8 @@ def through_get_and_post(
     url: str,
     *,
     json: object = None,
-    timeout: object = None,
-    headers: object = None,
+    timeout: float | httpx.Timeout | None = None,
+    headers: dict[str, str] | None = None,
     follow_redirects: bool = False,
 ) -> Iterator[httpx.Response]:
     """httpx.stream answered by whatever httpx.get and httpx.post are: the model endpoint fakes are written as those two
