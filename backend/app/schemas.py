@@ -290,6 +290,9 @@ class RunSummary(ApiModel):
     # The shown findings by status ("needs_review": 1, "missing": 1): what the run concluded, so a list of runs never
     # shows two different outcomes as the same "Complete" (2026-10-09 review).
     outcomes: dict[str, int] = {}
+    # Proposals code withheld (their quotes were not found): kept on the run and named on its receipt, never shown as
+    # answers. Counted here so the list says what the receipt says (stress test, 2026-10-30, wave 2).
+    withheld: int = 0
     has_guidance: bool
     document_id: str
     document_name: str

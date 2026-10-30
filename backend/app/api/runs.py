@@ -233,6 +233,7 @@ def run_summary(run: Run, document_name: str | None = None) -> RunSummary:
         reason=run.reason,
         findings=len(shown),
         outcomes=dict(Counter(f.status for f in shown)),
+        withheld=sum(1 for f in run.findings if f.status == "unresolved"),
         has_guidance=run.guidance_id is not None,
         document_id=run.document_id,
         document_name=run_document_name(run) if document_name is None else document_name,
