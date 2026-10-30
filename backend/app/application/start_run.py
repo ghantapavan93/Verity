@@ -24,13 +24,15 @@ from ..config import settings
 from ..errors import InvalidInput, NotFound
 from ..hashing import fingerprint
 from ..ingest.invisible import visible_text
-from ..models import Document, Guidance, Run, Section, utcnow
+from ..models import Document, Guidance, Run, Section, new_id, utcnow
 from ..providers.base import ModelProvider
 from ..retrieval.aliases import ALIASES_SHA256
 from ..routing.router import ModelRouter, task_for
+from ..runs.owner import this_process
 from ..runs.relations import reached_start, replacement_starts
 from ..runs.versions import SEMANTIC_VERSIONS
 from .quotas import admit, run_quotas
+from .recover_runs import run_ended, run_started
 from .workspace import require_document, require_guidance
 
 FINGERPRINT_KIND = "run/v1"
@@ -158,6 +160,7 @@ def start_run(
     key = compute_fingerprint(document.id, guidance.id if guidance else None, question, prompt.sha256, options, workspace)
 
     run = Run(
+        id=new_id(),  # known before the row is written: the run is held for its worker under this id (write below)
         document_id=document.id,
         guidance_id=guidance.id if guidance else None,
         question=question,
@@ -174,14 +177,24 @@ def start_run(
         fingerprint=key,
         workspace_id=workspace,
         created_at=now,
+        owner=this_process().render(),
     )
 
     def write() -> Run:
+        # Held for its worker before its row commits, so no read sees a run of this process that no one holds
+        # (application/recover_runs.py); the caller that starts its worker lets it go when the worker ends.
+        run_started(run.id)
         session.add(run)
         return run
 
     # A question asked before is handed its run before any quota is counted: it creates nothing and calls no model.
-    written, created = admit(session, run_quotas(workspace), write, find=lambda: active_run(session, key))
+    try:
+        written, created = admit(session, run_quotas(workspace), write, find=lambda: active_run(session, key))
+    except BaseException:
+        run_ended(run.id)  # never written
+        raise
+    if not created:
+        run_ended(run.id)
     return StartedRun(written, created=created)
 
 

@@ -147,6 +147,11 @@ def test_a_run_whose_process_is_gone_is_recovered_at_once_and_a_live_one_waits_f
         session.add(RunStage(run_id=run_id, stage="checking", detail="against the question", status="running", owner=dead))
         session.add(RunStage(run_id=other_id, stage="checking", detail="against the question", status="running", owner=this_process().render()))
         session.commit()
+        # The live process's run is held by one of its workers (application/recover_runs.py): since 2026-10-30 a run of
+        # this process that no worker holds is failed at once (tests/test_run_liveness.py).
+        from app.application.recover_runs import run_ended, run_started
+
+        run_started(other_id)
         assert recover_interrupted_runs(session) == 1
     recovered = client.get(f"/api/runs/{run_id}").json()
     assert recovered["stage"] == "failed" and "stopped. Ask the question again" in recovered["error"]
@@ -155,7 +160,10 @@ def test_a_run_whose_process_is_gone_is_recovered_at_once_and_a_live_one_waits_f
     shown = " ".join(client.get(f"/api/runs/{run_id}{path}").text for path in ("", "/detail", "/explanation"))
     for part in (piece for piece in dead.split(":") if piece):
         assert part not in shown, part
-    assert client.get(f"/api/runs/{other_id}").json()["stage"] == "checking", "a live process's run is not touched"
+    try:
+        assert client.get(f"/api/runs/{other_id}").json()["stage"] == "checking", "a live process's run is not touched"
+    finally:
+        run_ended(other_id)
 
 
 def test_every_stage_row_a_worker_writes_names_its_process(client: TestClient) -> None:

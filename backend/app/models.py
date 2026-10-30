@@ -225,6 +225,10 @@ class Run(Base):
     fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The process that made the run (runs.owner: host, pid, start time), written with its row: until its worker's first
+    # stage row a run had no owner, so a crash left it open for the whole staleness window (stress test, 2026-10-30).
+    # NULL on runs made before; recovery then reads the stage rows' owner, or staleness (application/recover_runs.py).
+    owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     document: Mapped[Document] = relationship()
     guidance: Mapped[Guidance | None] = relationship()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections import Counter
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
@@ -15,7 +16,7 @@ from ..application.clause_location import ClauseLocator
 from ..application.create_memo import review_head
 from ..application.evidence_pack import build_evidence_pack
 from ..application.explain_run import explain_run
-from ..application.recover_runs import recover_interrupted_runs
+from ..application.recover_runs import recover_interrupted_runs, run_ended
 from ..application.review_finding import latest_review_id, review_out
 from ..application.start_run import start_run
 from ..application.workspace import require_run, visible_runs
@@ -50,6 +51,7 @@ from .deps import get_provider
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 HEARTBEAT_SECONDS = 15
+log = logging.getLogger(__name__)
 
 
 # ----------------------------------------------------------------------------- mapping
@@ -247,12 +249,24 @@ RUN_EXECUTOR = ThreadPoolExecutor(max_workers=64, thread_name_prefix="run")
 
 
 def _worker(run_id: str, provider: ModelProvider) -> None:
-    with SessionLocal() as session:
-        execute_run(session, run_id, provider_for(session.get(Run, run_id), provider))
+    """Answer the run, then let it go however that ended. A run whose ending could not be written (its own failure met a
+    write lock past the busy wait, a full disk) is then held by no worker, and the next read fails it
+    (application/recover_runs.py); the error is logged here with its run, not raised to the server, where it read
+    "Exception in ASGI application" and named no run (stress test, 2026-10-30)."""
+    try:
+        with SessionLocal() as session:
+            execute_run(session, run_id, provider_for(session.get(Run, run_id), provider))
+    except Exception:
+        log.exception("run_id=%s worker ended without recording how; the next read ends the run", run_id)
+    finally:
+        run_ended(run_id)
 
 
 async def _run_on_own_thread(run_id: str, provider: ModelProvider) -> None:
-    await asyncio.get_running_loop().run_in_executor(RUN_EXECUTOR, _worker, run_id, provider)
+    future = RUN_EXECUTOR.submit(_worker, run_id, provider)
+    # A run whose turn on a thread never comes (the executor shut down while it waited) is let go too.
+    future.add_done_callback(lambda done: run_ended(run_id) if done.cancelled() else None)
+    await asyncio.wrap_future(future)
 
 
 def provider_for(run: Run | None, default: ModelProvider) -> ModelProvider:
@@ -272,12 +286,20 @@ def create_run(
     workspace: str = Depends(current_workspace),
 ) -> RunOut:
     """202 with a new run, or 200 with this workspace's running or completed run that already has these inputs."""
+    # A run no one is answering any more gives its question back before the question is looked up: handed back, it
+    # would be followed until the next read ended it.
+    recover_interrupted_runs(session)
     started = start_run(session, body.document_id, body.guidance_id, body.question, provider, workspace=workspace)
+    try:
+        out = run_out(started.run)
+    except BaseException:
+        if started.created:
+            run_ended(started.run.id)  # no worker will be started for it: the next read ends it
+        raise
     if started.created:
         background.add_task(_run_on_own_thread, started.run.id, provider)
     else:
         response.status_code = status.HTTP_200_OK
-    out = run_out(started.run)
     out.reused = not started.created
     # The request's session lives until the background task ends (FastAPI closes yield-dependencies after
     # the response, and Starlette runs background tasks inside the response). Reading the run after the

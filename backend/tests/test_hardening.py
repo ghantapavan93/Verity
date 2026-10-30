@@ -83,7 +83,15 @@ def test_a_run_whose_owner_is_alive_here_is_not_stale_while_it_waits(client: Tes
         )
         session.add(stage)
         session.commit()
-        recovered = recover_interrupted_runs(session, stale_after_s=60)
+        # Waiting for its model call means a worker of this process holds it (application/recover_runs.py; since
+        # 2026-10-30 a run of this process that no worker holds is failed at once).
+        from app.application.recover_runs import run_ended, run_started
+
+        run_started(run.id)
+        try:
+            recovered = recover_interrupted_runs(session, stale_after_s=60)
+        finally:
+            run_ended(run.id)
         session.refresh(run)
         assert recovered == 0 and run.stage == "checking", "a run whose process is alive on this host waits for its model call"
 
