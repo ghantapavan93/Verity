@@ -10,9 +10,10 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app import db as db_module
-from app.goldens.service import Golden, Verdict, compare, ensure_golden_document, judge, load_set, report
+from app.goldens.service import LOWERED_NOTE, Golden, Verdict, compare, ensure_golden_document, judge, load_set, lowered_passes, report
 from app.ingest import PARSER_VERSION
 from app.models import EvidenceSpan, Finding, FindingStatusName, Run, RunReasonName, RunStageName, Section
+from app.schemas import GoldenRunOut
 
 
 def span(number: str, verified: bool = True, method: str = "exact") -> EvidenceSpan:
@@ -64,6 +65,83 @@ def test_a_guidance_golden_also_needs_the_expected_status() -> None:
     assert judge(golden, run_with("complete", [finding("pass", span("5.3.1"))])).outcome == "pass"
     wrong = judge(golden, run_with("complete", [finding("needs_review", span("5.3.1"))]))
     assert wrong.outcome == "fail" and "decided needs_review where pass was expected" in wrong.because
+
+
+def test_a_status_golden_fails_when_its_clause_is_decided_both_ways() -> None:
+    """GOLDENS.md: a run that "decides the other status fails the golden". The judge failed it only when no finding in
+    the section had the expected status, so a pass and a needs-review on the same quote satisfied either expectation,
+    in either order (stress test EVL-3, 2026-10-30)."""
+    for expected, other in (("pass", "needs_review"), ("needs_review", "pass")):
+        golden = Golden("g", "q", "present", ("5.3.1",), "", category="guidance_comparison", guidance="at least 30 days", status=expected)  # type: ignore[arg-type]
+        for first, second in ((expected, other), (other, expected)):
+            verdict = judge(golden, run_with("complete", [finding(first, span("5.3.1")), finding(second, span("5.3.1"))]))  # type: ignore[arg-type]
+            assert verdict.outcome == "fail", (expected, first, second)
+            assert f"decided both {expected} and {other}" in verdict.because
+        # Controls: one finding with the expected status passes, two that agree pass, and a finding with the other
+        # status on a clause the golden does not name decides nothing about it.
+        assert judge(golden, run_with("complete", [finding(expected, span("5.3.1"))])).outcome == "pass"  # type: ignore[arg-type]
+        assert judge(golden, run_with("complete", [finding(expected, span("5.3.1")), finding(expected, span("5.3.1"))])).outcome == "pass"  # type: ignore[arg-type]
+        assert judge(golden, run_with("complete", [finding(expected, span("5.3.1")), finding(other, span("9.9"))])).outcome == "pass"  # type: ignore[arg-type]
+
+
+def test_a_golden_without_a_status_is_not_judged_on_statuses() -> None:
+    """Unguided answers mix statuses in one section when they answer two points of it (a recorded run timed one point
+    and asked review of the cap); only a golden that names a status is judged on it."""
+    assert judge(PRESENT, run_with("complete", [finding("pass", span("5.3.1")), finding("needs_review", span("5.3.1"))])).outcome == "pass"
+
+
+def lowered(source: str, *spans: EvidenceSpan) -> Finding:
+    return Finding(status="needs_review", status_source=source, topic="t", conclusion="c", spans=list(spans))
+
+
+def test_a_pass_carried_by_a_finding_code_lowered_says_so_and_is_counted() -> None:
+    """A wrong number that code lowered (position_check) passed a golden as a plain pass, and so did a right answer whose
+    prose named a section the document does not have (reference_check, Recording 6c's g38). Neither verdict changes: a
+    lowering can be right about a wrong reference in a right answer. The verdict names the lowering, and the report
+    counts the passes that rest on one (stress test EVL-3, 2026-10-30)."""
+    for source in ("position_check", "reference_check", "ambiguous_fact"):
+        verdict = judge(PRESENT, run_with("complete", [lowered(source, span("5.3.1"))]))
+        assert verdict.outcome == "pass" and verdict.lowered == source
+        assert f"{LOWERED_NOTE} ({source})" in verdict.because
+    # A finding code did not lower carries the pass when the run has one, in either order.
+    plain, by_code = finding("pass", span("5.3.1")), lowered("position_check", span("5.3.1"))
+    for findings in ([by_code, plain], [plain, by_code]):
+        verdict = judge(PRESENT, run_with("complete", findings))
+        assert verdict.outcome == "pass" and verdict.lowered is None and LOWERED_NOTE not in verdict.because
+    # Control: a needs review the model itself asked for, or code computed from the day counts, is not a lowering.
+    assert judge(PRESENT, run_with("complete", [finding("needs_review", span("5.3.1"))])).lowered is None
+    assert judge(PRESENT, run_with("complete", [lowered("computed_days", span("5.3.1"))])).lowered is None
+    rows = [
+        GoldenRunOut(golden_id="a", verdict="pass", because=f"verified citation in §5.3.1 (exact); {LOWERED_NOTE} (position_check)"),
+        GoldenRunOut(golden_id="b", verdict="pass", because="verified citation in §5.3.1 (exact)"),
+        GoldenRunOut(golden_id="c", verdict="fail", because=f"no verified citation; {LOWERED_NOTE}"),
+    ]
+    assert lowered_passes(rows) == ["a"]
+
+
+def test_a_numeric_golden_needs_the_expected_period_in_the_answer() -> None:
+    """numeric_precision exists for the tempting wrong number beside the right one, and the judge read no number: a run
+    answering 30 days for g36's 60 passed, lowered by code or not (stress test EVL-3). The periods the answer states,
+    in its conclusion and its observed value, are read by the parser the status decision uses."""
+    golden = Golden("g36", "q", "present", ("5.3(b)",), "", category="numeric_precision", expected_value="60 days")
+
+    def answer(conclusion: str, observed: str | None = None) -> Finding:
+        return Finding(status="pass", status_source="model_hint", topic="t", conclusion=conclusion, observed=observed, spans=[span("5.3(b)")])
+
+    right = answer("Proceedings may continue for 60 days.", "60 days")
+    both = answer("60 days, not the 30-day cure period.")
+    words = answer("Sixty (60) days.")
+    wrong = answer("They may continue for 30 days.", "30 days")
+    silent = answer("Insolvency is a ground to terminate.")
+    assert all(judge(golden, run_with("complete", [f])).outcome == "pass" for f in (right, both, words))
+    for f in (wrong, silent):
+        verdict = judge(golden, run_with("complete", [f]))
+        assert verdict.outcome == "fail" and "60 days" in verdict.because
+    # A wrong finding beside a right one on the same clause: the right one carries it.
+    assert judge(golden, run_with("complete", [wrong, right])).outcome == "pass"
+    golden_set = load_set()
+    numeric = {g.id: g.expected_value for g in golden_set.goldens if g.category == "numeric_precision"}
+    assert numeric == {"g35": "30 days", "g36": "60 days"}, "every numeric_precision golden carries the period it asks for"
 
 
 def test_an_absent_golden_passes_when_nothing_is_asserted() -> None:

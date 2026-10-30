@@ -23,12 +23,17 @@ runner and the regression report are `backend/scripts/run_goldens.py`. The inter
    an entry in `DECISIONS.md` that says why the original expectation was wrong.
 4. **Code judges.** A verdict is computed from the run record: the run's stage and reason, each
    finding's status, and each evidence span's verified flag, method and section. No one reads a
-   run and decides it "looks right". Nor does the judge: it never reads the answer's words, so a
-   run that cites the expected section with the expected status passes whatever its conclusion
-   says. A review probe (2026-10-13) passed g35 with the wrong number of days and g37 with its answer
-   inverted. A score here is a score of citations and statuses, not of answers; the
-   `numeric_precision` and `negation` categories cannot see a number or a polarity until their
-   goldens carry an expected value.
+   run and decides it "looks right". Nor does the judge read the answer's words, with one
+   exception: since 2026-10-30 each `numeric_precision` golden names the period it asks for (g35
+   30 days, g36 60 days), and the carrying finding's conclusion or observed value must state it, as
+   the parser the status decision uses reads it. Otherwise a run that cites the expected section
+   with the expected status passes whatever its conclusion says: a review probe (2026-10-13) passed
+   g37 with its answer inverted, and g35 with the wrong number of days, which now fails. A score
+   here is a score of citations, statuses and those two periods, not of answers; the `negation`
+   category cannot see a polarity, and no word check is claimed to. A pass carried by a finding
+   that code lowered to needs review (a reference, position or ambiguity check) stays a pass, since
+   the lowering can be right about a wrong section number in a right answer, and says which check
+   lowered it; the report counts those passes.
 5. **The comparison is between recorded runs.** Runs are immutable and fingerprinted on their
    inputs (document, guidance, question, prompt hash, model and decoding options), so the same
    golden under the same prompt and model is one run, reused. Re-running the set never
@@ -41,9 +46,10 @@ runner and the regression report are `backend/scripts/run_goldens.py`. The inter
 
 - **present**: the contract addresses the point. The run must be `complete` and must carry a
   finding whose status is `pass` or `needs_review` with a verified citation in one of the
-  sections the golden names. When the golden names a status, that finding must have it. A run
-  that withholds, fails, cites the wrong section, answers "not found", or decides the other
-  status fails the golden.
+  sections the golden names. When the golden names a status, every such finding must have it,
+  so a pass and a needs review on the same clause fail it in either order (until 2026-10-30 that
+  pair satisfied either expectation). A run that withholds, fails, cites the wrong section,
+  answers "not found", or decides the other status fails the golden.
 - **absent**: the contract does not address the point. The run must not assert that it does.
   A `complete` run whose findings are all `missing` passes; an `unresolved` run (no supporting
   passage, or citations that did not verify) passes; a `pass` or `needs_review` finding fails.

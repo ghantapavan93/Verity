@@ -5,7 +5,7 @@
     "sha256": "cb72dad74b3af676",
     "note": "Common Paper Cloud Service Agreement, CC BY 4.0, unmodified. The sha256 prefix identifies the file; the runner ingests it with the current reader."
   },
-  "rules": "A golden is 'present' when the contract addresses the point: the run must cite a verified passage in one of the listed sections and must not call it missing; when a status is named, the finding carrying that citation must have it. A golden is 'absent' when the contract does not address it: the run must not assert that it does (a 'not found' answer or a withheld run both pass). Guidance is supplied only where the golden says so.",
+  "rules": "A golden is 'present' when the contract addresses the point: the run must cite a verified passage in one of the listed sections and must not call it missing; when a status is named, every finding carrying a citation in those sections must have it, and when a period is named, the answer must state it. A golden is 'absent' when the contract does not address it: the run must not assert that it does (a 'not found' answer or a withheld run both pass). Guidance is supplied only where the golden says so.",
   "categories": {
     "direct_extraction": "a period, count or condition stated in one clause",
     "absence": "the contract does not address the point",
@@ -384,6 +384,7 @@
       "sections": [
         "4.6"
       ],
+      "expected_value": "30 days",
       "why": "30 days to dispute sits next to 15 days to resolve."
     },
     {
@@ -394,6 +395,7 @@
       "sections": [
         "5.3(b)"
       ],
+      "expected_value": "60 days",
       "why": "60 days in a clause that also names the 30-day cure period one line above."
     },
     {

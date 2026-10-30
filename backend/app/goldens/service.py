@@ -8,6 +8,7 @@ same record, same idempotency. This module only reads those records back.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -21,7 +22,8 @@ from ..application.start_run import compute_fingerprint, identity_options, run_o
 from ..config import BACKEND_DIR
 from ..hashing import sha256_bytes, sha256_text
 from ..ingest import PARSER_VERSION
-from ..models import TERMINAL_STAGES, Document, FindingStatusName, Run, utcnow
+from ..models import TERMINAL_STAGES, Document, Finding, FindingStatusName, Run, StatusSourceName, utcnow
+from ..policy.durations import Duration, parse_durations
 from ..runs.versions import without_versions
 from ..schemas import (
     GoldenCategoryCount,
@@ -40,6 +42,11 @@ VerdictName = Literal["pass", "fail", "missing"]
 ExpectedStatus = Literal["pass", "needs_review"]
 # Statuses that assert the contract addresses the point.
 ASSERTING: frozenset[FindingStatusName] = frozenset({"pass", "needs_review"})
+# The sources of a needs review that code set over the model's hint because the evidence does not establish the answer
+# (runs/status.py, runs/service.py). A pass carried by such a finding stays a pass, since the lowering can be right about
+# a wrong section reference in a right answer (Recording 6c's g38), but the verdict says so and the report counts it.
+LOWERED_BY_CODE: frozenset[StatusSourceName] = frozenset({"position_check", "reference_check", "ambiguous_fact"})
+LOWERED_NOTE = "carried by a finding code lowered to needs review"
 
 
 @dataclass(frozen=True)
@@ -51,7 +58,8 @@ class Golden:
     why: str
     category: str = ""
     guidance: str | None = None  # supplied to the run when set; the status is then judged too
-    status: ExpectedStatus | None = None  # required on the finding that carries the citation
+    status: ExpectedStatus | None = None  # required on every finding that carries a citation in the golden's sections
+    expected_value: str | None = None  # a period the carrying finding's answer must state ("60 days"), read by policy.durations
 
 
 @dataclass(frozen=True)
@@ -71,6 +79,7 @@ class Verdict:
     because: str
     statuses: tuple[FindingStatusName, ...] = ()
     cited: tuple[str, ...] = ()  # "5.3.1 exact", "sec_9 not found"
+    lowered: StatusSourceName | None = None  # a pass carried only by a finding code lowered, and by which check
 
 
 def _expected_status(value: object, golden_id: str) -> ExpectedStatus | None:
@@ -81,6 +90,14 @@ def _expected_status(value: object, golden_id: str) -> ExpectedStatus | None:
     if value == "needs_review":
         return "needs_review"
     raise ValueError(f"{golden_id}: an expected status must be pass or needs_review, not {value!r}")
+
+
+def expected_period(value: str, golden_id: str = "") -> Duration:
+    """The one period an expected value names, read as the status decision reads one."""
+    periods = [m.duration for m in parse_durations(value) if m.duration is not None]
+    if len(periods) != 1:
+        raise ValueError(f"{golden_id}: an expected value names exactly one period, not {value!r}")
+    return periods[0]
 
 
 def load_set(path: Path = SET_PATH) -> GoldenSet:
@@ -96,6 +113,7 @@ def load_set(path: Path = SET_PATH) -> GoldenSet:
             category=str(g.get("category", "")),
             guidance=(str(g["guidance"]).strip() or None) if g.get("guidance") else None,
             status=_expected_status(g.get("status"), str(g["id"])),
+            expected_value=str(g["expected_value"]) if g.get("expected_value") else None,
         )
         for g in data["goldens"]
     )
@@ -114,6 +132,8 @@ def load_set(path: Path = SET_PATH) -> GoldenSet:
             raise ValueError(f"{golden.id}: a status is only decided against guidance")
         if categories and golden.category not in categories:
             raise ValueError(f"{golden.id}: unknown category {golden.category!r}")
+        if golden.expected_value is not None:
+            expected_period(golden.expected_value, golden.id)
     document = data["document"]
     return GoldenSet(
         sha256=sha256_bytes(raw),
@@ -188,10 +208,15 @@ def _citations(run: Run) -> tuple[str, ...]:
     return tuple(cited)
 
 
+def _states(finding: Finding, period: Duration) -> bool:
+    """Whether the answer states the period, in its conclusion or its observed value."""
+    return any(m.duration == period for text in (finding.conclusion, finding.observed) for m in parse_durations(text))
+
+
 def judge(golden: Golden, run: Run | None) -> Verdict:
-    """Code decides. A present golden needs a verified citation in one of its sections on a finding
-    that does not call the point missing (and carries the expected status when one is named); an
-    absent golden needs the run not to assert the point."""
+    """Code decides. A present golden needs a verified citation in one of its sections on a finding that does not call
+    the point missing; when the golden names a status, every such finding must have it, and when it names a period, the
+    carrying finding's answer must state it. An absent golden needs the run not to assert the point."""
     if run is None:
         return Verdict("missing", "no run recorded for this prompt version")
     statuses = tuple(f.status for f in run.findings)
@@ -211,18 +236,35 @@ def judge(golden: Golden, run: Run | None) -> Verdict:
 
     if run.stage == "unresolved":
         return Verdict("fail", f"withheld ({run.reason}) although the contract contains the point", statuses, cited)
-    wrong_status: FindingStatusName | None = None
-    for finding in run.findings:
-        if finding.status not in ASSERTING:
-            continue
-        for span in finding.spans:
-            if span.verified and span.section is not None and span.section.number in golden.sections:
-                if golden.status is not None and finding.status != golden.status:
-                    wrong_status = finding.status
-                    break
-                return Verdict("pass", f"verified citation in §{span.section.number} ({span.method})", statuses, cited)
-    if wrong_status is not None:
-        return Verdict("fail", f"cited the right clause but decided {wrong_status} where {golden.status} was expected", statuses, cited)
+    carriers = [
+        (finding, span)
+        for finding in run.findings
+        if finding.status in ASSERTING
+        for span in finding.spans
+        if span.verified and span.section is not None and span.section.number in golden.sections
+    ]
+    if golden.status is not None:
+        # Every finding that cites the clause decides it: a pass and a needs review on the same quote is no decision,
+        # and it used to satisfy either expectation (stress test EVL-3, 2026-10-30).
+        others = sorted({finding.status for finding, _span in carriers} - {golden.status})
+        if others and any(finding.status == golden.status for finding, _span in carriers):
+            return Verdict("fail", f"cited the right clause and decided both {golden.status} and {others[0]}; {golden.status} was expected", statuses, cited)
+        if others:
+            return Verdict("fail", f"cited the right clause but decided {others[0]} where {golden.status} was expected", statuses, cited)
+    if carriers and golden.expected_value is not None:
+        period = expected_period(golden.expected_value, golden.id)
+        stating = [(finding, span) for finding, span in carriers if _states(finding, period)]
+        if not stating:
+            stated = sorted({m.surface for f, _s in carriers for text in (f.conclusion, f.observed) for m in parse_durations(text)})
+            said = f"states {', '.join(stated)}" if stated else "states no period"
+            return Verdict("fail", f"cited the right clause, but the answer {said} where {golden.expected_value} was asked for", statuses, cited)
+        carriers = stating
+    if carriers:
+        # A finding code did not lower carries the pass when there is one; otherwise the verdict says which check lowered it.
+        finding, span = next(((f, s) for f, s in carriers if f.status_source not in LOWERED_BY_CODE), carriers[0])
+        lowered = finding.status_source if finding.status_source in LOWERED_BY_CODE else None
+        because = f"verified citation in §{span.section.number if span.section else '?'} ({span.method})"
+        return Verdict("pass", f"{because}; {LOWERED_NOTE} ({lowered})" if lowered else because, statuses, cited, lowered)
     verified = sorted({span.section.number or span.section.heading for f in run.findings for span in f.spans if span.verified and span.section is not None})
     if statuses and all(s == "missing" for s in statuses):
         return Verdict("fail", "answered not found although the contract contains the point", statuses, cited)
@@ -230,6 +272,11 @@ def judge(golden: Golden, run: Run | None) -> Verdict:
     return Verdict(
         "fail", f"no verified citation in §{expected}; verified citations were in §{', §'.join(verified) if verified else 'nothing'}", statuses, cited
     )
+
+
+def lowered_passes(rows: Sequence[GoldenRunOut]) -> list[str]:
+    """The goldens whose pass rests on a finding code lowered to needs review: how much of a score the lowering carries."""
+    return [row.golden_id for row in rows if row.verdict == "pass" and LOWERED_NOTE in row.because]
 
 
 def compare(

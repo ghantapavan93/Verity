@@ -27,7 +27,7 @@ from app.application.save_guidance import save_guidance  # noqa: E402
 from app.application.start_run import start_run  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.db import SessionLocal, init_db  # noqa: E402
-from app.goldens.service import compare_models, ensure_golden_document, judge, load_set, report, run_for, task_of  # noqa: E402
+from app.goldens.service import compare_models, ensure_golden_document, judge, load_set, lowered_passes, report, run_for, task_of  # noqa: E402
 from app.providers import make_provider  # noqa: E402
 from app.runs.service import execute_run  # noqa: E402
 
@@ -44,6 +44,8 @@ def print_report() -> int:
         print(f"{prompt.version} ({prompt.hash[:12]}): {prompt.passes} of {prompt.recorded} pass{latency}")
         for count in prompt.by_category:
             print(f"    {count.category:<22} {count.passes}/{count.recorded}")
+        carried = lowered_passes(prompt.runs)
+        print(f"    passes carried by a finding code lowered to needs review: {len(carried)} {' '.join(carried)}".rstrip())
     compare = out.compare
     if compare is None:
         print("\none prompt version recorded; nothing to compare")

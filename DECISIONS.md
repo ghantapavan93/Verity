@@ -1784,3 +1784,11 @@ disagree.
   miss for recall and withholds the verdict (six failed questions of seven had read "recall 1.00, fit"; this batch had
   none). The batch's scoring inputs are committed (`backend/app/batch/recordings/`), so the table is re-derived without
   the store.
+- **The golden judge holds a status golden to one status, and two goldens to a number.** A pass and a needs review on
+  the same clause passed a status golden whichever was expected, in either order; now every finding citing the clause
+  must carry the expected status. A pass carried by a finding code lowered (reference, position or ambiguity check)
+  stays a pass, because the lowering can be right about a wrong section number in a right answer (Recording 6c's g38),
+  but the verdict names the check and `run_goldens.py --report` counts such passes. g35 and g36, the two
+  `numeric_precision` goldens, now name the period they ask for (30 and 60 days), and the answer must state it; a run
+  answering 30 days for g36 passed before. This tightens two goldens' expectations, which rule 3 of `docs/GOLDENS.md`
+  allows only with this entry: neither expectation was wrong, both were unread.
