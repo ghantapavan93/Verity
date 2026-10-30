@@ -110,6 +110,8 @@ _ONES = {
     "nineteen": 19,
 }
 _TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+# The words a number is written with: no word of them says what a sentence is about (policy.proof.concept_stems).
+NUMBER_WORD_NAMES = frozenset([*_ONES, *_TENS, "hundred", "thousand"])
 # A number written in words, by its grammar: "forty-five", "one hundred and twenty", "two thousand five hundred". Until
 # policy-v17 any run of number words was one number, with "and" anywhere in it, so "between thirty and sixty days" was
 # ninety days, a figure neither text states (stress test, 2026-10-30). Now "and" joins only after "hundred" or

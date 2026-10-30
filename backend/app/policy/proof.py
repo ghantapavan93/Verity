@@ -25,6 +25,7 @@ import re
 from collections.abc import Sequence
 
 from .durations import (
+    NUMBER_WORD_NAMES,
     GuidanceRule,
     Operator,
     counts_back,
@@ -63,8 +64,10 @@ CARVE_OUT = re.compile(
 
 def concept_stems(text: str) -> set[str]:
     """The words of a sentence that could say what it is about, by their first five letters, so that "terminate"
-    and "termination" are one word."""
-    return {word[:5] for word in _WORD.findall(text.lower()) if word not in _GENERIC}
+    and "termination" are one word. A number written in words is no such word: "ninety (90) days" in a quote about
+    termination for cause and in guidance about termination for convenience was their shared subject, so spelling the
+    period out decided whether code wrote its "consistent" sentence (stress test, 2026-10-30, mutation finding 5)."""
+    return {word[:5] for word in _WORD.findall(text.lower()) if word not in _GENERIC and word not in NUMBER_WORD_NAMES}
 
 
 def same_point(quotes: Sequence[str], guidance: str) -> bool:
