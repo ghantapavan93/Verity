@@ -13,6 +13,14 @@ from .sections import ParsedSection, build_sections
 __all__ = ["PARSER_VERSION", "SUPPORTED", "Ingested", "TooLargeToRead", "UnsupportedFile", "ingest"]
 
 MAX_NAME = 255
+# What a reading may hand on, checked where it is made: in the reading's child, so a refusal costs the API nothing. Every
+# cost after a reading grows with its sections, and none of it was bounded: one 5.9 MB text of 100,000 short headings
+# held the store's write lock for 16.5 s and took 416 MB in the API process, outside the child's bounds (stress test,
+# 2026-10-30). The largest real contract read so far, a 4.4 MB file, has 7,174 sections (ingest/bounded.py); the
+# limits are three times that, the margin the child's own bounds keep. Sections are counted after a long paragraph
+# is split into parts, and the text is counted too, so a wall of text that splits into parts is held by the same rule.
+MAX_SECTIONS = 3 * 7_174
+MAX_TEXT_CHARS = 3 * 4_400_000
 
 # Stored on every document so a run record says which reader produced the text its citations
 # point into. Bump it whenever the reader changes what a file's text is.
@@ -69,7 +77,11 @@ MAX_NAME = 255
 # lines named, as a Word file's headers and footers are (sections.page_edge_furniture); v12 kept such lines as text where
 # they stood, so they sat inside clauses and broke the sentence a page break fell in. The document's own heading printed
 # at the head of its first page stays. DOCX is read as in v14 but for unstyled lines naming a part. Measured: DECISIONS.md.
-PARSER_VERSION = "v15"
+# v16 (2026-10-30, the adversarial stress test): every format. A long paragraph is cut into parts only where a passage
+# ends and nothing is split (sections.split_paragraph; v15 cut at the 6,000th character inside "$350,|000,000"); an
+# invisible mark inside an ASCII number is removed ("9؜0"); a reading of more sections or text than three times the
+# largest real contract is refused in the reader's child.
+PARSER_VERSION = "v16"
 
 
 @dataclass
@@ -101,7 +113,12 @@ def base_name(filename: str) -> str:
 
 def ingest(filename: str, data: bytes) -> Ingested:
     result: ReadResult = read(filename, data)
+    characters = sum(len(block.text) for block in result.blocks)
+    if characters > MAX_TEXT_CHARS:
+        raise TooLargeToRead(f"the file's text is {characters:,} characters; no contract needs more than {MAX_TEXT_CHARS:,}")
     sections = build_sections(result.blocks, title=result.title)
+    if len(sections) > MAX_SECTIONS:
+        raise TooLargeToRead(f"the file reads as {len(sections):,} sections; no contract needs more than {MAX_SECTIONS:,}")
     if not sections or not any(s.text for s in sections):
         # A PDF whose every page has no text layer is a scan: say so, since "no readable text" left the reader to guess why.
         scanned = next((part.count for part in result.coverage if part.part == "scanned_pages"), 0)

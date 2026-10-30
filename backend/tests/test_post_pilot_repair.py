@@ -307,7 +307,7 @@ def test_a_lettered_sub_item_is_cited_with_the_clause_it_sits_in() -> None:
 
 
 def test_the_reader_keeps_v14s_numbering() -> None:
-    assert PARSER_VERSION in ("v14", "v15")  # v15 (test_reader_v15.py) changes no DOCX numbering
+    assert PARSER_VERSION in ("v14", "v15", "v16")  # v15 and v16 (test_reader_v15.py, test_reader_v16_*.py) change no DOCX numbering
 
 
 # ------------------------------------------------------------------------------------------------ 3. policy-v9

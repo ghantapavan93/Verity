@@ -19,6 +19,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from itertools import pairwise
 
+from ..verify.spans import bounded, verification_pass
+
 # Nine digits per part: a "number" longer than that is not a clause number, and Python refuses to parse thousands of digits.
 HEADING_NUMBER = re.compile(r"^\s*(?:(?:Section|Clause|Article)\s+)?(\d{1,9}(?:\.\d{1,9})*)[.)]?\s+(.*\S)\s*$", re.IGNORECASE)
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
@@ -613,22 +615,57 @@ def _push(sections: list[ParsedSection], section: ParsedSection) -> None:
 
 
 def split_paragraph(text: str, cap: int) -> list[str]:
-    """A paragraph cut into pieces no longer than ``cap``, at sentence ends where there are any, else at the cap."""
+    """A paragraph cut into pieces of about ``cap`` characters, each cut at a place every reader of the text reads as a
+    passage end (`_cut`). A piece may run past the cap to reach one; a paragraph with no such place left stays whole.
+
+    Until reader v16 the cut fell at the cap itself when no sentence end was in the window, inside a word or a number:
+    a credit agreement's part ended "the greater of $350," and the next began "000,000 and 7.5%", and a quote of "the
+    greater of $350" was verified, since the end of a part is the end of the text the verifier searches (stress test,
+    2026-10-30). The invariant: a part's edge is never inside a word, inside a number as it is written
+    (verify.tokens.written_numbers), or inside a sentence when a sentence end is within reach."""
     pieces: list[str] = []
     start = 0
-    while len(text) - start > cap:
-        # The last sentence end inside the window, unless that leaves a sliver; then the cap itself.
-        cut = max((m.end() for m in SENTENCE_END.finditer(text, start, start + cap)), default=start)
-        if cut - start < cap // 4:
-            cut = start + cap
-        piece = text[start:cut].strip()
-        if piece:
-            pieces.append(piece)
-        start = cut
+    with verification_pass():  # the paragraph's numbers are read once for all its cuts
+        while len(text) - start > cap:
+            cut = _cut(text, start, cap)
+            if cut is None:
+                break
+            piece = text[start:cut].strip()
+            if piece:
+                pieces.append(piece)
+            start = cut
     tail = text[start:].strip()
     if tail:
         pieces.append(tail)
     return pieces
+
+
+# A passage end: a stop that ends a sentence or an item of a list, any closing quote or bracket after it, and the space
+# after that; the CJK stops need no space (reader v16; "。" was no end before, so a Chinese paragraph was cut at the cap).
+PASSAGE_END = re.compile(r"[.!?;][\"'”’)\]]*\s+|[。！？；][」』”’）)\]]*\s*")
+_SPACE = re.compile(r"\s+")
+
+
+def _cut(text: str, start: int, cap: int) -> int | None:
+    """Where the piece of ``text`` from ``start`` ends: the last passage end within the cap that splits nothing (not a
+    sliver, so not before a quarter of it); else the first one past the cap, within half a cap more; else the last space
+    within the cap that splits nothing (a number written with a sign keeps its spaces: "-Rs. 5M"), else the first past
+    it; else None, and the rest stays whole. "Splits nothing" is the verifier's own test of an edge (spans.bounded)."""
+    low, high = start + cap // 4, start + cap
+
+    def fits(at: int) -> bool:
+        return start < at < len(text) and bounded(text, at, at)
+
+    ends = [m.end() for m in PASSAGE_END.finditer(text, low, high + cap // 2)]
+    found = next((at for at in reversed(ends) if at <= high and fits(at)), None)
+    if found is None:
+        found = next((at for at in ends if at > high and fits(at)), None)
+    if found is None:
+        spaces = [m.end() for m in _SPACE.finditer(text, low, high)]
+        found = next((at for at in reversed(spaces) if fits(at)), None)
+    if found is None:
+        found = next((m.end() for m in _SPACE.finditer(text, high) if fits(m.end())), None)
+    return found
 
 
 # "Schedule A. Service Level and Credits", "Annex 2 – Fees", "Appendix B: Data Processing Terms": a part of the agreement
