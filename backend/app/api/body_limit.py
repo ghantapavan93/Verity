@@ -207,7 +207,7 @@ class BodyLimitMiddleware:
 async def _answer(send: Send, status: int, detail: str, retry_after: int | None = None, *, kind: str = "body_limit", path: str = "") -> None:
     if status in (429, 503):
         # The same line as the API's own refusals (main.workbench_error), so one grep counts every limit by its name.
-        log.warning("refused path=%s status=%d kind=%s detail=%s", path, status, kind, detail)
+        log.warning("refused path=%s status=%d kind=%s detail=%s", path, status, kind, detail, extra={"shape": f"refused {status} {kind}"})
     body = json.dumps({"detail": detail}, separators=(",", ":")).encode()
     headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()), (b"connection", b"close")]
     if retry_after is not None:

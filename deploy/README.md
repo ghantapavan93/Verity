@@ -273,8 +273,11 @@ interface still says `X-Powered-By: Next.js`: known, not fixed here.
 
 Logs under `backend/data/logs/deploy/` carry request ids, paths without query strings, statuses,
 durations, run and document ids, stages and restart events, and no contract text, guidance, prompt,
-model output or credential (searched for each on 2026-10-02). There is no rotation: one file per
-start, 745 KB after two days.
+model output or credential (searched for each on 2026-10-02). The API writes its own log to
+`backend/data/logs/deploy/api/` in segments of 10 MiB, the oldest deleted past 200 MiB in all
+(`WORKBENCH_LOG_SEGMENT_BYTES`, `WORKBENCH_LOG_KEEP_BYTES`); each line is cut at 2,000 characters and a flood of
+one kind of line (a 4xx, a refusal) is kept at 60 a minute (`backend/app/log_sink.py`). Each start's stamped output is
+removed after 14 days or past 200 MB in all, oldest first.
 
 ## Keeping the two servers up (2026-10-01)
 

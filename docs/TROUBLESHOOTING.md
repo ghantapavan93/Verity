@@ -25,11 +25,12 @@ All under `backend/data/logs/deploy` on the machine that serves the site.
 | File | Written by | What its lines say |
 |---|---|---|
 | `api.supervisor.log`, `web.supervisor.log` | `deploy/supervise.ps1` | each start; each exit with its code and run time, and the last line the server wrote to its error output; missed health probes and `answering again`; a supervisor that ended without a record (Windows shut down or signed out) with the machine's boot time; old output removed |
-| `api.<stamp>.err.log` | the API (`app/main.py`, Python logging) | one line per request (`request_id`, `path`, `status`, `duration_ms`; the health probe is left out); `refused path=… status=… kind=… detail=…` for every 429 and 503, the upload door's included (`kind=SpoolFull`, `kind=UploadsPerNetwork`, the quota's class); a `status=500` request line for an unhandled error, its traceback beside it; a run's stages (`run_id=… stage=… reason=…`); the model's time apart from the queue's (`model_ms=… queue_ms=… queue_depth=…`); `model_build server_version=… model=… build=…` at start; `recovered_runs=…` |
-| `api.<stamp>.out.log` | uvicorn | nothing in normal running: its access log is off (the request line above replaces it) |
+| `api/api.<stamp>.<pid>.<n>.log` | the API (`app/main.py`, Python logging, `app/log_sink.py`) | segments of 10 MiB, the oldest deleted past 200 MiB in all; a line is cut at 2,000 characters, and past 60 a minute of one kind (a 4xx request line, a refusal of one kind) the rest are left out and the next line kept says how many; a line that could not be written is counted on the next one. One line per request (`request_id`, `path`, `status`, `duration_ms`; the health probe is left out); `refused path=… status=… kind=… detail=…` for every 429 and 503, the upload door's included (`kind=SpoolFull`, `kind=UploadsPerNetwork`, the quota's class); a `status=500` request line for an unhandled error, its traceback beside it; a run's stages (`run_id=… stage=… reason=…`); the model's time apart from the queue's (`model_ms=… queue_ms=… queue_depth=…`); `model_build server_version=… model=… build=…` at start; `recovered_runs=…` |
+| `api.<stamp>.err.log` | Python, outside its logging | what is written before logging starts or past it: a traceback that ends the process, a reading child's own output |
+| `api.<stamp>.out.log` | uvicorn | nothing in normal running: its access log is off (the request line above replaces it), and its own lines go to the API's log |
 | `web.<stamp>.*.log` | `next start` | the interface server's own output |
 
-A start's two output files are removed after 14 days; the supervisor logs are kept.
+A start's two output files are removed after 14 days, or oldest first past 200 MB in all; the supervisor logs are kept.
 
 ## Symptoms
 

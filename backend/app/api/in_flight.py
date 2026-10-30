@@ -125,7 +125,7 @@ class InFlightMiddleware:
 
 async def _answer(send: Send, status: int, detail: str, retry_after: int, *, kind: str, path: str) -> None:
     # The same line as every other refusal (main.workbench_error, body_limit._answer), so one grep counts it by name.
-    log.warning("refused path=%s status=%d kind=%s detail=%s", path, status, kind, detail)
+    log.warning("refused path=%s status=%d kind=%s detail=%s", path, status, kind, detail, extra={"shape": f"refused {status} {kind}"})
     body = json.dumps({"detail": detail}, separators=(",", ":")).encode()
     headers = [
         (b"content-type", b"application/json"),

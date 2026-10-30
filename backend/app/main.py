@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from . import db as db_module
+from . import log_sink
 from .api import access, batches, documents, engineering, findings, guidance, health, memos, model, runs, trust
 from .api.body_limit import BodyLimitMiddleware, BodyRefused
 from .api.in_flight import InFlightMiddleware
@@ -32,7 +33,14 @@ from .providers import make_provider
 from .providers.base import ModelProvider
 from .runs.events import bus
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# Every logger through one bounded sink: each line cut, floods shaped, the file's total capped (app/log_sink.py). Below
+# the store's own free-space floor a line is dropped and counted rather than written.
+log_sink.configure(
+    settings.log_dir,
+    settings.log_segment_bytes,
+    settings.log_keep_bytes,
+    settings.public_min_free_bytes if settings.anonymous_sessions else health.MIN_FREE_BYTES,
+)
 log = logging.getLogger("app")
 # An id a caller may give its request (X-Request-ID): letters, digits and hyphens, at most 64 of them.
 _REQUEST_ID = re.compile(r"[A-Za-z0-9-]{1,64}")
@@ -140,7 +148,14 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
         if error.status_code in (429, 503):
             # Five limits answer 429 and three conditions 503; the request line alone cannot say which one refused.
-            log.warning("refused path=%s status=%d kind=%s detail=%s", request.url.path, error.status_code, type(error).__name__, error)
+            log.warning(
+                "refused path=%s status=%d kind=%s detail=%s",
+                request.url.path,
+                error.status_code,
+                type(error).__name__,
+                error,
+                extra={"shape": f"refused {error.status_code} {type(error).__name__}"},
+            )
         return JSONResponse({"detail": str(error)}, status_code=error.status_code, headers=headers)
 
     @app.exception_handler(BodyRefused)
@@ -148,7 +163,14 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         # A body refused while FastAPI reads it (a full spool, for one) reaches here, not the door's own answer; it is
         # logged the same way (fresh review, 2026-10-19: a SpoolFull 503 met there left no line).
         if error.status_code in (429, 503):
-            log.warning("refused path=%s status=%d kind=%s detail=%s", request.url.path, error.status_code, type(error).__name__, error.detail)
+            log.warning(
+                "refused path=%s status=%d kind=%s detail=%s",
+                request.url.path,
+                error.status_code,
+                type(error).__name__,
+                error.detail,
+                extra={"shape": f"refused {error.status_code} {type(error).__name__}"},
+            )
         return await http_exception_handler(request, error)
 
     @app.middleware("http")
@@ -180,8 +202,17 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
         if request.url.path != "/api/health":
+            # A 4xx line is the one an outsider repeats at will (an unknown path, no session): shaped by its status, so a
+            # flood of them cannot push the record out of the log's bound (app/log_sink.py).
+            status_code = response.status_code
             log.info(
-                "request_id=%s method=%s path=%s status=%d duration_ms=%.0f", request_id, request.method, request.url.path, response.status_code, duration_ms
+                "request_id=%s method=%s path=%s status=%d duration_ms=%.0f",
+                request_id,
+                request.method,
+                request.url.path,
+                status_code,
+                duration_ms,
+                extra={"shape": f"status {status_code}"} if 400 <= status_code < 500 else None,
             )
         return response
 

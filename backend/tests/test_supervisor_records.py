@@ -168,7 +168,10 @@ def test_only_the_stop_file_ends_the_supervisor(tmp_path: Path) -> None:
 
 def run_function(name: str, body: str, logs: Path, tag: str = "t") -> subprocess.CompletedProcess[str]:
     script = SUPERVISE.read_text(encoding="utf-8")
-    prelude = f"$ErrorActionPreference = 'Stop'\n$logs = '{logs}'\n$Tag = '{tag}'\n$supervisorLog = '{logs / (tag + '.supervisor.log')}'\n$LOG_KEEP_DAYS = 14\n"
+    prelude = (
+        f"$ErrorActionPreference = 'Stop'\n$logs = '{logs}'\n$Tag = '{tag}'\n$supervisorLog = '{logs / (tag + '.supervisor.log')}'\n"
+        "$LOG_KEEP_DAYS = 14\n$LOG_KEEP_BYTES = 200MB\n"
+    )
     command = prelude + function_source(script, name) + "\n" + body
     return subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", command], capture_output=True, text=True, timeout=60)
 
@@ -193,6 +196,50 @@ def test_old_output_of_this_server_is_removed_and_nothing_else(tmp_path: Path) -
     assert result.stdout.strip() == "2"
     assert not [path for path in old if path.exists()]
     assert all(path.exists() for path in kept)
+
+
+def sized(path: Path, size: int, days: float) -> Path:
+    path.write_bytes(b"x" * size)
+    then = time.time() - days * 86400
+    os.utime(path, (then, then))
+    return path
+
+
+def test_output_past_its_byte_budget_is_removed_oldest_first(tmp_path: Path) -> None:
+    # By age alone, a server that wrote fast or restarted in a loop kept every byte for two weeks (stress test, 2026-10-30).
+    oldest = [sized(tmp_path / f"t.2026102{n}-000000.err.log", 400, 5 - n) for n in range(3)]  # 1,200 bytes, oldest first
+    newest = sized(tmp_path / "t.20261029-000000.err.log", 400, 1)
+    others = [sized(tmp_path / "web.20261020-000000.err.log", 5000, 5), sized(tmp_path / "t.supervisor.log", 5000, 5)]
+    result = run_function("Remove-OldLogs", "$LOG_KEEP_BYTES = 900\nRemove-OldLogs", tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "2"
+    assert [path.exists() for path in oldest] == [False, False, True] and newest.exists()
+    assert all(path.exists() for path in others), "only this server's stamped output counts"
+
+
+def test_control_output_inside_its_byte_budget_is_kept(tmp_path: Path) -> None:
+    files = [sized(tmp_path / f"t.2026102{n}-000000.out.log", 400, 5 - n) for n in range(3)]
+    result = run_function("Remove-OldLogs", "$LOG_KEEP_BYTES = 1200\nRemove-OldLogs", tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "0" and all(path.exists() for path in files)
+
+
+def test_an_api_exit_reads_its_last_line_from_its_own_log_when_its_error_output_is_empty(tmp_path: Path) -> None:
+    # The API writes its log to segments of its own (backend/app/log_sink.py); its standard error is then usually empty.
+    script = SUPERVISE.read_text(encoding="utf-8")
+    segments = tmp_path / "t"
+    segments.mkdir()
+    (segments / "api.20261030-000000.100.00001.log").write_text("INFO older segment\n", encoding="utf-8")
+    (segments / "api.20261030-000000.100.00002.log").write_text("ERROR app: Application startup failed\n", encoding="utf-8")
+    (tmp_path / "empty.err.log").write_text("", encoding="utf-8")
+    (tmp_path / "said.err.log").write_text("RuntimeError: refusing to start\n", encoding="utf-8")
+    prelude = f"$ErrorActionPreference = 'Stop'\n$Name = 'api'\n$apiLogs = '{segments}'\n"
+    functions = function_source(script, "Get-LastLine") + "\n" + function_source(script, "Get-LastServerLine")
+    body = f"\"[$(Get-LastServerLine '{tmp_path / 'empty.err.log'}')]\"\n\"[$(Get-LastServerLine '{tmp_path / 'said.err.log'}')]\""
+    command = prelude + functions + "\n" + body
+    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", command], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["[ERROR app: Application startup failed]", "[RuntimeError: refusing to start]"]
 
 
 def test_an_end_with_no_record_is_named_with_its_last_line(tmp_path: Path) -> None:

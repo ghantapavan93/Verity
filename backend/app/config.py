@@ -136,6 +136,12 @@ class Settings(BaseModel):
     public_streams_per_network: int = int(os.environ.get("WORKBENCH_PUBLIC_STREAMS_PER_NETWORK", "16"))
     # Free space the public store keeps: below it new uploads and writes are paused, reading still works (2 GiB).
     public_min_free_bytes: int = int(os.environ.get("WORKBENCH_PUBLIC_MIN_FREE_BYTES", str(2 * 1024**3)))
+    # Where the API writes its log (app/log_sink.py): segments in this folder, the oldest deleted past log_keep_bytes in
+    # all. Unset, the log goes to standard error (tests, a laptop, a container whose log driver bounds it). The supervisor
+    # sets it (deploy/supervise.ps1): its redirect of standard error to one file per start had no bound at all.
+    log_dir: Path | None = Path(os.environ["WORKBENCH_LOG_DIR"]) if os.environ.get("WORKBENCH_LOG_DIR") else None
+    log_segment_bytes: int = int(os.environ.get("WORKBENCH_LOG_SEGMENT_BYTES", str(10 * 1024**2)))
+    log_keep_bytes: int = int(os.environ.get("WORKBENCH_LOG_KEEP_BYTES", str(200 * 1024**2)))
     # Optional: the results.json of the ivo-experiments repository, for the Runs surface, and the
     # published page it was built for (links become "Open experiment" → <url>#<id>).
     experiments_results: Path | None = Path(os.environ["WORKBENCH_EXPERIMENTS_RESULTS"]) if os.environ.get("WORKBENCH_EXPERIMENTS_RESULTS") else None

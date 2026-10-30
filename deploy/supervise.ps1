@@ -80,16 +80,40 @@ function Get-LastLine([string]$path) {
 }
 
 # Each start writes two files of its own and nothing removed them (ops audit, 2026-10-19). Every start removes this
-# server's stamped output older than LOG_KEEP_DAYS; the supervisor's own log and the other server's files are kept.
+# server's stamped output older than LOG_KEEP_DAYS, and then the oldest of it while all of it together holds more than
+# LOG_KEEP_BYTES: by age alone, a server restarting in a loop, or one that wrote fast, kept everything for two weeks
+# (stress test, 2026-10-30). The supervisor's own log and the other server's files are kept.
 $LOG_KEEP_DAYS = 14
+$LOG_KEEP_BYTES = 200MB
 function Remove-OldLogs {
   $cutoff = (Get-Date).AddDays(-$LOG_KEEP_DAYS)
   $own = "^$([regex]::Escape($Tag))\.\d{8}-\d{6}\.(out|err)\.log$"
   $removed = 0
-  foreach ($file in @(Get-ChildItem -LiteralPath $logs -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $own -and $_.LastWriteTime -lt $cutoff })) {
-    try { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop; $removed++ } catch { }
+  $kept = @()
+  foreach ($file in @(Get-ChildItem -LiteralPath $logs -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $own } | Sort-Object LastWriteTime)) {
+    if ($file.LastWriteTime -lt $cutoff) {
+      try { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop; $removed++; continue } catch { }
+    }
+    $kept += $file
+  }
+  $total = ($kept | Measure-Object -Property Length -Sum).Sum
+  foreach ($file in $kept) {
+    if ($total -le $LOG_KEEP_BYTES) { break }
+    try { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop; $removed++; $total -= $file.Length } catch { }
   }
   return $removed
+}
+
+# The API writes its own log, in segments with a bound of their own (backend/app/log_sink.py), to this folder; its
+# standard error keeps what Python writes before logging starts or past it (a traceback that ends the process). The last
+# line of an exit is read from the error output first, then from the newest segment.
+$apiLogs = Join-Path $logs $Tag
+function Get-LastServerLine([string]$errPath) {
+  $line = Get-LastLine $errPath
+  if ($line -or $Name -ne "api") { return $line }
+  $segment = Get-ChildItem -LiteralPath $apiLogs -File -Filter "api.*.log" -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -Last 1
+  if ($segment) { return Get-LastLine $segment.FullName }
+  return ""
 }
 
 if (Test-Path $stopFile) { Write-Line "supervisor not started: stop file present ($stopFile); remove it to allow restarts"; exit 0 }
@@ -122,6 +146,9 @@ while ($true) {
       $env:WORKBENCH_PROMPT_VERSION = "answer-v2"
       $env:WORKBENCH_CORS_ORIGINS = $Origin
       $env:WORKBENCH_APP_URL = $Origin
+      # The API's own log, bounded per line, per flood and in total (backend/app/log_sink.py): through the redirect below
+      # alone, one client's 404s in a loop wrote about 4 GB an hour into one file (stress test, 2026-10-30).
+      $env:WORKBENCH_LOG_DIR = $apiLogs
       # The gate (backend/app/api/access.py): on when a secret has been made (backend/scripts/access.py secret). The secret
       # and the list of revoked readers live under backend/data, outside the repository, and are read at every start.
       $secretFile = Join-Path $backend "data\access.secret"
@@ -192,8 +219,8 @@ while ($true) {
     }
     $ran = [int]((Get-Date) - $began).TotalSeconds
     Write-Line "exited $Name pid $($process.Id) code $($process.ExitCode)$(Get-ExitMeaning $process.ExitCode) after $ran s"
-    $lastLine = Get-LastLine $err
-    if ($lastLine) { Write-Line "last line of $Tag.$stamp.err.log: $lastLine" }
+    $lastLine = Get-LastServerLine $err
+    if ($lastLine) { Write-Line "last line of $Tag.$stamp.err.log or its log: $lastLine" }
     Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
     if (Test-Path $stopFile) { Write-Line "stop file present; not restarting"; break }
     Write-Line "restarting $Name in $backoff s"
