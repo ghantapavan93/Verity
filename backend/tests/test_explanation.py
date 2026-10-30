@@ -108,8 +108,8 @@ def test_inside_the_model_visible_context_is_decided_by_the_slice_not_by_a_const
     # the window constant says. The slice is the authority; the run itself is untouched.
     original = reconstruct_module.context_slice
 
-    def shorter(label: str, section: Section, rank: int, window: int = 5000) -> reconstruct_module.ContextSlice:
-        piece = original(label, section, rank, window)
+    def shorter(label: str, section: Section, rank: int, *, window: int) -> reconstruct_module.ContextSlice:
+        piece = original(label, section, rank, window=window)
         return reconstruct_module.ContextSlice(piece.label, piece.section_id, piece.rank, piece.start, min(piece.end, 10), True, piece.content_sha256)
 
     monkeypatch.setattr(reconstruct_module, "context_slice", shorter)

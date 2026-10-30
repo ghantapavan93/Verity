@@ -50,6 +50,7 @@ def test_versions_are_compared_by_their_number_not_by_inequality(prefix: str, re
         (None, "v11", "earlier"),  # recorded before versions were recorded: as stale as a run can be
         ("", "v11", "earlier"),
         ("v11b", "v11", "unknown"),  # a form this build cannot read is not one it knows
+        ("v11b", "v11b", "current"),  # whatever its form, the build's own version is its own
         ("retrieval-v3", "v3", "unknown"),  # another rule's version is not this one's
     ],
 )

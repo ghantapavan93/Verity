@@ -45,6 +45,8 @@ def compare_version(recorded: object, current: str) -> Order:
     build cannot read, or another rule's version, is unknown."""
     if not recorded:
         return "earlier"
+    if str(recorded) == current:
+        return "current"
     seen, own = _NUMBERED.fullmatch(str(recorded)), _NUMBERED.fullmatch(current)
     if seen is None or own is None or seen["rule"] != own["rule"]:
         return "unknown"

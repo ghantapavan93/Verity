@@ -18,7 +18,7 @@ from sqlalchemy import text
 
 from app import config
 from app import db as db_module
-from app.analysis.service import load_prompt
+from app.analysis.service import INPUT_VERSION, load_prompt
 from app.application.reconstruct_input import reconstruct_input
 from app.application.start_run import compute_fingerprint, run_options, start_run
 from app.db import SessionLocal
@@ -39,7 +39,12 @@ QUESTION = "How much notice does the customer need to give to terminate for conv
 
 
 def test_the_versions_are_the_ones_the_rules_declare_and_every_run_records_them(client: TestClient) -> None:
-    assert SEMANTIC_VERSIONS == {"policy_version": POLICY_VERSION, "verifier_version": VERIFIER_VERSION, "retrieval_version": RETRIEVAL_VERSION}
+    assert SEMANTIC_VERSIONS == {
+        "policy_version": POLICY_VERSION,
+        "verifier_version": VERIFIER_VERSION,
+        "retrieval_version": RETRIEVAL_VERSION,
+        "input_version": INPUT_VERSION,
+    }
     result = upload_and_ask(client, QUESTION)
     options = client.get(f"/api/runs/{result['run_id']}/detail").json()["options"]
     assert {name: options[name] for name in SEMANTIC_VERSIONS} == SEMANTIC_VERSIONS
