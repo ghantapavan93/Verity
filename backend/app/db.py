@@ -65,7 +65,7 @@ def init_db(target_engine: Engine | None = None) -> None:
 
 
 # Indexes a later model replaced; dropped so the replacement can be created. Never a data change.
-SUPERSEDED_INDEXES: dict[str, tuple[str, ...]] = {"memos": ("ux_memos_run_id",)}
+SUPERSEDED_INDEXES: dict[str, tuple[str, ...]] = {"memos": ("ux_memos_run_id", "ux_memos_run_review")}
 
 
 def ensure_columns(target_engine: Engine) -> None:

@@ -29,8 +29,9 @@ def _out(memo: Memo) -> MemoOut:
 
 @router.post("", response_model=MemoOut, status_code=status.HTTP_201_CREATED)
 def create_memo(body: MemoIn, response: Response, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> MemoOut:
-    """201 with a memo for the run's current review state, or 200 with the one already written under it. A review
-    after a memo makes the next request write a new memo; the earlier one is kept as it was."""
+    """201 with a memo for the run's current review state, or 200 with the one already written under it and under the
+    rules in force (application.create_memo.content_key). A review after a memo, or a change to what a memo would say,
+    makes the next request write a new memo; the earlier one is kept as it was, and served by its id."""
     require_run(session, body.run_id, workspace)
     created = create_memo_for_run(session, body.run_id)
     if not created.created:

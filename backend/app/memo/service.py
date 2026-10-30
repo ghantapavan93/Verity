@@ -186,6 +186,9 @@ def status_label(status: str, with_guidance: bool, source: str = "model_hint") -
 
 
 AUTHOR = "Verity"
+# Changed by hand when the Word memo's layout changes in a way its HTML does not show: part of what a memo says, so the
+# first request after such a change writes a new memo (application.create_memo.content_key).
+DOCX_LAYOUT = "docx-1"
 CUSTOM_PROPERTIES_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.custom-properties+xml"
 CUSTOM_PROPERTIES_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}"
 
@@ -275,9 +278,13 @@ def memo_html(
     flagged: dict[str, str] | None = None,
     withheld: Sequence[Finding] = (),
     related: dict[str, list[str]] | None = None,
+    date: str | None = None,
 ) -> str:
-    now = datetime.now().astimezone()
-    date = f"{now.day} {now.strftime('%B %Y')}"
+    """The memo as HTML. ``date`` is the day it is written, today's unless given: application.create_memo renders it
+    once with a fixed date to know what the memo says, its date aside."""
+    if date is None:
+        now = datetime.now().astimezone()
+        date = f"{now.day} {now.strftime('%B %Y')}"
     flags = memo_flags(findings, withheld, flagged)
     issues = [f for f, _ in flags]
     why = {f.id: reason for f, reason in flags}
