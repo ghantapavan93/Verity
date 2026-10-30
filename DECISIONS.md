@@ -1851,8 +1851,25 @@ Fixed, by teams in their own worktrees, each test written first and red, then me
 - **The API and operations**: health off the request threads and a per-network bound at the door, capped streams, a daily
   byte budget, a bounded and rotated log, run liveness and recovery in one place, bounded purge transactions with
   originals written whole, an OpenAPI contract generated from the error classes, escaped spreadsheet cells, bounded and
-  cached trust reads, no workspace shown another's file name. Time, the model's transport and the store's evolution
-  are the last team's (their entry follows when it lands).
+  cached trust reads, no workspace shown another's file name.
+- **Time**: every daily quota counts the row's own instant, durations and deadlines in the deploy scripts run on a
+  stopwatch (a clock step blinded the watchdog for its size), a session lives as long as its workspace whatever the clock
+  did, a run nobody reads ends at the retention pass, and retention keeps a file Windows will not let it remove.
+- **The model's transport**: one deadline for every request of a call, its body included; a cut answer or a refusal for
+  size is read from the reply's fields, never its wording; nothing comes between an answer and its clean start; a
+  pinned model build is part of a run's identity.
+- **The store across releases**: versions are compared by number, so a build rolled back to opens records made under
+  rules it does not know, says so on their trust page and re-checks nothing; its pack prints NOT CHECKED and exits 2;
+  `status.py` counts such runs and documents. An old store's table whose CHECKs differ from the models', by name or by
+  body, is rebuilt by SQLite's documented procedure, foreign keys off before the transaction and every trigger dropped
+  and put back, its counts and foreign_key_check asserted; a row the new constraint refuses stops the opening and is
+  named. Stores created by release-2026-10-02 gain ck_findings_status_source at their next start (the 2026-10-02 entry
+  had left them without it).
+- **Versions**: the code behind each version is the closure of its entry points, found by following it (the executor's,
+  for the policy, short of the other versions' entry points and a named list of what records rather than decides),
+  never a list of files: five planted edits outside the old list now each move a fingerprint. A fourth version,
+  `input-v1`, names what the model is handed of the sections and how its answer is read, and the reader's version is
+  held to its code the same way. A run's window is an argument everywhere it is used, never a default.
 - **The interface** shows a run only beside its own contract, shows every model- or file-written string through one
   display primitive, keys a memo by what it says, asks before an invite replaces a working session, runs no script
   without the response's nonce, and joins sections only where the reader recorded a split.
@@ -1866,10 +1883,28 @@ the model's characters as evidence; a memo's identity is its content; the record
 verifying stage's hash keeps its meaning; the CSP nonce governs scripts only, since styles are written as attributes and
 the API may be another origin.
 
-Open: whether an answer that repeats a condition's words while denying it keeps its pass, which waits for the owner (the
-skeptic's rule, judging on the evidence alone, reverses the 2026-10-16 decision); which of two guidance sentences applies
-(above); PDF text hidden by clipping or optional content; columns narrower than 0.9 line-heights; an amendment only
-links' grammar reads ("amended by adding") is not yet a reason to lower; a shared reading still reveals that the same
-bytes were uploaded before; reviews are not bound by the pack; a sign set apart from its number by a space is
-punctuation, as since v8. Including in each version every code that decides its outcome, by the closure of its entry
-points rather than a hand-made list, is the lead's next step.
+*A left-out condition is judged on the evidence (policy-v17; reverses the 2026-10-16 rule).* An answer "stated" a
+condition its quote left out when it shared two of the condition's words, so "… on 30 days' written notice, including
+during the Initial Term", which denies the condition, kept the pass the neutral answer lost, and the correct answer was
+lowered by the value check: of three answers only the wrong one passed. No test on an answer's words tells stating a
+condition from denying it ("with no exception for the Initial Term", "not subject to the Initial Term"), so the answer
+is not read for it: a pass keeps only when another verified quote of the same finding shows the condition whole. The
+status is now the same for any answer over the same evidence (a property test). The cost, replayed over the passes in
+the local QA and lab stores: 20 of 1,212 distinct passes are lowered that the old rule kept, about two thirds of them
+answers that state the condition correctly in their own words ("excluding liabilities under Section 7.2"), each now
+needs review with the left-out words in its reason; one pass the old rule lowered stands, its condition quoted beside
+it. A correct answer shown for review costs a reader a look; a denial shown as a pass cost a wrong answer.
+
+*A rollback is named, not refused.* The skeptic of the store's evolution showed that refusing to start on a store with
+newer records would break the emergency path a rollback exists for, and that no change here protects a844ebf or 2e8fe68,
+which cannot learn about v11: deploy/README says to export no pack of a v11 run after rolling back to them.
+
+*No copy beside the store before a rebuild.* The rebuild is one transaction, all or nothing, and a copy of the public
+store would keep visitors' contracts past their retention.
+
+Open: which of two guidance sentences applies (above); PDF text hidden by clipping or optional content; columns narrower
+than 0.9 line-heights; an amendment only links' grammar reads ("amended by adding") is not yet a reason to lower; a
+shared reading still reveals that the same bytes were uploaded before; reviews are not bound by the pack; a sign set
+apart from its number by a space is punctuation, as since v8; a setting read during a run that its options do not record
+would change answers without changing identity (none is known: the options carry every setting the executor reads);
+dependency versions are pinned by the lockfiles, not named in a run's identity.
