@@ -12,6 +12,7 @@ stop for a paid GPU.
                                                                                            save_guidance
     documents a public workspace holds             its grants                              ingest_document
     uploads in a UTC day, every public workspace   public grants made today                ingest_document
+    bytes of new documents in a UTC day, public    their recorded sizes, with this one's   ingest_document
     questions a public workspace asks in a day     its runs made today                     start_run
     new runs in a UTC day, every reader            runs with a workspace made today        start_run
 
@@ -34,7 +35,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from ..config import settings
 from ..db import write_locked
 from ..errors import AccessRequired, Busy, TooManyRequests, WorkbenchError
-from ..models import TERMINAL_STAGES, DocumentAccess, Run, VisitorWorkspace, as_utc, utcnow
+from ..models import TERMINAL_STAGES, Document, DocumentAccess, Run, VisitorWorkspace, as_utc, utcnow
 from .workspace import PUBLIC_PREFIX, is_public
 
 
@@ -59,6 +60,13 @@ def seconds_to_tomorrow() -> int:
 
 def _grants(session: Session, *where: ColumnElement[bool]) -> int:
     return session.scalar(select(func.count()).select_from(DocumentAccess).where(*where)) or 0
+
+
+def _public_bytes_today(session: Session) -> int:
+    """The sizes of the documents stored today that a public workspace holds."""
+    held = select(DocumentAccess.document_id).where(DocumentAccess.document_id == Document.id, DocumentAccess.workspace_id.like(f"{PUBLIC_PREFIX}%"))
+    total = session.scalar(select(func.coalesce(func.sum(Document.size_bytes), 0)).where(Document.created_at >= day_start(), held.exists()))
+    return int(total or 0)
 
 
 def _runs(session: Session, *where: ColumnElement[bool]) -> int:
@@ -94,12 +102,22 @@ def workspace_open(workspace: str | None) -> tuple[Quota, ...]:
     )
 
 
-def document_quotas(workspace: str | None) -> tuple[Quota, ...]:
+def document_quotas(workspace: str | None, adding_bytes: int = 0) -> tuple[Quota, ...]:
     """What a new grant (a document the workspace holds) is counted against: a public workspace's being open, its own
-    bound, then every public workspace's uploads today. Other workspaces hold what they upload without a bound."""
+    bound, then every public workspace's uploads today, by count and, for a document stored new (``adding_bytes``, its
+    size; a grant of one already held stores nothing), by bytes. Other workspaces hold what they upload without a bound."""
     if not is_public(workspace):
         return ()
     held = settings.anonymous_max_documents
+    budget = settings.anonymous_max_upload_bytes_per_day
+    in_bytes = (
+        # Refused once today's bytes and this document's together pass the budget: the count reaching budget + 1.
+        Quota(
+            budget + 1,
+            lambda session: _public_bytes_today(session) + adding_bytes,
+            lambda: TooManyRequests("The demo has taken all the contract text it takes in a day. Try again tomorrow (UTC).", retry_after=seconds_to_tomorrow()),
+        ),
+    )
     return (
         *workspace_open(workspace),
         Quota(
@@ -112,6 +130,7 @@ def document_quotas(workspace: str | None) -> tuple[Quota, ...]:
             lambda session: _grants(session, DocumentAccess.workspace_id.like(f"{PUBLIC_PREFIX}%"), DocumentAccess.created_at >= day_start()),
             lambda: TooManyRequests("The demo has taken all the uploads it takes in a day. Try again tomorrow (UTC).", retry_after=seconds_to_tomorrow()),
         ),
+        *(in_bytes if budget > 0 else ()),
     )
 
 

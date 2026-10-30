@@ -126,6 +126,10 @@ class Settings(BaseModel):
     # half a minute an answer, eight is a wait of four minutes; the ninth visitor is told at once rather than queued.
     public_max_runs_in_flight: int = int(os.environ.get("WORKBENCH_PUBLIC_MAX_RUNS_IN_FLIGHT", "8"))
     anonymous_max_uploads_per_day: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_UPLOADS_PER_DAY", "300"))
+    # Bytes of new contracts the public store takes in a UTC day, every visitor together (application/quotas.py): by count
+    # alone, 300 uploads of 25 MB could bring the store to its 2 GiB floor in days. 1 GiB is a thousand ordinary contracts
+    # and forty of the largest; a document already held costs none. 0 is no bound.
+    anonymous_max_upload_bytes_per_day: int = int(os.environ.get("WORKBENCH_ANONYMOUS_MAX_UPLOAD_BYTES_PER_DAY", str(1024**3)))
     # Requests one network may have in flight at once in the public store (api/in_flight.py): a fifth of the forty request
     # threads, so no one network holds them. A page's own burst at load is a handful, and one past the bound waits two
     # seconds for a turn before it is refused.

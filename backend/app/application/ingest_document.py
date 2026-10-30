@@ -24,7 +24,7 @@ from ..ingest.bounded import ReadingBusy, read_file
 from ..ingest.coverage import coverage_report
 from ..ingest.readers import SUFFIX_OF, file_type, read
 from ..models import Document, DocumentAccess, Section
-from .quotas import admit, document_quotas
+from .quotas import admit, document_quotas, refuse_if_spent
 from .workspace import document_is_curated, grant_document, is_public
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -113,6 +113,9 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
         new_to_workspace = _grant(session, existing, workspace, new=False, name=given)
         return IngestedDocument(existing, created=new_to_workspace)
 
+    # New bytes are counted against the day's before they are read, so a file that would be refused is not read (advice:
+    # the count that decides is made again with the row, in store below).
+    refuse_if_spent(session, document_quotas(workspace, adding_bytes=len(data)))
     started = time.perf_counter()
     try:
         parsed = read_file(filename or "upload", data, wait=reading_wait)  # read where it can be stopped (ingest/bounded.py)
@@ -136,6 +139,7 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
         tracked_changes=parsed.tracked_changes,
         hidden_runs=parsed.hidden_runs,
         coverage_json=json.dumps(coverage_report(parsed.coverage, PARSER_VERSION, "persisted")),
+        size_bytes=len(data),
     )
     document.sections = [Section(ordinal=i, number=s.number, heading=s.heading, text=s.text) for i, s in enumerate(parsed.sections)]
 
@@ -158,7 +162,7 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
     try:
         # The workspace's quotas are counted again here, under the write lock, with the grant they limit: the count made
         # before the reading (api/access.admit_upload) was passed by every upload of a burst (war room F-13, 2026-10-13).
-        admit(session, document_quotas(workspace), store)
+        admit(session, document_quotas(workspace, adding_bytes=len(data)), store)
     except IntegrityError:
         # Another request stored the same bytes between the lookup and the insert; the database kept its row (admit has
         # rolled this one back).

@@ -32,6 +32,8 @@ front of the public. A visitor's workspace reads only its own records, never cur
 | Questions per workspace per UTC day | 30 (`WORKBENCH_ANONYMOUS_MAX_RUNS_PER_DAY`) | `application/quotas.py`, counted with the run |
 | New sessions, uploads, questions per network address | 20, 30, 30 an hour | `api/access.py`, keyed by the address Cloudflare saw |
 | Uploads, everyone, per UTC day | 300 (`WORKBENCH_ANONYMOUS_MAX_UPLOADS_PER_DAY`) | `application/quotas.py`, counted with the grant; `api/access.py admit_upload` refuses before reading |
+| Bytes of new contracts, everyone, per UTC day | 1 GiB (`WORKBENCH_ANONYMOUS_MAX_UPLOAD_BYTES_PER_DAY`); bytes already held count none | `application/quotas.py`, counted with the document; refused before reading |
+| Requests in flight per network | 8 (`WORKBENCH_PUBLIC_REQUESTS_PER_NETWORK`), one past it waits 2 s; live run streams 4 per workspace, 16 per network | `api/in_flight.py`, at the door; health is never counted |
 | Questions, everyone, per UTC day | 200 (`WORKBENCH_MAX_RUNS_PER_DAY`, set by the supervisor) | `application/quotas.py`, counted with the run |
 | Upload size and type | 25 MB; PDF, DOCX, TXT, checked against the bytes; stored under its hash | `application/ingest_document.py` |
 | Model calls at once, model timeout | the admission bound; 600 s | `providers` |

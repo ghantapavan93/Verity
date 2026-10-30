@@ -87,3 +87,54 @@ def test_the_day_starts_at_utc_midnight_and_retry_after_points_there(monkeypatch
     _clock_at(monkeypatch, datetime(2026, 10, 30, hour, 0, 0, tzinfo=UTC))
     assert quotas.day_start() == datetime(2026, 10, 30, tzinfo=UTC)
     assert quotas.seconds_to_tomorrow() == (24 - hour) * 3600 + 1
+
+
+# ---------------------------------------------------------------------------- the day's upload bytes
+# Uploads were capped by count (300 a public day), not bytes: at 25 MB each the store could reach its 2 GiB floor in
+# days, pausing every visitor's writes until retention (DECISIONS.md, 2026-10-30, open). Each document now records its
+# size, and the day's new contracts in the public store together hold at most
+# settings.anonymous_max_upload_bytes_per_day.
+
+
+def _size(body: bytes) -> int:
+    return len(body)
+
+
+def test_the_public_day_takes_a_bounded_number_of_bytes_and_opens_again_at_midnight(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from sqlalchemy import func, select
+
+    from app.db import SessionLocal
+    from app.models import Document
+    from tests.test_quota_admission import _new_bytes, _upload
+
+    bodies = [_new_bytes() for _ in range(3)]
+    monkeypatch.setattr(config.settings, "anonymous_max_upload_bytes_per_day", _size(bodies[0]) + _size(bodies[1]) + _size(bodies[2]) // 2)
+    assert [_upload(_new_visitor(public), body) for body in bodies[:2]] == [201, 201]
+    with SessionLocal() as session:
+        before = session.scalar(select(func.count()).select_from(Document))
+    refused = _new_visitor(public).post("/api/documents", files={"file": ("contract.txt", bodies[2], "text/plain")})
+    assert refused.status_code == 429 and "tomorrow" in refused.json()["detail"] and int(refused.headers["retry-after"]) > 0
+    with SessionLocal() as session:
+        assert session.scalar(select(func.count()).select_from(Document)) == before, "nothing was stored"
+    assert _upload(_new_visitor(public), bodies[0]) in (200, 201), "control: bytes already held add none"
+    _clock_at(monkeypatch, _next_midnight())
+    assert _upload(_new_visitor(public), bodies[2]) == 201
+
+
+def test_a_document_records_its_size(client: TestClient) -> None:
+    from app.db import SessionLocal
+    from app.models import Document
+
+    body = b"SERVICES AGREEMENT\n\n1. Term\n\nThis Agreement runs for twelve months.\n"
+    uploaded = client.post("/api/documents", files={"file": ("c.txt", body, "text/plain")}).json()
+    with SessionLocal() as session:
+        document = session.get(Document, uploaded["id"])
+        assert document is not None and document.size_bytes == len(body)
+
+
+def test_control_the_owner_store_takes_any_number_of_bytes(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.test_quota_admission import _new_bytes
+
+    monkeypatch.setattr(config.settings, "anonymous_max_upload_bytes_per_day", 1)
+    codes = [client.post("/api/documents", files={"file": ("c.txt", _new_bytes(), "text/plain")}).status_code for _ in range(3)]
+    assert codes == [201, 201, 201]
