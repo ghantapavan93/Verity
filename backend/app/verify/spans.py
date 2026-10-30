@@ -264,9 +264,11 @@ def _read_numbers(text: str) -> tuple[array[int], array[int]]:
     return starts, ends
 
 
-def _find_bounded(haystack: str, needle: str, index_map: list[int] | None, text: str) -> tuple[int, int, int] | None:
-    """The first occurrence of ``needle`` in ``haystack`` whose span, mapped back onto ``text``, is bounded, with the
-    number of bounded occurrences."""
+def _find_bounded(
+    haystack: str, needle: str, index_map: list[int] | None, text: str, keep: Callable[[int, int], bool] | None = None
+) -> tuple[int, int, int] | None:
+    """The first occurrence of ``needle`` in ``haystack`` whose span, mapped back onto ``text``, is bounded (and kept by
+    ``keep``, when given), with the number of such occurrences."""
     first: tuple[int, int] | None = None
     count = 0
     at = haystack.find(needle)
@@ -275,7 +277,7 @@ def _find_bounded(haystack: str, needle: str, index_map: list[int] | None, text:
             start, end = at, at + len(needle)
         else:
             start, end = index_map[at], index_map[at + len(needle) - 1] + 1
-        if bounded(text, start, end):
+        if bounded(text, start, end) and (keep is None or keep(start, end)):
             count += 1
             if first is None:
                 first = (start, end)
@@ -331,14 +333,20 @@ def _tiers(quote: str, text: str) -> Located | None:
         return Located(found[0], found[1], "normalized", found[2])
 
     folded_text, folded_map = fold_with_map(norm_text, norm_map)
-    found = _find_bounded(folded_text, norm_quote.casefold(), folded_map, text)
+    written = _sections(quote)  # case forgives "SECTION 2(a)" for "Section 2(a)", never a clause's letter (v11)
+    found = _find_bounded(folded_text, norm_quote.casefold(), folded_map, text, lambda start, end: _sections(text[start:end]) == written)
     if found is not None:
         return Located(found[0], found[1], "casefold", found[2])
 
-    typed = locate_tokens(quote, text, _INVISIBLE)
-    if typed is not None and bounded(text, typed.start, typed.end):
+    typed = locate_tokens(quote, text, _INVISIBLE, keep=lambda start, end: bounded(text, start, end))
+    if typed is not None:
         return Located(typed.start, typed.end, "typed", typed.count)
     return None
+
+
+def _sections(text: str) -> list[str]:
+    """The section identifiers written in ``text``, as written: "2(A)" and "2(a)" name two clauses (verifier v11)."""
+    return [text[t.start : t.end] for t in tokenize(text) if t.kind is Kind.SECTION]
 
 
 def strip_label(quote: str, label: str) -> str | None:

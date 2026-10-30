@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import bisect
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
@@ -350,7 +351,8 @@ def signed(text: str, tokens: list[Token], version: int = VERSION, invisible: fr
     reads as v8 did, for the evidence packs of runs verified under v8. ``invisible`` (v9): characters a reader does not
     see, which neither part a sign from its number nor count as written ("-‎$5M" is "-$5M"). From v10 a word holding
     digits inside a number ("RM5M" of "(RM5M)") is part of its value, and a label before it is joined like a currency.
-    From v11 a number whose digits "/" or ":" join is one token, its value read whole: "2/3" is not "2 3"."""
+    From v11 a number whose digits "/" or ":" join is one token, its value read whole: "2/3" is not "2 3"; and a section
+    identifier keeps its letters' case, so "2(A)" is not "2(a)"."""
     v9, v10, v11 = version >= 9, version >= 10, version >= 11
     out = list(tokens)
     starts = [t.start for t in out]
@@ -385,6 +387,9 @@ def signed(text: str, tokens: list[Token], version: int = VERSION, invisible: fr
                 head = _number_word_value(text, first) if v10 else _amount_value(text, first)
             if last.kind is Kind.WORD:
                 tail = _number_word_value(text, last) if v10 else _amount_value(text, last)
+        if v11:  # a clause's letter keeps its case: contracts number (a) and (A) at different levels
+            head = text[first.start : first.end] if first.kind is Kind.SECTION else head
+            tail = text[last.start : last.end] if last.kind is Kind.SECTION else tail
         if v11 and len(inside) > 1 and not _JOINED.isdisjoint(text[first.end : last.start]):
             middle = "".join(t.canonical if t.kind is not Kind.WORD else _number_word_value(text, t) for t in out[inside[0] + 1 : inside[-1]])
             out[inside[0]] = Token(first.kind, before + head + middle + tail + after, low, high)
@@ -429,11 +434,14 @@ class TokenMatch:
     count: int  # how many places in the text the token sequence occurs; 1 means the location is unambiguous
 
 
-def locate_tokens(quote: str, text: str, invisible: frozenset[str] = frozenset()) -> TokenMatch | None:
+def locate_tokens(quote: str, text: str, invisible: frozenset[str] = frozenset(), keep: Callable[[int, int], bool] | None = None) -> TokenMatch | None:
     """The first place the quote's tokens occur, in order and next to each other, among the text's, with the number of
-    such places. Every token must be identical: a number its value and its minus sign or parentheses (v8), an amount
-    its currency, a percentage its sign, a section identifier its dots, a word its letters, and from v11 a sentence's
-    end where the text has one. A match therefore never starts or ends inside a word or a number, never forgives a
+    such places; with ``keep``, only the places whose offsets it keeps (spans.bounded: until v11 only the first place
+    was tried, so a quote whose first place lay inside a number was withheld though the text said it further on).
+
+    Every token must be identical: a number its value and its minus sign or parentheses (v8), an amount its currency,
+    a percentage its sign, a section identifier its dots (and from v11 its letters' case), a word its letters, and from
+    v11 a sentence's end where the text has one. A match therefore never starts or ends inside a word or a number, never forgives a
     changed digit, never forgives a space moved inside the letters, and never runs one sentence into the next.
 
     Until v6 a run of consecutive words was compared as its joined letters, so that a space the reader lost or added
@@ -449,7 +457,10 @@ def locate_tokens(quote: str, text: str, invisible: frozenset[str] = frozenset()
     count = 0
     for i in range(len(hay) - len(needle) + 1):
         if keys[i : i + len(needle)] == needle:
+            place = (hay[i].start, hay[i + len(needle) - 1].end)
+            if keep is not None and not keep(*place):
+                continue
             count += 1
             if first is None:
-                first = (hay[i].start, hay[i + len(needle) - 1].end)
+                first = place
     return None if first is None else TokenMatch(first[0], first[1], count)

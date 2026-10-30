@@ -172,6 +172,8 @@ CASES_FOR_PACKS = [
     ("Approval of 2/3 of the Lenders is needed.", "2/3 of the Lenders", "2-3 of the Lenders", "typed"),
     ("The Customer may terminate. Without cause, the Supplier may suspend.", "may terminate. Without cause", "may terminate without cause", "typed"),
     ("The term is one year.", ".", ".", "exact"),
+    ("Section 2(a) applies.", "Section 2(a) applies", "section 2(A) applies", "casefold"),
+    ("Section 2(a) applies.", "Section 2(a) applies", "Section 2(A), applies", "typed"),
 ]
 
 
@@ -190,3 +192,35 @@ def test_control_a_v11_pack_passes_what_v11_finds(tmp_path: Path) -> None:
         assert located is not None, quote
         folder = tmp_path / str(located.start)
         assert _verdict(_pack(folder, text, located.start, located.end, quote, located.method, "v11")), quote
+
+
+# ------------------------------------------------------- a clause's letter, and a later place the first one hides
+# Found by the same audit, after the four above. Contracts number sub-clauses (a) and (A) at different levels, and the
+# casefold and typed tiers found "Section 2(A)" at "Section 2(a)": another clause. And the typed tier tried only the
+# first place its tokens occur, so a quote whose first place lay inside a number ("1 500" with a narrow space) was
+# withheld though the text says it, word for word, further on (a false negative, the safe way round).
+NNBSP = " "
+
+
+@pytest.mark.parametrize(
+    "quote",
+    ["Section 2(A) applies", "section 2(A) applies", "Section 2(A), applies"],
+)
+def test_a_clause_s_letter_keeps_its_case(quote: str) -> None:
+    assert locate(quote, "Section 2(a) applies. Section 2(A)(i) differs.") is None
+
+
+@pytest.mark.parametrize(
+    ("quote", "method"),
+    [("SECTION 2(a) APPLIES", "casefold"), ("Section 2(a), applies", "typed"), ("section 12.4(b) applies", "casefold")],
+)
+def test_control_a_clause_quoted_with_its_own_letter_is_found(quote: str, method: str) -> None:
+    found = locate(quote, "Section 2(a) applies. Section 12.4(b) applies.")
+    assert found is not None and found.method == method, found
+
+
+def test_a_later_place_is_found_when_the_first_lies_inside_a_number() -> None:
+    text = f"1{NNBSP}500 shares; later, 500 shares"
+    found = locate("500, shares", text)
+    assert found is not None and found.method == "typed" and text[found.start : found.end] == "500 shares", found
+    assert found.start == text.rindex("500") and found.count == 1

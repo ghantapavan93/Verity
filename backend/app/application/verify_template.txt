@@ -46,8 +46,9 @@ holding digits inside such a number ("RM5M") is part of its value. A v9 run is s
 For a run verified under verifier v11 or later, a comparator, a plus or plus-minus sign and a decimal point written
 against a number are part of it (">$1,000,000", "≥99.9%", "±5%", "+/-5%", ".5%"), and digits joined by "/" or ":" are
 one number ("2/3" is not "2-3"); the typed check compares the end of each sentence, so a quote cannot run one sentence
-into the next; no edge splits a word at a combining mark or a joiner; and a quote with no letter or digit is never
-found. A v10 run is still checked as v10 read it.
+into the next; neither it nor the casefold check forgives the case of a clause's letter ("2(A)" is not "2(a)"); no
+edge splits a word at a combining mark or a joiner; and a quote with no letter or digit is never found. A v10 run is
+still checked as v10 read it.
 This verifier establishes integrity between the original input, the canonical reading, the context
 given to the model and the stored spans. It does not, and cannot, say the conclusions are right. The
 pack is not signed: it shows that its files agree with each other and with the hashes the run recorded,
@@ -216,6 +217,9 @@ def typed_tokens(text, version=0):
             before = "".join("-" if c in MINUS_SIGNS else c for c in text[low:first[2]])
             after = text[last[3]:high]
             head, tail = value(first), value(last)
+            if v11:  # a clause's letter keeps its case: "2(A)" is not "2(a)"
+                head = text[first[2]:first[3]] if first[0] == "section" else head
+                tail = text[last[2]:last[3]] if last[0] == "section" else tail
             if v9:
                 before = "".join(c for c in before if c not in DELETED and not c.isspace()).upper()
                 after = "".join(c for c in after if c not in DELETED)
@@ -335,6 +339,11 @@ def typed_at(text, start, end, version):
     return [(t[0], t[1]) for t in inside]
 
 
+def sections(text):
+    """The section identifiers written in text, as written (verify/spans._sections, v11)."""
+    return [m.group(0) for m in TOKEN_V7.finditer(text) if m.lastgroup == "section"]
+
+
 def same(found, quote, method, version=0, where=None):
     if version >= 11 and not any(ch.isalnum() for ch in quote):
         return False  # v11: punctuation alone is never found
@@ -346,7 +355,8 @@ def same(found, quote, method, version=0, where=None):
     if base == "normalized":
         return normalize(found) == normalize(quote).strip()
     if base == "casefold":
-        return normalize(found).casefold() == normalize(quote).strip().casefold()
+        # v11: case is forgiven, never a clause's letter ("Section 2(A)" is not found at "Section 2(a)").
+        return normalize(found).casefold() == normalize(quote).strip().casefold() and (version < 11 or sections(found) == sections(quote))
     if base == "alnum":
         return alnum(found) == alnum(quote)
     if base == "typed":

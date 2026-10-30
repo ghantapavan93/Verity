@@ -105,9 +105,11 @@ RECORDED: dict[str, str] = {
     "v10": "d895b935b9c94210",
     # v11, 2026-10-30 (the break audit): a comparator, a plus sign and a leading decimal point belong to a number, "/" and
     # ":" join its digits, the typed tier compares the end of a sentence, a combining mark or a joiner belongs to its word,
-    # and punctuation alone is never found. Replayed over 17,603 recorded spans in 94 stores: none lost or gained; six
-    # typed spans now end on their own quote's closing semicolon.
-    "v11": "46b0058accc6124d",
+    # punctuation alone is never found, a clause's letter keeps its case ("2(A)" is not "2(a)"), and the typed tier tries
+    # every place its tokens occur, not only the first. v11 is not committed to main, so its fingerprint was replaced, not
+    # bumped. Replayed over 17,603 recorded spans in 94 stores: none lost or gained; six typed spans now end on their own
+    # quote's closing semicolon.
+    "v11": "0cd47aebb21056c7",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
     # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.
