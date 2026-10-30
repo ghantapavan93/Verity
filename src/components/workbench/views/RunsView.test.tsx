@@ -17,6 +17,8 @@ const api = vi.hoisted(() => ({
   getGoldens: vi.fn(),
   getRunDetail: vi.fn(),
   getBatch: vi.fn(),
+  // A run's record holds "Why this answer", which asks for the explanation: never answered here.
+  getRunExplanation: vi.fn(() => new Promise(() => undefined)),
 }));
 
 vi.mock("@/lib/api", () => ({ ...api, absolute: (path: string) => path, errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
@@ -123,7 +125,8 @@ describe("RunsView, the golden set's recordings", () => {
 describe("RunsView, the hash a finished run recorded", () => {
   beforeEach(() => {
     for (const fn of Object.values(api)) fn.mockReset();
-    for (const fn of [api.getExperiments, api.getContractState, api.getCitations, api.getFamilies, api.getGoldens]) fn.mockImplementation(never);
+    for (const fn of [api.getExperiments, api.getContractState, api.getCitations, api.getFamilies, api.getGoldens, api.getRunExplanation])
+      fn.mockImplementation(never);
     api.listBatches.mockResolvedValue([]);
     api.listRuns.mockResolvedValue([
       {
