@@ -164,6 +164,21 @@ def verify_evidence(
     return section, None, "none"
 
 
+def located_text(section: Section, located: Located) -> str:
+    """The contract's characters a verified quote covers: what code reads a period or a value from, never the model's
+    string. A quote verifies through what a tier forgives (a zero-width space, a direction mark, a typeset dash, case,
+    punctuation), so the model's spelling of it can differ from the contract in exactly the characters a reader of
+    numbers trips on: "9\u200b0 days" verified over the contract's "90 days" and was code's shortfall of 0 days, and
+    "15 d\u200eays" over "15 days" hid code's own (stress test, 2026-10-30: hostile model, verifier). A quote found once
+    the section's label is set aside (verifier "unprefixed") and starting where the text does may carry the heading's
+    words of a sentence the reader split across heading and text ("… Customer one hundred" / "eighty (180) days'"), so
+    the stored heading, the contract's own characters, comes first."""
+    covered = section.text[located.start : located.end]
+    if "unprefixed:" in located.method and located.start == 0 and section.heading:
+        return f"{section.heading} {covered}"
+    return covered
+
+
 class StaleRun(RuntimeError):
     """The run was created under rules or a configuration the code executing it no longer has. It is not executed."""
 
@@ -377,12 +392,14 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             passages: list[str] = []
             dependencies: list[str] = []
             conditions: list[str] = []  # what each verified quote's own sentence carries outside it (policy-v14)
+            read: list[str] = []  # what each verified quote covers in the contract: what code reads values from (policy-v17)
             all_verified = bool(item.evidence)
             for span_ordinal, evidence in enumerate(item.evidence):
                 section, located, method = verify_evidence(evidence.quote, evidence.section_id, by_label, chosen, window=window)
                 verified = located is not None
                 all_verified = all_verified and verified
                 if located is not None and section is not None:
+                    read.append(located_text(section, located))
                     # What the sentences around the quote point at that the model was not handed (runs.status).
                     passage = enclosing_sentences(section.text, located.start, located.end)
                     passages.append(passage)
@@ -410,7 +427,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 item.required,
                 guidance_text is not None,
                 all_verified,
-                quotes=[span.quote for span in spans if span.verified],
+                quotes=read,
                 guidance=guidance_text,
                 topic=item.topic,
                 dependencies=dependencies,
@@ -433,7 +450,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             decision = check_values(
                 decision,
                 label_handles(item.conclusion, labels),
-                [span.quote for span in spans if span.verified],
+                read,
                 run.question,
                 guidance_text,
                 clause_numbers,
@@ -461,7 +478,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 spans=spans,
             )
             found_in = tuple((span.section_id, all_sections_by_id[span.section_id].number) for span in spans if span.verified and span.section_id)
-            proposed.append((finding, decision, Grounds(tuple(span.quote for span in spans if span.verified), tuple(passages), found_in)))
+            proposed.append((finding, decision, Grounds(tuple(read), tuple(passages), found_in)))
         # A pass code confirmed does not stand beside a shortfall code found in a finding that bears on it (runs.status).
         settled = settle_together([d for _, d, _ in proposed], [g for _, _, g in proposed], guidance_text)
         for (finding, _, _), decision in zip(proposed, settled, strict=True):
