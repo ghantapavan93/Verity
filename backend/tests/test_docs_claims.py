@@ -235,6 +235,48 @@ def test_the_golden_figure_is_the_committed_recording_replayed_by_the_code_in_fo
             assert "g44" in replayed["fails"], f"g44 passes in the replay, and this says it fails: {sentence[:160]}"
 
 
+RETRIEVAL_RESULTS = BACKEND / "scripts" / "results" / "eval_retrieval-bm25.json"
+_FIGURE = re.compile(r"\b0\.\d\d\b|\bBM25 \d+, hybrid \d+")
+_DATE = re.compile(r"\b20\d\d-\d\d-\d\d\b")
+
+
+def undated_figures(text: str) -> list[str]:
+    """Clauses that state a measured retrieval figure and name no day it was measured."""
+    return [clause for clause in sentences(text) if _FIGURE.search(clause) and not _DATE.search(clause)]
+
+
+def test_the_retrieval_figure_is_the_committed_measurement_labelled_with_its_configuration() -> None:
+    """docs/STATUS.md gave BM25 Recall@6 as 0.85, undated, beside a hybrid's 0.95: the figure of BM25 without the alias
+    table, which had made it 0.98 since 2026-10-01 (stress test EVL-6). The figure stated is the committed measurement
+    (scripts/eval_retrieval.py --results), with the configuration it was measured under; it may be called the code in
+    force only while the code's fingerprint is the file's; and every other retrieval figure in the row names its day."""
+    eval_retrieval = _script("eval_retrieval")
+    results = json.loads(RETRIEVAL_RESULTS.read_text(encoding="utf-8"))
+    bm25 = results["modes"]["bm25"]
+    sets, measured_under = bm25["sets"], bm25["fingerprint"]
+    row = next(line for line in STATUS.read_text(encoding="utf-8").splitlines() if line.startswith("| Retrieval |"))
+    cuad, goldens = sets["CUAD both"], sets["goldens"]
+    stated = f"Recall@6 {cuad['R@6']:.2f} on {cuad['cases']} CUAD cases with experts' spans and {goldens['R@6']:.2f} on {goldens['cases']} goldens"
+    assert stated in row, f"docs/STATUS.md should state: {stated}"
+    under = (
+        f"measured {results['measured']} at {measured_under['retrieval_version']}, reader {measured_under['reader']}, "
+        f"alias table {measured_under['aliases']}, k = {measured_under['k']}"
+    )
+    assert under in row, f"docs/STATUS.md should say what the figure was measured under: {under}"
+    if "in force" in row:
+        assert eval_retrieval.fingerprint("bm25") == measured_under, "the row calls a measurement of other code the code in force"
+    assert undated_figures(row) == []
+
+
+def test_control_the_old_retrieval_row_fails_the_check() -> None:
+    old = (
+        "| Retrieval | BM25 scored against labels, 164 CUAD cases with experts' spans and 38 goldens: Recall@6 0.85 and 0.92; "
+        "a hybrid with a local embedding model measured at 0.95 and 0.97 and built behind a setting; on the 44 goldens BM25 37, "
+        "hybrid 40 with one regression, so BM25 stays the default by the rule (`docs/RETRIEVAL.md`) |"
+    )
+    assert len(undated_figures(old)) == 3
+
+
 def _env_example() -> dict[str, str]:
     lines = (ROOT / "deploy" / "cloud" / "env.example").read_text(encoding="utf-8").splitlines()
     return dict(line.split("=", 1) for line in lines if "=" in line and not line.lstrip().startswith("#"))

@@ -1749,7 +1749,10 @@ rules, the interface, and the repository as a stranger first reads it. What they
   probe and no longer lists the machine's models.
 - **The interface**: phone heights (100dvh), chips that wrap, landmarks and a heading outline, live regions, one name
   per action. The repository: one-screen README, docs/STATUS.md, docs/archive/, research/.
-- **Dependencies**: pypdf 6.21.2, certifi 2026.10.19, Next 16.4.1; npm audit and pip-audit clean. The Next install
+- **Dependencies**: pypdf 6.21.2, certifi 2026.10.19, Next 16.4.1; `npm audit --omit=dev` and pip-audit clean. The full
+  `npm audit` is not: against the same lockfile it reports 6 advisories, all in development packages (2 critical,
+  3 high, 1 moderate: vitest, tinypool, @vitest/mocker, undici, vite, zod), found by the stress test the same day
+  (TLS-3); this line said "npm audit and pip-audit clean" until then. The Next install
   dropped the @emnapi/runtime lock entry a third time; `test_lockfile.py` caught it.
 
 Open, each recorded with what it would take:
@@ -1804,3 +1807,11 @@ disagree.
   raw outputs are committed (`backend/app/goldens/recordings/6c.json`); replayed through the code in force, with no model
   call, they give 37 of 44 with the same seven failures, four of the passes resting on a lowered finding. A test replays
   them, and `docs/STATUS.md` states the replay's figure, held to the file.
+- **The retrieval figure names what it was measured under.** `docs/STATUS.md` gave BM25 Recall@6 as 0.85 on the CUAD
+  cases, undated, beside the hybrid's 0.95: 0.85 was BM25 without the alias table (2026-09-29, reader v4), and the table
+  has been on since 2026-10-01. Today's BM25, measured with no model: 0.98 on the 164 CUAD cases and 0.92 on the 38
+  goldens (retrieval-v2, reader v15, alias table fe44dfcfc495, k = 6). `scripts/eval_retrieval.py --results` writes the
+  figures with the inputs that decide them; the test holds the row to that file, and lets the row call the figure the
+  code in force only while the code's inputs are the file's. The hybrid was measured against the older BM25 and is not
+  re-measured here (it needs the embedding model). The full `npm audit` reports six development advisories where this
+  log said it was clean; the line above now says which audit is clean.

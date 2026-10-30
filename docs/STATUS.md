@@ -2,8 +2,8 @@
 
 What the repository claims is true today, with the measurement behind each claim and where it is kept. The README is
 the short version. `backend/tests/test_docs_claims.py` holds the versions, the part, flow, mutant and fault counts,
-and the golden figure stated here to what the code derives now; the store's counts below are labelled with the day
-they were counted.
+and the golden and retrieval figures stated here to what the code derives now; the store's counts below are labelled
+with the day they were counted.
 
 ## Measured, not claimed
 
@@ -189,7 +189,7 @@ records where its results file sits beside the checkout; the cloud image does no
 | Lighthouse | landing 100/100/100/100 and workspace with a run 99/100/100/100 on the production build, LCP 0.7 s and 1.0 s; the one real finding, uncompressed API JSON, fixed with gzip and a test (`docs/PERFORMANCE.md`) |
 | Dependencies | the backend installs only from `backend/requirements.lock`, every version pinned, updated by hand and checked with `pip-audit` (no known vulnerabilities on 2026-10-30, after pypdf 6.19.0, which parses every uploaded PDF, was moved to 6.21.2: eleven advisories of crafted PDFs that loop, exhaust memory or run long, and the same 70 PDFs read byte for byte the same before and after); Dependabot proposes updates to the interface's packages and to the unpinned `backend/requirements.txt`, which nothing installs; CodeQL code scanning is written on the local `ci` branch and has never run, for the same reason the checks workflow has not |
 | SkillOpt | Microsoft's skill optimizer run against the production answer path, the seed prompt as the skill, CUAD contracts disjoint from CUAD-30 as data, the goldens as the untouched judge: six steps, twelve analyst calls, zero edits proposed, answer-v2 stands; why, and what would change it, in `docs/archive/SKILLOPT.md` |
-| Retrieval | BM25 scored against labels, 164 CUAD cases with experts' spans and 38 goldens: Recall@6 0.85 and 0.92; a hybrid with a local embedding model measured at 0.95 and 0.97 and built behind a setting; on the 44 goldens BM25 37, hybrid 40 with one regression, so BM25 stays the default by the rule (`docs/RETRIEVAL.md`) |
+| Retrieval | BM25 scored against labels, with no model: Recall@6 0.98 on 164 CUAD cases with experts' spans and 0.92 on 38 goldens, measured 2026-10-30 at retrieval-v2, reader v15, alias table fe44dfcfc495, k = 6 (`backend/scripts/results/eval_retrieval-bm25.json`, written by `scripts/eval_retrieval.py --results`); the 0.85 stated here until 2026-10-30 was BM25 without the alias table, measured 2026-09-29 under reader v4. A hybrid with a local embedding model measured 0.95 and 0.97 on 2026-09-29, against that BM25 without the table, and is built behind a setting; it has not been measured with the table on, which needs the embedding model, so today's BM25 is not compared with it; on the 44 goldens BM25 37, hybrid 40 with one regression (Recordings 4 and 4h, 2026-09-29), so BM25 stays the default by the rule (`docs/RETRIEVAL.md`) |
 | Failure envelope | one table of cases, expected, observed and the test that holds each; writing it found two 422s that were a 500 and a wrong reason (`docs/FAILURE-ENVELOPE.md`) |
 | Scale | what was measured and what each next step would have to earn; nothing says millions (`docs/SCALE.md`) |
 | Data behind the claims | every agreement the repository has touched, by SHA-256, with its source, licence, role (evaluation, fixture, runtime) and the measurements made on it, and the denominator of each measured set kept apart; produced by `scripts/data_audit.py` from the manifests, the store and the records outside git, never by copying a result (`docs/DATA-EVIDENCE.md`) |

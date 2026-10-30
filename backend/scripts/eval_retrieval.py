@@ -1,20 +1,30 @@
 """Does BM25 hand the model the section the answer lives in? Measured against labels, no model call.
 
     .venv/Scripts/python scripts/eval_retrieval.py
+    .venv/Scripts/python scripts/eval_retrieval.py --data <dir> --results scripts/results/eval_retrieval-bm25.json
 
 Three labelled sets: CUAD-30 (experts' spans), the SkillOpt CUAD split (experts' spans), and the
 goldens on the sample (section numbers). A candidate section counts as a hit when it carries an
 expert span (app.batch.cuad_match.retrieved_carries) or its number is one the golden names.
 Thresholds are pre-registered in docs/RETRIEVAL.md.
+
+--results writes each mode's figures with the inputs that decide them (`fingerprint`): the retrieval
+and reader versions, the alias table, k and the labels, and the hashes of the data files read, which
+git does not hold. tests/test_docs_claims.py holds docs/STATUS.md's retrieval figure to that file,
+and fails when the text calls it the code in force and the code's fingerprint is no longer the
+file's: STATUS gave Recall@6 0.85, BM25 without the alias table, eighteen days after the table made
+it 0.98 (stress test EVL-6, 2026-10-30).
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +35,9 @@ import httpx  # noqa: E402
 
 from app.batch.cuad_match import retrieved_carries  # noqa: E402
 from app.config import settings  # noqa: E402
-from app.ingest import ingest  # noqa: E402
-from app.retrieval.aliases import expand_query  # noqa: E402
-from app.retrieval.lexical import LexicalIndex  # noqa: E402
+from app.ingest import PARSER_VERSION, ingest  # noqa: E402
+from app.retrieval.aliases import ALIASES_SHA256, expand_query  # noqa: E402
+from app.retrieval.lexical import RETRIEVAL_VERSION, LexicalIndex  # noqa: E402
 
 
 def query_text(question: str) -> str:
@@ -86,6 +96,49 @@ def span_cases(set_name: str, texts_dir: Path, labels: dict[str, dict[str, list[
                 Case(set_name, category, QUESTION_BY_CATEGORY[category], sections, lambda _n, text, spans=spans: any(retrieved_carries(text, e) for e in spans))
             )
     return cases
+
+
+CORPORA = BACKEND / "app" / "batch" / "corpora"
+SET_PATH = BACKEND / "app" / "goldens" / "set.json"
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def golden_labels() -> list[tuple[str, list[str]]]:
+    """What the goldens' figure is measured against: each present golden's question as the query is built, and the
+    sections it names."""
+    data = json.loads(SET_PATH.read_text(encoding="utf-8"))
+    return [
+        (str(g["question"]) + (f" {g['guidance']}" if g.get("guidance") else ""), sorted(g["sections"]))
+        for g in data["goldens"]
+        if g["kind"] == "present" and g["sections"]
+    ]
+
+
+def fingerprint(mode: str) -> dict[str, str | int]:
+    """The inputs that decide a measurement and that the repository alone holds, so a committed result can be held to
+    the code on any clone: what ranks (mode, retrieval version, alias table, k), what is read (the reader) and what a
+    hit is judged against (the manifests and labels)."""
+    return {
+        "mode": mode,
+        "retrieval_version": RETRIEVAL_VERSION,
+        "reader": PARSER_VERSION,
+        "aliases": ALIASES_SHA256[:12] if settings.retrieval_aliases else "off",
+        "k": settings.retrieval_k,
+        "cuad_30": hashlib.sha256((_sha256(CORPORA / "cuad-30.json") + _sha256(CORPORA / "cuad-30-labels.json")).encode()).hexdigest()[:16],
+        "cuad_skillopt": _sha256(CORPORA / "cuad-skillopt.json")[:16],
+        "goldens": hashlib.sha256(json.dumps(golden_labels()).encode()).hexdigest()[:16],
+    }
+
+
+def checked_corpus(texts_dir: Path, manifest: dict[str, Any]) -> None:
+    """The CUAD-30 texts read are the manifest's bytes, or nothing is measured."""
+    for contract in manifest["contracts"]:
+        path = texts_dir / str(contract["file"])
+        if not path.exists() or _sha256(path) != contract["sha256"]:
+            raise SystemExit(f"{path} is missing or is not the manifest's bytes")
 
 
 def golden_cases() -> list[Case]:
@@ -184,30 +237,41 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--mode", choices=["bm25", "dense", "hybrid"], action="append", help="ranking to evaluate (repeatable); default bm25")
     parser.add_argument("--k", type=int, action="append", help="an extra cut-off column (repeatable), for example --k 10 --k 12")
     parser.add_argument("--ranks", action="store_true", help="also print the rank of the first hit for every golden question")
+    parser.add_argument("--data", type=Path, default=BACKEND / "data", help="the data directory holding cuad/corpus-30 and skillopt/data")
+    parser.add_argument("--results", type=Path, help="also write each mode's figures and their fingerprint to this file, to commit")
     args = parser.parse_args(argv)
     modes = args.mode or ["bm25"]
     ks = tuple(sorted(set(KS) | set(args.k or [])))
-    corpora = BACKEND / "app" / "batch" / "corpora"
-    cuad30 = json.loads((corpora / "cuad-30.json").read_text(encoding="utf-8"))
-    labels30 = json.loads((corpora / "cuad-30-labels.json").read_text(encoding="utf-8"))
-    cases = span_cases("CUAD-30", BACKEND / "data" / "cuad" / "corpus-30", labels30, {c["title"]: c["file"] for c in cuad30["contracts"]})
+    cuad30 = json.loads((CORPORA / "cuad-30.json").read_text(encoding="utf-8"))
+    labels30 = json.loads((CORPORA / "cuad-30-labels.json").read_text(encoding="utf-8"))
+    texts30 = args.data / "cuad" / "corpus-30"
+    checked_corpus(texts30, cuad30)
+    cases = span_cases("CUAD-30", texts30, labels30, {c["title"]: c["file"] for c in cuad30["contracts"]})
 
-    skill_dir = BACKEND / "data" / "skillopt" / "data"
+    skill_dir = args.data / "skillopt" / "data"
     labels_skill: dict[str, dict[str, list[str]]] = {}
     files_skill: dict[str, str] = {}
+    data_read: dict[str, str] = {"cuad_30_texts": hashlib.sha256("".join(str(c["sha256"]) for c in cuad30["contracts"]).encode()).hexdigest()[:16]}
     for split in ("train", "val", "test"):
         items_path = skill_dir / split / "items.json"
         if items_path.exists():
+            data_read[f"skillopt_{split}_items"] = _sha256(items_path)[:16]
             for item in json.loads(items_path.read_text(encoding="utf-8")):
                 labels_skill.setdefault(item["title"], {})[item["category"]] = list(item["expert_spans"])
                 files_skill[item["title"]] = item["contract_name"]
     cases += span_cases("CUAD-SkillOpt-30", skill_dir / "contracts", labels_skill, files_skill)
     cases += golden_cases()
 
+    data_read["skillopt_contracts"] = hashlib.sha256(
+        "".join(_sha256(skill_dir / "contracts" / name) for name in sorted(set(files_skill.values()))).encode()
+    ).hexdigest()[:16]
+    results: dict[str, Any] = {"measured": date.today().isoformat(), "modes": {}}
     for mode in modes:
         outcomes = [evaluate(c, mode, max(ks)) for c in cases]
         by_set = {name: summarise([o for o in outcomes if o.set_name == name], ks) for name in ("CUAD-30", "CUAD-SkillOpt-30", "goldens")}
         cuad_all = summarise([o for o in outcomes if o.set_name.startswith("CUAD")], ks)
+        rounded = {name: {key: round(value, 4) for key, value in row.items()} for name, row in {**by_set, "CUAD both": cuad_all}.items()}
+        results["modes"][mode] = {"fingerprint": fingerprint(mode), "data_read": data_read, "sets": rounded}
         labels = {"bm25": "BM25, heading x3", "dense": f"dense ({EMBED_MODEL}, cosine)", "hybrid": f"hybrid (BM25 + {EMBED_MODEL}, RRF)"}
         label = labels[mode]
         print(table(f"{label}; k = {settings.retrieval_k} in production", {**by_set, "CUAD both": cuad_all}, ks))
@@ -220,6 +284,10 @@ def main(argv: list[str]) -> int:
         cuad = [o for o in outcomes if o.set_name.startswith("CUAD")]
         print(table(f"{mode}: CUAD by category, both sets", {c: summarise([o for o in cuad if o.category == c], ks) for c in categories}, ks))
         print()
+    if args.results:
+        args.results.parent.mkdir(parents=True, exist_ok=True)
+        args.results.write_text(json.dumps(results, indent=1) + "\n", encoding="utf-8", newline="\n")
+        print(f"written {args.results}")
     unreachable = [o for o in outcomes if not o.reachable]
     print(
         f"unreachable (no section carries the span at all): {len(unreachable)} of {len(outcomes)}; by set: "
