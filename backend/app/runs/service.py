@@ -44,7 +44,7 @@ from .events import StageEvent, bus
 from .links import because, linked
 from .owner import this_process
 from .prose import label_handles, unresolved_handles
-from .relations import Note, Recorded, assess, dump, load, locate_relations, parts_of, relevant
+from .relations import Note, Recorded, assess, dump, load, locate_relations, parts_of, relevant, unhanded_amendment
 from .status import (
     Decision,
     Grounds,
@@ -52,6 +52,7 @@ from .status import (
     check_old_value,
     check_references,
     check_replaced,
+    check_unhanded,
     check_values,
     decide,
     enclosing_sentences,
@@ -467,6 +468,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 )
                 decision = check_replaced(decision, next((n.sentence for n in notes[ordinal] if n.effect == "replaced"), None))
                 decision = check_old_value(decision, next((n.sentence for n in notes[ordinal] if n.effect == "old_value"), None))
+                decision = check_unhanded(decision, unhanded_amendment(relations, quoted, {s.id for s in chosen}, run.question))
             verified_any = verified_any or all_verified
             if not all_verified:
                 withheld_count += 1

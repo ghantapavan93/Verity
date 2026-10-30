@@ -712,6 +712,26 @@ def assess(
     return notes
 
 
+def unhanded_amendment(relations: Sequence[Relation], spans: Sequence[tuple[str, int, int]], handed: set[str], question: str) -> str | None:
+    """Code's sentence when a verified quote lies in text a located statement changes and the statement's section was
+    not handed to the model, or None. The model answered from the wording before the change without seeing the change:
+    a pass is not established (`runs.status.check_unhanded`). A full replacement the answer does not follow already sets
+    the status (`check_replaced`); this reaches what it does not: a limited change, a dated question, a definition. A
+    question about the original agreement asks about the wording before the change, and raises nothing (policy-v17,
+    stress test 2026-10-30: the retrieval corner's amendments the links could not hand)."""
+    if perspective(question) == "historical":
+        return None
+    for relation in relations:
+        if relation.kind != "replaces" or relation.statement.section_id in handed or not any(_inside(span, relation.replaced) for span in spans):
+            continue
+        what = f"clause {relation.target}" if relation.target else "passage"
+        return (
+            f"the quoted {what} is changed by {relation.statement.label} (“{_excerpt(relation.statement.text)}”), which was not handed to the model; "
+            "the answer rests on its wording before that change, and which wording governs is not decided by code"
+        )
+    return None
+
+
 # ----------------------------------------------------------------------------- the record
 
 
