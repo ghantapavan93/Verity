@@ -1,5 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { POLL_MAX_MS, POLL_MS, apiBase, followRun, health, unreachable } from "./api";
+import {
+  POLL_MAX_MS,
+  POLL_MS,
+  RecordIdError,
+  apiBase,
+  followRun,
+  getBatch,
+  getDocument,
+  getGuidance,
+  getRun,
+  getRunDetail,
+  getRunExplanation,
+  getRunTrustDiff,
+  health,
+  recordSupersedes,
+  reviewFinding,
+  unreachable,
+} from "./api";
 
 /** Behind Cloudflare Access an expired sign-in answers a request for data with a sign-in page, status 200. */
 describe("a page in place of data", () => {
@@ -67,6 +84,76 @@ describe("where the interface finds the API", () => {
   });
 });
 
+/** An event stream the test drives: the browser's EventSource, for the stream's half of followRun. */
+class FakeSource {
+  static last: FakeSource | null = null;
+  onerror: (() => void) | null = null;
+  private listeners: Record<string, ((event: MessageEvent) => void)[]> = {};
+  constructor(readonly url: string) {
+    FakeSource.last = this;
+  }
+  addEventListener(type: string, listener: (event: MessageEvent) => void) {
+    (this.listeners[type] ??= []).push(listener);
+  }
+  close() {}
+  emit(type: string, data: unknown) {
+    for (const listener of this.listeners[type] ?? []) listener(new MessageEvent(type, { data: JSON.stringify(data) }));
+  }
+}
+
+/**
+ * Whoever stopped following a run wants nothing more of it. The record read after the terminal event outlived stop():
+ * the canceller set the same flag the stream's own end had already set, so the record of contract X was handed over after
+ * the reader had opened contract Y, and shown beside it (stress test, 2026-10-30).
+ */
+describe("a follower that was stopped", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const record = (stage: string) => new Response(JSON.stringify({ id: "run1", stage }), { status: 200, headers: { "content-type": "application/json" } });
+
+  function streamed() {
+    vi.stubGlobal("EventSource", FakeSource);
+    let release: (r: Response) => void = () => {};
+    const fetch = vi.fn(() => new Promise<Response>((r) => (release = r)));
+    vi.stubGlobal("fetch", fetch);
+    const done = vi.fn();
+    const failed = vi.fn();
+    const stages = vi.fn();
+    const stop = followRun("run1", stages, done, failed);
+    return { fetch, done, failed, stages, stop, release: (r: Response) => release(r) };
+  }
+
+  it("hands over no record that was on its way when it was stopped", async () => {
+    const { fetch, done, failed, stop, release } = streamed();
+    FakeSource.last!.emit("stage", { stage: "complete", final: true });
+    expect(fetch).toHaveBeenCalledTimes(1); // the record read after the terminal event
+    stop();
+    release(record("complete"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(done).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it("reports no failure of a record read it no longer wants", async () => {
+    const { done, failed, stop, release } = streamed();
+    FakeSource.last!.emit("stage", { stage: "complete", final: true });
+    stop();
+    release(new Response(JSON.stringify({ detail: "boom" }), { status: 502, headers: { "content-type": "application/json" } }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(done).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it("control: a follower still following takes the record once", async () => {
+    const { done, failed, release } = streamed();
+    FakeSource.last!.emit("stage", { stage: "complete", final: true });
+    FakeSource.last!.emit("stage", { stage: "complete", final: true }); // a repeated final event reads nothing twice
+    release(record("complete"));
+    await vi.waitFor(() => expect(done).toHaveBeenCalledTimes(1));
+    expect(failed).not.toHaveBeenCalled();
+  });
+});
+
 /** A run followed by polling (the stream dropped, or the browser has none) asks less while nothing changes. */
 describe("following a run by polling", () => {
   const detail = (stage: string, ahead: number | null) =>
@@ -123,6 +210,23 @@ describe("following a run by polling", () => {
     stop();
   });
 
+  it("a follower stopped while the finished record is on its way hands nothing over (stress test, 2026-10-30)", async () => {
+    // The poll path: the detail says complete, the record read is held, the reader leaves, then the record arrives.
+    vi.stubGlobal("EventSource", undefined);
+    let release: (r: Response) => void = () => {};
+    const fetch = vi.fn(async (url: string) => (url.endsWith("/detail") ? detail("complete", null) : new Promise<Response>((r) => (release = r))));
+    vi.stubGlobal("fetch", fetch);
+    const done = vi.fn();
+    const failed = vi.fn();
+    const stop = followRun("run1", () => {}, done, failed);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    stop();
+    release(new Response(JSON.stringify({ id: "run1", stage: "complete" }), { status: 200, headers: { "content-type": "application/json" } }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(done).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+  });
+
   it("asks nothing while the page is hidden, and asks at once when it is shown", async () => {
     const { fetch, stop } = polled(() => detail("checking", 1));
     await vi.advanceTimersByTimeAsync(0);
@@ -134,5 +238,91 @@ describe("following a run by polling", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fetch).toHaveBeenCalledTimes(2);
     stop();
+  });
+});
+
+/**
+ * Whatever the address carries, an id names one record and never chooses an API route. Ids from ?run and ?document were
+ * pasted raw into paths, so "R/evidence-pack?" or "../runs/R/evidence-pack?" made the reader's own browser build a pack,
+ * spend one of its network's pack downloads, and then say the sign-in may have expired (stress test, 2026-10-30).
+ * Encoding alone would not do: "..", and "%2e%2e" after encoding, are dot segments to a URL.
+ */
+describe("an id in a path", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const calls = [
+    (id: string) => getRun(id),
+    (id: string) => getRunDetail(id),
+    (id: string) => getRunExplanation(id),
+    (id: string) => getDocument(id),
+    (id: string) => getGuidance(id),
+    (id: string) => getBatch(id),
+    (id: string) => recordSupersedes(id, "d1"),
+    (id: string) => recordSupersedes("d1", id),
+    (id: string) => getRunTrustDiff(id, "d1"),
+    (id: string) => reviewFinding(id, { verdict: "confirmed", reviewer: "A", note: null } as never),
+  ];
+
+  function fetched() {
+    const fetch = vi.fn(async (url: string) => new Response(JSON.stringify({ url }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetch);
+    return () => fetch.mock.calls.map(([url]) => new URL(url).pathname);
+  }
+
+  it("refuses, in a sentence and without a request, any value that is not a record id", async () => {
+    const paths = fetched();
+    const crafted = ["R/evidence-pack?", "../runs/R/evidence-pack?", "..", ".", "%2e%2e", "R#x", "R?x", "R/../S", "", " R", "a".repeat(33), "R\u202e"];
+    for (const call of calls) {
+      for (const value of crafted) {
+        await expect(call(value), JSON.stringify(value)).rejects.toThrow(RecordIdError);
+        await expect(call(value)).rejects.toThrow(/does not name a record/);
+      }
+    }
+    expect(paths()).toEqual([]);
+  });
+
+  it("over random strings, calls only the route the id names, or nothing", async () => {
+    const ALPHABET = ["a", "7", "F", "_", "-", "/", "?", "#", ".", "..", "%", "%2e", "%2F", " ", "&", "="];
+    let state = 7;
+    const next = () => (state = (state * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    for (let i = 0; i < 300; i++) {
+      const paths = fetched();
+      const value = Array.from({ length: 1 + Math.floor(next() * 12) }, () => ALPHABET[Math.floor(next() * ALPHABET.length)]).join("");
+      const ok = await getRunDetail(value).then(
+        () => true,
+        (error) => (error instanceof RecordIdError ? false : Promise.reject(error)),
+      );
+      expect(paths(), value).toEqual(ok ? [`/api/runs/${value}/detail`] : []);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("control: a well-formed id reaches its own route, and nothing else", async () => {
+    const paths = fetched();
+    await getRunDetail("7c697d0d8d014d48");
+    await getDocument("0fdeff03581e4d21");
+    await recordSupersedes("0fdeff03581e4d21", "7a59c97b83e948f0");
+    expect(paths()).toEqual(["/api/runs/7c697d0d8d014d48/detail", "/api/documents/0fdeff03581e4d21", "/api/documents/0fdeff03581e4d21/supersedes"]);
+  });
+
+  it("no request in this module builds a path from an interpolated value except through route", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const source = readFileSync(join(process.cwd(), "src/lib/api.ts"), "utf8");
+    const raw = [...source.matchAll(/(?<!route)`\/api\/[^`]*\$\{/g)].map((m) => m[0]);
+    expect(raw).toEqual([]);
+  });
+});
+
+describe("an answer that is not data", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("is called a sign-in page only when it is one", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("PK", { status: 200, headers: { "content-type": "application/zip" } })),
+    );
+    await expect(health()).rejects.toThrow(/not data/);
+    await expect(health()).rejects.not.toThrow(/sign-in/);
   });
 });

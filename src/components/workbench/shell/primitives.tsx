@@ -30,15 +30,19 @@ export function Brand() {
 }
 
 /**
- * Stored text as it is: an invisible format character an older reading still holds is shown as a marker naming it, so
- * the screen never displays different text from what was checked (lib/text revealInvisible).
+ * Stored text as it is: an invisible format character an older reading still holds, or one a model wrote into its quote,
+ * topic or conclusion, is shown as a marker naming it, so the screen never displays different text from what was checked
+ * (lib/text revealInvisible). Every string a model or a file wrote is rendered through this, or through shownText where
+ * it must be a string. `start` and `end` (code points) show a stretch of the text, read in the context of the whole.
+ * A missing value renders nothing, as React renders it in place of a string.
  */
-export function Visible({ text }: { text: string }) {
+export function Visible({ text, start, end }: { text: string | null | undefined; start?: number; end?: number }) {
+  if (text == null) return null;
   return (
     <>
-      {revealInvisible(text).map((piece, i) =>
+      {revealInvisible(text, start, end).map((piece, i) =>
         piece.invisible ? (
-          <span key={i} className={styles.invisibleMark} title={`An invisible character (${piece.codePoint}) in the stored text`}>
+          <span key={i} className={styles.invisibleMark} title={`An invisible character (${piece.codePoint}) in the recorded text`}>
             {piece.codePoint}
           </span>
         ) : (

@@ -20,7 +20,7 @@ vi.mock("@/lib/api", () => ({
   errorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }));
 
-import { useRunFollower } from "./useRunFollower";
+import { beside, useRunFollower } from "./useRunFollower";
 
 function runView(overrides: Partial<RunView> = {}): RunView {
   return {
@@ -406,5 +406,139 @@ describe("the screen's owner, not its phase (re-review probes, 2026-10-13)", () 
     expect(result.current.run?.stage).toBe("checking");
     act(() => callbacks().onStage("verifying", "1 quote"));
     expect(result.current.run?.stage).toBe("verifying"); // control: a stage that moves forward is applied
+  });
+});
+
+/**
+ * A finished record belongs on screen only while its run is the one followed. The reducer took a record in every phase but
+ * three, so the record of run A, read after its terminal event, replaced finished run B, turned a new question that was
+ * still being created into "finished" with A, and came back after the screen was cleared (stress test, 2026-10-30).
+ */
+describe("a record for a run the screen no longer follows", () => {
+  beforeEach(() => {
+    api.createRun.mockReset();
+    api.followRun.mockReset();
+    api.followRun.mockReturnValue(vi.fn());
+  });
+
+  /** Run A followed to its terminal event: the callbacks of its follower, with its record not yet in. */
+  function followedA(result: { current: ReturnType<typeof useRunFollower> }) {
+    act(() => result.current.show(runView({ id: "runA", stage: "verifying" }), "docX"));
+    const a = callbacks();
+    act(() => a.onStage("complete"));
+    expect(result.current.state.phase).toBe("loading_record");
+    return a;
+  }
+  const recordA = runView({ id: "runA", stage: "complete" });
+
+  it("changes nothing once another finished run is shown", () => {
+    const { result } = renderHook(() => useRunFollower());
+    const a = followedA(result);
+    act(() => result.current.show(runView({ id: "runB", stage: "complete" }), "docX"));
+    act(() => a.onDone(recordA));
+    expect(result.current.run?.id).toBe("runB");
+  });
+
+  it("changes nothing once the screen was cleared", () => {
+    const { result } = renderHook(() => useRunFollower());
+    const a = followedA(result);
+    act(() => result.current.show(null));
+    act(() => a.onDone(recordA));
+    expect(result.current.state.phase).toBe("idle");
+    expect(result.current.run).toBeNull();
+  });
+
+  it("changes nothing while a new question is being created, and the question's refusal is still said", async () => {
+    let refuse: (error: Error) => void = () => undefined;
+    api.createRun.mockImplementationOnce(() => new Promise<RunView>((_, reject) => (refuse = reject)));
+    const { result } = renderHook(() => useRunFollower());
+    const a = followedA(result);
+    let accepted: Promise<boolean> = Promise.resolve(true);
+    act(() => {
+      accepted = result.current.ask("docY", null, "Is there a notices clause?");
+    });
+    act(() => a.onDone(recordA));
+    expect(result.current.state.phase).toBe("starting");
+    await act(async () => refuse(new Error("503 Service Unavailable")));
+    expect(await accepted).toBe(false);
+    expect(result.current.state.phase).toBe("not_started");
+    expect(result.current.runError).toBe("503 Service Unavailable");
+  });
+
+  it("changes nothing once a question could not be started", async () => {
+    api.createRun.mockRejectedValueOnce(new Error("Too many runs"));
+    const { result } = renderHook(() => useRunFollower());
+    const a = followedA(result);
+    await act(() => result.current.ask("docY", null, "Is there a notices clause?"));
+    act(() => a.onDone(recordA));
+    expect(result.current.state.phase).toBe("not_started");
+  });
+
+  it("changes nothing while another run is followed", () => {
+    const { result } = renderHook(() => useRunFollower());
+    const a = followedA(result);
+    act(() => result.current.show(runView({ id: "runC", stage: "checking" }), "docX"));
+    act(() => a.onDone(recordA));
+    expect(result.current.state.phase).toBe("following");
+    expect(result.current.run?.id).toBe("runC");
+  });
+
+  it("control: the followed run takes its own record", () => {
+    const { result } = renderHook(() => useRunFollower());
+    const a = followedA(result);
+    act(() => a.onDone(recordA));
+    expect(result.current.state.phase).toBe("finished");
+    expect(result.current.run?.id).toBe("runA");
+  });
+});
+
+/**
+ * The answer on screen is an answer about the contract on screen. The run carried no contract, so the shell paired the two
+ * by the order its calls happened to land in, and one contract's verified quote was shown over another with "Found word for
+ * word in the document text" (stress test, 2026-10-30). The follower now knows each run's contract, and `beside` shows a
+ * run, or a question being created, only next to its own.
+ */
+describe("a run beside a contract", () => {
+  beforeEach(() => {
+    api.createRun.mockReset();
+    api.followRun.mockReset();
+    api.followRun.mockReturnValue(vi.fn());
+  });
+
+  it("shows nothing of a run of another contract, in flight or finished", () => {
+    const { result } = renderHook(() => useRunFollower());
+    for (const stage of ["checking", "complete"] as const) {
+      act(() => result.current.show(runView({ id: `run-${stage}`, stage }), "docX"));
+      const shown = beside(result.current, "docY");
+      expect(shown.run).toBeNull();
+      expect(shown.pending).toBeNull();
+      expect(shown.state.phase).toBe("idle");
+      expect(shown.stageDetails).toEqual({});
+      expect(beside(result.current, "docX").run?.id).toBe(`run-${stage}`); // control: beside its own contract
+    }
+  });
+
+  it("shows no question being created, or refused, for another contract", async () => {
+    api.createRun.mockRejectedValueOnce(new Error("Too many runs"));
+    const { result } = renderHook(() => useRunFollower());
+    await act(() => result.current.ask("docU", null, "What is the term?"));
+    expect(beside(result.current, "docY").pending).toBeNull();
+    expect(beside(result.current, "docY").runError).toBeNull();
+    expect(beside(result.current, "docU").pending?.question).toBe("What is the term?"); // control
+    expect(beside(result.current, "docU").runError).toBe("Too many runs");
+  });
+
+  it("shows no run without a contract, and nothing beside no contract", () => {
+    const { result } = renderHook(() => useRunFollower());
+    act(() => result.current.show(runView({ stage: "complete" })));
+    expect(beside(result.current, "docX").run).toBeNull();
+    act(() => result.current.show(runView({ stage: "complete" }), "docX"));
+    expect(beside(result.current, null).run).toBeNull();
+  });
+
+  it("control: an idle follower's error is the screen's, whichever contract is open", () => {
+    const { result } = renderHook(() => useRunFollower());
+    act(() => result.current.setRunError("The memo could not be made."));
+    expect(beside(result.current, "docY").runError).toBe("The memo could not be made.");
   });
 });

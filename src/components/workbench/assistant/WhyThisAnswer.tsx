@@ -2,8 +2,9 @@
 
 import styles from "../Workbench.module.css";
 import { useRunExplanation } from "../hooks/useRunExplanation";
+import { Visible } from "../shell/primitives";
 import { shortHash } from "@/lib/format";
-import { codeRole, retrievalNote, statusLabel, type RunExplanationView } from "@/lib/types";
+import { codeRole, retrievalNote, statusLabel, type FindingStatus, type RunExplanationView } from "@/lib/types";
 
 /**
  * Why this answer: the run explained from its record. The API assembles the explanation
@@ -177,7 +178,9 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
             <dl key={p.ordinal} className={styles.drawerFacts}>
               <div>
                 <dt>Conclusion</dt>
-                <dd>{p.conclusion}</dd>
+                <dd>
+                  <Visible text={p.conclusion} />
+                </dd>
               </div>
               <div>
                 <dt>Hint</dt>
@@ -186,13 +189,17 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
               {p.observed && (
                 <div>
                   <dt>Observed</dt>
-                  <dd>{p.observed} (the model&apos;s words)</dd>
+                  <dd>
+                    <Visible text={p.observed} /> (the model&apos;s words)
+                  </dd>
                 </div>
               )}
               {p.required && (
                 <div>
                   <dt>Required</dt>
-                  <dd>{p.required} (the model&apos;s words)</dd>
+                  <dd>
+                    <Visible text={p.required} /> (the model&apos;s words)
+                  </dd>
                 </div>
               )}
               <div>
@@ -200,7 +207,14 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
                 <dd>
                   {p.evidence.map((e, i) => (
                     <div key={i}>
-                      cited <span className={styles.whyMono}>{e.citedLabel}</span>: <span className={styles.whyQuote}>{e.quote}</span>
+                      cited{" "}
+                      <span className={styles.whyMono}>
+                        <Visible text={e.citedLabel} />
+                      </span>
+                      :{" "}
+                      <span className={styles.whyQuote}>
+                        <Visible text={e.quote} />
+                      </span>
                     </div>
                   ))}
                 </dd>
@@ -212,13 +226,20 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
 
       {findings.map((f) => (
         <section key={f.id} className={styles.drawerSection}>
-          <h4>What code established{findings.length > 1 ? `: ${f.topic}` : ""}</h4>
+          <h4>
+            What code established
+            {findings.length > 1 && (
+              <>
+                : <Visible text={f.topic} />
+              </>
+            )}
+          </h4>
           <span className={styles.whyLabel}>SourceMatch</span>
           {f.sourceMatches.map((m, i) => (
             <dl key={i} className={styles.drawerFacts} data-testid="source-match">
               <div>
                 <dt>Model cited</dt>
-                <dd className={styles.whyMono}>{m.citedLabel || "no label"}</dd>
+                <dd className={styles.whyMono}>{m.citedLabel ? <Visible text={m.citedLabel} /> : "no label"}</dd>
               </div>
               <div>
                 <dt>Located in</dt>
@@ -271,7 +292,7 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
             <div>
               <dt>
                 {f.recordedPolicyEvaluation.deterministic
-                  ? codeRole(f.recordedPolicyEvaluation.statusSource)
+                  ? codeRole(f.recordedPolicyEvaluation.statusSource, f.recordedPolicyEvaluation.status as FindingStatus)
                   : f.recordedPolicyEvaluation.statusSource === "confirmed_days"
                     ? "Proposed by the model, confirmed by code"
                     : "Not decided by code"}

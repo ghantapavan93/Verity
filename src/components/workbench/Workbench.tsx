@@ -24,11 +24,12 @@ import { DEFAULT_GUIDANCE, useGuidance } from "./hooks/useGuidance";
 import { useHighlightScroll } from "./hooks/useHighlightScroll";
 import { useModelWake } from "./hooks/useModelWake";
 import { useMemoAction } from "./hooks/useMemoAction";
-import { useRunFollower } from "./hooks/useRunFollower";
+import { beside, useRunFollower } from "./hooks/useRunFollower";
 import { useUrlState } from "./hooks/useUrlState";
 import { Landing, refusal } from "./landing/Landing";
 import { chooseProof } from "./landing/proofRun";
 import { modelPlace } from "@/lib/modelPlace";
+import { shownText } from "@/lib/text";
 import { Rail } from "./shell/Rail";
 import { NARROW_QUERY, type Stage, TERMINAL, type View, transitions } from "./shell/constants";
 import { DocumentsView } from "./views/DocumentsView";
@@ -38,6 +39,7 @@ import { Divider } from "./workspace/Divider";
 import { DocumentPane, type Highlight } from "./workspace/DocumentPane";
 import {
   ApiError,
+  RecordIdError,
   errorMessage,
   getDocument,
   getGuidance,
@@ -111,18 +113,24 @@ function WorkbenchSurface() {
   const [view, setView] = useState<View>("assistant");
   const [recent, setRecent] = useState<DocumentSummary[]>([]);
   const [pendingFindingId, setPendingFindingId] = useState<string | null>(null);
-  // The reader's latest open, upload or question (review of these repairs, 2026-10-16). Each one clears the notice, and
-  // a failed open is said only while it is still the latest, so a slow 404 of an earlier click never replaces a newer
-  // notice. An upload's refusal is always said: it ends the upload's own screen.
-  const latestAction = useRef(0);
-  const beginAction = useCallback(() => {
-    const mine = ++latestAction.current;
-    setNotice(null);
-    return () => latestAction.current === mine;
-  }, []);
 
-  const runs = useRunFollower();
-  const { run, show: showRun, refresh: refreshRun, claim: claimRun, setRunError, stop: stopRun, ask: startRun } = runs;
+  const follower = useRunFollower();
+  const { show: showRun, refresh: refreshRun, claim: claimRun, setRunError, stop: stopRun, ask: startRun } = follower;
+  // The run, or the question, beside the contract on screen, and nothing of another contract's: every surface below
+  // reads the follower through this (hooks/useRunFollower beside; stress test, 2026-10-30).
+  const runs = useMemo(() => beside(follower, doc?.id ?? null), [follower, doc]);
+  const { run } = runs;
+
+  // The reader's latest open, upload, question or return to the first screen: the newest intent owns the screen. Each
+  // claims it through the follower's one token, which a question asked or a run shown also moves, and whatever a claim
+  // waits for (a contract, a run's record, an upload, the ready pause) is put on screen only while the claim holds. Until
+  // 2026-10-30 the shell kept a token of its own that only notices read, so a slow open, an upload or the first screen's
+  // question landed over a contract opened after it (stress test). Each claim clears the notice; a refusal or a failed
+  // open is said only while its claim holds, so a slow 404 of an earlier click never replaces a newer notice (2026-10-16).
+  const beginAction = useCallback(() => {
+    setNotice(null);
+    return claimRun();
+  }, [claimRun]);
   // On a phone, a new contract or a new run on screen opens on its answer, whatever put it there (an upload, a list, the
   // palette, a link): the pane an earlier passage left on the contract hides the composer and the answer (skeptic
   // review, 2026-10-15). Adjusted while rendering, keyed on what is shown; a jump within the same run keeps its pane.
@@ -211,7 +219,7 @@ function WorkbenchSurface() {
       // refusal on that view (blind contract stress test, 2026-10-16: it sent them to the first screen's top, the
       // contract gone and the refusal below the fold).
       const addedFrom = stage === "workspace" ? view : null;
-      beginAction();
+      const latest = beginAction();
       setPendingName(file.name);
       setProcessingLabel("Reading document");
       // A file added from another view (Documents) is read on the first screen, where its progress and result show.
@@ -219,6 +227,9 @@ function WorkbenchSurface() {
       setStage("processing");
       try {
         const uploaded = await uploadDocument(file);
+        // The reader opened something else, or went back to the first screen, while the file was read: it is in
+        // Documents, and is not put over what they chose instead.
+        if (!latest()) return;
         setDoc(uploaded);
         setContractsAdded((n) => n + 1);
         setSample(kind);
@@ -227,7 +238,11 @@ function WorkbenchSurface() {
         setHighlight(null);
         setEvidence(null);
         setProcessingLabel("Ready");
+        // The contract just added is now the newest intent: the pause ends, and its question is asked, only while it still
+        // is. Back inside the pause asked the uploaded contract's question over the contract gone back to (2026-10-30).
+        const ready = claimRun();
         window.setTimeout(() => {
+          if (!ready()) return;
           focusComposerOnOpen.current = true;
           setStage("workspace");
           if (!question) return;
@@ -237,6 +252,7 @@ function WorkbenchSurface() {
           });
         }, READY_PAUSE_MS);
       } catch (error) {
+        if (!latest()) return;
         setNotice({ kind: "refused", name: file.name, reason: errorMessage(error) });
         if (addedFrom === null) {
           setStage("empty");
@@ -246,7 +262,7 @@ function WorkbenchSurface() {
         }
       }
     },
-    [beginAction, showRun, resetMemo, stage, view, composerText, startRun, guidanceRecord],
+    [beginAction, claimRun, showRun, resetMemo, stage, view, composerText, startRun, guidanceRecord],
   );
 
   useEffect(() => {
@@ -266,15 +282,16 @@ function WorkbenchSurface() {
 
   const loadSample = useCallback(
     async (kind: SampleKind) => {
-      beginAction();
+      const latest = beginAction();
       try {
         // eslint-disable-next-line no-restricted-globals -- the bundled sample is a static file of this origin, not the API
         const response = await fetch(SAMPLES[kind].path);
         if (!response.ok) throw new Error("The sample agreement is missing from this build.");
         const blob = await response.blob();
+        if (!latest()) return;
         await loadFile(new File([blob], SAMPLES[kind].name, { type: blob.type }), kind);
       } catch (error) {
-        setNotice({ kind: "refused", name: null, reason: errorMessage(error) });
+        if (latest()) setNotice({ kind: "refused", name: null, reason: errorMessage(error) });
       }
     },
     [beginAction, loadFile],
@@ -289,7 +306,10 @@ function WorkbenchSurface() {
   const ask = useCallback(
     async (text: string) => {
       const question = text.trim();
-      if (!question || !doc) return;
+      // One run at a time, kept here, before anything changes, whatever control asks: the rule lived only in Enter and
+      // Send, and the palette's Ask started a second run while one was live, abandoning the one on screen and spending
+      // a visitor's question (stress test, 2026-10-30). The palette shows why its questions wait.
+      if (!question || !doc || runs.live) return;
       beginAction();
       setComposerText("");
       setEvidence(null);
@@ -298,17 +318,20 @@ function WorkbenchSurface() {
       const started = await startRun(doc.id, guidanceRecord?.id ?? null, question);
       if (!started) setComposerText(text); // the API refused it; the words are the person's, not the error's
     },
-    [beginAction, doc, guidanceRecord, startRun, resetMemo],
+    [beginAction, doc, runs.live, guidanceRecord, startRun, resetMemo],
   );
 
   // ---- opening records from the Documents, Findings and Runs surfaces ----------------------
 
   /** Why a record could not be opened. A 404 says so in a sentence (the API's "run not found" read as a fault, QA
-   *  2026-10-15), and claims only what a 404 means here: not readable from this workspace, or gone. */
+   *  2026-10-15), and claims only what a 404 means here: not readable from this workspace, or gone. A link whose id is
+   *  not one asks the API nothing and says so (lib/api route; stress test, 2026-10-30). */
   const openFailure = (error: unknown, record: "run" | "contract"): string =>
-    error instanceof ApiError && error.status === 404
-      ? `This ${record} cannot be opened in this workspace: it belongs to another one, or no longer exists.`
-      : errorMessage(error);
+    error instanceof RecordIdError
+      ? `This link does not name a ${record}: it is damaged, or it was not made by Verity.`
+      : error instanceof ApiError && error.status === 404
+        ? `This ${record} cannot be opened in this workspace: it belongs to another one, or no longer exists.`
+        : errorMessage(error);
 
   const navigate = useCallback(
     (next: View) => {
@@ -322,9 +345,10 @@ function WorkbenchSurface() {
 
   /** The first screen: where a contract is added. The mark on the rail and the palette's last command both lead here. */
   const goHome = useCallback(() => {
+    beginAction(); // an open or an upload still on its way does not take the reader off the first screen
     navigate("assistant");
     setStage("empty");
-  }, [navigate]);
+  }, [beginAction, navigate]);
 
   const openDocument = useCallback(
     async (id: string, show = true) => {
@@ -338,6 +362,7 @@ function WorkbenchSurface() {
       }
       try {
         const loaded = await getDocument(id);
+        if (!latest()) return; // the reader opened something else meanwhile: the newest intent owns the screen
         stopRun();
         setDoc(loaded);
         setSample(null);
@@ -351,7 +376,10 @@ function WorkbenchSurface() {
         setStage("workspace");
         if (show) setView("assistant");
       } catch (error) {
-        if (latest()) setNotice({ kind: "failed", text: openFailure(error, "contract") });
+        if (!latest()) return;
+        setNotice({ kind: "failed", text: openFailure(error, "contract") });
+        // An upload this open came after left its own screen up, and nothing else will end it: the first screen does.
+        setStage((shown) => (shown === "processing" ? "empty" : shown));
       }
     },
     [beginAction, doc, stopRun, showRun, resetMemo, setRunError],
@@ -360,9 +388,9 @@ function WorkbenchSurface() {
   /** Show a recorded run in the workspace: its document, its guidance as the scope, its findings. */
   const openRun = useCallback(
     async (runId: string, findingId: string | null = null, show = true) => {
+      // Opening waits on three fetches; a question asked, or a contract or another run opened meanwhile, is newer and keeps
+      // the screen.
       const latest = beginAction();
-      // Opening waits on three fetches; a question asked or another run opened meanwhile is newer and keeps the screen.
-      const current = claimRun();
       try {
         const detail = await getRunDetail(runId);
         const [loadedDoc, loadedRun, loadedGuidance] = await Promise.all([
@@ -370,11 +398,11 @@ function WorkbenchSurface() {
           getRun(runId),
           detail.guidanceId ? getGuidance(detail.guidanceId) : Promise.resolve(null),
         ]);
-        if (!current()) return;
+        if (!latest()) return;
         stopRun();
         setDoc(loadedDoc);
         setSample(null);
-        showRun(loadedRun); // followed when it is still in flight
+        showRun(loadedRun, detail.documentId); // followed when it is still in flight, and shown beside its own contract only
         setGuidance(loadedGuidance ? { id: loadedGuidance.id, text: loadedGuidance.text } : null);
         setGuidanceDraft(loadedGuidance ? loadedGuidance.text : DEFAULT_GUIDANCE);
         resetMemo();
@@ -387,10 +415,12 @@ function WorkbenchSurface() {
         setStage("workspace");
         if (show) setView("assistant");
       } catch (error) {
-        if (current() && latest()) setNotice({ kind: "failed", text: openFailure(error, "run") });
+        if (!latest()) return;
+        setNotice({ kind: "failed", text: openFailure(error, "run") });
+        setStage((shown) => (shown === "processing" ? "empty" : shown)); // as in openDocument: an upload's screen ends
       }
     },
-    [beginAction, doc, claimRun, stopRun, showRun, setGuidance, setGuidanceDraft, resetMemo, setRunError],
+    [beginAction, doc, stopRun, showRun, setGuidance, setGuidanceDraft, resetMemo, setRunError],
   );
 
   useUrlState({ view, doc, stage, run, findingId: evidence?.id ?? null, openRun, openDocument, navigate, goHome });
@@ -560,7 +590,13 @@ function WorkbenchSurface() {
 
   // The palette calls this once when it mounts; nothing here runs during the workbench render.
   const buildCommands = (): Command[] => {
-    const list: Command[] = suggestionsFor(sample, ASSISTANT_SUGGESTIONS).map((s) => ({ id: `ask-${s}`, label: s, group: "Ask", run: () => void ask(s) }));
+    const list: Command[] = suggestionsFor(sample, ASSISTANT_SUGGESTIONS).map((s) => ({
+      id: `ask-${s}`,
+      label: s,
+      group: "Ask",
+      ...(runs.live ? { disabled: true, hint: "after this answer arrives" } : {}),
+      run: () => void ask(s),
+    }));
     list.push({
       id: "guidance-edit",
       label: guidanceRecord ? "Edit legal guidance" : "Add legal guidance",
@@ -569,7 +605,7 @@ function WorkbenchSurface() {
     });
     if (guidanceRecord) list.push({ id: "guidance-remove", label: "Remove legal guidance", group: "Guidance", run: guidance.remove });
     for (const f of run?.findings ?? []) {
-      list.push({ id: `evidence-${f.id}`, label: `Inspect evidence: ${f.topic}`, group: "Evidence", run: () => openEvidence(f, null) });
+      list.push({ id: `evidence-${f.id}`, label: `Inspect evidence: ${shownText(f.topic)}`, group: "Evidence", run: () => openEvidence(f, null) });
     }
     if (run?.stage === "complete" && run.findings.length > 0) {
       list.push({ id: "memo", label: "Generate review memo", group: "Evidence", run: () => void generateMemo(run) });

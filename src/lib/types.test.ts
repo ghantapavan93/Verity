@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   stageAnnouncement,
+  codeAccount,
   codeRole,
+  STATUS_SOURCE_LABELS,
+  statusSourceLabel,
   decidedByCode,
   evidenceJump,
   partOf,
   passageLabel,
+  readingParts,
   retrievalNote,
   sectionsReadNote,
   statusLabel,
@@ -61,6 +65,54 @@ describe("statusLabel", () => {
   });
 });
 
+/**
+ * A record is described by what its (status, source) pair means. computed_days is the one source the API allows with
+ * opposite statuses: before policy v2, code passed a finding on the day counts alone (15 days against at least 10), and
+ * every surface that chose its words from the source alone headed that pass "Code found a conflict" (stress test,
+ * 2026-10-30, store evolution). The chip, which reads the pair, was already right.
+ */
+describe("the account of a status, by its status and its source", () => {
+  const SOURCES = [
+    "computed_days",
+    "confirmed_days",
+    "model_hint",
+    "no_evidence",
+    "reference_check",
+    "position_check",
+    "ambiguous_fact",
+    "",
+    "a_source_added_later",
+  ];
+  const STATUSES = ["pass", "needs_review", "missing", "unresolved"] as const;
+
+  // The sources the API allows a pass under (backend models.STATUSES_BY_SOURCE), and one it does not know.
+  const PASSING = ["computed_days", "confirmed_days", "model_hint", "a_source_added_later"];
+
+  it("never words a pass as a conflict or a review, on any surface's sentence", () => {
+    for (const source of PASSING) {
+      const account = codeAccount(source, "pass");
+      const words = [account.role, account.note, account.sentence, statusSourceLabel(source, "pass")].join(" | ");
+      expect(words, source).not.toMatch(/conflict|needs review|lowered/i);
+    }
+  });
+
+  it("says a pass computed from the day counts is that, under a rule since withdrawn", () => {
+    expect(codeRole("computed_days", "pass")).toBe("Code passed it on the day counts");
+    expect(statusSourceLabel("computed_days", "pass")).toMatch(/day counts alone.*withdrawn/);
+  });
+
+  it("control: a shortfall code computed is still a conflict, and every other pair reads as its source does", () => {
+    expect(codeRole("computed_days", "needs_review")).toBe("Code found a conflict");
+    expect(statusSourceLabel("computed_days", "needs_review")).toBe(STATUS_SOURCE_LABELS.computed_days);
+    for (const source of SOURCES.filter((s) => s !== "computed_days")) {
+      for (const status of STATUSES) {
+        expect(codeAccount(source, status)).toEqual(codeAccount(source));
+        expect(statusSourceLabel(source, status)).toBe(STATUS_SOURCE_LABELS[source] ?? source);
+      }
+    }
+  });
+});
+
 /** Sections handed over because nothing ranked are never described as retrieval's choice. */
 describe("how the sections were chosen", () => {
   it("says a ranking is a ranking", () => {
@@ -104,6 +156,53 @@ describe("partOf", () => {
     expect(partOf("Intellectual Property (part 1)")).toEqual({ base: "Intellectual Property", index: 1 });
     expect(partOf("Fees (part 2) and more")).toBeNull();
     expect(partOf("Fees and Milestones")).toBeNull();
+  });
+});
+
+/**
+ * A heading the document wrote is shown as written. The paper took any heading ending in " (part N)" for the reader's
+ * size split: "2. Definitions (part 2)" lost its words and was shown as a continuation the reader made (stress test,
+ * 2026-10-30). The reader writes parts only as a run of two or more, "B (part 1)" first, one after another under the
+ * same number; only such a run is read as one.
+ */
+describe("readingParts", () => {
+  const sections = (...rows: [string, string][]) => rows.map(([number, heading], i) => ({ id: `s${i}`, number, heading, text: "" }) as SectionView);
+
+  it("reads as parts only a run the reader wrote: from part 1, in order, under one number", () => {
+    const parts = readingParts(sections(["5", "Fees (part 1)"], ["5", "Fees (part 2)"], ["5", "Fees (part 3)"], ["6", "Term"]));
+    expect([...parts.entries()]).toEqual([
+      ["s0", { base: "Fees", index: 1 }],
+      ["s1", { base: "Fees", index: 2 }],
+      ["s2", { base: "Fees", index: 3 }],
+    ]);
+  });
+
+  it("leaves a heading the document wrote as written, whatever its suffix", () => {
+    for (const rows of [
+      [
+        ["1", "Definitions (part 1)"],
+        ["2", "Definitions (part 2)"],
+      ], // two numbered clauses
+      [["", "Recitals (part 2)"]], // no part 1 before it
+      [
+        ["", "Schedule A (part 1)"],
+        ["", "Pricing"],
+      ], // a part 1 with no part 2
+      [
+        ["5", "Fees (part 1)"],
+        ["5", "Fees (part 3)"],
+      ], // not in order
+      [
+        ["5", "Fees (part 2)"],
+        ["5", "Fees (part 3)"],
+      ], // no part 1
+      [
+        ["5", "Fees (part 1)"],
+        ["5", "Charges (part 2)"],
+      ], // another base
+    ] as [string, string][][]) {
+      expect(readingParts(sections(...rows)).size, JSON.stringify(rows)).toBe(0);
+    }
   });
 });
 

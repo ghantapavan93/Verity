@@ -200,6 +200,24 @@ describe("checkLedger: what was checked, and by whom", () => {
   });
 });
 
+/** A pass code computed before policy v2 is a pass, on the ledger as on the chip (stress test, 2026-10-30, store evolution). */
+describe("checkLedger, a record from before policy v2", () => {
+  const legacy = (status: FindingView["status"], reason: string) =>
+    checkLedger(finding({ status, statusSource: "computed_days", statusReason: reason }), true, sections, null);
+
+  it("says code passed it on the day counts, not that it found a conflict", () => {
+    const text = row(legacy("pass", "the contract provides 15 calendar days; the guidance requires at least 10 calendar days"), "comparison")?.text ?? "";
+    expect(text).toBe("Code passed it on the day counts: the contract provides 15 calendar days; the guidance requires at least 10 calendar days");
+    expect(text).not.toMatch(/conflict/);
+  });
+
+  it("control: a shortfall code computed is still a conflict", () => {
+    expect(row(legacy("needs_review", "the contract provides 15 calendar days; the guidance requires at least 30 calendar days"), "comparison")?.text).toMatch(
+      /^Code found a conflict: /,
+    );
+  });
+});
+
 describe("valueNotes: what code says about the values an answer chose", () => {
   it("names the values the passages offered and the answer's, and leaves which applies to the model", () => {
     const notes = valueNotes(finding({ valueChoices: [{ kind: "percent", answer: "8%", values: ["5%", "8%"], more: 0 }] }));

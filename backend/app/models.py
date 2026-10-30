@@ -391,14 +391,19 @@ class BatchItem(Base):
 
 class Memo(Base):
     __tablename__ = "memos"
-    # One memo per (run, review state): the run is immutable, the reviews of its findings are not, and a memo describes
-    # both. A later review earns a new memo; the old one stays what it was (found while tracing, 2026-09-29).
-    __table_args__ = (Index("ux_memos_run_review", "run_id", "review_head", unique=True),)
+    # One memo per (run, review state, what it says): the run is immutable, the reviews of its findings are not, and a
+    # memo describes both. A later review earns a new memo; the old one stays what it was (found while tracing,
+    # 2026-09-29). What it says joined the key on 2026-10-30: a memo written under rules since changed was handed back
+    # as current (stress test, store evolution).
+    __table_args__ = (Index("ux_memos_run_review_content", "run_id", "review_head", "content_sha256", unique=True),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), index=True)
     # sha256 over the findings' latest review rows at the time of writing (application.create_memo.review_head).
     review_head: Mapped[str | None] = mapped_column(String(64), nullable=True, default="")
+    # sha256 of what the memo says, its date aside (application.create_memo.content_key). NULL on a memo written before
+    # it was kept: such a memo is served by its id, and never handed back as the answer to a new request.
+    content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True, default="")
     docx_path: Mapped[str] = mapped_column(String(512))
     docx_sha256: Mapped[str] = mapped_column(String(64))
     html: Mapped[str] = mapped_column(Text)

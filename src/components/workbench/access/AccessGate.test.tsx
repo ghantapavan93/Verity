@@ -136,6 +136,23 @@ describe("AccessGate", () => {
     expect(api.enterWithInvite).toHaveBeenLastCalledWith("https://ivo.example/#invite=good");
   });
 
+  it("says a damaged invite in the link is damaged, and falls to the door, never left opening (stress test, 2026-10-30)", async () => {
+    // decodeURIComponent threw on "%E0%A4%A" outside the exchange's try: the invite was gone from the address and the
+    // page said "Opening the workbench" for good.
+    window.history.replaceState(null, "", "/?run=r1#invite=abc%E0%A4%A");
+    api.getAccess.mockResolvedValue(OUT);
+    render(
+      <AccessGate>
+        <Inside />
+      </AccessGate>,
+    );
+    expect((await screen.findByRole("alert")).textContent).toMatch(/invite link is damaged/);
+    expect(screen.getByLabelText("Invite link")).toBeTruthy();
+    expect(window.location.pathname + window.location.search + window.location.hash).toBe("/?run=r1");
+    expect(api.enterWithInvite).not.toHaveBeenCalled();
+    expect(api.getAccess).toHaveBeenCalledTimes(1);
+  });
+
   it("says so when the invite in the link is refused, and still takes it out of the address bar", async () => {
     window.history.replaceState(null, "", "/#invite=expired");
     api.enterWithInvite.mockRejectedValue(new Error("That invite is not valid, or it has expired. Ask for a new link."));

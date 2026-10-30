@@ -1,15 +1,15 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { memo, type Ref } from "react";
+import { memo, useMemo, type Ref } from "react";
 import styles from "../Workbench.module.css";
 import { transitions } from "../shell/constants";
 import { SAMPLES, type SampleKind } from "../samples";
 import { formatWhen, plural } from "@/lib/format";
-import { codePointLength, splitByCodePoints } from "@/lib/text";
+import { codePointLength } from "@/lib/text";
 import { Visible } from "../shell/primitives";
 import { EvidenceSpine } from "./EvidenceSpine";
-import { partOf, type DocumentView, type FindingView, type LocatedSpan, type SectionView, type SpanView } from "@/lib/types";
+import { readingParts, type DocumentView, type FindingView, type LocatedSpan, type SectionView, type SpanView } from "@/lib/types";
 
 /** The passage to mark: a section, and within it the exact span the API located. */
 export interface Highlight {
@@ -60,6 +60,8 @@ export function DocumentPane({
 }) {
   const { morph } = transitions(reduceMotion);
   const docMeta = doc ? describe(doc) : "";
+  // Which sections the reader split for size, read from the whole document: a heading alone cannot say (lib/types).
+  const parts = useMemo(() => readingParts(doc?.sections ?? []), [doc]);
   return (
     <motion.div
       className={styles.docPane}
@@ -73,7 +75,7 @@ export function DocumentPane({
       {doc && onJump && <EvidenceSpine doc={doc} findings={findings} highlight={highlight} onJump={onJump} />}
       <header className={styles.docHeader}>
         <div className={styles.docKicker}>Contract</div>
-        <h1 className={styles.docTitle}>{doc?.name}</h1>
+        <h1 className={styles.docTitle}>{doc && <Visible text={doc.name} />}</h1>
         <div className={styles.docMeta}>
           {docMeta} · Uploaded {doc ? formatWhen(doc.createdAt) : ""}
         </div>
@@ -94,6 +96,7 @@ export function DocumentPane({
           <SectionBlock
             key={section.id}
             section={section}
+            part={parts.get(section.id) ?? null}
             lit={lit === section.id}
             span={highlight?.sectionId === section.id ? highlight.span : null}
             readOnly={highlight?.sectionId === section.id && readNotRelied(findings, highlight.span)}
@@ -117,44 +120,48 @@ function readNotRelied(findings: FindingView[] | undefined, span: SpanView | nul
 // 1.25M-character contract under 4x CPU, 2026-10-09). Its props are stable, so only a block whose highlight changes renders.
 const SectionBlock = memo(function SectionBlock({
   section,
+  part,
   lit,
   span,
   readOnly = false,
 }: {
   section: SectionView;
+  /** The reader's part, when the reader split this section for size; null for a section as the document has it. */
+  part: { base: string; index: number } | null;
   lit: boolean;
   span: SpanView | null;
   readOnly?: boolean;
 }) {
-  // Offsets are code points (the API's), so the slice is by code points too (src/lib/text.ts).
-  const located =
-    span && span.verified && span.start >= 0 && span.end <= codePointLength(section.text) ? splitByCodePoints(section.text, span.start, span.end) : null;
+  // Offsets are code points (the API's), so the stretches are by code points too (src/lib/text.ts), each read in the
+  // context of the whole section: a selector at a highlight's edge is judged by its neighbours there (2026-10-30).
+  const located = span && span.verified && span.start >= 0 && span.end <= codePointLength(section.text);
   const body = located ? (
     <>
-      <Visible text={located[0]} />
+      <Visible text={section.text} end={span.start} />
       <mark className={readOnly ? styles.passageRead : styles.passage} title={readOnly ? "Read by the model, not relied on" : undefined}>
-        <Visible text={located[1]} />
+        <Visible text={section.text} start={span.start} end={span.end} />
       </mark>
-      <Visible text={located[2]} />
+      <Visible text={section.text} start={span.end} />
     </>
   ) : (
     <Visible text={section.text} />
   );
-  const part = partOf(section.heading);
   const heading = part ? part.base : section.heading;
   return (
     <section data-section={section.id} className={`${styles.clause} ${lit ? styles.clauseLit : ""}`}>
       {part && part.index > 1 ? (
         <p className={styles.partContinued}>
           {section.number ? `${section.number} ` : ""}
-          {part.base}, continued
+          <Visible text={part.base} />, continued
         </p>
       ) : section.number ? (
         <h3 className={styles.clauseTitle}>
-          <span className={styles.clauseNumber}>{section.number}</span> {heading}
+          <span className={styles.clauseNumber}>{section.number}</span> <Visible text={heading} />
         </h3>
       ) : (
-        <h2 className={styles.docHeading}>{heading}</h2>
+        <h2 className={styles.docHeading}>
+          <Visible text={heading} />
+        </h2>
       )}
       {section.text && <p className={styles.clauseBody}>{body}</p>}
     </section>

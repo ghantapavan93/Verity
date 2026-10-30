@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import styles from "./RevisionCheck.module.css";
-import { StatusChip } from "../shell/primitives";
+import { StatusChip, Visible } from "../shell/primitives";
 import { createGuidance, createRun, errorMessage, followRun, getRunTrustDiff, recordSupersedes, uploadDocument } from "@/lib/api";
 import { statusLabel } from "@/lib/types";
 import type { FindingView, RelationView, RunView, TrustDiffView, TrustFindingChange } from "@/lib/types";
@@ -36,17 +36,21 @@ function FindingSummary({ finding, hasGuidance }: { finding: FindingView; hasGui
   return (
     <div className={styles.summaryCard}>
       <div className={styles.summaryHead}>
-        <span className={styles.summaryTopic}>{finding.topic}</span>
+        <span className={styles.summaryTopic}>
+          <Visible text={finding.topic} />
+        </span>
         <StatusChip status={finding.status} hasGuidance={hasGuidance} source={finding.statusSource} />
       </div>
-      <p className={styles.summaryText}>{finding.conclusion}</p>
+      <p className={styles.summaryText}>
+        <Visible text={finding.conclusion} />
+      </p>
       <p className={styles.summaryWho}>
         {finding.decidedBy === "code" ? "Code set this status" : finding.decidedBy === "withheld" ? "Withheld: no quote found" : "The model's call"}
         {finding.statusReason ? `: ${finding.statusReason}` : ""}
       </p>
       {quoted && (
         <blockquote className={styles.summaryQuote}>
-          <span className={styles.summaryCite}>{quoted.clauseLabel || quoted.sectionLabel}</span> {quoted.quote}
+          <span className={styles.summaryCite}>{quoted.clauseLabel || quoted.sectionLabel}</span> <Visible text={quoted.quote} />
         </blockquote>
       )}
     </div>
@@ -203,7 +207,9 @@ function FindingRow({ change }: { change: TrustFindingChange }) {
           <span className={styles.verdict} data-verdict={change.verdict}>
             {VERDICT_LABEL[change.verdict] ?? change.verdict}
           </span>
-          <span className={styles.topic}>{change.topic}</span>
+          <span className={styles.topic}>
+            <Visible text={change.topic} />
+          </span>
           <span className={styles.states}>
             {moved
               ? `${STATE_LABEL[change.before] ?? change.before} → ${STATE_LABEL[change.after] ?? change.after}`

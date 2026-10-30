@@ -17,6 +17,7 @@ import { suggestionsFor, type SampleKind } from "../samples";
 import { RunOutcome, WithheldList } from "./RunOutcome";
 import { StageList } from "./StageList";
 import { absolute } from "@/lib/api";
+import { locatedNote } from "@/lib/checks";
 import {
   STAGE_LABELS,
   sectionsReadNote,
@@ -103,7 +104,7 @@ export function AssistantPanel({
   reduceMotion: boolean;
 }) {
   const { morph, quick } = transitions(reduceMotion);
-  const { run, pending, runError, stageDetails, ahead } = runs;
+  const { run, pending, live, runError, stageDetails, ahead } = runs;
   // The shortcut as this keyboard writes it. The server render says Ctrl; the client reads the platform once.
   const apple = useSyncExternalStore(noSubscription, isApplePlatform, () => false);
   // A run being created shows as reading; a run in flight shows the API's stage; a run that could not start shows its error.
@@ -263,7 +264,7 @@ export function AssistantPanel({
                       <code>{run.model}</code> · prompt <code>{run.promptVersion}</code>
                       {run.latencyMs !== null ? ` · ${(run.latencyMs / 1000).toFixed(0)} s` : ""}
                     </span>
-                    <span>every passage shown was found in the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}</span>
+                    <span>{locatedNote(run.withheld.length)}</span>
                     {run.sectionsRead != null && doc && <span>{sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length)}</span>}
                   </p>
                   {doc && <RevisionCheck key={run.id} runId={run.id} documentId={doc.id} run={run} prepared={sample === "standard" ? SAMPLE_REVISION : null} />}
@@ -305,12 +306,13 @@ export function AssistantPanel({
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               // The same rule as the Send button: one run at a time. Enter used to start another run and abandon
-              // the one on screen (sweep, 2026-10-01).
-              if (!stageLabel) onAsk(composerText);
+              // the one on screen (sweep, 2026-10-01). The rule is the follower's (`live`), and the workbench's ask
+              // keeps it too, for every other way to ask (the palette, 2026-10-30).
+              if (!live) onAsk(composerText);
             }
           }}
         />
-        <button type="button" className={styles.sendButton} aria-label="Send" onClick={() => onAsk(composerText)} disabled={!!stageLabel}>
+        <button type="button" className={styles.sendButton} aria-label="Send" onClick={() => onAsk(composerText)} disabled={live}>
           <IconArrowUp />
         </button>
       </motion.div>

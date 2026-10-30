@@ -5,10 +5,12 @@ import { NARROW_QUERY } from "../shell/constants";
 import { StatusChip, Visible } from "../shell/primitives";
 import { RelationNotes } from "./RelationNotes";
 import { checkLedger, unseenNote, valueNotes } from "@/lib/checks";
+import { clipCodePoints } from "@/lib/text";
 import { isLocated, passageLabel, type FindingView, type SectionView, type SpanView } from "@/lib/types";
 
+/** At most 150 characters of a quote, cut by code points (lib/text clipCodePoints): never inside a surrogate pair. */
 function excerpt(quote: string, max = 150): string {
-  return quote.length > max ? `${quote.slice(0, max - 3).trimEnd()}…` : quote;
+  return clipCodePoints(quote, max, max - 3);
 }
 
 /**
@@ -41,10 +43,14 @@ export function FindingCard({
   return (
     <article className={styles.result}>
       <header className={styles.resultHead}>
-        <h3 className={styles.resultTopic}>{finding.topic}</h3>
+        <h3 className={styles.resultTopic}>
+          <Visible text={finding.topic} />
+        </h3>
         <StatusChip status={finding.status} hasGuidance={hasGuidance} source={finding.statusSource} />
       </header>
-      <p className={styles.resultText}>{finding.conclusion}</p>
+      <p className={styles.resultText}>
+        <Visible text={finding.conclusion} />
+      </p>
       {/* Where the model reported the point as not found, the product says only that; the model's own sentence is
           kept, collapsed and named as the model's, never as the finding (m10: of 23 such recorded sentences, 7 were
           right, 7 incomplete and 9 wrong, and nothing in code tells them apart, so the status stays as it is). The API
@@ -52,7 +58,9 @@ export function FindingCard({
       {finding.withheldConclusion && (
         <details className={styles.withheld}>
           <summary>The model also wrote a sentence · withheld</summary>
-          <p className={styles.withheldText}>{finding.withheldConclusion}</p>
+          <p className={styles.withheldText}>
+            <Visible text={finding.withheldConclusion} />
+          </p>
           <p className={styles.withheldNote}>
             The model&apos;s words, not checked by code. Withheld from the finding because the model reported the point as not found in the sections it was
             given.

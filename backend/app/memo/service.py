@@ -34,6 +34,7 @@ from ..config import settings
 from ..document_names import run_document_name
 from ..hashing import sha256_file
 from ..models import EvidenceSpan, Finding, Run, as_utc, iso, utcnow
+from .visible import shown, shown_html
 
 # Characters XML 1.0 cannot carry (control characters other than tab, newline and return). python-docx refuses them
 # with a ValueError; a form feed pasted from a PDF into the guidance made the memo a 500 (hostile review, 2026-10-01).
@@ -49,7 +50,10 @@ def _suggests(finding: Finding) -> bool:
 
 
 def xml_safe(text: str) -> str:
-    return _XML_UNSAFE.sub("", text)
+    """Text as the Word memo carries it: without the characters XML cannot hold, and with each invisible character the
+    record holds named in place (memo.visible), so Word cannot display "(15)" as "(51)" (hostile-model review, 2026-10-30).
+    Every string the DOCX shows from the record passes through here."""
+    return _XML_UNSAFE.sub("", shown(text))
 
 
 # "Not found" is a statement about the sections the model was handed, never about the agreement (prompt rule 8).
@@ -182,6 +186,9 @@ def status_label(status: str, with_guidance: bool, source: str = "model_hint") -
 
 
 AUTHOR = "Verity"
+# Changed by hand when the Word memo's layout changes in a way its HTML does not show: part of what a memo says, so the
+# first request after such a change writes a new memo (application.create_memo.content_key).
+DOCX_LAYOUT = "docx-1"
 CUSTOM_PROPERTIES_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.custom-properties+xml"
 CUSTOM_PROPERTIES_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}"
 
@@ -271,15 +278,21 @@ def memo_html(
     flagged: dict[str, str] | None = None,
     withheld: Sequence[Finding] = (),
     related: dict[str, list[str]] | None = None,
+    date: str | None = None,
 ) -> str:
-    now = datetime.now().astimezone()
-    date = f"{now.day} {now.strftime('%B %Y')}"
+    """The memo as HTML. ``date`` is the day it is written, today's unless given: application.create_memo renders it
+    once with a fixed date to know what the memo says, its date aside."""
+    if date is None:
+        now = datetime.now().astimezone()
+        date = f"{now.day} {now.strftime('%B %Y')}"
     flags = memo_flags(findings, withheld, flagged)
     issues = [f for f, _ in flags]
     why = {f.id: reason for f, reason in flags}
     guidance_text = run.guidance.text if run.guidance else None
     sources = _sources(findings, section_titles, clauses)
     by_span = {id(s.span): s for s in sources}
+    # Every string from the record is shown through shown_html (memo.visible): escaped, its invisible characters named.
+    # A link's address is only escaped; it is built from ids.
     parts = [
         "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>Contract review memo</title>",
@@ -302,64 +315,67 @@ def memo_html(
         "th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#6d675c}"
         "a{color:#7a5a1c;text-decoration-color:#c9a964;text-underline-offset:3px}"
         "hr{border:0;border-top:1px solid #e1d9c8;margin:36px 0 14px}"
+        # An invisible character the record holds, named where it is (memo.visible), as the workbench marks one.
+        ".invisible{display:inline-block;margin:0 1px;padding:0 3px;border:1px dashed #b0852c;border-radius:3px;"
+        "font:500 12px/1.3 ui-monospace,Consolas,monospace;vertical-align:1px}"
         "@media (max-width:700px){body{margin:0;padding:28px 20px;border-radius:0}dl{grid-template-columns:1fr}}"
         "</style></head><body>",
         "<div class='kicker'>Verity · contract review memo</div><h1>Contract Review Memo</h1>",
-        f"<dl><dt>Agreement</dt><dd>{escape(run_document_name(run))}</dd><dt>Date</dt><dd>{date}</dd><dt>Question</dt><dd>{escape(run.question)}</dd>",
-        f"<dt>Guidance</dt><dd>{escape(run.guidance.text) if run.guidance else 'none supplied'}</dd>"
-        f"<dt>Sections read</dt><dd>{escape(reading_line(run))}</dd></dl>",
+        f"<dl><dt>Agreement</dt><dd>{shown_html(run_document_name(run))}</dd><dt>Date</dt><dd>{date}</dd><dt>Question</dt><dd>{shown_html(run.question)}</dd>",
+        f"<dt>Guidance</dt><dd>{shown_html(run.guidance.text) if run.guidance else 'none supplied'}</dd>"
+        f"<dt>Sections read</dt><dd>{shown_html(reading_line(run))}</dd></dl>",
         f"<h2>{FLAGS_HEAD} ({len(issues)})</h2>",
     ]
     if issues:
-        items = "".join(f"<li>{escape(flag_title(f))}" + (f" — {escape(why[f.id])}" if why[f.id] else "") + "</li>" for f in issues)
+        items = "".join(f"<li>{shown_html(flag_title(f))}" + (f" — {shown_html(why[f.id])}" if why[f.id] else "") + "</li>" for f in issues)
         parts.append(f"<ol>{items}</ol>")
     else:
-        parts.append(f"<p>{escape(NO_FLAGS)}</p>")
+        parts.append(f"<p>{shown_html(NO_FLAGS)}</p>")
     for f in findings:
-        parts.append(f"<h2>{escape(f.topic)} · {status_label(f.status, run.guidance is not None, f.status_source)}</h2>")
-        parts.append(f"<p>{escape(f.shown_conclusion)}</p>")
+        parts.append(f"<h2>{shown_html(f.topic)} · {status_label(f.status, run.guidance is not None, f.status_source)}</h2>")
+        parts.append(f"<p>{shown_html(f.shown_conclusion)}</p>")
         if f.withheld_conclusion:
-            also = escape(f.withheld_conclusion)
-            parts.append(f"<p class='withheld'><strong>The model also wrote</strong> <small>{escape(WITHHELD_NOTE)}</small>: {also}</p>")
+            also = shown_html(f.withheld_conclusion)
+            parts.append(f"<p class='withheld'><strong>The model also wrote</strong> <small>{shown_html(WITHHELD_NOTE)}</small>: {also}</p>")
         for span in f.spans:
             source = by_span[id(span)]
             parts.append(
-                f"<p><strong>{_evidence_head(f)}</strong> <small>({escape(source.title)})</small> "
-                f"<a href='#src-{source.number}'>[{source.number}]</a></p><blockquote>{escape(span.quote)}</blockquote>"
+                f"<p><strong>{_evidence_head(f)}</strong> <small>({shown_html(source.title)})</small> "
+                f"<a href='#src-{source.number}'>[{source.number}]</a></p><blockquote>{shown_html(span.quote)}</blockquote>"
             )
         if unseen and f.id in unseen:
-            parts.append(f"<p class='unseen'><strong>{UNSEEN_HEAD}</strong> {escape(unseen_note(unseen[f.id]))}</p>")
+            parts.append(f"<p class='unseen'><strong>{UNSEEN_HEAD}</strong> {shown_html(unseen_note(unseen[f.id]))}</p>")
         if f.guidance_reference:
-            parts.append(f"<p><strong>The model's reference to the guidance.</strong> {escape(guidance_line(f, guidance_text))}</p>")
+            parts.append(f"<p><strong>The model's reference to the guidance.</strong> {shown_html(guidance_line(f, guidance_text))}</p>")
         if model_reading(f):
-            parts.append(f"<p><strong>The model's reading.</strong> {escape(model_reading(f))}</p>")
+            parts.append(f"<p><strong>The model's reading.</strong> {shown_html(model_reading(f))}</p>")
         if why.get(f.id):
-            parts.append(f"<p><strong>Why flagged.</strong> {escape(why[f.id])}</p>")
+            parts.append(f"<p><strong>Why flagged.</strong> {shown_html(why[f.id])}</p>")
         for sentence in (related or {}).get(f.id, []):
-            parts.append(f"<p><strong>{RELATED_HEAD}</strong> {escape(sentence)}</p>")
+            parts.append(f"<p><strong>{RELATED_HEAD}</strong> {shown_html(sentence)}</p>")
         if _suggests(f):
-            parts.append(f"<p><strong>Suggested position (the model's).</strong> {escape(f.suggested_position or '')}</p>")
+            parts.append(f"<p><strong>Suggested position (the model's).</strong> {shown_html(f.suggested_position or '')}</p>")
         if f.review is not None:
-            parts.append(f"<p><strong>Reviewed.</strong> {escape(_review_line(f))}</p>")
+            parts.append(f"<p><strong>Reviewed.</strong> {shown_html(_review_line(f))}</p>")
         else:
             parts.append(f"<p><strong>Person.</strong> {NOT_REVIEWED}</p>")
     if withheld:
-        parts.append(f"<h2>{WITHHELD_HEAD} ({len(withheld)})</h2><p><small>{escape(WITHHELD_LEDE)}</small></p>")
+        parts.append(f"<h2>{WITHHELD_HEAD} ({len(withheld)})</h2><p><small>{shown_html(WITHHELD_LEDE)}</small></p>")
         for w in withheld:
             parts.append(
-                f"<p class='withheld'><strong>{escape(w.topic)}.</strong> <small>The model wrote, withheld:</small> {escape(w.conclusion)}</p>"
-                f"<p><strong>Why withheld.</strong> {escape(why[w.id])}</p>"
+                f"<p class='withheld'><strong>{shown_html(w.topic)}.</strong> <small>The model wrote, withheld:</small> {shown_html(w.conclusion)}</p>"
+                f"<p><strong>Why withheld.</strong> {shown_html(why[w.id])}</p>"
             )
     parts.append("<h2>Sources</h2><table><tr><th>#</th><th>Section</th><th>Located</th><th></th></tr>")
     for source in sources:
         parts.append(
-            f"<tr id='src-{source.number}'><td>{source.number}</td><td>{escape(source.title)}</td><td>{escape(_located(source.span))}</td>"
+            f"<tr id='src-{source.number}'><td>{source.number}</td><td>{shown_html(source.title)}</td><td>{shown_html(_located(source.span))}</td>"
             f"<td><a href='{escape(deep_link(run, source.finding))}'>Open in the workbench</a></td></tr>"
         )
     parts.append("</table>")
     parts.append(
-        f"<hr><p><small>Generated from run {escape(run.id)} · review state {escape(review_head[:8]) or 'none'} · model {escape(run.model)} · "
-        f"prompt {escape(run.prompt_version)} ({escape(run.prompt_hash[:12])}) · "
+        f"<hr><p><small>Generated from run {shown_html(run.id)} · review state {shown_html(review_head[:8]) or 'none'} · model {shown_html(run.model)} · "
+        f"prompt {shown_html(run.prompt_version)} ({shown_html(run.prompt_hash[:12])}) · "
         "every quoted passage was found in the document text before this memo was written; that a passage supports its finding is the "
         "model's reading and the reviewer's decision.</small></p></body></html>"
     )

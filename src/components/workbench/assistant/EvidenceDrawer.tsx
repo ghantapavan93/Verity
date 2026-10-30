@@ -13,6 +13,7 @@ import { DayGauge, readComparison } from "./DayGauge";
 import { RelationNotes } from "./RelationNotes";
 import { WhyThisAnswer } from "./WhyThisAnswer";
 import { errorMessage, isConflict, reviewFinding } from "@/lib/api";
+import { aroundCodePoints, shownText } from "@/lib/text";
 import { unseenNote } from "@/lib/checks";
 import { formatWhen } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
@@ -74,7 +75,9 @@ export function EvidenceDrawer({
           <header className={styles.drawerHead}>
             <div className={styles.drawerTitle}>
               <strong>Evidence</strong>
-              <span>{finding.topic}</span>
+              <span>
+                <Visible text={finding.topic} />
+              </span>
             </div>
             <button ref={closeRef} type="button" className={styles.iconButton} aria-label="Close evidence" onClick={onClose}>
               <IconClose />
@@ -107,27 +110,28 @@ function proposalFor(explanation: RunExplanationView | null, findingId: string) 
   return explanation.proposals.find((p) => p.ordinal === ordinal) ?? null;
 }
 
-const AROUND = 280; // characters of stored text shown on each side of a quote
+const AROUND = 280; // characters (code points) of stored text shown on each side of a quote
 
 /**
  * On a phone, where the contract text is hidden: the stored text around a verified quote, read from its offsets, in a
- * native disclosure (keyboard and screen reader for free). Nothing when the offsets do not fit the text.
+ * native disclosure (keyboard and screen reader for free). Nothing when the offsets do not fit the text. The offsets
+ * count code points, and so does every cut here (lib/text aroundCodePoints): sliced as UTF-16 units, the emphasis moved
+ * one character off the located text for each astral character before it (stress test, 2026-10-30).
  */
 function QuoteContext({ text, start, end }: { text: string; start: number; end: number }) {
-  if (!(start >= 0 && end > start && end <= text.length)) return null;
-  const before = text.slice(Math.max(0, start - AROUND), start);
-  const after = text.slice(end, end + AROUND);
-  const lead = start > AROUND ? `…${before.replace(/^\S*\s/, "")}` : before;
-  const trail = end + AROUND < text.length ? `${after.replace(/\s\S*$/, "")}…` : after;
+  const around = aroundCodePoints(text, start, end, AROUND);
+  if (!around) return null;
   return (
     <details className={styles.quoteContext}>
       <summary>Text around this quote</summary>
       <p className={styles.quoteContextText}>
-        <Visible text={lead} />
+        {around.cutBefore && "…"}
+        <Visible text={text} start={around.from} end={start} />
         <strong>
-          <Visible text={text.slice(start, end)} />
+          <Visible text={text} start={start} end={end} />
         </strong>
-        <Visible text={trail} />
+        <Visible text={text} start={end} end={around.to} />
+        {around.cutAfter && "…"}
       </p>
       <p className={styles.drawerRefStatic}>From the contract text as Verity read it, not an image of the page.</p>
     </details>
@@ -224,7 +228,7 @@ function EvidenceBody({
             who: "Code",
             what: setByModel ? "did not decide" : plainLabel(statusLabel(finding.status, hasGuidance, finding.statusSource)),
             tone: setByModel ? "muted" : toneOf(finding.status),
-            note: setByModel ? undefined : codeAccount(finding.statusSource).note || undefined,
+            note: setByModel ? undefined : codeAccount(finding.statusSource, finding.status).note || undefined,
             decisive: !setByModel,
           },
           {
@@ -281,7 +285,9 @@ function EvidenceBody({
             <div>
               <dt>Its sentence</dt>
               <dd>
-                <span className={styles.modelPassage}>{finding.withheldConclusion}</span>
+                <span className={styles.modelPassage}>
+                  <Visible text={finding.withheldConclusion} />
+                </span>
               </dd>
             </div>
           </dl>
@@ -301,14 +307,18 @@ function EvidenceBody({
               <div>
                 <dt>It pointed at</dt>
                 <dd>
-                  <span className={styles.modelPassage}>{finding.guidanceReference}</span>
+                  <span className={styles.modelPassage}>
+                    <Visible text={finding.guidanceReference} />
+                  </span>
                 </dd>
               </div>
             )}
             {finding.suggestedPosition && (
               <div>
                 <dt>It suggested</dt>
-                <dd>{finding.suggestedPosition}</dd>
+                <dd>
+                  <Visible text={finding.suggestedPosition} />
+                </dd>
               </div>
             )}
           </dl>
@@ -346,7 +356,7 @@ function EvidenceBody({
                 {span.verified && <IconCheck className={styles.verifiedMark} />}
                 <span>
                   {!span.verified
-                    ? `Not found verbatim in the document · withheld${span.citedSectionLabel ? ` · the model cited ${span.citedSectionLabel}` : ""}`
+                    ? `Not found verbatim in the document · withheld${span.citedSectionLabel ? ` · the model cited ${shownText(span.citedSectionLabel)}` : ""}`
                     : finding.evidenceKind === "coverage"
                       ? "Found in the document text · the closest provision read; in the model's view it does not state the point"
                       : span.method === "exact"
@@ -398,13 +408,15 @@ function EvidenceBody({
         {/* The heading is a claim. It says "Code found a conflict" only under a source where code compared two periods; the
             model's own phrases, its pointer into the guidance and its suggestion are in the layer above, never here. */}
         <div className={styles.layerHead}>
-          <h4>{codeRole(finding.statusSource)}</h4>
+          <h4>{codeRole(finding.statusSource, finding.status)}</h4>
           {!setByModel && setTag}
         </div>
         {guidance && (
           <div className={styles.guidanceBlock}>
             <h5 className={styles.drawerSubhead}>{decidedByCode(finding.statusSource) || confirmed ? "Guidance" : "Guidance given"}</h5>
-            <blockquote className={styles.guidanceQuote}>{guidance}</blockquote>
+            <blockquote className={styles.guidanceQuote}>
+              <Visible text={guidance} />
+            </blockquote>
           </div>
         )}
         {(decidedByCode(finding.statusSource) || confirmed) && comparison && <DayGauge comparison={comparison} />}
@@ -417,7 +429,7 @@ function EvidenceBody({
                   ? "No comparable day counts, so the model's hint stands as its view."
                   : finding.statusSource === "no_evidence"
                     ? "No verified passage, so no status was given."
-                    : codeAccount(finding.statusSource).sentence)}
+                    : codeAccount(finding.statusSource, finding.status).sentence)}
             </dd>
           </div>
           {finding.unseenReason && (
@@ -600,11 +612,20 @@ function HumanLayer({
 function ModelWords({ observed, required }: { observed: string | null | undefined; required: string | null | undefined }) {
   return (
     <>
-      {observed ? <span className={styles.modelWords}>{observed}</span> : "nothing observed"}
+      {observed ? (
+        <span className={styles.modelWords}>
+          <Visible text={observed} />
+        </span>
+      ) : (
+        "nothing observed"
+      )}
       {required ? (
         <>
           {" "}
-          against <span className={styles.modelWords}>{required}</span>
+          against{" "}
+          <span className={styles.modelWords}>
+            <Visible text={required} />
+          </span>
         </>
       ) : null}
     </>

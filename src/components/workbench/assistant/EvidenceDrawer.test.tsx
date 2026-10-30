@@ -24,6 +24,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { EXPLANATION_E5A20E22 } from "./__fixtures__/explanation-e5a20e2283e8416e";
+import { expectShownByName, hostile } from "./__fixtures__/hostile";
 import { EvidenceDrawer } from "./EvidenceDrawer";
 
 const SECTION: SectionView = {
@@ -425,6 +426,99 @@ describe("one drawer, another finding", () => {
       expect(around({ ...located, spans: [{ ...located.spans[0], verified: false }] } as unknown as FindingView, true).shown).toBeNull();
     } finally {
       delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
+
+  /**
+   * The API's offsets count code points, as Python indexes the text. The context sliced them as UTF-16 units, so each
+   * character outside the Basic Multilingual Plane before the quote moved the emphasis one unit off the located text,
+   * onto a neighbouring clause's words with enough of them (stress test, 2026-10-30). The offsets here are code points.
+   */
+  it("on a phone, emphasises exactly the located text, whatever astral characters come before or inside it", () => {
+    const quote = "Either party may terminate on ninety (90) days' written notice.";
+    const cases = [
+      `The Supplier, \u{20B9F}\u5ddd Trading Co., and the Customer agree as follows. ${quote} Fees are due monthly.`, // CJK Extension B
+      `Signed \u{1F600}\u{1F600}\u{1F600} by both. ${quote} Fees are due monthly.`, // emoji
+      `The \u{1D412}\u{1D42E}\u{1D429}\u{1D429}\u{1D425}\u{1D422}\u{1D41E}\u{1D42B} agree. ${quote} Fees are due monthly.`, // mathematical bold
+      `Plain words first. ${quote.replace("written", "written \u{1F4DD}")} Fees are due monthly.`, // an emoji inside the quote
+      `${"\u{1F600}".repeat(300)} ${quote} ${"\u{1F4DD}".repeat(300)}`, // the cut lands among astral characters
+      `Plain words first. ${quote} Fees are due monthly.`, // control: nothing outside the BMP
+    ];
+    const lone = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: (media: string) => ({ matches: true, media, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+    });
+    try {
+      for (const text of cases) {
+        const located = text.includes(quote) ? quote : quote.replace("written", "written \u{1F4DD}");
+        const start = Array.from(text.slice(0, text.indexOf(located))).length;
+        const end = start + Array.from(located).length;
+        const base = finding(null);
+        const view = { ...base, spans: [{ ...base.spans[0], quote: located, start, end }] } as unknown as FindingView;
+        render(
+          <EvidenceDrawer
+            finding={view}
+            run={RUN}
+            guidanceText={null}
+            sectionsById={new Map([["s0", { ...SECTION, text }]])}
+            onJump={vi.fn()}
+            onClose={vi.fn()}
+            closeRef={null}
+            reduceMotion
+          />,
+        );
+        const context = screen.getByText("Text around this quote").closest("details")!;
+        expect(context.querySelector("strong")?.textContent, text.slice(0, 40)).toBe(located);
+        expect(lone.test(context.textContent ?? ""), "a cut split a surrogate pair").toBe(false);
+        cleanup();
+      }
+    } finally {
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
+
+  it("heads a pass code computed before policy v2 as a pass on the day counts, nowhere as a conflict (2026-10-30)", async () => {
+    const base = finding(null);
+    const legacy = {
+      ...base,
+      status: "pass",
+      statusSource: "computed_days",
+      statusReason: "the contract provides 15 calendar days; the guidance requires at least 10 calendar days",
+    } as unknown as FindingView;
+    renderDrawer(legacy);
+    const code = await screen.findByTestId("layer-code");
+    expect(within(code).getByRole("heading", { level: 4 }).textContent).toBe("Code passed it on the day counts");
+    expect(document.body.textContent).not.toMatch(/conflict/);
+  });
+
+  it("names every invisible character the model wrote, in each of its strings, instead of letting it act", async () => {
+    api.getRunExplanation.mockRejectedValue(new Error("no record")); // the finding's own fields, not the proposal's
+    const base = finding(null);
+    const view = {
+      ...base,
+      topic: hostile("Termination topic"),
+      observed: hostile("observed words"),
+      required: hostile("required words"),
+      guidanceReference: hostile("guidance words"),
+      suggestedPosition: hostile("suggested words"),
+      withheldConclusion: hostile("withheld words"),
+      spans: [{ ...base.spans[0], verified: false, sectionId: null, quote: hostile("quoted words"), citedSectionLabel: hostile("sec_4") }],
+    } as unknown as FindingView;
+    const { container } = renderDrawer(view);
+    await screen.findByText(/The record could not be read/);
+    for (const words of [
+      "Termination topic",
+      "observed words",
+      "required words",
+      "guidance words",
+      "suggested words",
+      "withheld words",
+      "quoted words",
+      "sec_4",
+    ]) {
+      expectShownByName(container, words);
     }
   });
 });

@@ -5,7 +5,7 @@ import { useContext, useEffect, useState, type Dispatch, type SetStateAction } f
 import styles from "./Landing.module.css";
 import { IconArrowRight, IconFile } from "../icons";
 import { transitions, type Stage } from "../shell/constants";
-import { Brand, Shimmer, StatusChip } from "../shell/primitives";
+import { Brand, Shimmer, StatusChip, Visible } from "../shell/primitives";
 import { OneRun, RecordPipeline, Refusals } from "./LandingStory";
 import type { SampleKind } from "../samples";
 import { getCitations, getRun, listDocuments, type Health } from "@/lib/api";
@@ -14,7 +14,7 @@ import { modelPlace } from "@/lib/modelPlace";
 import { SOURCE, TopLinks } from "./TopLinks";
 import { AccessModeKnown, PublicDemo } from "../access/PublicDemo";
 import { INDEPENDENCE } from "@/lib/independence";
-import { runOutcome } from "@/lib/checks";
+import { locatedNote, runOutcome } from "@/lib/checks";
 import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
 /** How a status is set, in the order the evidence drawer reads it, each step with who acts. Static: it describes the
@@ -77,15 +77,26 @@ export function Landing({
   reduceMotion: boolean;
 }) {
   const { morph, quick } = transitions(reduceMotion);
-  // The finished review's first finding, read from its run, so the card can say what was decided and by whom.
+  // The finished review's first finding, read from its run, so the card can say what was decided and by whom; and how
+  // many proposals its record withheld, so the card says what was located only as the record does (null: not yet read).
   const [lead, setLead] = useState<FindingView | null>(null);
+  const [read, setRead] = useState<{ runId: string; withheld: number | null } | null>(null);
   const proofId = proof?.id ?? null;
+  const withheld = read && read.runId === proofId ? read.withheld : null; // another run's count is never this one's
   useEffect(() => {
     if (!proofId) return;
     let cancelled = false;
     getRun(proofId)
-      .then((run) => !cancelled && setLead(run.findings[0] ?? null))
-      .catch(() => !cancelled && setLead(null));
+      .then((run) => {
+        if (cancelled) return;
+        setLead(run.findings[0] ?? null);
+        setRead({ runId: proofId, withheld: Array.isArray(run.withheld) ? run.withheld.length : null });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLead(null);
+        setRead(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -353,7 +364,10 @@ export function Landing({
                     </div>
                     <div>
                       <dt>Findings</dt>
-                      <dd>{runOutcome(proof.outcomes, proof.hasGuidance)}; every quoted passage located in the document</dd>
+                      <dd>
+                        {runOutcome(proof.outcomes, proof.hasGuidance)}
+                        {withheld !== null && `; ${locatedNote(withheld)}`}
+                      </dd>
                     </div>
                     <div>
                       <dt>Model</dt>
@@ -366,7 +380,9 @@ export function Landing({
                   {lead && (
                     <div className={styles.receiptDecision}>
                       <div className={styles.receiptDecisionHead}>
-                        <span className={styles.receiptTopic}>{lead.topic}</span>
+                        <span className={styles.receiptTopic}>
+                          <Visible text={lead.topic} />
+                        </span>
                         <StatusChip status={lead.status} hasGuidance={proof.hasGuidance} source={lead.statusSource} />
                       </div>
                       {lead.statusReason && (

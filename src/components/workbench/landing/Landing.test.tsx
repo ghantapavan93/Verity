@@ -190,6 +190,52 @@ describe("Landing: the finished review it shows", () => {
   });
 });
 
+/**
+ * The receipt states only what its run's record shows. It said "every quoted passage located in the document" as a
+ * constant, so a run with one answer located and one proposal withheld, its quote not found, was described as fully
+ * located on the first screen; a public visitor's receipt is their own latest run (stress test, 2026-10-30).
+ */
+describe("Landing: what the receipt says was located", () => {
+  const summary = {
+    ...({} as RunSummary),
+    id: "run9",
+    question: "What notice is needed?",
+    stage: "complete",
+    findings: 1,
+    outcomes: { pass: 1 },
+    hasGuidance: false,
+    documentName: "a.txt",
+    model: "m",
+    latencyMs: null,
+  } as RunSummary;
+  const findingsRow = () => screen.getByText("Findings").closest("div")?.querySelector("dd")?.textContent ?? "";
+
+  async function receiptFor(withheld: unknown[] | undefined) {
+    const { getRun } = await import("@/lib/api");
+    vi.mocked(getRun).mockResolvedValueOnce({
+      findings: [{ id: "f1", topic: "Notice", status: "pass", statusSource: "model_hint", spans: [] }],
+      withheld,
+    } as never);
+    renderLanding({ ...health("off"), modelLocation: "server", modelHost: "" } as Health, true, summary, false);
+    await screen.findByText("Notice");
+    return findingsRow();
+  }
+
+  it("says how many proposals were withheld, and claims every passage located only when none was", async () => {
+    const withheld = await receiptFor([{ id: "f2", topic: "Termination fee", status: "unresolved" }]);
+    expect(withheld).toContain("1 withheld");
+    expect(withheld).not.toMatch(/every quoted passage located/);
+  });
+
+  it("claims nothing about location while the record cannot say", async () => {
+    expect(await receiptFor(undefined)).not.toMatch(/every|located|found/);
+  });
+
+  it("control: a run with every proposal located says so", async () => {
+    expect(await receiptFor([])).toBe("1 answered; every passage shown was found in the document text");
+  });
+});
+
 describe("Landing: the way to the research", () => {
   it("links the recorded research and the source from the first screen", () => {
     renderLanding(health("entered"), true);

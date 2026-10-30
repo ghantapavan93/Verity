@@ -5,11 +5,11 @@ import styles from "../Workbench.module.css";
 import { IconClose, IconPlus } from "../icons";
 import { transitions } from "../shell/constants";
 import type { GuidanceController } from "../hooks/useGuidance";
+import { clipCodePoints } from "@/lib/text";
 
 /** The first words of the guidance, so the chip says what the run is checked against rather than that something is. */
 function excerpt(text: string, max = 44): string {
-  const line = text.replace(/\s+/g, " ").trim();
-  return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
+  return clipCodePoints(text.replace(/\s+/g, " ").trim(), max); // cut by code points: never inside a surrogate pair
 }
 
 /** The scope line under the Assistant title: the document chip and the guidance chip with its popover. */

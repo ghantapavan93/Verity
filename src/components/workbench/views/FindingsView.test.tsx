@@ -21,6 +21,7 @@ vi.mock("@/lib/api", () => ({
   isConflict: (error: unknown) => error instanceof Error && (error as Error & { status?: number }).status === 409,
 }));
 
+import { HOSTILE, expectShownByName, hostile } from "../assistant/__fixtures__/hostile";
 import { FindingsView, forAttention } from "./FindingsView";
 
 function record(id: string, topic: string, review: FindingRecord["review"], latestReviewId: number): FindingRecord {
@@ -154,5 +155,19 @@ describe("FindingsView: what needs a person comes first", () => {
     render(<FindingsView notice={null} onOpen={vi.fn()} onStart={start} />);
     fireEvent.click(await screen.findByRole("button", { name: "Try the amendment challenge" }));
     expect(start).toHaveBeenCalledOnce();
+  });
+});
+
+/** The model's topic and conclusion as the record keeps them: named in place, never acting (hostile-model review, 2026-10-30). */
+describe("FindingsView, the model's strings", () => {
+  it("names every invisible character in a topic and a conclusion, on the row and in the buttons' names", async () => {
+    const row = { ...record("f3", hostile("Termination topic"), null, 0), conclusion: hostile("The model's conclusion") } as FindingRecord;
+    api.listFindings.mockResolvedValue([row]);
+    const { container } = render(<FindingsView notice={null} onOpen={vi.fn()} />);
+    const confirm = await screen.findByRole("button", { name: /^Confirm: Termination topic/ });
+    expectShownByName(container, "Termination topic");
+    expectShownByName(container, "The model's conclusion");
+    for (const ch of HOSTILE) expect(confirm.getAttribute("aria-label")).not.toContain(ch);
+    expect(confirm.getAttribute("aria-label")).toContain("[U+202E]");
   });
 });

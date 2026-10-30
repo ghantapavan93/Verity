@@ -15,8 +15,9 @@ import { createContext, Fragment, useContext, useId, useMemo, useRef, useState, 
 import { INDEPENDENCE } from "@/lib/independence";
 
 import { StatusChip } from "../workbench/shell/primitives";
-import { STATUS_SOURCE_LABELS } from "@/lib/types";
+import { STATUS_SOURCE_LABELS, statusSourceLabel, type FindingStatus } from "@/lib/types";
 import { shortHash } from "@/lib/format";
+import { splitByCodePoints } from "@/lib/text";
 import styles from "./BreakStory.module.css";
 import {
   charDiff,
@@ -444,6 +445,9 @@ function RetrievalPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
   const [chosen, setChosen] = useState<string>(s.finding.spans[0]?.sectionId ?? s.retrieval[0]?.sectionId);
   const section = c.sections[chosen];
   const span = s.finding.spans.find((sp) => sp.sectionId === chosen) ?? null;
+  // The record's offsets count code points, as the API's do (lib/text): a UTF-16 slice moves the mark off the located
+  // text after any astral character (stress test, 2026-10-30).
+  const marked = span && section ? splitByCodePoints(section.text, span.start, span.end) : null;
   return (
     <div className={styles.retrieval}>
       <ol className={styles.slices} aria-label="Sections handed to the model, in rank order">
@@ -464,11 +468,11 @@ function RetrievalPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
         <p className={styles.paperHeading}>{section?.heading}</p>
         {section && section.text.length > 0 ? (
           <p className={styles.paperText}>
-            {span ? (
+            {marked ? (
               <>
-                {section.text.slice(0, span.start)}
-                <mark className={styles.paperMark}>{section.text.slice(span.start, span.end)}</mark>
-                {section.text.slice(span.end)}
+                {marked[0]}
+                <mark className={styles.paperMark}>{marked[1]}</mark>
+                {marked[2]}
               </>
             ) : (
               section.text
@@ -504,7 +508,7 @@ function OutputPanel({ s }: { s: SessionRecord }) {
 function BrowserCheck({ c, span }: { c: CaseRecord; span: SpanRecord }) {
   const [result, setResult] = useState<ReturnType<typeof check> | null>(null);
   function check() {
-    const text = c.sections[span.sectionId].text.slice(span.start, span.end);
+    const text = splitByCodePoints(c.sections[span.sectionId].text, span.start, span.end)[1]; // code points, as recorded
     const words = wordsOf(text);
     const quoteWords = wordsOf(span.quote);
     const diff = charDiff(text, span.quote);
@@ -591,7 +595,11 @@ function BoundaryPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
             which did not fire on it.
           </li>
           <li>
-            <strong>Who set the status.</strong> {STATUS_SOURCE_LABELS[s.finding.statusSource] ?? s.finding.policy.summary}.
+            <strong>Who set the status.</strong>{" "}
+            {s.finding.statusSource in STATUS_SOURCE_LABELS
+              ? statusSourceLabel(s.finding.statusSource, s.finding.status as FindingStatus)
+              : s.finding.policy.summary}
+            .
           </li>
         </ul>
       </div>
