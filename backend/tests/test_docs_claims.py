@@ -382,9 +382,9 @@ class DeniedCheck(NamedTuple):
 
 DENIED_CHECKS = {
     # check_conditions lowers a pass whose quote leaves out a condition its own sentence opens with a CARVE_OUT word,
-    # unless the answer shares enough of its words. Every condition, and conditions in other clauses, are not checked.
+    # unless another verified quote of the finding shows it. Every condition, and conditions in other clauses, are not checked.
     "a condition the quote leaves out of its sentence": DeniedCheck(
-        calls=(("runs/service.py", "left_out_condition("), ("runs/service.py", "check_conditions(")),
+        calls=(("runs/service.py", "left_out("), ("runs/service.py", "check_conditions(")),
         subject=(
             re.compile(r"\b(?:condition|exception|carve[- ]out|proviso|qualification)s?\b|[“\"](?:unless|except|subject to)[”\"]", re.IGNORECASE),
             re.compile(

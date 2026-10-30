@@ -22,7 +22,6 @@ from app.runs.status import Decision, check_conditions, decide, left_out_conditi
 
 QUOTE = "Customer may terminate this Agreement for convenience on thirty (30) days' written notice."
 GUIDANCE = "Termination for convenience requires at least 30 days' notice."
-NEUTRAL = "Customer may terminate for convenience on 30 days' written notice."
 LEADS = [
     "Provided Customer has paid all undisputed Fees,",
     "Provided that Customer has paid all undisputed Fees,",
@@ -49,7 +48,7 @@ def test_a_condition_opened_by_any_of_these_words_is_read_and_left_out(lead: str
     start = section.index(QUOTE)
     condition = left_out_condition(section, start, start + len(QUOTE))
     assert condition is not None and condition == lead.rstrip(",")
-    lowered = check_conditions(Decision("pass", "model_hint"), NEUTRAL, [condition])
+    lowered = check_conditions(Decision("pass", "model_hint"), [condition])
     assert (lowered.status, lowered.source) == ("needs_review", "position_check")
     passed = decide("pass", None, None, True, True, quotes=[QUOTE], guidance=GUIDANCE, topic="Termination for convenience", passages=[section])
     assert "a condition or an exception" in passed.reason and "consistent" not in passed.reason

@@ -148,7 +148,9 @@ from .values import frame_times, redaction_given_as_value, uniform_party_choices
 # the model's spelling of it (runs.service.located_text). A value only the guidance states supports an answer that
 # compares, never one that gives it as the contract's (`check_values`). Relations: a replaced definition is the replaced
 # text in every wording of the statement, and the conclusion alone is read for the replaced value (`old_value`). The
-# condition words read every way a contract opens one; a number written in words is no subject word.
+# condition words read every way a contract opens one; a number written in words is no subject word. A condition left
+# out of a quote's sentence lowers a pass unless another verified quote of the finding shows it, whatever the answer
+# says of it: two shared words had "stated" it, so an answer denying it kept the pass (`check_conditions`).
 POLICY_VERSION = "policy-v17"
 
 
@@ -482,62 +484,76 @@ def enclosing_sentences(text: str, start: int, end: int) -> str:
 MAX_CONDITION_CHARS = 200
 
 
-def left_out_condition(text: str, start: int, end: int) -> str | None:
+@dataclass(frozen=True)
+class LeftOut:
+    """A condition a quote's sentence carries outside the quote: as written, where it stands in the text read, and as
+    shown in a reason (cut to MAX_CONDITION_CHARS)."""
+
+    written: str
+    start: int
+    end: int
+    shown: str
+
+
+def left_out(text: str, start: int, end: int) -> LeftOut | None:
     """The condition or exception that the span's own sentence carries outside the span (`policy.proof.CARVE_OUT`),
     as written: before the span, from the condition word to where it meets the quote ("Except for the first sixty (60)
     calendar days of the Initial Term" before "Customer may terminate …"); else after it, to the sentence's end ("unless
     Customer has paid"). None when the sentence carries none outside the quote: a condition the quote includes is shown
     with it, and one in another sentence is not this sentence's (blind contract stress test, 2026-10-16)."""
     first, last = _sentence_bounds(text, start, end)
-    before, after = text[first:start], text[end:last]
+    before_at, before, after = first, text[first:start], text[end:last]
     # A sentence that ends inside quotation marks ('… written notice." Section 5.2 …') ends there too: the words
     # before it are another sentence, often another clause's quoted text (the blind kit's Amendment One).
     if ends := list(_QUOTED_END.finditer(before)):
-        before = before[ends[-1].end() :]
+        before_at, before = before_at + ends[-1].end(), before[ends[-1].end() :]
     if ends := list(_QUOTED_END.finditer(after)):
         after = after[: ends[0].start() + 1]
-    for side, found in ((before, CARVE_OUT.search(before)), (after, CARVE_OUT.search(after))):
+    for at, side, found in ((before_at, before, CARVE_OUT.search(before)), (end, after, CARVE_OUT.search(after))):
         # A condition word with nothing of its own after it ("However, …") is a turn of phrase, not a condition.
         if found is None or not concept_stems(side[found.end() :]):
             continue
-        condition = side[found.start() :].strip().rstrip(",;:—–-.").strip()
-        if len(condition) > MAX_CONDITION_CHARS:
-            cut = condition.rfind(" ", 0, MAX_CONDITION_CHARS)
-            condition = condition[: cut if cut > 0 else MAX_CONDITION_CHARS] + "…"
-        return condition
+        rest = side[found.start() :]
+        written = rest.strip().rstrip(",;:—–-.").strip()
+        begins = at + found.start() + len(rest) - len(rest.lstrip())
+        shown = written
+        if len(shown) > MAX_CONDITION_CHARS:
+            cut = shown.rfind(" ", 0, MAX_CONDITION_CHARS)
+            shown = shown[: cut if cut > 0 else MAX_CONDITION_CHARS] + "…"
+        return LeftOut(written, begins, begins + len(written), shown)
     return None
 
 
+def left_out_condition(text: str, start: int, end: int) -> str | None:
+    """The left-out condition as a reason shows it (`left_out`), or None."""
+    found = left_out(text, start, end)
+    return found.shown if found is not None else None
+
+
+def unshown_conditions(left: Sequence[LeftOut], shown: Sequence[str]) -> list[str]:
+    """The conditions, as a reason shows them, that no verified quote of the finding shows whole: ``shown`` is the
+    contract text each verified quote was found at. A condition another quote carries is on screen beside the one
+    that leaves it out; part of it is not it."""
+    return [condition.shown for condition in left if not any(condition.written in text for text in shown)]
+
+
 _QUOTED_END = re.compile(r"[.!?][\"”’)]+\s+")
-# How many of the condition's own words an answer must carry to state it ("except during the first 60 days of the
-# Initial Term" for "Except for the first sixty (60) calendar days of the Initial Term"; "exceptions … indemnification
-# obligations, gross negligence" for "EXCEPT FOR (A) A PARTY'S INDEMNIFICATION OBLIGATIONS …, (B) … GROSS NEGLIGENCE").
-CONDITION_WORDS_NEEDED = 2
 
 
-def _states_condition(conclusion: str, condition: str) -> bool:
-    """Whether the answer states the condition: it carries words of the condition's own, the condition word aside (an
-    answer with "unless Customer is in breach" states some other condition). Measured over the recorded passes:
-    DECISIONS.md."""
-    word = CARVE_OUT.search(condition)
-    own = concept_stems(condition[word.end() :] if word else condition)
-    return len(own & concept_stems(conclusion)) >= min(CONDITION_WORDS_NEEDED, len(own))
+def check_conditions(decision: Decision, conditions: Sequence[str]) -> Decision:
+    """A pass that rests on a quote whose own sentence carries a condition outside the quoted words, which no verified
+    quote of the finding shows (``conditions``, `unshown_conditions`), is not a pass (policy-v14): the quote is real and
+    the pass drops what limits it, as "Customer may terminate … on 30 days' notice" did over a sentence opening "Except
+    for the first sixty (60) calendar days of the Initial Term". Whether the condition applies is a reading.
 
-
-def check_conditions(decision: Decision, conclusion: str | None, conditions: Sequence[str]) -> Decision:
-    """A pass that rests on a quote whose own sentence carries a condition outside the quoted words (``conditions``,
-    `left_out_condition`, one per verified span that has one) and that does not state the condition itself is not a pass
-    (policy-v14): the quote is real and the answer drops what limits it, as "Customer may terminate … on 30 days' notice"
-    did over a sentence opening "Except for the first sixty (60) calendar days of the Initial Term". Whether the condition
-    applies is a reading; code says only that the answer leaves it out. Other statuses already ask a person to look."""
-    if decision.status != "pass":
+    Judged on the evidence alone since policy-v17. The answer was read for the condition until then, and two words it
+    shared with the condition "stated" it: "… including during the Initial Term", which denies it, kept the pass the
+    neutral answer lost (stress test, 2026-10-30). No test on an answer's words tells stating a condition from denying
+    it. Other statuses already ask a person to look."""
+    if decision.status != "pass" or not conditions:
         return decision
-    unstated = [condition for condition in conditions if not _states_condition(conclusion or "", condition)]
-    if not unstated:
-        return decision
-    return Decision(
-        "needs_review", "position_check", _with_earlier(f"the quote leaves out of its sentence “{unstated[0]}”, and the answer does not state it", decision)
-    )
+    reason = f"the quote leaves out of its sentence “{conditions[0]}”, and no quote of this finding shows it"
+    return Decision("needs_review", "position_check", _with_earlier(reason, decision))
 
 
 def _with_earlier(reason: str, decision: Decision) -> str:

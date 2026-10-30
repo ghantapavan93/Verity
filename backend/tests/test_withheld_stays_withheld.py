@@ -50,7 +50,7 @@ def test_no_check_after_decide_changes_a_withheld_finding(
     sentence = "the quoted clause 1.2 is text that §AMENDMENT NO. 1 replaces in full"
     assert check_references(UNRESOLVED, conclusion, numbers, ["sec_1"], numbers, ["sec_9"]) == UNRESOLVED
     assert check_values(UNRESOLVED, conclusion, quotes, question, guidance, numbers) == UNRESOLVED
-    assert check_conditions(UNRESOLVED, conclusion, conditions) == UNRESOLVED
+    assert check_conditions(UNRESOLVED, conditions) == UNRESOLVED
     assert check_replaced(UNRESOLVED, sentence) == UNRESOLVED
     assert check_old_value(UNRESOLVED, sentence) == UNRESOLVED
     short = Decision("needs_review", "computed_days", "the contract provides 10 calendar days; the guidance requires at least 30 calendar days")

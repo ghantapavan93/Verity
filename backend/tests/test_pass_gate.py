@@ -374,7 +374,7 @@ def test_through_the_run_without_guidance_a_pass_says_what_it_did_not_see(client
     finding = dependent["findings"][0]
     assert (finding["status"], finding["statusSource"]) == ("needs_review", "position_check"), finding
     assert finding["statusReason"] == (
-        "the quote leaves out of its sentence “Subject to Sections 6, 7 and 8”, and the answer does not state it; "
+        "the quote leaves out of its sentence “Subject to Sections 6, 7 and 8”, and no quote of this finding shows it; "
         "the sentence points at §8, which was not handed to the model"
     )
 

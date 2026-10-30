@@ -142,7 +142,8 @@ def test_every_surface_says_a_lowered_pass_rests_on_a_section_the_model_never_re
     run_id = ask_pointing_away(client, monkeypatch)
     finding = client.get(f"/api/runs/{run_id}/detail").json()["findings"][0]
     assert (finding["status"], finding["statusSource"]) == ("needs_review", "position_check"), finding
-    assert finding["statusReason"] == f"the quote leaves out of its sentence “Subject to Sections 7, 8 and 9”, and the answer does not state it; {UNSEEN_9}"
+    left_out = "the quote leaves out of its sentence “Subject to Sections 7, 8 and 9”, and no quote of this finding shows it"
+    assert finding["statusReason"] == f"{left_out}; {UNSEEN_9}"
     assert finding["codeCompared"] is False and finding["unseenReason"] == UNSEEN_9, finding
     assert_every_surface_names(client, run_id, finding)
 

@@ -49,6 +49,7 @@ from .relations import Note, Recorded, assess, dump, load, locate_relations, par
 from .status import (
     Decision,
     Grounds,
+    LeftOut,
     check_conditions,
     check_old_value,
     check_references,
@@ -57,9 +58,10 @@ from .status import (
     check_values,
     decide,
     enclosing_sentences,
-    left_out_condition,
+    left_out,
     settle_together,
     unseen_references,
+    unshown_conditions,
 )
 from .transitions import assert_transition
 from .versions import stale_versions
@@ -486,7 +488,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
             spans: list[EvidenceSpan] = []
             passages: list[str] = []
             dependencies: list[str] = []
-            conditions: list[str] = []  # what each verified quote's own sentence carries outside it (policy-v14)
+            conditions: list[LeftOut] = []  # what each verified quote's own sentence carries outside it (policy-v14)
             read: list[str] = []  # what each verified quote covers in the contract: what code reads values from (policy-v17)
             all_verified = bool(item.evidence)
             for span_ordinal, evidence in enumerate(item.evidence):
@@ -501,7 +503,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                     passage = enclosing_sentences(whole, at + located.start, at + located.end)
                     passages.append(passage)
                     dependencies += [d for d in unseen_references(passage, every_section, handed) if d not in dependencies]
-                    if (condition := left_out_condition(whole, at + located.start, at + located.end)) is not None:
+                    if (condition := left_out(whole, at + located.start, at + located.end)) is not None:
                         conditions.append(condition)
                 total_count += 1
                 verified_count += 1 if verified else 0
@@ -552,7 +554,7 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 guidance_text,
                 clause_numbers,
             )
-            decision = check_conditions(decision, label_handles(item.conclusion, labels), conditions)
+            decision = check_conditions(decision, unshown_conditions(conditions, read))
             if relations:
                 # What the located statements mean for this finding: only its verified quotes ground anything (runs.relations).
                 answer = " ".join(label_handles(text, labels) for text in (item.conclusion, item.observed) if text)

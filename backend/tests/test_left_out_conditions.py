@@ -10,13 +10,17 @@ the model's pass.
 
 The invariant: a pass may not rest on a verified quote whose own sentence, outside the quoted words, carries a condition
 or an exception (`policy.proof.CARVE_OUT`: except, unless, subject to, provided that, notwithstanding, other than, …)
-that the answer does not state. Read from the stored section text around the located span, before or after it, never
-across a sentence end. The answer states the condition when it carries words of the condition's own, two or all it
-has, the condition word aside ("except during the first 60 days"): a condition word alone may name another condition.
-Which condition governs, and whether it applies here, stays a reading.
+that no verified quote of the same finding shows. Read from the stored section text around the located span, before or
+after it, never across a sentence end. Which condition governs, and whether it applies here, stays a reading.
 
-Not lowered (controls): a quote that includes the condition; a condition in another sentence; a bare "if"; an answer
-that states the condition; a status other than a pass.
+Since policy-v17 the answer is not read for it (stress test, 2026-10-30, policy 6). Until then an answer "stated" the
+condition when it shared two of its words, so "… on 30 days' written notice, including during the Initial Term", which
+denies it, kept the pass while the neutral answer was lowered: no test on the answer's words tells stating a condition
+from denying it ("with no exception for the Initial Term", "not subject to the Initial Term"). The same evidence now
+gives the same status whatever the answer says.
+
+Not lowered (controls): a quote that includes the condition; another quote of the finding that shows it; a condition in
+another sentence; a bare "if"; a status other than a pass.
 """
 
 from __future__ import annotations
@@ -27,11 +31,12 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+from app.api import access
 from app.providers.base import Generation
-from app.runs.status import Decision, check_conditions, left_out_condition
+from app.runs.status import Decision, check_conditions, left_out, left_out_condition, unshown_conditions
 from tests.support import FakeProvider
 from tests.test_unquoted_values import assert_linear
 
@@ -106,19 +111,32 @@ def test_controls_leave_out_no_condition_of_their_own_sentence(text: str, quote:
     assert left_out_condition(text, *_span(text, quote)) is None
 
 
-def test_the_pass_is_lowered_unless_the_answer_states_the_condition() -> None:
+def test_a_pass_resting_on_a_quote_that_leaves_out_its_condition_is_lowered() -> None:
     condition = "Except for the first sixty (60) calendar days of the Initial Term"
-    lowered = check_conditions(PASS, ANSWER, [condition])
+    lowered = check_conditions(PASS, [condition])
     assert (lowered.status, lowered.source) == ("needs_review", "position_check")
-    assert lowered.reason == f"the quote leaves out of its sentence “{condition}”, and the answer does not state it"
-    stated = "Customer may terminate for convenience on 30 days' written notice, except during the first 60 days of the Initial Term."
-    assert check_conditions(PASS, stated, [condition]) == PASS
-    # A condition word alone, about something else, does not state this condition.
-    other = "Customer may terminate for convenience on 30 days' written notice unless Customer is in breach."
-    assert check_conditions(PASS, other, [condition]).status == "needs_review"
+    assert lowered.reason == f"the quote leaves out of its sentence “{condition}”, and no quote of this finding shows it"
     review = Decision("needs_review", "position_check", "earlier reason")
-    assert check_conditions(review, ANSWER, [condition]) == review
-    assert check_conditions(PASS, ANSWER, []) == PASS
+    assert check_conditions(review, [condition]) == review
+    assert check_conditions(PASS, []) == PASS
+
+
+def test_a_condition_another_quote_of_the_finding_shows_is_not_left_out() -> None:
+    found = left_out(SECTION, *_span(SECTION, TRIMMED))
+    assert found is not None and found.written == found.shown == "Except for the first sixty (60) calendar days of the Initial Term"
+    assert SECTION[found.start : found.end] == found.written
+    assert unshown_conditions([found], [TRIMMED]) == [found.shown]
+    assert unshown_conditions([found], [TRIMMED, "Except for the first sixty (60) calendar days of the Initial Term"]) == []
+    assert unshown_conditions([found], [TRIMMED, "Except for the first sixty (60) calendar days"]) == [found.shown]  # part of it is not it
+
+
+def test_a_long_condition_is_shown_cut_and_compared_whole() -> None:
+    lead = "Unless " + " ".join(f"obligation{n} remains outstanding" for n in range(30))
+    text = f"{lead}, Provider may suspend access on ten (10) days' notice."
+    found = left_out(text, *_span(text, "Provider may suspend access on ten (10) days' notice"))
+    assert found is not None and found.written == lead and found.shown.endswith("…") and len(found.shown) <= 201
+    assert unshown_conditions([found], [found.shown[:-1]]) == [found.shown]  # the cut words are not the whole condition
+    assert unshown_conditions([found], [text]) == []
 
 
 @settings(max_examples=60, deadline=None)
@@ -153,11 +171,13 @@ This Agreement is governed by the laws of the State of Delaware.
 
 
 class TrimmingProvider(FakeProvider):
-    """Quotes §5.1 from "Customer may terminate", or whole, and answers without the exception."""
+    """Quotes §5.1 from "Customer may terminate", or whole, and answers without the exception, or as told."""
 
-    def __init__(self, quote: str) -> None:
+    def __init__(self, quote: str, conclusion: str = ANSWER, more: tuple[str, ...] = ()) -> None:
         super().__init__()
         self.quote = quote
+        self.conclusion = conclusion
+        self.more = more
 
     def generate_json(self, system: str, user: str, schema: dict[str, Any]) -> Generation:
         label = re.search(r"\[(sec_\d+)\] 5 Termination", user)
@@ -166,9 +186,9 @@ class TrimmingProvider(FakeProvider):
             "findings": [
                 {
                     "topic": "Termination for Convenience",
-                    "conclusion": ANSWER,
+                    "conclusion": self.conclusion,
                     "status_hint": "pass",
-                    "evidence": [{"section_id": label.group(1), "quote": self.quote}],
+                    "evidence": [{"section_id": label.group(1), "quote": quote} for quote in (self.quote, *self.more)],
                     "guidance_reference": None,
                     "observed": "30 days",
                     "required": None,
@@ -181,10 +201,10 @@ class TrimmingProvider(FakeProvider):
         return Generation(text=json.dumps(payload), input_tokens=100, output_tokens=50, latency_ms=12.5, model=self.model)
 
 
-def _ask(client: TestClient, quote: str) -> dict[str, Any]:
-    client.app.state.provider = TrimmingProvider(quote)  # type: ignore[attr-defined]
+def _ask(client: TestClient, quote: str, conclusion: str = ANSWER, more: tuple[str, ...] = (), asked: int = 0) -> dict[str, Any]:
+    client.app.state.provider = TrimmingProvider(quote, conclusion, more)  # type: ignore[attr-defined]
     document = client.post("/api/documents", files={"file": ("convenience.txt", CONTRACT.encode("utf-8"), "text/plain")}).json()
-    question = "Can Customer terminate for convenience on 30 days notice?"
+    question = "Can Customer terminate for convenience on 30 days notice?" + " Please." * asked  # each ask its own run
     started = client.post("/api/runs", json={"documentId": document["id"], "guidanceId": None, "question": question})
     assert started.status_code == 202, started.text
     detail: dict[str, Any] = client.get(f"/api/runs/{started.json()['id']}/detail").json()
@@ -202,3 +222,36 @@ def test_control_the_whole_sentence_quoted_leaves_the_models_answer(client: Test
     whole = "Except for the first sixty (60) calendar days of the Initial Term, " + TRIMMED
     finding = _ask(client, whole)["findings"][0]
     assert (finding["status"], finding["statusSource"]) == ("pass", "model_hint")
+
+
+# What an answer can say of the condition: nothing, deny it, state it, or anything else. None of it is read for it.
+SAYS = [
+    "",
+    ", including during the Initial Term",
+    ", with no exception for the Initial Term",
+    ", even in the first sixty days of the Initial Term",
+    "; this right is not subject to the Initial Term",
+    ", except during the first sixty days of the Initial Term",
+    "; the exceptions for the Initial Term were deleted",
+]
+
+
+ASKED = iter(range(1, 10**6))
+
+
+@settings(max_examples=25, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(says=st.lists(st.sampled_from(SAYS), max_size=3), noise=st.text(st.characters(codec="ascii", categories=("L", "Zs")), max_size=30))
+def test_property_the_status_does_not_depend_on_what_the_answer_says_of_the_condition(client: TestClient, says: list[str], noise: str) -> None:
+    access.run_starts.reset()
+    conclusion = "Customer may terminate for convenience with 30 days' written notice" + "".join(says) + f" {noise}."
+    finding = _ask(client, TRIMMED, conclusion, asked=next(ASKED))["findings"][0]
+    assert finding["spans"][0]["verified"] is True
+    assert (finding["status"], finding["decidedBy"]) == ("needs_review", "code"), conclusion
+
+
+@pytest.mark.parametrize("says", SAYS)
+def test_control_a_second_quote_that_shows_the_condition_leaves_the_models_answer(client: TestClient, says: str) -> None:
+    shown = "Except for the first sixty (60) calendar days of the Initial Term"
+    finding = _ask(client, TRIMMED, f"Customer may terminate for convenience with 30 days' written notice{says}.", (shown,))["findings"][0]
+    assert all(span["verified"] for span in finding["spans"])
+    assert "leaves out of its sentence" not in (finding["statusReason"] or "")
