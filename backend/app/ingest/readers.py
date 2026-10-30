@@ -223,7 +223,7 @@ _NOT_DISPLAYED = frozenset(
     )
 )
 _INLINE_CONTAINERS = frozenset(qn(f"w:{tag}") for tag in ("ins", "moveTo", "hyperlink", "smartTag", "customXml", "fldSimple", "sdtContent"))
-_DIRECTIONS = {qn("w:bdo"): {"rtl": "‮", "ltr": "‭"}, qn("w:dir"): {"rtl": "‫", "ltr": "‪"}}
+_DIRECTIONS = {qn("w:bdo"): {"rtl": "\u202e", "ltr": "\u202d"}, qn("w:dir"): {"rtl": "\u202b", "ltr": "\u202a"}}
 # Elements of a table, a row or the body that hold no text of their own.
 _STRUCTURE = frozenset(qn(f"w:{tag}") for tag in ("tblPr", "tblGrid", "trPr", "tblPrEx", "tcPr", "sectPr"))
 # A title or a heading is a line, not a page: a paragraph longer than this becomes body text under a shortened heading,
@@ -512,7 +512,7 @@ def accepted_text(element: etree._Element, walk: _Walk, look: _Look | None = Non
         elif tag in _DIRECTIONS:
             opening = _DIRECTIONS[tag].get(child.get(_VAL) or "", "")
             inner = accepted_text(child, walk, look)
-            parts.append(f"{opening}{inner}‬" if opening and inner else inner)
+            parts.append(f"{opening}{inner}\u202c" if opening and inner else inner)
         elif tag in _INLINE_CONTAINERS:
             parts.append(accepted_text(child, walk, look))
         else:

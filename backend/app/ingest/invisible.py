@@ -10,7 +10,7 @@ Kept, because text needs them: the zero-width joiner and non-joiner (emoji seque
 scripts) and the other default-ignorable characters (variation selectors, the combining grapheme joiner, Hangul fillers)
 except between two ASCII letters or digits, where nothing is shaped or varied; and the left-to-right, right-to-left and
 Arabic letter marks, which order neutral characters and cannot reverse a run, except inside a number written in ASCII
-digits (reader v16): "upon 9؜0 days" displays "upon 90 days", and there the mark orders nothing and only parts the
+digits (reader v16): "upon 9\u061c0 days" displays "upon 90 days", and there the mark orders nothing and only parts the
 number for whatever reads it (stress test, 2026-10-30). Between two ASCII letters a mark is kept, as before.
 """
 
@@ -29,8 +29,11 @@ MARKS = "\u200e\u200f\u061c"  # left-to-right, right-to-left and Arabic letter m
 IGNORABLE = "\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180d\u180f\u3164\ufe00-\ufe0f\uffa0\U000e0100-\U000e01ef"
 _BETWEEN_ASCII = re.compile(rf"(?<=[A-Za-z0-9])[{JOINERS}{IGNORABLE}]+(?=[A-Za-z0-9])")
 # Inside a number written in ASCII digits: between two digits, or between a digit and the group or decimal mark beside
-# another digit ("1‎,500", "1,‎500"). Any of the invisible characters kept elsewhere (reader v16).
-_IN_ASCII_NUMBER = re.compile(rf"(?<=[0-9])[{JOINERS}{MARKS}{IGNORABLE}]+(?=[0-9]|[.,][0-9])|(?<=[0-9][.,])[{JOINERS}{MARKS}{IGNORABLE}]+(?=[0-9])")
+# another digit ("1" LRM ",500", "1," LRM "500"). Any of the invisible characters kept elsewhere (reader v16).
+INSIDE_NUMBERS = f"{JOINERS}{MARKS}{IGNORABLE}"
+_IN_ASCII_NUMBER = re.compile(rf"(?<=[0-9])[{INSIDE_NUMBERS}]+(?=[0-9]|[.,][0-9])|(?<=[0-9][.,])[{INSIDE_NUMBERS}]+(?=[0-9])")
+# Whether a text holds any of them at all: most hold none, and the two passes above then cost a 2 MB text 0.8 s.
+_ANY_KEPT = re.compile(f"[{INSIDE_NUMBERS}]")
 
 
 @cache
@@ -45,7 +48,9 @@ def _format_characters() -> re.Pattern[str]:
 
 def remove_format_characters(text: str) -> tuple[str, int]:
     """The text without invisible format characters, and how many were removed."""
-    cleaned = _IN_ASCII_NUMBER.sub("", _BETWEEN_ASCII.sub("", _format_characters().sub("", text)))
+    cleaned = _format_characters().sub("", text)
+    if _ANY_KEPT.search(cleaned):
+        cleaned = _IN_ASCII_NUMBER.sub("", _BETWEEN_ASCII.sub("", cleaned))
     return cleaned, len(text) - len(cleaned)
 
 

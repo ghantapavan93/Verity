@@ -212,7 +212,7 @@ def test_a_bound_control_whose_store_is_missing_reads_its_cache_as_word_does() -
 
 def test_a_bound_value_shown_through_a_format_this_reader_does_not_apply_is_left_out_and_counted() -> None:
     data = docx(p(t("Effective "), bound(CUSTOM_BINDING, "1 March 2026", kind='<w:date w:fullDate="2026-03-01T00:00:00Z"/>')), parts=CUSTOM)
-    assert body_text(data) == "Effective �"
+    assert body_text(data) == "Effective \ufffd"
     assert coverage(data)["bound_controls"][:2] == (Status.PARTIAL, 1)
 
 
@@ -339,7 +339,7 @@ def test_a_symbol_is_read_as_the_glyph_its_font_draws(font: str, char: str, show
 
 def test_a_symbol_this_reader_does_not_know_is_read_as_a_replacement_and_counted() -> None:
     data = docx(p(t("Mark: "), sym("Wingdings", "F041"), t(" here")))
-    assert body_text(data) == "Mark: � here"
+    assert body_text(data) == "Mark: \ufffd here"
     assert coverage(data)["symbols"][:2] == (Status.PARTIAL, 1)
 
 

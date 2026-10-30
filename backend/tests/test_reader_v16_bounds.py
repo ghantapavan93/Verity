@@ -13,7 +13,7 @@ or a number: a credit agreement's "(part 3)" ended "the greater of $350," and "(
 The invariant: a part's edge is never inside a word, inside a number as it is written (verify.tokens.written_numbers),
 or inside a sentence when a sentence end is within reach; a CJK stop ends a passage too.
 
-(3) An LRM, RLM or ALM between two digits was kept: "upon 9؜0 days" displays "upon 90 days", and whatever reads
+(3) An LRM, RLM or ALM between two digits was kept: "upon 9\u061c0 days" displays "upon 90 days", and whatever reads
 numbers read 9 and 0. The invariant: inside a number written in ASCII digits no invisible character is kept.
 """
 
@@ -159,18 +159,18 @@ def test_a_quote_of_a_truncated_amount_is_not_found_in_any_part_of_the_reading()
 # ---------------------------------------------------------------- (3) no invisible character inside an ASCII number
 
 
-@pytest.mark.parametrize("mark", ["‎", "‏", "؜", "‌", "‍", "️"])
+@pytest.mark.parametrize("mark", ["\u200e", "\u200f", "\u061c", "\u200c", "\u200d", "\ufe0f"])
 @pytest.mark.parametrize(("hidden", "shown"), [("upon 9{m}0 days", "upon 90 days"), ("$1{m},500", "$1,500"), ("$1,{m}500", "$1,500"), ("2.{m}5%", "2.5%")])
 def test_an_invisible_mark_inside_a_number_is_removed_and_counted(mark: str, hidden: str, shown: str) -> None:
     assert remove_format_characters(hidden.format(m=mark)) == (shown, 1)
 
 
 def test_control_marks_between_letters_and_beside_scripts_stay() -> None:
-    for text in ("a‎b‏c", "שלום‏ 90", "9‏ שלום", "مرحبا؜ 12"):
+    for text in ("a\u200eb\u200fc", "שלום\u200f 90", "9\u200f שלום", "مرحبا\u061c 12"):
         assert remove_format_characters(text) == (text, 0)
 
 
 def test_an_alm_between_digits_reads_as_the_number_displayed() -> None:
-    parsed = ingest("notice.txt", "1. Notice\n\nEither party may terminate upon 9؜0 days' notice.\n".encode())
+    parsed = ingest("notice.txt", "1. Notice\n\nEither party may terminate upon 9\u061c0 days' notice.\n".encode())
     assert "upon 90 days" in parsed.sections[-1].text
     assert next(c for c in parsed.coverage if c.part == "format_characters").count == 1

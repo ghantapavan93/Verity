@@ -204,7 +204,7 @@ def docx_more_coverage(walked: DocxWalkCounts) -> list[PartCoverage]:
         more.append(PartCoverage("text_boxes", Status.READ, walked.text_boxes, "each text box is read once, as text after the paragraph it is anchored in"))
     if walked.symbols:
         more.append(
-            PartCoverage("symbols", Status.PARTIAL, walked.unknown_symbols, "symbols in a font this reader does not know are read as �")
+            PartCoverage("symbols", Status.PARTIAL, walked.unknown_symbols, "symbols in a font this reader does not know are read as \ufffd")
             if walked.unknown_symbols
             else PartCoverage("symbols", Status.READ, walked.symbols, "symbols (w:sym, Symbol and Wingdings text) are read as the glyphs those fonts draw")
         )
@@ -214,7 +214,7 @@ def docx_more_coverage(walked: DocxWalkCounts) -> list[PartCoverage]:
                 "bound_controls",
                 Status.PARTIAL if walked.bound_unknown else Status.READ,
                 walked.bound_unknown or walked.bound_read,
-                "controls whose bound value is shown through a format this reader does not apply are read as �"
+                "controls whose bound value is shown through a format this reader does not apply are read as \ufffd"
                 if walked.bound_unknown
                 else "controls bound to a part of the package are read as the bound value Word displays",
             )

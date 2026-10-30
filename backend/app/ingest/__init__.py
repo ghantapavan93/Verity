@@ -79,7 +79,7 @@ MAX_TEXT_CHARS = 3 * 4_400_000
 # at the head of its first page stays. DOCX is read as in v14 but for unstyled lines naming a part. Measured: DECISIONS.md.
 # v16 (2026-10-30, the adversarial stress test): every format. A long paragraph is cut into parts only where a passage
 # ends and nothing is split (sections.split_paragraph; v15 cut at the 6,000th character inside "$350,|000,000"); an
-# invisible mark inside an ASCII number is removed ("9؜0"); a reading of more sections or text than three times the
+# invisible mark inside an ASCII number is removed ("9\u061c0"); a reading of more sections or text than three times the
 # largest real contract is refused in the reader's child. DOCX is read as Word displays it (ingest/word_display.py): one
 # branch of an mc:AlternateContent, no text inside a field's instruction, a legacy check box as ☒/☐ and a drop-down as
 # its entry, a w:sym or symbol-font text as its glyph, a data-bound control as its bound value, a w:bdo or w:dir with its

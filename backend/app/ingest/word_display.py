@@ -224,7 +224,7 @@ def fields_balance(marks: list[tuple[str | None, bool]]) -> bool:
 
 # -------------------------------------------------------------------------------------------------------- symbols
 
-REPLACEMENT = "�"
+REPLACEMENT = "\ufffd"
 
 # What each symbol font draws for a character code (the code's low byte; Word writes them as F0xx in w:sym and as
 # private-use or Latin-1 characters in text), for the codes whose glyph is a mark, a sign or a letter a contract uses.
@@ -234,7 +234,7 @@ REPLACEMENT = "�"
 _SYMBOL = dict(
     zip(
         range(0x20, 0x7F),
-        " !∀#∃%&∋()∗+,−./0123456789:;<=>?≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_�αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼",
+        " !∀#∃%&∋()∗+,−./0123456789:;<=>?≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_\ufffdαβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼",
         strict=True,
     )
 ) | {
