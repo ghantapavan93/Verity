@@ -86,13 +86,15 @@ $health = (Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8000/api/health"
 Write-Host "API health: $health"
 
 # --- the tunnel
-$pids = @{ api = $api.Id; web = $web.Id; tunnel = $null; started = (Get-Date).ToString("o"); local = [bool]$Local }
+# Each process by its pid and its start time: deploy/down.ps1 stops one only when both match, since Windows reuses pids.
+function Get-Record($process) { return @{ pid = $process.Id; started = "$($process.StartTime.ToFileTimeUtc())" } }
+$pids = @{ api = (Get-Record $api); web = (Get-Record $web); tunnel = $null; started = (Get-Date).ToString("o"); local = [bool]$Local }
 if (-not $Local) {
   $cf = Start-Process -FilePath $cloudflared `
     -ArgumentList "tunnel", "--config", (Join-Path $root "deploy\cloudflared.yml"), "run", $Tunnel `
     -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput (Join-Path $logs "tunnel.out.log") -RedirectStandardError (Join-Path $logs "tunnel.err.log")
-  $pids.tunnel = $cf.Id
+  $pids.tunnel = Get-Record $cf
   Write-Host "Tunnel '$Tunnel' starting (pid $($cf.Id)); the public URL is https://$Hostname once DNS is routed (deploy\README.md)"
 }
 $pids | ConvertTo-Json | Out-File -Encoding utf8 (Join-Path $logs "pids.json")

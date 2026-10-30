@@ -187,7 +187,9 @@ while ($true) {
     }
     $null = $process.Handle  # cache the handle now, or Windows PowerShell cannot read the exit code after the exit
     $pidNote = ""
-    if (-not (Write-Record { Set-Content -Path $pidFile -Value $process.Id -Encoding ascii })) {
+    # The pid and the server's start time: deploy/down.ps1 stops a process only when both match, since Windows reuses pids.
+    try { $startToken = "$($process.StartTime.ToFileTimeUtc())" } catch { $startToken = "" }
+    if (-not (Write-Record { Set-Content -Path $pidFile -Value "$($process.Id) $startToken" -Encoding ascii })) {
       # An earlier server's pid left in the file would send down.ps1's taskkill to whatever process has that pid now.
       $cleared = (-not (Test-Path $pidFile)) -or (Write-Record { Remove-Item $pidFile -Force })
       $pidNote = if ($cleared) { "; pid file not written: down.ps1 cannot stop this server by pid" } else { "; pid file not written and still names an earlier server: do not run down.ps1 until it is removed" }

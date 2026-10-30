@@ -321,7 +321,7 @@ runs verified themselves. Nothing schedules a backup.
 `deploy/supervise.ps1 -Name api|web` is the whole mechanism: start the server with its stdout and stderr in a stamped
 file under `backend/data/logs/deploy/`, wait for it to exit, write the exit code and how long it ran to
 `<name>.supervisor.log`, start it again after a delay that doubles from 5 s to 60 s while it keeps dying within a
-minute. A stop file ends the supervisor. The pid of the running server is in `<name>.pid`. No service manager, no
+minute. A stop file ends the supervisor. The pid of the running server and its start time are in `<name>.pid`; `deploy/down.ps1` stops a process only when both match, and removes the record. No service manager, no
 wrapper binary: a 70-line script and the task scheduler that ships with Windows. The connector (`cloudflared`) is
 already a Windows service started by the system and is not part of this.
 
