@@ -123,6 +123,30 @@ describe("DocumentPane, a heading ending in (part N)", () => {
     expect(shown(view)).toEqual(["H3 1 Definitions (part 1)", "H3 2 Definitions (part 2)", "H2 Recitals (part 2)"]);
   });
 
+  it("shows two headings the document wrote as parts as headings, when the reader says it split neither", () => {
+    const view = render(
+      <DocumentPane
+        doc={
+          {
+            id: "d4",
+            name: "p.txt",
+            pages: null,
+            sections: [
+              { id: "a", number: "", heading: "Fees (part 1)", part: 0, text: "Body." },
+              { id: "b", number: "", heading: "Fees (part 2)", part: 0, text: "Body." },
+            ],
+          } as unknown as DocumentView
+        }
+        sample={null}
+        lit={null}
+        highlight={null}
+        reduceMotion
+        paneRef={null}
+      />,
+    );
+    expect(shown(view as ReturnType<typeof paperOf>)).toEqual(["H2 Fees (part 1)", "H2 Fees (part 2)"]);
+  });
+
   it("control: a section the reader split for size shows its heading once, then continued", () => {
     const view = paperOf([
       ["5", "Fees (part 1)"],

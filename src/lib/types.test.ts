@@ -165,6 +165,35 @@ describe("partOf", () => {
  * 2026-10-30). The reader writes parts only as a run of two or more, "B (part 1)" first, one after another under the
  * same number; only such a run is read as one.
  */
+/**
+ * Reader v17 records its own size splits as data (SectionOut.part: 1..n for a split, 0 otherwise, null on a reading made
+ * before it), so a document's own "X (part 2)" heading is told from a split by the record, not its text: two unnumbered
+ * headings the document wrote as "Fees (part 1)" and "Fees (part 2)" were read as one split section (2026-10-30).
+ */
+describe("readingParts, from the reader's record", () => {
+  const recorded = (...rows: [string, string, number | null][]) =>
+    rows.map(([number, heading, part], i) => ({ id: `s${i}`, number, heading, part, text: "" }) as SectionView);
+
+  it("never joins sections the reader did not split, whatever their headings say", () => {
+    for (const number of ["", "5"]) {
+      expect(readingParts(recorded([number, "Fees (part 1)", 0], [number, "Fees (part 2)", 0])).size, number).toBe(0);
+    }
+  });
+
+  it("joins the parts the reader recorded, with the base heading it wrote them under", () => {
+    const parts = readingParts(recorded(["5", "Fees (part 1)", 1], ["5", "Fees (part 2)", 2], ["6", "Term", 0]));
+    expect([...parts.entries()]).toEqual([
+      ["s0", { base: "Fees", index: 1 }],
+      ["s1", { base: "Fees", index: 2 }],
+    ]);
+  });
+
+  it("control: a reading made before parts were recorded is read by its headings, as before", () => {
+    expect(readingParts(recorded(["", "Fees (part 1)", null], ["", "Fees (part 2)", null])).size).toBe(2);
+    expect(readingParts(recorded(["1", "Definitions (part 1)", null], ["2", "Definitions (part 2)", null])).size).toBe(0);
+  });
+});
+
 describe("readingParts", () => {
   const sections = (...rows: [string, string][]) => rows.map(([number, heading], i) => ({ id: `s${i}`, number, heading, text: "" }) as SectionView);
 
