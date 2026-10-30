@@ -14,6 +14,49 @@ export function splitByCodePoints(text: string, start: number, end: number): [st
   return [chars.slice(0, start).join(""), chars.slice(start, end).join(""), chars.slice(end).join("")];
 }
 
+/** Whether a span's code-point offsets fit the text it was located in: checked in code points, as they count. */
+export function fitsCodePoints(text: string, start: number, end: number): boolean {
+  return Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end > start && end <= codePointLength(text);
+}
+
+const SPACE = /^\s$/u;
+
+/**
+ * The stretch of text around a located span, in code points: up to `radius` on each side, cut between words (the
+ * partial word at a cut, and the space beside it, are left out), with whether each side was cut. Null when the span does
+ * not fit the text. Counted in code points, so the cut never falls inside a surrogate pair and the span inside is the
+ * located text, exactly: QuoteContext sliced the API's code-point offsets as UTF-16 units, and on a phone bolded text one
+ * character off for each astral character before the quote (stress test, 2026-10-30).
+ */
+export function aroundCodePoints(text: string, start: number, end: number, radius: number) {
+  if (!fitsCodePoints(text, start, end)) return null;
+  const chars = Array.from(text);
+  let from = Math.max(0, start - radius);
+  let to = Math.min(chars.length, end + radius);
+  const cutBefore = from > 0;
+  const cutAfter = to < chars.length;
+  if (cutBefore) {
+    const space = chars.slice(from, start).findIndex((ch) => SPACE.test(ch));
+    if (space >= 0) from += space + 1;
+  }
+  if (cutAfter) {
+    const after = chars.slice(end, to);
+    let space = after.length - 1;
+    while (space >= 0 && !SPACE.test(after[space])) space--;
+    if (space >= 0) to = end + space;
+  }
+  return { from, to, cutBefore, cutAfter };
+}
+
+/**
+ * At most `max` code points of the text, else its first `keep` and an ellipsis: an excerpt that never ends inside a
+ * surrogate pair (a UTF-16 cut left U+FFFD at the end of a quote whose 150th unit was half an emoji).
+ */
+export function clipCodePoints(text: string, max: number, keep = max - 1): string {
+  const chars = Array.from(text);
+  return chars.length > max ? `${chars.slice(0, keep).join("").trimEnd()}…` : text;
+}
+
 /**
  * Invisible format characters (Unicode Cf) a stored reading may still hold: readings made before reader v9 kept them,
  * and they make the text on screen differ from the text that was checked ("\u202e09\u202c days" displays as "90 days").

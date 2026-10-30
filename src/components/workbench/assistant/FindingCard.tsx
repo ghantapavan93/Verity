@@ -5,10 +5,12 @@ import { NARROW_QUERY } from "../shell/constants";
 import { StatusChip, Visible } from "../shell/primitives";
 import { RelationNotes } from "./RelationNotes";
 import { checkLedger, unseenNote, valueNotes } from "@/lib/checks";
+import { clipCodePoints } from "@/lib/text";
 import { isLocated, passageLabel, type FindingView, type SectionView, type SpanView } from "@/lib/types";
 
+/** At most 150 characters of a quote, cut by code points (lib/text clipCodePoints): never inside a surrogate pair. */
 function excerpt(quote: string, max = 150): string {
-  return quote.length > max ? `${quote.slice(0, max - 3).trimEnd()}…` : quote;
+  return clipCodePoints(quote, max, max - 3);
 }
 
 /**

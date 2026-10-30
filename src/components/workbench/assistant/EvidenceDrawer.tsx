@@ -13,7 +13,7 @@ import { DayGauge, readComparison } from "./DayGauge";
 import { RelationNotes } from "./RelationNotes";
 import { WhyThisAnswer } from "./WhyThisAnswer";
 import { errorMessage, isConflict, reviewFinding } from "@/lib/api";
-import { shownText } from "@/lib/text";
+import { aroundCodePoints, shownText } from "@/lib/text";
 import { unseenNote } from "@/lib/checks";
 import { formatWhen } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
@@ -110,27 +110,28 @@ function proposalFor(explanation: RunExplanationView | null, findingId: string) 
   return explanation.proposals.find((p) => p.ordinal === ordinal) ?? null;
 }
 
-const AROUND = 280; // characters of stored text shown on each side of a quote
+const AROUND = 280; // characters (code points) of stored text shown on each side of a quote
 
 /**
  * On a phone, where the contract text is hidden: the stored text around a verified quote, read from its offsets, in a
- * native disclosure (keyboard and screen reader for free). Nothing when the offsets do not fit the text.
+ * native disclosure (keyboard and screen reader for free). Nothing when the offsets do not fit the text. The offsets
+ * count code points, and so does every cut here (lib/text aroundCodePoints): sliced as UTF-16 units, the emphasis moved
+ * one character off the located text for each astral character before it (stress test, 2026-10-30).
  */
 function QuoteContext({ text, start, end }: { text: string; start: number; end: number }) {
-  if (!(start >= 0 && end > start && end <= text.length)) return null;
-  const before = text.slice(Math.max(0, start - AROUND), start);
-  const after = text.slice(end, end + AROUND);
-  const lead = start > AROUND ? `…${before.replace(/^\S*\s/, "")}` : before;
-  const trail = end + AROUND < text.length ? `${after.replace(/\s\S*$/, "")}…` : after;
+  const around = aroundCodePoints(text, start, end, AROUND);
+  if (!around) return null;
   return (
     <details className={styles.quoteContext}>
       <summary>Text around this quote</summary>
       <p className={styles.quoteContextText}>
-        <Visible text={lead} />
+        {around.cutBefore && "…"}
+        <Visible text={text} start={around.from} end={start} />
         <strong>
-          <Visible text={text.slice(start, end)} />
+          <Visible text={text} start={start} end={end} />
         </strong>
-        <Visible text={trail} />
+        <Visible text={text} start={end} end={around.to} />
+        {around.cutAfter && "…"}
       </p>
       <p className={styles.drawerRefStatic}>From the contract text as Verity read it, not an image of the page.</p>
     </details>

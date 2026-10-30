@@ -429,6 +429,56 @@ describe("one drawer, another finding", () => {
     }
   });
 
+  /**
+   * The API's offsets count code points, as Python indexes the text. The context sliced them as UTF-16 units, so each
+   * character outside the Basic Multilingual Plane before the quote moved the emphasis one unit off the located text,
+   * onto a neighbouring clause's words with enough of them (stress test, 2026-10-30). The offsets here are code points.
+   */
+  it("on a phone, emphasises exactly the located text, whatever astral characters come before or inside it", () => {
+    const quote = "Either party may terminate on ninety (90) days' written notice.";
+    const cases = [
+      `The Supplier, \u{20B9F}\u5ddd Trading Co., and the Customer agree as follows. ${quote} Fees are due monthly.`, // CJK Extension B
+      `Signed \u{1F600}\u{1F600}\u{1F600} by both. ${quote} Fees are due monthly.`, // emoji
+      `The \u{1D412}\u{1D42E}\u{1D429}\u{1D429}\u{1D425}\u{1D422}\u{1D41E}\u{1D42B} agree. ${quote} Fees are due monthly.`, // mathematical bold
+      `Plain words first. ${quote.replace("written", "written \u{1F4DD}")} Fees are due monthly.`, // an emoji inside the quote
+      `${"\u{1F600}".repeat(300)} ${quote} ${"\u{1F4DD}".repeat(300)}`, // the cut lands among astral characters
+      `Plain words first. ${quote} Fees are due monthly.`, // control: nothing outside the BMP
+    ];
+    const lone = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: (media: string) => ({ matches: true, media, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+    });
+    try {
+      for (const text of cases) {
+        const located = text.includes(quote) ? quote : quote.replace("written", "written \u{1F4DD}");
+        const start = Array.from(text.slice(0, text.indexOf(located))).length;
+        const end = start + Array.from(located).length;
+        const base = finding(null);
+        const view = { ...base, spans: [{ ...base.spans[0], quote: located, start, end }] } as unknown as FindingView;
+        render(
+          <EvidenceDrawer
+            finding={view}
+            run={RUN}
+            guidanceText={null}
+            sectionsById={new Map([["s0", { ...SECTION, text }]])}
+            onJump={vi.fn()}
+            onClose={vi.fn()}
+            closeRef={null}
+            reduceMotion
+          />,
+        );
+        const context = screen.getByText("Text around this quote").closest("details")!;
+        expect(context.querySelector("strong")?.textContent, text.slice(0, 40)).toBe(located);
+        expect(lone.test(context.textContent ?? ""), "a cut split a surrogate pair").toBe(false);
+        cleanup();
+      }
+    } finally {
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
+
   it("names every invisible character the model wrote, in each of its strings, instead of letting it act", async () => {
     api.getRunExplanation.mockRejectedValue(new Error("no record")); // the finding's own fields, not the proposal's
     const base = finding(null);

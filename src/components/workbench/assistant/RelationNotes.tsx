@@ -4,6 +4,7 @@ import styles from "../Workbench.module.css";
 import { NARROW_QUERY } from "../shell/constants";
 import { Visible } from "../shell/primitives";
 import { aroundChanges, wordContrast, type DiffPiece } from "@/lib/diff";
+import { clipCodePoints } from "@/lib/text";
 import { passageSpan, type PassageView, type RelationNoteView, type RelationView, type SpanView } from "@/lib/types";
 
 /**
@@ -12,8 +13,7 @@ import { passageSpan, type PassageView, type RelationNoteView, type RelationView
  */
 
 function excerpt(text: string, max = 150): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
+  return clipCodePoints(text.replace(/\s+/g, " ").trim(), max); // cut by code points: never inside a surrogate pair
 }
 
 type Side = "original" | "replacement" | null;
