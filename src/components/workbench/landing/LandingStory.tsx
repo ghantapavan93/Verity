@@ -4,6 +4,7 @@ import { motion, useInView } from "framer-motion";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import styles from "./Landing.module.css";
 import { IconArrowRight } from "../icons";
+import { shownText } from "@/lib/text";
 import { statusLabel, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -234,7 +235,7 @@ export function OneRun({
   const found = verified.length
     ? `The quote was found verbatim${relocated ? ", in a different section from the one cited" : ""}.`
     : "Code did not find the quote in the document text.";
-  const read = lead.observed && lead.required ? `It read ${lead.observed} against ${lead.required}` : "It answered";
+  const read = lead.observed && lead.required ? `It read ${shownText(lead.observed)} against ${shownText(lead.required)}` : "It answered";
   const steps = [
     {
       n: "01",

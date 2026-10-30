@@ -1,6 +1,8 @@
 "use client";
 
 import styles from "../Workbench.module.css";
+import { Visible } from "../shell/primitives";
+import { shownText } from "@/lib/text";
 import { citationLabel, REASON_TITLES, type FindingView, type RunView, type SectionView } from "@/lib/types";
 
 /** The title for a run that ended without findings, from the reason the API recorded. */
@@ -34,7 +36,10 @@ export function RunOutcome({
           {run.stage === "failed" ? "Failed" : "Unresolved"}
         </span>
       </div>
-      <p className={styles.resultText}>{run.error ?? runError ?? run.note ?? "No passage in the sections retrieved for this question could be verified."}</p>
+      {/* A run's error can quote what the model wrote (a validation error names the input it refused). */}
+      <p className={styles.resultText}>
+        <Visible text={run.error ?? runError ?? run.note ?? "No passage in the sections retrieved for this question could be verified."} />
+      </p>
       {run.withheld.length > 0 && <WithheldList findings={run.withheld} sectionsById={sectionsById} onEvidence={onEvidence} />}
       {run.stage === "failed" && (
         <div className={styles.resultActions}>
@@ -66,14 +71,24 @@ export function WithheldList({
       <div className={styles.evidenceHead}>What the model proposed · withheld by the verifier</div>
       {findings.map((finding) => (
         <div key={finding.id} className={styles.withheldProposal}>
-          <div className={styles.withheldTopic}>{finding.topic}</div>
-          <p className={styles.withheldProposalText}>{finding.conclusion}</p>
+          <div className={styles.withheldTopic}>
+            <Visible text={finding.topic} />
+          </div>
+          <p className={styles.withheldProposalText}>
+            <Visible text={finding.conclusion} />
+          </p>
           {finding.spans.map((span, i) => {
             const section = span.sectionId ? sectionsById.get(span.sectionId) : undefined;
-            const where = section ? citationLabel(section) : span.citedSectionLabel ? `the model's ${span.citedSectionLabel}` : "the sections handed over";
+            const where = section
+              ? citationLabel(section)
+              : span.citedSectionLabel
+                ? `the model's ${shownText(span.citedSectionLabel)}`
+                : "the sections handed over";
             return (
               <div key={i} className={styles.withheldSpan}>
-                <span className={span.verified ? styles.withheldQuoteKept : `${styles.withheldQuote} ${styles.quoteWithheld}`}>{span.quote}</span>
+                <span className={span.verified ? styles.withheldQuoteKept : `${styles.withheldQuote} ${styles.quoteWithheld}`}>
+                  <Visible text={span.quote} />
+                </span>
                 <span className={styles.verifiedTag}>{span.verified ? `found in ${where}` : `not found verbatim in ${where}`}</span>
               </div>
             );

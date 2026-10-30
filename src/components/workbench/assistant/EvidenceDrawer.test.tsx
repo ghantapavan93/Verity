@@ -24,6 +24,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { EXPLANATION_E5A20E22 } from "./__fixtures__/explanation-e5a20e2283e8416e";
+import { expectShownByName, hostile } from "./__fixtures__/hostile";
 import { EvidenceDrawer } from "./EvidenceDrawer";
 
 const SECTION: SectionView = {
@@ -425,6 +426,35 @@ describe("one drawer, another finding", () => {
       expect(around({ ...located, spans: [{ ...located.spans[0], verified: false }] } as unknown as FindingView, true).shown).toBeNull();
     } finally {
       delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
+
+  it("names every invisible character the model wrote, in each of its strings, instead of letting it act", async () => {
+    api.getRunExplanation.mockRejectedValue(new Error("no record")); // the finding's own fields, not the proposal's
+    const base = finding(null);
+    const view = {
+      ...base,
+      topic: hostile("Termination topic"),
+      observed: hostile("observed words"),
+      required: hostile("required words"),
+      guidanceReference: hostile("guidance words"),
+      suggestedPosition: hostile("suggested words"),
+      withheldConclusion: hostile("withheld words"),
+      spans: [{ ...base.spans[0], verified: false, sectionId: null, quote: hostile("quoted words"), citedSectionLabel: hostile("sec_4") }],
+    } as unknown as FindingView;
+    const { container } = renderDrawer(view);
+    await screen.findByText(/The record could not be read/);
+    for (const words of [
+      "Termination topic",
+      "observed words",
+      "required words",
+      "guidance words",
+      "suggested words",
+      "withheld words",
+      "quoted words",
+      "sec_4",
+    ]) {
+      expectShownByName(container, words);
     }
   });
 });

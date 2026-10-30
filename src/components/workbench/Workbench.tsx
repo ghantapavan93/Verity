@@ -29,6 +29,7 @@ import { useUrlState } from "./hooks/useUrlState";
 import { Landing, refusal } from "./landing/Landing";
 import { chooseProof } from "./landing/proofRun";
 import { modelPlace } from "@/lib/modelPlace";
+import { shownText } from "@/lib/text";
 import { Rail } from "./shell/Rail";
 import { NARROW_QUERY, type Stage, TERMINAL, type View, transitions } from "./shell/constants";
 import { DocumentsView } from "./views/DocumentsView";
@@ -591,7 +592,7 @@ function WorkbenchSurface() {
     });
     if (guidanceRecord) list.push({ id: "guidance-remove", label: "Remove legal guidance", group: "Guidance", run: guidance.remove });
     for (const f of run?.findings ?? []) {
-      list.push({ id: `evidence-${f.id}`, label: `Inspect evidence: ${f.topic}`, group: "Evidence", run: () => openEvidence(f, null) });
+      list.push({ id: `evidence-${f.id}`, label: `Inspect evidence: ${shownText(f.topic)}`, group: "Evidence", run: () => openEvidence(f, null) });
     }
     if (run?.stage === "complete" && run.findings.length > 0) {
       list.push({ id: "memo", label: "Generate review memo", group: "Evidence", run: () => void generateMemo(run) });

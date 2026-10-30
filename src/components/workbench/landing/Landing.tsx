@@ -5,7 +5,7 @@ import { useContext, useEffect, useState, type Dispatch, type SetStateAction } f
 import styles from "./Landing.module.css";
 import { IconArrowRight, IconFile } from "../icons";
 import { transitions, type Stage } from "../shell/constants";
-import { Brand, Shimmer, StatusChip } from "../shell/primitives";
+import { Brand, Shimmer, StatusChip, Visible } from "../shell/primitives";
 import { OneRun, RecordPipeline, Refusals } from "./LandingStory";
 import type { SampleKind } from "../samples";
 import { getCitations, getRun, listDocuments, type Health } from "@/lib/api";
@@ -366,7 +366,9 @@ export function Landing({
                   {lead && (
                     <div className={styles.receiptDecision}>
                       <div className={styles.receiptDecisionHead}>
-                        <span className={styles.receiptTopic}>{lead.topic}</span>
+                        <span className={styles.receiptTopic}>
+                          <Visible text={lead.topic} />
+                        </span>
                         <StatusChip status={lead.status} hasGuidance={proof.hasGuidance} source={lead.statusSource} />
                       </div>
                       {lead.statusReason && (

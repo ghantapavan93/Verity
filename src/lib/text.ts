@@ -34,8 +34,18 @@ const ASCII_WORD = /^[A-Za-z0-9]$/;
 
 export type VisiblePiece = { text: string; invisible: false } | { text: string; invisible: true; codePoint: string };
 
-/** The text in pieces: ordinary text, and each character the reader would remove on its own, named by its code point. */
-export function revealInvisible(text: string): VisiblePiece[] {
+/**
+ * The text in pieces: ordinary text, and each character the reader would remove on its own, named by its code point.
+ * With `start` and `end` (code points), only that stretch, read in the context of the whole text: the paper revealed the
+ * text before a mark, the mark and the text after it each on its own, so a selector at the mark's edge had no neighbour
+ * and acted unmarked (stress test, 2026-10-30).
+ *
+ * The one display primitive for text a model or a file wrote, on every surface of the interface: a model's quote, topic,
+ * conclusion and readings are never cleaned on their way in (the record keeps what the model wrote), so a direction
+ * override in a quote displayed "fifteen (51) days" under "found in the document text" (hostile-model review, 2026-10-30).
+ * Rendered as React by shell/primitives Visible, and as a string, for an attribute or a label, by `shownText`.
+ */
+export function revealInvisible(text: string, start = 0, end?: number): VisiblePiece[] {
   const chars = Array.from(text);
   const hidden = chars.map((ch) => INVISIBLE.test(ch) && !KEPT.has(ch) && !SHAPING.test(ch));
   // As the reader does it: format characters first, then a run of shaping characters between two ASCII letters or digits.
@@ -50,15 +60,23 @@ export function revealInvisible(text: string): VisiblePiece[] {
   });
   const pieces: VisiblePiece[] = [];
   let run = "";
-  chars.forEach((ch, i) => {
+  for (let i = Math.max(0, start); i < Math.min(chars.length, end ?? chars.length); i++) {
+    const ch = chars[i];
     if (!hidden[i]) {
       run += ch;
-      return;
+      continue;
     }
     if (run) pieces.push({ text: run, invisible: false });
     run = "";
     pieces.push({ text: ch, invisible: true, codePoint: `U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}` });
-  });
+  }
   if (run) pieces.push({ text: run, invisible: false });
   return pieces;
+}
+
+/** `revealInvisible` as one string, each marked character written as its name in brackets: for an attribute, a label. */
+export function shownText(text: string): string {
+  return revealInvisible(text)
+    .map((piece) => (piece.invisible ? `[${piece.codePoint}]` : piece.text))
+    .join("");
 }

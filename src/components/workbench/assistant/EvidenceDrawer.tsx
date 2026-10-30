@@ -13,6 +13,7 @@ import { DayGauge, readComparison } from "./DayGauge";
 import { RelationNotes } from "./RelationNotes";
 import { WhyThisAnswer } from "./WhyThisAnswer";
 import { errorMessage, isConflict, reviewFinding } from "@/lib/api";
+import { shownText } from "@/lib/text";
 import { unseenNote } from "@/lib/checks";
 import { formatWhen } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
@@ -74,7 +75,9 @@ export function EvidenceDrawer({
           <header className={styles.drawerHead}>
             <div className={styles.drawerTitle}>
               <strong>Evidence</strong>
-              <span>{finding.topic}</span>
+              <span>
+                <Visible text={finding.topic} />
+              </span>
             </div>
             <button ref={closeRef} type="button" className={styles.iconButton} aria-label="Close evidence" onClick={onClose}>
               <IconClose />
@@ -281,7 +284,9 @@ function EvidenceBody({
             <div>
               <dt>Its sentence</dt>
               <dd>
-                <span className={styles.modelPassage}>{finding.withheldConclusion}</span>
+                <span className={styles.modelPassage}>
+                  <Visible text={finding.withheldConclusion} />
+                </span>
               </dd>
             </div>
           </dl>
@@ -301,14 +306,18 @@ function EvidenceBody({
               <div>
                 <dt>It pointed at</dt>
                 <dd>
-                  <span className={styles.modelPassage}>{finding.guidanceReference}</span>
+                  <span className={styles.modelPassage}>
+                    <Visible text={finding.guidanceReference} />
+                  </span>
                 </dd>
               </div>
             )}
             {finding.suggestedPosition && (
               <div>
                 <dt>It suggested</dt>
-                <dd>{finding.suggestedPosition}</dd>
+                <dd>
+                  <Visible text={finding.suggestedPosition} />
+                </dd>
               </div>
             )}
           </dl>
@@ -346,7 +355,7 @@ function EvidenceBody({
                 {span.verified && <IconCheck className={styles.verifiedMark} />}
                 <span>
                   {!span.verified
-                    ? `Not found verbatim in the document · withheld${span.citedSectionLabel ? ` · the model cited ${span.citedSectionLabel}` : ""}`
+                    ? `Not found verbatim in the document · withheld${span.citedSectionLabel ? ` · the model cited ${shownText(span.citedSectionLabel)}` : ""}`
                     : finding.evidenceKind === "coverage"
                       ? "Found in the document text · the closest provision read; in the model's view it does not state the point"
                       : span.method === "exact"
@@ -404,7 +413,9 @@ function EvidenceBody({
         {guidance && (
           <div className={styles.guidanceBlock}>
             <h5 className={styles.drawerSubhead}>{decidedByCode(finding.statusSource) || confirmed ? "Guidance" : "Guidance given"}</h5>
-            <blockquote className={styles.guidanceQuote}>{guidance}</blockquote>
+            <blockquote className={styles.guidanceQuote}>
+              <Visible text={guidance} />
+            </blockquote>
           </div>
         )}
         {(decidedByCode(finding.statusSource) || confirmed) && comparison && <DayGauge comparison={comparison} />}
@@ -600,11 +611,20 @@ function HumanLayer({
 function ModelWords({ observed, required }: { observed: string | null | undefined; required: string | null | undefined }) {
   return (
     <>
-      {observed ? <span className={styles.modelWords}>{observed}</span> : "nothing observed"}
+      {observed ? (
+        <span className={styles.modelWords}>
+          <Visible text={observed} />
+        </span>
+      ) : (
+        "nothing observed"
+      )}
       {required ? (
         <>
           {" "}
-          against <span className={styles.modelWords}>{required}</span>
+          against{" "}
+          <span className={styles.modelWords}>
+            <Visible text={required} />
+          </span>
         </>
       ) : null}
     </>

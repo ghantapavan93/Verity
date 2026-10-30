@@ -16,6 +16,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { EXPLANATION_E5A20E22 } from "./__fixtures__/explanation-e5a20e2283e8416e";
+import { expectShownByName, hostile } from "./__fixtures__/hostile";
 import { WhyThisAnswer } from "./WhyThisAnswer";
 
 describe("WhyThisAnswer", () => {
@@ -117,5 +118,36 @@ describe("WhyThisAnswer", () => {
     api.getRunExplanation.mockRejectedValue(new Error("The workbench API at http://127.0.0.1:8000 is not reachable."));
     render(<WhyThisAnswer runId="e5a20e2283e8416e" />);
     expect(await screen.findByText(/The explanation could not be read: The workbench API/)).toBeTruthy();
+  });
+});
+
+/** The proposal as the record keeps the model's words: named in place, never acting (hostile-model review, 2026-10-30). */
+describe("WhyThisAnswer, the model's strings", () => {
+  beforeEach(() => api.getRunExplanation.mockReset());
+  afterEach(cleanup);
+
+  it("names every invisible character in the proposal's conclusion, readings, cited labels and quotes", async () => {
+    const [proposal] = EXPLANATION_E5A20E22.proposals;
+    const [found] = EXPLANATION_E5A20E22.findings;
+    api.getRunExplanation.mockResolvedValue({
+      ...EXPLANATION_E5A20E22,
+      proposals: [
+        {
+          ...proposal,
+          conclusion: hostile("conclusion words"),
+          observed: hostile("observed words"),
+          required: hostile("required words"),
+          evidence: [{ citedLabel: hostile("sec_4"), quote: hostile("quoted words") }],
+        },
+      ],
+      findings: [
+        found,
+        { ...found, id: "second", topic: hostile("second topic"), sourceMatches: [{ ...found.sourceMatches[0], citedLabel: hostile("sec_9") }] },
+      ],
+    });
+    render(<WhyThisAnswer runId="e5a20e2283e8416e" />);
+    const panel = await screen.findByTestId("why-this-answer");
+    for (const words of ["conclusion words", "observed words", "required words", "sec_4", "quoted words", "second topic", "sec_9"])
+      expectShownByName(panel, words);
   });
 });

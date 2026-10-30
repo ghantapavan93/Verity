@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import styles from "../Workbench.module.css";
 import type { Highlight } from "./DocumentPane";
-import { codePointLength } from "@/lib/text";
+import { codePointLength, shownText } from "@/lib/text";
 import { isLocated, passageLabel, type DocumentView, type FindingView, type LocatedSpan, type SectionView } from "@/lib/types";
 
 /** One verified quote, placed along the contract: how far into the text it begins, as a share of the whole. */
@@ -67,8 +67,8 @@ export function EvidenceSpine({
             className={`${styles.spineTick} ${tick.read ? styles.spineTickRead : ""} ${current ? styles.spineTickCurrent : ""}`}
             data-read={tick.read || undefined}
             style={{ top: `${Math.min(99, Math.max(1, tick.at * 100))}%` }}
-            title={`${tick.topic}: ${passageLabel(tick.span, tick.section)}${tick.read ? " (read, not relied on)" : ""}`}
-            aria-label={`${tick.topic}, ${passageLabel(tick.span, tick.section)}${tick.read ? ", read, not relied on" : ""}: show in the document`}
+            title={`${shownText(tick.topic)}: ${passageLabel(tick.span, tick.section)}${tick.read ? " (read, not relied on)" : ""}`}
+            aria-label={`${shownText(tick.topic)}, ${passageLabel(tick.span, tick.section)}${tick.read ? ", read, not relied on" : ""}: show in the document`}
             onClick={() => onJump(tick.span.sectionId, tick.span)}
           />
         );

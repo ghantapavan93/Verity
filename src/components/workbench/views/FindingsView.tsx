@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import wb from "../Workbench.module.css";
 import styles from "./Views.module.css";
-import { StatusChip } from "../shell/primitives";
+import { StatusChip, Visible } from "../shell/primitives";
 import { Figures } from "./Figures";
 import { ListSkeleton, ReadFailed } from "./Skeleton";
 import { errorMessage, isConflict, listFindings, reviewFinding } from "@/lib/api";
 import { formatWhen, plural } from "@/lib/format";
 import { rememberReviewer, rememberedReviewer } from "@/lib/reviewer";
+import { shownText } from "@/lib/text";
 import { type FindingRecord, type FindingStatus, type ReviewVerdict } from "@/lib/types";
 
 /** What the figures at the top can narrow the list to. */
@@ -199,12 +200,16 @@ export function FindingsView({
                 <li key={r.id} className={styles.findingItem}>
                   <button type="button" className={`${styles.row} ${styles.findingRow}`} onClick={() => onOpen(r)}>
                     <div className={styles.rowMain}>
-                      <div className={styles.rowTitle}>{r.topic}</div>
+                      <div className={styles.rowTitle}>
+                        <Visible text={r.topic} />
+                      </div>
                       <div className={styles.rowMeta}>
                         <span title={r.question}>Asked: {r.question}</span>
                       </div>
                     </div>
-                    <p className={styles.cellText}>{r.conclusion}</p>
+                    <p className={styles.cellText}>
+                      <Visible text={r.conclusion} />
+                    </p>
                     <div className={styles.cellEvidence}>
                       {r.citations.map((c) => (
                         <span
@@ -262,7 +267,7 @@ export function FindingsView({
                           className={styles.reviewButton}
                           disabled={busyId === r.id}
                           onClick={() => void decide(r, "cleared")}
-                          aria-label={`Clear decision: ${r.topic}`}
+                          aria-label={`Clear decision: ${shownText(r.topic)}`}
                         >
                           Clear decision
                         </button>
@@ -288,7 +293,7 @@ export function FindingsView({
                           required
                           ref={(element) => element?.focus()}
                         />
-                        <button type="submit" className={styles.reviewButton} aria-label={`${VERB[pending.verdict]}: ${r.topic}`}>
+                        <button type="submit" className={styles.reviewButton} aria-label={`${VERB[pending.verdict]}: ${shownText(r.topic)}`}>
                           {VERB[pending.verdict]}
                         </button>
                         <button type="button" className={styles.reviewButton} onClick={() => setPending(null)}>
@@ -303,7 +308,7 @@ export function FindingsView({
                           className={styles.reviewButton}
                           disabled={busyId === r.id}
                           onClick={() => void decide(r, "confirmed")}
-                          aria-label={`Confirm: ${r.topic}`}
+                          aria-label={`Confirm: ${shownText(r.topic)}`}
                           aria-describedby={r.flagged && r.concerns.length > 0 ? `concerns-${r.id}` : undefined}
                         >
                           Confirm
@@ -313,7 +318,7 @@ export function FindingsView({
                           className={styles.reviewButton}
                           disabled={busyId === r.id}
                           onClick={() => void decide(r, "dismissed")}
-                          aria-label={`Dismiss: ${r.topic}`}
+                          aria-label={`Dismiss: ${shownText(r.topic)}`}
                         >
                           Dismiss
                         </button>

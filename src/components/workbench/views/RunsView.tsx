@@ -14,7 +14,7 @@ import wb from "../Workbench.module.css";
 import { WhyThisAnswer } from "../assistant/WhyThisAnswer";
 import { TERMINAL } from "../shell/constants";
 import { PackLink } from "../shell/PackLink";
-import { StatusChip } from "../shell/primitives";
+import { StatusChip, Visible } from "../shell/primitives";
 import styles from "./Views.module.css";
 import { Figures, MethodBar } from "./Figures";
 import { ListSkeleton, ReadFailed } from "./Skeleton";
@@ -33,6 +33,7 @@ import {
   listRuns,
 } from "@/lib/api";
 import { formatClock, formatDelta, formatLatency, formatWhen, plural, shortHash } from "@/lib/format";
+import { shownText } from "@/lib/text";
 import {
   OUTCOME_LABELS,
   REASON_TITLES,
@@ -537,10 +538,14 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
         {run.findings.map((f) => (
           <article key={f.id} className={styles.finding}>
             <div className={styles.findingHead}>
-              <span>{f.topic}</span>
+              <span>
+                <Visible text={f.topic} />
+              </span>
               <StatusChip status={f.status} hasGuidance={run.hasGuidance} source={f.statusSource} />
             </div>
-            <p className={styles.findingText}>{f.conclusion}</p>
+            <p className={styles.findingText}>
+              <Visible text={f.conclusion} />
+            </p>
             <p className={styles.quiet}>
               {STATUS_SOURCE_LABELS[f.statusSource] ?? f.statusSource}
               {f.statusReason ? ` Recorded: ${f.statusReason}.` : ""}
@@ -549,13 +554,15 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
               <div key={i} className={styles.span}>
                 <div className={styles.spanMeta}>
                   <span>
-                    cited <strong className={styles.mono}>{s.citedSectionLabel || "no label"}</strong>
+                    cited <strong className={styles.mono}>{s.citedSectionLabel ? <Visible text={s.citedSectionLabel} /> : "no label"}</strong>
                   </span>
                   <span>
                     located <strong>{s.verified ? `${s.method} · offsets ${s.start} to ${s.end}` : "not found"}</strong>
                   </span>
                 </div>
-                <p className={styles.quote}>{s.quote}</p>
+                <p className={styles.quote}>
+                  <Visible text={s.quote} />
+                </p>
               </div>
             ))}
           </article>
@@ -1067,7 +1074,9 @@ function Experiments({ view }: { view: ExperimentsView }) {
                   </div>
                   <div>
                     <dt>Observed</dt>
-                    <dd>{r.observed}</dd>
+                    <dd>
+                      <Visible text={r.observed} />
+                    </dd>
                   </div>
                 </dl>
               </div>
@@ -1076,7 +1085,7 @@ function Experiments({ view }: { view: ExperimentsView }) {
           {view.baselines.length > 0 && (
             <p className={styles.quiet}>
               Before the three, two prompt baselines set their shape:{" "}
-              {view.baselines.map((b, i) => `${b.title.toLowerCase()} went ${b.observed}${i < view.baselines.length - 1 ? "; " : "."}`).join("")}
+              {view.baselines.map((b, i) => `${b.title.toLowerCase()} went ${shownText(b.observed)}${i < view.baselines.length - 1 ? "; " : "."}`).join("")}
             </p>
           )}
           <p className={styles.quiet}>
