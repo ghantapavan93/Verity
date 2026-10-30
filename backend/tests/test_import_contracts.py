@@ -63,3 +63,20 @@ def test_every_module_sits_in_the_layers_contract_or_says_why_not() -> None:
     named = {name.strip().removeprefix("app.") for line in layers.splitlines() for name in line.replace("|", ":").split(":") if name.strip()}
     assert _top_level() - named == set(EXEMPT), "a module in no layer must be exempt with its reason, and an exempt one in none"
     assert not named & set(EXEMPT)
+
+
+def test_the_verifier_reads_as_absent_everything_the_shared_definition_calls_unseen() -> None:
+    """The verifier imports nothing of the app, so it writes out its own set of characters a reader does not see
+    (verify.spans.IGNORABLE_RANGES); app.unseen is the definition the readers and the value readers share. A character one
+    calls unseen and the other reads would part what is checked from what is read (stress test, 2026-10-30)."""
+    import re
+
+    from app import unseen
+    from app.ingest import invisible
+    from app.verify.spans import IGNORABLE_RANGES
+
+    verifier = {code for low, high in IGNORABLE_RANGES for code in range(low, high + 1)}
+    shared = re.compile(f"[{unseen.IGNORABLE}{unseen.JOINERS}{unseen.MARKS}]")
+    unseen_codes = {code for code in range(0x110000) if shared.fullmatch(chr(code))}
+    assert unseen_codes <= verifier, sorted(hex(code) for code in unseen_codes - verifier)
+    assert (invisible.IGNORABLE, invisible.JOINERS, invisible.MARKS) == (unseen.IGNORABLE, unseen.JOINERS, unseen.MARKS)

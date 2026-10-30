@@ -29,6 +29,7 @@ forbidden_modules =
     app.schemas
     app.serving
     app.trust
+    app.unseen
 
 [importlinter:contract:providers-know-nothing]
 name = a model provider sees settings and its own base only; it cannot reach the verifier, the record or the run
@@ -55,4 +56,4 @@ layers =
     app.runs | app.routing | app.trust
     app.analysis | app.retrieval | app.verify | app.ingest | app.memo | app.policy
     app.providers
-    app.document_names : app.models : app.db : app.schemas : app.config : app.hashing : app.errors
+    app.document_names : app.models : app.db : app.schemas : app.config : app.hashing : app.errors : app.unseen

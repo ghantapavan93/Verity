@@ -29,7 +29,7 @@ from enum import StrEnum
 from functools import lru_cache
 from typing import Literal
 
-from ..ingest.invisible import IGNORABLE
+from ..unseen import IGNORABLE
 
 
 class DurationUnit(StrEnum):
