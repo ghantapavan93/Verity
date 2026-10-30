@@ -224,3 +224,25 @@ def test_a_later_place_is_found_when_the_first_lies_inside_a_number() -> None:
     found = locate("500, shares", text)
     assert found is not None and found.method == "typed" and text[found.start : found.end] == "500 shares", found
     assert found.start == text.rindex("500") and found.count == 1
+
+
+# The headline invariant, held by two implementations: whatever the workbench locates, at whatever tier, the evidence
+# pack's own checker accepts at the same offsets under the same version. Quotes are cut from the text, then put in
+# capitals, stripped of punctuation or given doubled spaces, so every tier is reached.
+CONTRACTISH = st.text(alphabet="0123456789,.%$()-−+±>/: aAbBeT́‌;! ", min_size=1, max_size=40)
+VARIANTS = [str, str.upper, lambda q: "".join(c for c in q if c.isalnum() or c.isspace()), lambda q: q.replace(" ", "  ")]
+
+
+@settings(max_examples=400 * FUZZ_SCALE, deadline=None)
+@given(text=CONTRACTISH, data=st.data())
+def test_whatever_the_workbench_locates_its_pack_accepts(tmp_path_factory: pytest.TempPathFactory, text: str, data: st.DataObject) -> None:
+    checker = _checker(tmp_path_factory.mktemp("located-v11"))
+    start = data.draw(st.integers(0, len(text) - 1))
+    end = data.draw(st.integers(start + 1, len(text)))
+    quote = data.draw(st.sampled_from(VARIANTS))(text[start:end])
+    found = locate(quote, text)
+    if found is None:
+        return
+    span = text[found.start : found.end]
+    assert checker.same(span, quote, found.method, 11, (text, found.start, found.end)), (text, quote, found)
+    assert checker.edges_hold(text, found.start, found.end, 11), (text, quote, found)
