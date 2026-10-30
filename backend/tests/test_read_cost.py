@@ -160,3 +160,38 @@ def test_each_finding_s_account_is_built_once_per_read(client: TestClient, monke
     answer = client.get(f"/api/runs/{result['run_id']}{view}")
     assert answer.status_code == 200
     assert sorted(built) == sorted(set(built)) and len(built) == shown
+
+
+def test_concurrent_questions_on_one_document_read_its_replacement_starts_once(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The starts are read in the request, before the question is admitted; three questions at once on a fresh 1.85 MB
+    # document each read them again (32, 39 and 71 s; stress test, 2026-10-30, performance 1). One reads, the others wait.
+    import threading
+    import time
+
+    from app.application import start_run as start_module
+
+    document_id = client.post("/api/documents", files={"file": ("c.txt", CONTRACT.encode(), "text/plain")}).json()["id"]
+    read: list[int] = []
+
+    def slow(sections: Any) -> tuple[str, ...]:  # noqa: ANN401
+        read.append(1)
+        time.sleep(0.3)
+        return ()
+
+    monkeypatch.setattr(start_module, "replacement_starts", slow)
+    with start_module._STARTS_LOCK:
+        start_module._STARTS.clear()
+    go = threading.Barrier(4)
+
+    def ask() -> None:
+        with SessionLocal() as session:
+            document = session.get(Document, document_id)
+            go.wait()
+            start_module._document_starts(session, document)
+
+    threads = [threading.Thread(target=ask) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert len(read) == 1

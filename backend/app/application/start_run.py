@@ -80,6 +80,10 @@ def run_options(model: str | None = None) -> RunOptions:
 _STARTS: OrderedDict[tuple[str, str], tuple[str, ...]] = OrderedDict()
 _STARTS_KEPT = 256
 _STARTS_LOCK = threading.Lock()
+# One reading of a document's starts at a time: concurrent questions on a document not yet read each read it, in the
+# request before admission, so three at once on a fresh 1.85 MB document took 32, 39 and 71 s (stress test, 2026-10-30).
+# The others wait for the one and are handed its answer. A lock per document, dropped once it is read.
+_READING_STARTS: dict[tuple[str, str], threading.Lock] = {}
 
 
 def _document_starts(session: Session, document: Document) -> tuple[str, ...]:
@@ -88,12 +92,21 @@ def _document_starts(session: Session, document: Document) -> tuple[str, ...]:
         if key in _STARTS:
             _STARTS.move_to_end(key)
             return _STARTS[key]
-    sections = session.query(Section).filter(Section.document_id == document.id).order_by(Section.ordinal).all()
-    starts = replacement_starts(sections)
-    with _STARTS_LOCK:
-        _STARTS[key] = starts
-        while len(_STARTS) > _STARTS_KEPT:
-            _STARTS.popitem(last=False)
+        reading = _READING_STARTS.setdefault(key, threading.Lock())
+    with reading:
+        with _STARTS_LOCK:
+            if key in _STARTS:  # read by the request this one waited for
+                return _STARTS[key]
+        try:
+            sections = session.query(Section).filter(Section.document_id == document.id).order_by(Section.ordinal).all()
+            starts = replacement_starts(sections)
+            with _STARTS_LOCK:
+                _STARTS[key] = starts
+                while len(_STARTS) > _STARTS_KEPT:
+                    _STARTS.popitem(last=False)
+        finally:
+            with _STARTS_LOCK:
+                _READING_STARTS.pop(key, None)
     return starts
 
 
