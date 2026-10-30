@@ -12,9 +12,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+import pytest
 from fastapi.testclient import TestClient
 
-from app.runs.links import MAX_LINKS, because, linked, links_of
+from app.runs.links import MAX_LINKS, _definitions, because, linked, links_of
 from app.runs.service import FrozenOptions, _retrieve
 from tests.test_policy_v10_calendar import DisputeProvider
 
@@ -28,6 +29,7 @@ class S:
 
 
 FILLER = [S(str(n), f"Miscellaneous {n}", f"This clause {n} concerns unrelated administrative matter number {n}.") for n in range(20, 34)]
+FROZEN = FrozenOptions(retrieval_k=6, retriever="bm25", aliases=True, embed_model="", window=6000, decoding={})
 
 
 def _sections() -> list[S]:
@@ -95,3 +97,74 @@ def test_a_run_records_why_a_linked_section_was_handed(client: TestClient) -> No
         assert run is not None
         handed = json.loads(run.candidates_json or "[]")
     assert any(c.get("linked", "").startswith('the definition of "') for c in handed), handed
+
+
+# retrieval-v3 (stress test 2026-10-30, retrieval corner, finding 6): one reading of a defined term, whatever the drafting.
+# A definition in single quotes or guillemets was never linked (UK, Commonwealth and EU drafting); an interpretation
+# clause ('"including" means "including without limitation"') made a word of construction a term matched in every
+# section, so its definition took a link place from what the clause cites; a term in a clause printed in capitals, or in
+# its "-ies" plural, was not seen as used.
+
+
+def _uk(opening: str, closing: str) -> list[S]:
+    return [
+        S("1", "Definitions", f"{opening}Business Day{closing} means a day other than a Saturday, Sunday or public holiday in England.", "s1"),
+        S("3", "Payment", "The Customer shall pay each undisputed invoice within ten Business Days of receipt.", "s3"),
+        *FILLER,
+    ]
+
+
+@pytest.mark.parametrize(
+    ("opening", "closing"),
+    [("\u201c", "\u201d"), ('"', '"'), ("\u2018", "\u2019"), ("'", "'"), ("\u00ab", "\u00bb"), ("\u00ab ", " \u00bb"), ("\u201e", "\u201c")],
+)
+def test_a_definition_is_linked_whatever_its_quotation_marks(opening: str, closing: str) -> None:
+    sections = _uk(opening, closing)
+    assert ("definition", 0, "Business Day") in {(link.kind, link.index, link.by) for link in links_of(sections, 1)}
+    chosen, _, why = _retrieve(sections, "How long does the customer have to pay an invoice?", None, FROZEN)  # type: ignore[arg-type]
+    assert sections[0] in chosen and why[sections[0].id] == 'the definition of "Business Day", used in §3'
+
+
+def test_an_apostrophe_never_opens_or_closes_a_term() -> None:
+    assert _definitions([S("1", "x", "Each of the Parties' and the Members' interest includes all rights in the Fund.")]) == {}
+    assert list(_definitions([S("1", "x", '"Customer\'s Control Panel" shall mean the portal.')])) == ["Customer's Control Panel"]
+    assert list(_definitions([S("1", "x", "\u2018Customer\u2019s Data\u2019 means the data the Customer uploads.")])) == ["Customer\u2019s Data"]
+    assert list(_definitions([S("1", "x", "The Supplier's 'Personal Data' means data about a person.")])) == ["Personal Data"]
+
+
+def test_an_interpretation_clause_defines_no_term_and_takes_no_link_place() -> None:
+    sections = [
+        S(
+            "1",
+            "Definitions",
+            '"Business Day" means a weekday. "including" means "including without limitation"; "to" means "to but excluding";'
+            ' "to the extent" means the degree to which; "$" means United States dollars.',
+        ),
+        S("4", "Payment", "Subject to Clause 9, the Customer shall pay all charges, including expenses, within ten Business Days of invoice."),
+        S("9", "Set-off", "The Customer may set off any amount the Supplier owes it."),
+        *FILLER,
+    ]
+    assert set(_definitions(sections)) == {"Business Day"}
+    added = linked(sections, [1, *range(3, 8)], window=6000)
+    assert {(link.kind, link.index) for link in added} == {("definition", 0), ("reference", 2)}, [because(link, sections) for link in added]
+
+
+def test_control_a_lower_case_content_term_still_links() -> None:
+    sections = [
+        S("1", "Definitions", '"days" means Business Days, unless stated otherwise.'),
+        S("5", "Notice", "Notice takes effect five days after it is sent."),
+        *FILLER,
+    ]
+    assert ("definition", 0, "days") in {(link.kind, link.index, link.by) for link in links_of(sections, 1)}
+    assert all(link.by != "days" for link in links_of([sections[0], S("6", "Days", "Days of rest are agreed."), *FILLER], 1)), "matched as written"
+
+
+def test_a_term_is_used_in_capitals_and_in_its_plural() -> None:
+    sections = [
+        S("1", "Definitions", '"Fees" means the charges in Schedule 1. "Party" means the Supplier or the Customer. "Act" means the Data Act.'),
+        S("12", "Limitation", "IN NO EVENT SHALL EITHER PARTY'S AGGREGATE LIABILITY EXCEED THE FEES PAID IN THE TWELVE MONTHS BEFORE THE CLAIM."),
+        S("13", "Cooperation", "The Parties shall cooperate; the Supplier meets the ACT standard for accessible design in every release it makes."),
+        *FILLER,
+    ]
+    assert {link.by for link in links_of(sections, 1) if link.kind == "definition"} == {"Fees", "Party"}
+    assert {link.by for link in links_of(sections, 2) if link.kind == "definition"} == {"Party"}, "an acronym in mixed text is not the term"

@@ -35,10 +35,28 @@ MAX_LINKS = 2  # linked sections added after the ranked ones, at most
 LinkKind = Literal["amendment", "definition", "reference"]
 _PRIORITY: dict[LinkKind, int] = {"amendment": 0, "definition": 1, "reference": 2}
 
-# A defining sentence: the term in quotes, up to three words, then a defining verb.
+# A defining sentence: the term between a pair of quotation marks, up to three words, then a defining verb. Every pair a
+# contract is drafted with (retrieval-v3, stress test 2026-10-30, retrieval corner): until then only double quotes were
+# read, so a definition in single quotes or guillemets, as UK and EU drafting writes them, was never linked. A single
+# quotation mark opens a term only where no letter precedes it and closes one only where none follows, so an apostrophe
+# never does ("the Parties' and the Members' interest includes"), and a term may hold one ("‘Customer’s Data’").
 _DEFINES = re.compile(
-    r"[“\"]([^”\"]{1,60})[”\"](?:\s+[\w-]+){0,3}?\s+(?:means|mean|shall mean|has the meaning|have the meaning|is to|are to|refers to|includes)\b"
+    r"(?:[“\"](?P<double>[^”\"]{1,60})[”\"]"
+    r"|(?<!\w)‘(?P<curly>(?:[^‘’\n]|’(?=\w)){1,60}?)’(?!\w)"
+    r"|(?<![\w'])'(?P<straight>(?:[^'\n]|'(?=\w)){1,60}?)'(?!\w)"
+    r"|«\s?(?P<guillemet>[^«»\n]{1,60}?)\s?»"
+    r"|„(?P<low>[^„“”\n]{1,60})[“”])"
+    r"(?:\s+[\w-]+){0,3}?\s+(?:means|mean|shall mean|has the meaning|have the meaning|is to|are to|refers to|includes)\b"
 )
+# The words of construction an interpretation clause defines ('"including" means "including without limitation"', '"to"
+# means "to but excluding"'). They are not terms: every clause uses them, so their definition took one of the two link
+# places from whatever the clause cites (CUAD, 2026-10-30: 198 of 17,850 runs).
+_CONSTRUCTION = frozenset(
+    {"to", "from", "until", "till", "through", "include", "includes", "including", "or", "and", "any", "will", "shall", "may"}
+    | {"herein", "hereof", "hereunder", "hereto", "hereby", "to the extent"}
+)
+_OPENING_QUOTE = "“\"‘'«„"
+_CAPITALS_AROUND = 80  # characters either side of a use in capitals that must read as capitals
 # The verbs that change another clause's text or override it, or a reference into another instrument ("Section 4.1 of
 # the Lease"), which is how an amendment names what it changes. A wider list (modify, prevail, reduced …) added no case
 # and more false links on CUAD.
@@ -78,25 +96,64 @@ def _definitions(sections: Sequence[Readable]) -> dict[str, int]:
     found: dict[str, int] = {}
     for index, text in enumerate(s.text for s in sections):
         for match in _DEFINES.finditer(text):
-            term = match.group(1).strip()
+            term = _term(match, text)
             if term and term not in found:
                 found[term] = index
     return found
 
 
+def _term(match: re.Match[str], text: str) -> str | None:
+    """The term a defining sentence defines, or None when it defines a word of construction: one of ``_CONSTRUCTION``, a
+    lower-case word the definition quotes again ('"including" means "including without limitation"'), or no word at all
+    ('"$" means', '"[***]" means')."""
+    term = (match.group(match.lastgroup or 0) or "").strip()
+    if not any(ch.isalpha() for ch in term) or term.casefold() in _CONSTRUCTION:
+        return None
+    if term.islower() and re.compile(rf"\s*[{_OPENING_QUOTE}]\s?{re.escape(term)}(?!\w)", re.IGNORECASE).match(text, match.end()):
+        return None
+    return term
+
+
+def _plural(term: str) -> str:
+    """The term and its plural as a pattern: "Party" or "Parties", "Fee" or "Fees", "Business" or "Businesses"."""
+    if len(term) > 1 and term[-1] in "yY" and term[-2].lower() not in "aeiou":
+        return re.escape(term[:-1]) + ("(?:Y|IES)" if term[-1] == "Y" else "(?:y|ies)")
+    return re.escape(term) + ("(?:S|ES)?" if term.isupper() else "(?:s|es)?")
+
+
 @lru_cache(maxsize=8192)
 def _use_of(term: str) -> re.Pattern[str]:
-    """How a term is used: a capitalised term as written (a plural too), a lower-case one in any case. Compiled once per
-    term: a long agreement defines hundreds, and the module's own pattern cache holds 512 (a 4 MB filing, 2026-10-14)."""
+    """How a term is used: a capitalised term as written, its plural too; a lower-case one as written, its case included
+    (retrieval-v3: in any case until then, so '"control" means' was used by every "Control"). Compiled once per term: a
+    long agreement defines hundreds, and the module's own pattern cache holds 512 (a 4 MB filing, 2026-10-14)."""
     if term[:1].isupper():
-        return re.compile(rf"(?<![\w“\"]){re.escape(term)}s?\b")
-    return re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
+        return re.compile(rf"(?<![\w{_OPENING_QUOTE}]){_plural(term)}\b")
+    return re.compile(rf"\b{re.escape(term)}\b")
+
+
+@lru_cache(maxsize=8192)
+def _capitals_of(term: str) -> re.Pattern[str]:
+    """A capitalised term as a clause printed in capitals writes it: "FEES", "PARTIES"."""
+    return re.compile(rf"(?<![\w{_OPENING_QUOTE}]){_plural(term.upper())}\b")
+
+
+def _in_capitals(text: str, start: int, end: int) -> bool:
+    """Whether the text around a span reads as capitals: four upper-case letters or more to every lower-case one."""
+    around = text[max(0, start - _CAPITALS_AROUND) : end + _CAPITALS_AROUND]
+    return sum(ch.isupper() for ch in around) >= 4 * sum(ch.islower() for ch in around)
 
 
 def _uses(text: str, term: str) -> int | None:
-    """Where the text uses the term, or None."""
+    """Where the text uses the term, or None. A capitalised term is also used in capitals where the text around it is
+    printed in capitals (retrieval-v3: a limitation clause in capitals used "FEES" and was never linked to "Fees"); an
+    acronym in mixed text ("the ACT standard") is not the term "Act"."""
     match = _use_of(term).search(text)
-    return match.start() if match else None
+    at = match.start() if match else None
+    if term[:1].isupper() and not term.isupper():
+        for capitals in _capitals_of(term).finditer(text, 0, len(text) if at is None else at):
+            if _in_capitals(text, capitals.start(), capitals.end()):
+                return capitals.start()
+    return at
 
 
 def _amending(sections: Sequence[Readable]) -> list[list[list[str]]]:
