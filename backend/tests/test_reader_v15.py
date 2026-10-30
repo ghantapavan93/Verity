@@ -271,4 +271,4 @@ def test_property_furniture_at_the_page_edge_is_left_out_and_every_clause_reads_
 
 
 def test_the_reader_keeps_v15s_rules() -> None:
-    assert PARSER_VERSION in ("v15", "v16")  # v16 (test_reader_v16_*.py) keeps every rule tested here
+    assert PARSER_VERSION in ("v15", "v16", "v17")  # v16 and v17 keep every rule tested here

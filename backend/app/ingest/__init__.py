@@ -102,7 +102,13 @@ MAX_TEXT_CHARS = 3 * 4_400_000
 # page) is left out and counted, invisible text over an image (a scan's OCR layer) read and counted; a digit whose
 # ToUnicode entry names another than the glyph a non-embedded font draws is read as U+FFFD and counted; rotated text,
 # filled form fields and free-text notes are counted; a page is a scan only when nothing on it draws text.
-PARSER_VERSION = "v16"
+# v17 (2026-10-30, the stress test's second wave): every format. A definition is what the one defined-term reader says it
+# is (ingest/terms.py, shared with the links and the family fingerprint): a heading that is a definition is labelled by
+# its term where up to three words stand before the verb ('"Subsidiary" of any entity shall mean'), with "will have the
+# meaning", in any of the quotes a contract is drafted with, and never by a word of construction ('"including" means').
+# Measured against v16: 6 of 5,739 texts (8 headings) and 3 of 30 DOCX (Common Paper's "Personal Data" will have the
+# meaning …, labelled "Definitions" by its parent before) read differently; no PDF.
+PARSER_VERSION = "v17"
 
 
 @dataclass

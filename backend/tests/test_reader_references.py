@@ -51,6 +51,6 @@ def test_control_a_line_that_opens_a_clause_still_opens_it(text: str, number: st
 
 
 def test_an_amendment_naming_a_clause_neither_labels_nor_states_it() -> None:
-    text = "1. Amendment. The parties amend the Lease as follows.\n\nSection 5.4 of the Lease is deleted and replaced with the following: the rent is due quarterly."
+    text = "1. Amendment. The parties amend the Lease as follows.\n\nSection 5.4 of the Lease is deleted and replaced with: the rent is due quarterly."
     assert stated_clause_numbers([text]) == {"1"}
     assert clause_label(text, text.index("the rent is due")) == "§1 Amendment"

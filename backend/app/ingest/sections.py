@@ -20,12 +20,11 @@ from dataclasses import dataclass, field
 from itertools import pairwise
 
 from ..verify.spans import bounded, verification_pass
+from .terms import defined_at_start
 
 # Nine digits per part: a "number" longer than that is not a clause number, and Python refuses to parse thousands of digits.
 HEADING_NUMBER = re.compile(r"^\s*(?:(?:Section|Clause|Article)\s+)?(\d{1,9}(?:\.\d{1,9})*)[.)]?\s+(.*\S)\s*$", re.IGNORECASE)
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
-# "Agreement" means …: a definition is labelled by its term and the whole sentence is its body.
-DEFINED_TERM = re.compile(r"^[“\"‘']([^”\"’']{1,60})[”\"’']\s+(?:means|has the meaning|shall mean|shall have the meaning|includes)", re.IGNORECASE)
 SENTENCE_MIN_WORDS = 6
 MAX_LEAD_IN_CHARS = 60
 MAX_LEAD_IN_WORDS = 8
@@ -287,9 +286,12 @@ def split_lead_in(text: str) -> tuple[str, str]:
     """('Access and Use', 'During the Subscription Period …') when a heading carries its body;
     ('Agreement', '"Agreement" means …') for a definition; a sentence that is a clause in its own
     right keeps all its text as body under a short label, so every word of it stays quotable."""
-    term = DEFINED_TERM.match(text)
+    # "Agreement" means …: a definition is labelled by its term and the whole sentence is its body. What a definition
+    # is, is the one reader's (ingest/terms.py, reader v17): this module had its own pattern, which read fewer quotes and
+    # verbs and took words of construction ('"including" means …') for terms.
+    term = defined_at_start(text)
     if term:
-        return term.group(1).strip(), text
+        return term, text
     match = _lead_in(text)
     if match:
         lead = match[0].rstrip(".:").strip()
