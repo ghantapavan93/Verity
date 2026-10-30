@@ -25,10 +25,11 @@ from docx.oxml.text.paragraph import CT_P
 from docx.styles.style import ParagraphStyle
 from docx.text.paragraph import Paragraph
 from lxml import etree
-from pypdf import PdfReader
+from pypdf import PageObject, PdfReader
 
-from .coverage import DocxWalkCounts, PartCoverage, Status, docx_coverage, docx_more_coverage, pdf_coverage, txt_coverage
+from .coverage import DocxWalkCounts, PartCoverage, PdfTally, Status, docx_coverage, docx_more_coverage, pdf_coverage, txt_coverage
 from .invisible import remove_format_characters, visible_text
+from .pdf_layout import page_text
 from .sections import (
     HEADING_NUMBER,
     MAX_TOP_STEP,
@@ -1225,15 +1226,26 @@ def read_pdf(data: bytes) -> ReadResult:
     line_pages: list[int] = []  # the page each line was printed on: page furniture is a line printed on most of them
     textless = 0
     removed = 0
+    tally = PdfTally()
     for number, page in enumerate(pages):
-        # Layout mode keeps blank lines between paragraphs, which is the only structure most PDFs carry.
+        # Each page is read from its own drawing operations, laid out as pypdf's layout mode lays out lines, which keeps
+        # the blank lines between paragraphs, the only structure most PDFs carry (reader v16, ingest/pdf_layout.py:
+        # columns, form XObjects, glyph order, text that cannot be seen).
         try:
-            text = page.extract_text(extraction_mode="layout") or ""
-        except Exception:  # noqa: BLE001 - fall back to the plain extractor for odd PDFs
-            text = page.extract_text() or ""
+            shown = page_text(page)
+            text, drawn = shown.text, shown.drawn
+            tally.add(shown)
+        except Exception:  # noqa: BLE001 - a page the walk cannot finish is read as pypdf's layout mode reads it, and counted
+            tally.as_given += 1
+            try:
+                text = page.extract_text(extraction_mode="layout") or ""
+            except Exception:  # noqa: BLE001 - then the plain extractor, as before v16
+                text = page.extract_text() or ""
+            drawn = bool(text.strip())
+        tally.annotations += _annotation_texts(page)
         text, count = remove_format_characters(text)
         removed += count
-        if not text.strip():
+        if not text.strip() and not drawn:
             textless += 1  # an image-only (scanned) page: the record says so instead of "unknown"
         lines.extend(re.sub(r"[ \t]{2,}", " ", line) for line in text.splitlines())
         lines.append("")
@@ -1244,12 +1256,39 @@ def read_pdf(data: bytes) -> ReadResult:
     footers = [lines[i].strip() for i in sorted(furniture.footers)]
     lines = ["" if i in furniture.headers or i in furniture.footers else line for i, line in enumerate(lines)]
     return ReadResult(
-        coverage=pdf_coverage(page_count, textless, headers, footers),
+        coverage=pdf_coverage(page_count, textless, headers, footers, tally),
         blocks=_blocks_from_lines(lines, line_pages),
         pages=len(pages),
         title=_first_line(lines),
         format_characters=removed,
     )
+
+
+def _annotation_texts(page: PageObject) -> int:
+    """How many annotations on the page show text the reading does not hold (reader v16): a form field with a value (a
+    filled text field, a ticked box) and a free-text note or stamp, unless the annotation is flagged hidden. Neither of
+    pypdf's extractions reads them: "Initial Term:" was kept and its filled-in "thirty-six (36) months" dropped."""
+    count = 0
+    try:
+        annotations = page.get("/Annots")
+        for reference in annotations.get_object() if annotations is not None else []:
+            annotation = reference.get_object()
+            if int(annotation.get("/F", 0)) & (2 | 32):  # Hidden, NoView
+                continue
+            subtype = annotation.get("/Subtype")
+            if subtype == "/Widget":
+                value = annotation.get("/V")
+                parent = annotation.get("/Parent")
+                if value is None and parent is not None:
+                    value = parent.get_object().get("/V")
+                shown = annotation.get("/AS")
+                if (isinstance(value, str) and value.strip()) or (shown is not None and str(shown) != "/Off"):
+                    count += 1
+            elif subtype in ("/FreeText", "/Stamp") and str(annotation.get("/Contents") or "").strip():
+                count += 1
+    except Exception:  # noqa: BLE001 - annotations this reader cannot walk are not counted; the page's own text is read
+        return count
+    return count
 
 
 # ---------------------------------------------------------------------------- TXT

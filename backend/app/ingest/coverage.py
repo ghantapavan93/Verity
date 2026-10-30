@@ -14,8 +14,12 @@ import io
 import re
 import zipfile
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .pdf_layout import PageText
 
 # Every part a reading accounts for, in the order they are reported.
 PARTS: tuple[str, ...] = (
@@ -250,21 +254,95 @@ def _left_out(edge: str, lines: Sequence[str], unknown: str) -> PartCoverage:
     return PartCoverage(f"{edge}s", Status.OMITTED, len(lines), f"lines printed at the {where} of most pages, left out of the reading: {named}")
 
 
-def pdf_coverage(pages: int | None, textless_pages: int = 0, headers: Sequence[str] = (), footers: Sequence[str] = ()) -> list[PartCoverage]:
+@dataclass
+class PdfTally:
+    """What reading a PDF's pages met, summed over the pages (reader v16, ingest/pdf_layout.py)."""
+
+    hidden: dict[str, int] = field(default_factory=dict)  # characters left out because they cannot be seen, by why
+    rotated: int = 0
+    image_text: int = 0
+    disagreements: int = 0
+    unreadable: int = 0
+    column_pages: int = 0
+    side_by_side_pages: int = 0
+    as_given: int = 0  # pages the walk could not finish, read as pypdf's layout mode reads them
+    annotations: int = 0
+
+    def add(self, page: PageText) -> None:
+        for why, count in page.hidden.items():
+            self.hidden[why] = self.hidden.get(why, 0) + count
+        self.rotated += page.rotated
+        self.image_text += page.image_text
+        self.disagreements += page.disagreements
+        self.unreadable += page.unreadable
+        self.column_pages += page.columns
+        self.side_by_side_pages += page.side_by_side
+
+
+_HIDDEN_WHY = {"render": "render mode 3 or 7", "white": "white on nothing painted", "tiny": "1 pt or smaller", "off_page": "off the page"}
+
+
+def pdf_coverage(
+    pages: int | None, textless_pages: int = 0, headers: Sequence[str] = (), footers: Sequence[str] = (), tally: PdfTally | None = None
+) -> list[PartCoverage]:
     scanned = (
         PartCoverage("scanned_pages", Status.OMITTED, textless_pages, "pages with no text layer; nothing is read from them and no OCR is run")
         if textless_pages
         else PartCoverage("scanned_pages", Status.ABSENT, 0, "every page has a text layer")
     )
-    return [
-        PartCoverage("main_body", Status.READ, pages or 0, "the text layer of every page, in reading order as the PDF gives it"),
-        PartCoverage("tables", Status.PARTIAL, note="table cells come out as running text; columns are not reconstructed"),
+    tally = tally or PdfTally()
+    order = "the text layer of every page, each line read left to right by position; side-by-side columns of prose are read one column after the other"
+    if tally.as_given:
+        order += f"; {tally.as_given} page(s) the reader could not walk are read in the order the PDF gives"
+    parts = [
+        PartCoverage("main_body", Status.READ, pages or 0, order),
+        PartCoverage("tables", Status.PARTIAL, note="table cells come out as running text, a row at a time; columns are not reconstructed"),
         _left_out("header", headers, "a PDF does not mark headers; page furniture may be in the text"),
         _left_out("footer", footers, "a PDF does not mark footers; page numbers may be in the text"),
         PartCoverage("footnotes", Status.UNKNOWN, note="footnotes are text on the page like any other"),
         scanned,
-        PartCoverage("embedded_objects", Status.OMITTED, note="images and attachments are not read"),
+        PartCoverage("embedded_objects", Status.OMITTED, note="images, attachments and marks drawn as graphics (such as check boxes) are not read"),
     ]
+    if tally.column_pages or tally.side_by_side_pages:
+        parts.append(
+            PartCoverage(
+                "columns",
+                Status.PARTIAL if tally.side_by_side_pages else Status.READ,
+                tally.column_pages + tally.side_by_side_pages,
+                f"pages with side-by-side text: prose read one column after the other on {tally.column_pages}; short cells read "
+                f"a line at a time across the columns on {tally.side_by_side_pages}",
+            )
+        )
+    if tally.hidden:
+        why = ", ".join(f"{_HIDDEN_WHY.get(k, k)} ({v})" for k, v in sorted(tally.hidden.items()))
+        left_out = f"characters drawn so that they cannot be seen are left out: {why}"
+        parts.append(PartCoverage("invisible_text", Status.EXCLUDED, sum(tally.hidden.values()), left_out))
+    if tally.image_text:
+        parts.append(
+            PartCoverage(
+                "image_text",
+                Status.PARTIAL,
+                tally.image_text,
+                "characters laid invisibly over an image (a scan's OCR layer) are read as the PDF gives them; the image may show otherwise",
+            )
+        )
+    if tally.rotated:
+        parts.append(PartCoverage("rotated_text", Status.OMITTED, tally.rotated, "characters of rotated text are not read"))
+    if tally.disagreements:
+        parts.append(
+            PartCoverage(
+                "text_layer",
+                Status.PARTIAL,
+                tally.disagreements,
+                "digits, currency signs and % whose text layer names another character than the glyph drawn are read as \ufffd",
+            )
+        )
+    if tally.unreadable:
+        unmapped = "characters in a font whose glyphs cannot be mapped to text are not read"
+        parts.append(PartCoverage("unreadable_fonts", Status.OMITTED, tally.unreadable, unmapped))
+    if tally.annotations:
+        parts.append(PartCoverage("annotations", Status.OMITTED, tally.annotations, "form-field values and annotation text shown on the page are not read"))
+    return parts
 
 
 def txt_coverage(encoding: str = "UTF-8") -> list[PartCoverage]:

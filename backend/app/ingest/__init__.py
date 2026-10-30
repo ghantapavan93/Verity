@@ -94,6 +94,14 @@ MAX_TEXT_CHARS = 3 * 4_400_000
 # of consequential damages in headings only, as §9. Measured on 5,739 EDGAR and CUAD texts against v16's first commit:
 # 3,052 read differently; texts holding operative capitals words only in headings, 332 to 57; 105,132 words moved from
 # headings into section text; clause numbers lost 51 in 36 texts (wrapped sentences that open with a number), gained 802.
+# PDF: a page is read from its own operators (ingest/pdf_layout.py) and laid out by pypdf's own fixed-width code, so a
+# page with none of the following reads as v15 read it (424 of 427 corpus pages identical): side-by-side prose columns,
+# found from the page's geometry, are read one after the other, never joined line by line ("Customer may terminate this
+# Agreement Supplier may terminate …"); strings drawn out of order read by position ("09" was stored where "90" shows);
+# form XObjects are read; text that cannot be seen (render mode 3 or 7, white on nothing painted, 1 pt or less, off the
+# page) is left out and counted, invisible text over an image (a scan's OCR layer) read and counted; a digit whose
+# ToUnicode entry names another than the glyph a non-embedded font draws is read as U+FFFD and counted; rotated text,
+# filled form fields and free-text notes are counted; a page is a scan only when nothing on it draws text.
 PARSER_VERSION = "v16"
 
 
