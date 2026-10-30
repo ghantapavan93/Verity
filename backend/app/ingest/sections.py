@@ -121,9 +121,16 @@ SENTENCE_START = re.compile(r"(?<=[.;:])\s+(?=\d)")
 # at the start of a paragraph, or "… in writing. 4.1 Late fees …" after a sentence end. A bare whole number must be
 # followed by "." or ")" so that "30 days after notice" is not clause 30, and must open a titled clause (`inline_clause`)
 # so that a list item ("2. invoice monthly;") is not clause 2; a cross-reference ("Subject to Section 9") opens nothing.
-_OPENING_NUMBER = r"(\d{1,9}(?:\.\d{1,9})+|\d{1,9}(?=[.)]))[.)]?[ \t]+(?=\S)"
+# A number the words after it go on naming opens nothing (second wave of the stress test, 2026-10-30): "Section 5.4 of
+# the Lease is deleted and replaced …" opened clause 5.4, so an amendment's sentence was taken for the document's own
+# 5.4. The words a reference goes on with, in the case they are written in: "To the extent …" opens a clause.
+_NAMING_WORDS = r"(?-i:of|OF|and|AND|or|OR|through|THROUGH|hereof|HEREOF|herein|hereunder|hereto|thereof|above|below)\b"
+_NAMING = rf"(?![ \t]*{_NAMING_WORDS})"
+# A paragraph that opens by naming a clause ("Section 5.4 of the Lease is deleted …"): it ends no clause either.
+_NAMES_A_CLAUSE = re.compile(rf"^\s*(?:(?:Section|Clause|Article)s?\s+)?\d{{1,9}}(?:\.\d{{1,9}})*[.)]?[ \t]*{_NAMING_WORDS}", re.IGNORECASE)
+_OPENING_NUMBER = rf"(\d{{1,9}}(?:\.\d{{1,9}})+|\d{{1,9}}(?=[.)]))[.)]?{_NAMING}[ \t]+(?=\S)"
 _CLAUSE_OPENING = re.compile(
-    rf"^[ \t]*(?:(?:Section|Clause|Article)[ \t]+(\d{{1,9}}(?:\.\d{{1,9}})*)[.)]?[ \t]+(?=\S)|{_OPENING_NUMBER})"
+    rf"^[ \t]*(?:(?:Section|Clause|Article)[ \t]+(\d{{1,9}}(?:\.\d{{1,9}})*)[.)]?{_NAMING}[ \t]+(?=\S)|{_OPENING_NUMBER})"
     # After a sentence end the opening must carry a title: "Fees are due. 1.5 times the fee" opens nothing (bug hunt).
     rf"|(?<=[.;:])[ \t]+{_OPENING_NUMBER}(?-i:(?=[A-Z]))",
     re.IGNORECASE | re.MULTILINE,
@@ -202,7 +209,12 @@ def clause_label(text: str, start: int, seed: int = 0) -> str | None:
         clause = inline_clause(paragraph, last_top)
         if clause is not None:
             found, last_top = clause, int(clause[0].split(".", 1)[0])
-        elif found is not None and (numbered := HEADING_NUMBER.match(paragraph)) and _ends_clause(numbered.group(1), found[0]):
+        elif (
+            found is not None
+            and (numbered := HEADING_NUMBER.match(paragraph))
+            and _ends_clause(numbered.group(1), found[0])
+            and not _NAMES_A_CLAUSE.match(paragraph)
+        ):
             found = None
         for sentence in SENTENCE_START.finditer(paragraph):
             if found is None or offset + sentence.end() > start:
