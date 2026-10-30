@@ -165,8 +165,13 @@ export function wakeModel(): Promise<ModelWake> {
   return request<ModelWake>("/api/model/wake", { method: "POST" });
 }
 
-export function enterWithInvite(invite: string): Promise<AccessView> {
-  return request<AccessView>("/api/access/session", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ invite }) });
+/**
+ * Exchange an invite for a session. The API refuses (409) an invite for another reader while this browser holds a working
+ * session, unless the person chose to switch: `replace` says they did (backend api/access.enter).
+ */
+export function enterWithInvite(invite: string, { replace = false }: { replace?: boolean } = {}): Promise<AccessView> {
+  const path = replace ? "/api/access/session?replace=true" : "/api/access/session";
+  return request<AccessView>(path, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ invite }) });
 }
 
 export function uploadDocument(file: File): Promise<DocumentView> {

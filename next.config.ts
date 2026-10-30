@@ -2,7 +2,9 @@ import type { NextConfig } from "next";
 
 // The browser's protections on every page, whatever edge is in front: Caddy set them (deploy/cloud/Caddyfile), but a
 // Cloudflare Tunnel, the workstation's edge, sets none (observed on the live site, 2026-10-13). The API sends the same
-// set (backend app/main.py SECURITY_HEADERS).
+// set (backend app/main.py SECURITY_HEADERS). A page's Content-Security-Policy is src/proxy.ts's, with its script nonce,
+// and takes the place of the one here (checked on a production build, 2026-10-30); this one stays on what the proxy does
+// not serve, the files in public/ and Next's built files.
 export const SECURITY_HEADERS = [
   { key: "Strict-Transport-Security", value: "max-age=31536000" },
   { key: "X-Content-Type-Options", value: "nosniff" },

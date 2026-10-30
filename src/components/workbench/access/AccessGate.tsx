@@ -4,12 +4,12 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import styles from "../Workbench.module.css";
 import door from "../landing/Landing.module.css";
 import { Brand } from "../shell/primitives";
-import { ACCESS_REQUIRED_EVENT, enterWithInvite, errorMessage, getAccess, health, visit, type Health } from "@/lib/api";
+import { ACCESS_REQUIRED_EVENT, enterWithInvite, errorMessage, getAccess, health, isConflict, visit, type Health } from "@/lib/api";
 import { safeDecode } from "@/lib/address";
 import type { AccessView } from "@/lib/types";
 import { modelPlace } from "@/lib/modelPlace";
 import { SOURCE, TopLinks } from "../landing/TopLinks";
-import { AccessModeKnown, PublicDemo } from "./PublicDemo";
+import { AccessModeKnown, PublicDemo, Reader } from "./PublicDemo";
 
 /**
  * The door in front of the workbench, when the API has one (backend/app/api/access.py). This component decides
@@ -27,7 +27,10 @@ import { AccessModeKnown, PublicDemo } from "./PublicDemo";
  * invite. A workspace that ends while the page is open is said to have ended, and a new one starts only when asked.
  */
 
-type State = "checking" | "open" | "closed" | "unavailable" | "ended";
+type State = "checking" | "open" | "closed" | "unavailable" | "ended" | "switch";
+
+/** An invite for another reader, refused while this browser is inside: the API's sentence, naming both, and the invite. */
+type SwitchOffer = { invite: string; sentence: string };
 
 const INVITE_IN_FRAGMENT = /(?:^#|&)invite=([^&]+)/;
 
@@ -78,6 +81,9 @@ export function AccessGate({ children }: { children: ReactNode }) {
   const [demo, setDemo] = useState<{ retentionDays: number } | null>(null);
   // Whether the API said which door it is; the workbench opens either way, but claims neither door until it has.
   const [modeKnown, setModeKnown] = useState(true);
+  // Who this browser is inside as, and an invite for someone else waiting for the person's word (never switched unasked).
+  const [reader, setReader] = useState<string | null>(null);
+  const [offer, setOffer] = useState<SwitchOffer | null>(null);
   const demoRef = useRef(false);
 
   const startVisit = useCallback(async (): Promise<State> => {
@@ -95,6 +101,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
   const settle = useCallback(
     async (access: AccessView): Promise<State> => {
       demoRef.current = access.anonymous;
+      setReader(access.anonymous ? null : (access.subject ?? null));
       if (access.anonymous) {
         if (access.entered) {
           setDemo({ retentionDays: access.retentionDays ?? 7 });
@@ -111,13 +118,20 @@ export function AccessGate({ children }: { children: ReactNode }) {
     let cancelled = false;
     const arrive = async () => {
       // Whatever the address carried, the page ends at the door or in the workbench, never on "Opening the workbench".
+      let waiting: SwitchOffer | null = null;
       try {
         const carried = takeInviteFromAddress();
         if (typeof carried === "object" && carried !== null) {
           if (!cancelled) setProblem(DAMAGED_INVITE);
         } else if (carried) {
-          await enterWithInvite(carried);
-          if (!cancelled) setProblem(null);
+          try {
+            await enterWithInvite(carried);
+            if (!cancelled) setProblem(null);
+          } catch (error) {
+            // Another reader is inside: nothing was changed, and nothing is until the person says which (authz 1).
+            if (!isConflict(error)) throw error;
+            waiting = { invite: carried, sentence: errorMessage(error) };
+          }
         }
       } catch (error) {
         if (!cancelled) setProblem(errorMessage(error));
@@ -127,7 +141,8 @@ export function AccessGate({ children }: { children: ReactNode }) {
         const next = await settle(access);
         if (!cancelled) {
           setModeKnown(true);
-          setState(next);
+          setOffer(waiting);
+          setState(waiting && next === "open" ? "switch" : next);
         }
       } catch {
         // The API did not answer. The workbench says so in its own words; the door has nothing to add, and claims
@@ -178,6 +193,27 @@ export function AccessGate({ children }: { children: ReactNode }) {
     }
   };
 
+  /** The person chose: switch to the invited reader (the API is told they chose), or stay as the reader inside. */
+  const choose = async (switching: boolean) => {
+    if (!offer || busy) return;
+    if (!switching) {
+      setOffer(null);
+      setState("open");
+      return;
+    }
+    setBusy(true);
+    setProblem(null);
+    try {
+      await enterWithInvite(offer.invite, { replace: true });
+      setOffer(null);
+      setState(await settle(await getAccess()));
+    } catch (error) {
+      setProblem(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const again = async () => {
     if (busy) return;
     setBusy(true);
@@ -190,7 +226,9 @@ export function AccessGate({ children }: { children: ReactNode }) {
   if (state === "open")
     return (
       <AccessModeKnown.Provider value={modeKnown}>
-        <PublicDemo.Provider value={demo}>{children}</PublicDemo.Provider>
+        <PublicDemo.Provider value={demo}>
+          <Reader.Provider value={reader}>{children}</Reader.Provider>
+        </PublicDemo.Provider>
       </AccessModeKnown.Provider>
     );
   // While the API is asked, the frame the visitor is about to see, not an empty page (the first paint on a slow phone
@@ -211,6 +249,43 @@ export function AccessGate({ children }: { children: ReactNode }) {
         </section>
       </div>
     );
+  if (state === "switch" && offer) {
+    // The API's sentence names both readers; the button names the one the link is for.
+    const invited = /The link is for (.+?);/.exec(offer.sentence)?.[1] ?? "the invited reader";
+    return (
+      <div className={styles.root} data-stage="empty">
+        <section id="main" tabIndex={-1} className={door.page} aria-label="Live workbench">
+          <header className={door.topbar}>
+            <Brand />
+            <div className={door.topRight}>
+              <TopLinks />
+            </div>
+          </header>
+          <div className={door.gate}>
+            <h1 className={door.title}>The live Verity workbench</h1>
+            <p className={door.lead}>{offer.sentence}</p>
+            <p className={door.gateNote}>
+              What you add is kept in the workspace of the reader you are inside as. Switching signs this browser in as the reader the link was made for; the
+              other reader&apos;s work stays where it is.
+            </p>
+            <div className={door.gateForm}>
+              <button type="button" className={door.primary} disabled={busy} onClick={() => void choose(true)}>
+                {busy ? "Switching" : `Switch to ${invited}'s invite`}
+              </button>
+              <button type="button" className={door.secondary} disabled={busy} onClick={() => void choose(false)}>
+                Stay as {reader ?? "the reader inside"}
+              </button>
+            </div>
+            {problem && (
+              <p className={door.error} role="alert">
+                {problem}
+              </p>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  }
   if (state === "unavailable" || state === "ended") {
     return (
       <div className={styles.root} data-stage="empty">

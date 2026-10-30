@@ -15,3 +15,10 @@ export const PublicDemo = createContext<{ retentionDays: number } | null>(null);
  * 2026-10-13).
  */
 export const AccessModeKnown = createContext(true);
+
+/**
+ * The reader this browser is inside as, by invitation: the name the invite was made for (the API's AccessOut.subject).
+ * Null when there is none to name (the gate is off, a public demo, or the API has not said). Shown so a reader can see
+ * whose workspace they are adding to: an invite once switched the session silently (stress test, 2026-10-30, authz 1).
+ */
+export const Reader = createContext<string | null>(null);

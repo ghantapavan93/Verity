@@ -23,11 +23,12 @@ vi.mock("@/lib/api", () => ({
   health: api.health,
   visit: api.visit,
   errorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  isConflict: (error: unknown) => error instanceof Error && (error as Error & { status?: number }).status === 409,
 }));
 
 import { useContext } from "react";
 import { AccessGate } from "./AccessGate";
-import { AccessModeKnown } from "./PublicDemo";
+import { AccessModeKnown, Reader } from "./PublicDemo";
 
 const OUT = { required: true, entered: false, subject: null, anonymous: false };
 const IN = { required: true, entered: true, subject: "min-kyu", anonymous: false };
@@ -410,5 +411,86 @@ describe("two tabs opened at once on a first visit", () => {
     );
     expect(await screen.findByText(/Too many new visits/)).toBeTruthy();
     expect(api.visit).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * An invite does not replace another reader's working session unasked. In invited mode a link's invite was exchanged
+ * over whatever session the browser held, on arrival and on any change of the address, and what the reader added next
+ * went into the inviter's workspace (stress test, 2026-10-30, authz 1). The API now refuses (409) unless the request says
+ * the person chose to switch (?replace=true); the door asks, names both, and sends that only when told to.
+ */
+describe("AccessGate, an invite for another reader", () => {
+  const conflict = Object.assign(
+    new Error("This browser is already inside as min-kyu. The link is for ada; nothing was changed. Switch only if you mean to work as that reader."),
+    { status: 409 },
+  );
+  const ADA = { required: true, entered: true, subject: "ada", anonymous: false };
+
+  function WhoIsInside() {
+    return <p>the workbench, as {useContext(Reader) ?? "nobody named"}</p>;
+  }
+
+  beforeEach(() => {
+    api.getAccess.mockReset();
+    api.enterWithInvite.mockReset();
+    api.health.mockReset();
+    api.health.mockRejectedValue(new Error("no answer"));
+    window.history.replaceState(null, "", "/?run=r1#invite=v1.ada.sig");
+    api.enterWithInvite.mockRejectedValueOnce(conflict);
+    api.getAccess.mockResolvedValue(IN);
+  });
+  afterEach(cleanup);
+
+  it("asks before switching, naming both readers, and opens nothing until told", async () => {
+    render(
+      <AccessGate>
+        <WhoIsInside />
+      </AccessGate>,
+    );
+    expect(await screen.findByText(/already inside as min-kyu\. The link is for ada/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Switch to ada's invite" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Stay as min-kyu" })).toBeTruthy();
+    expect(screen.queryByText(/the workbench, as/)).toBeNull();
+    expect(api.enterWithInvite).toHaveBeenCalledTimes(1);
+    expect(api.enterWithInvite).toHaveBeenCalledWith("v1.ada.sig");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("stays as the reader inside when told to, and sends no switch", async () => {
+    render(
+      <AccessGate>
+        <WhoIsInside />
+      </AccessGate>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Stay as min-kyu" }));
+    expect(await screen.findByText("the workbench, as min-kyu")).toBeTruthy();
+    expect(api.enterWithInvite).toHaveBeenCalledTimes(1);
+  });
+
+  it("switches when told to, sending replace, and names the reader now inside", async () => {
+    api.enterWithInvite.mockResolvedValueOnce(ADA);
+    render(
+      <AccessGate>
+        <WhoIsInside />
+      </AccessGate>,
+    );
+    api.getAccess.mockResolvedValue(ADA);
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to ada's invite" }));
+    expect(await screen.findByText("the workbench, as ada")).toBeTruthy();
+    expect(api.enterWithInvite).toHaveBeenLastCalledWith("v1.ada.sig", { replace: true });
+  });
+
+  it("control: with no session held, the invite is exchanged at once and the reader named", async () => {
+    api.enterWithInvite.mockReset();
+    api.enterWithInvite.mockResolvedValue(ADA);
+    api.getAccess.mockResolvedValue(ADA);
+    render(
+      <AccessGate>
+        <WhoIsInside />
+      </AccessGate>,
+    );
+    expect(await screen.findByText("the workbench, as ada")).toBeTruthy();
+    expect(api.enterWithInvite).toHaveBeenCalledWith("v1.ada.sig");
   });
 });
