@@ -6,7 +6,9 @@ refuses to delete one (db.immutability_triggers). This is the one, scoped except
 
 - only workspaces listed in visitor_workspaces, and only once they have ended, are ever candidates: an owner store
   lists none, so there is nothing here it can delete;
-- a workspace with a run still in progress is left for the next pass;
+- a workspace with a run still in progress is left for the next pass; runs no one is answering any more are ended
+  first (application/recover_runs.py): a visitor who left reads nothing again, and the read that ends such a run never
+  came, so its workspace was skipped every hour until the API restarted (stress test, 2026-10-30, time 1);
 - a workspace is deleted in transactions each bounded by a unit the store already bounds: its runs and what hangs from
   them, then each document it held, whole, then its registration, last, so a pass stopped anywhere is finished by the
   next. One pass held the write lock for everything that expired in its hour, past the 30 s every other writer waits:
@@ -47,12 +49,14 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path, PureWindowsPath
 
 from sqlalchemy import Connection, Engine, text
+from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import PUBLIC_WORKSPACE_LIKE, immutability_triggers, workspace_tables
 from ..ingest.bounded import HANDOFF_PREFIX, handoff_folder
 from ..ingest.readers import SUFFIX_OF
 from ..models import CLOCK_SKEW, TERMINAL_STAGES, utcnow
+from .recover_runs import recover_interrupted_runs
 
 log = logging.getLogger(__name__)
 
@@ -135,6 +139,8 @@ def _reanchor(engine: Engine, now: datetime, report: PurgeReport, gap_s: float) 
 def purge_expired_workspaces(engine: Engine, now: datetime | None = None, gap_s: float = PURGE_GAP_S) -> PurgeReport:
     report = PurgeReport()
     instant = now or utcnow()
+    with Session(engine) as session:
+        recover_interrupted_runs(session)
     _reanchor(engine, instant, report, gap_s)
     moment = _stored(instant)
     with engine.connect() as connection:

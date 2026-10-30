@@ -19,19 +19,26 @@ runs its workers hold (run_started, run_ended). Then:
   (stress test, ops 1); and a run born but not yet given a stage row had no owner at all, so a
   crash left it open for the whole window and a live queued one was declared dead (concurrency 2);
 - another live process's run on this host is left to that process; a run of another host, or one
-  written before owners, waits for staleness.
+  written before owners, waits for staleness;
+- a public workspace's run is ended, whoever holds it, once it has been held longer than any run can wait in the
+  public queue: every slot ahead of it at its longest, and its own (queue_ceiling_seconds). Held was live however long,
+  so a worker that never came back held its run for the life of the API (stress test, 2026-10-30, time 1). The age is
+  the monotonic time since it was held, never its wall-clock stamps, which a clock step can age by days. The owner's
+  store has no bound on its queue, so no ceiling: its runs end at a read once no worker holds them.
 
 A run is ended by one conditional write (_end_as_failed): under the write lock, only if it is
 still as it was seen. Two readers recovering one run raced, and the loser's write hit the
 immutability trigger and answered 500, readers of unrelated runs included (concurrency 3). It
-runs at startup, whenever runs are read and before a question is asked; a store that cannot take
-the write yet leaves the run for the next read and never fails the read.
+runs at startup, whenever runs are read, before a question is asked, and at each retention pass in the public store
+(where a visitor who left reads nothing again); a store that cannot take the write yet leaves the run for the next read
+and never fails the read.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+import time
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, insert, select, update
@@ -44,33 +51,42 @@ from ..errors import Busy
 from ..models import Run, RunStage, as_utc, utcnow
 from ..runs.events import TERMINAL, StageEvent, bus
 from ..runs.owner import ProcessIdentity, owner_is_alive_here, owner_is_gone, this_process
+from .workspace import is_public
 
 log = logging.getLogger(__name__)
 
 MAX_MODEL_CALLS_PER_RUN = 4  # analysis.service: two validation rounds, each with one transport retry
 STALE_MARGIN_S = 60.0
 
-# The runs this process's workers hold: entered when a run is born (application/start_run.py, before its row commits,
-# so no read ever sees a run of this process that is not yet held), left when its worker ends however it ends
-# (api/runs.py). A process that starts runs and then exits (a batch, the goldens) need not leave them: its runs are
-# then a gone process's.
-_held: set[str] = set()
+# The runs this process's workers hold, with the monotonic instant each was held: entered when a run is born
+# (application/start_run.py, before its row commits, so no read ever sees a run of this process that is not yet held),
+# left when its worker ends however it ends (api/runs.py). A process that starts runs and then exits (a batch, the
+# goldens) need not leave them: its runs are then a gone process's.
+_held: dict[str, float] = {}
 _held_lock = threading.Lock()
+_monotonic = time.monotonic
 
 
 def run_started(run_id: str) -> None:
     with _held_lock:
-        _held.add(run_id)
+        _held[run_id] = _monotonic()
 
 
 def run_ended(run_id: str) -> None:
     with _held_lock:
-        _held.discard(run_id)
+        _held.pop(run_id, None)
 
 
 def is_working(run_id: str) -> bool:
     with _held_lock:
         return run_id in _held
+
+
+def _held_for(run_id: str) -> float | None:
+    """How long this process has held the run, on the monotonic clock; None when it does not hold it."""
+    with _held_lock:
+        since = _held.get(run_id)
+    return None if since is None else _monotonic() - since
 
 
 def stale_after_seconds() -> float:
@@ -80,6 +96,13 @@ def stale_after_seconds() -> float:
     # Declaring it dead earlier freed its fingerprint while it was alive (independent review, 2026-09-29). The window is
     # the worst legitimate case plus a minute.
     return settings.model_timeout_s * MAX_MODEL_CALLS_PER_RUN + STALE_MARGIN_S
+
+
+def queue_ceiling_seconds() -> float:
+    """The longest a public workspace's run can legitimately be held: every slot of the public queue ahead of it
+    (settings.public_max_runs_in_flight) at its longest, and its own. A run held longer is waiting on nothing that will
+    come back."""
+    return (settings.public_max_runs_in_flight + 1) * stale_after_seconds()
 
 
 def _is_this_process(owner: str | None) -> bool:
@@ -112,7 +135,9 @@ def recover_interrupted_runs(session: Session, stale_after_s: float | None = Non
         started = as_utc(latest.at) if latest is not None else as_utc(run.created_at)
         gone = owner_is_gone(owner)
         unheld = not gone and owner_is_alive_here(owner) and _is_this_process(owner) and not is_working(run.id)
-        if not gone and not unheld:
+        held_for = _held_for(run.id)
+        overdue = not gone and is_public(run.workspace_id) and held_for is not None and held_for >= queue_ceiling_seconds()
+        if not gone and not unheld and not overdue:
             if now - started < limit:
                 continue
             if owner_is_alive_here(owner):
@@ -123,6 +148,11 @@ def recover_interrupted_runs(session: Session, stale_after_s: float | None = Non
         if gone:
             # The process's identity goes to the log below, never into what a reader sees (journey audit, 2026-10-09).
             message = f"Interrupted: the server process running the {run.stage} stage stopped. Ask the question again."
+        elif overdue:
+            message = (
+                f"Interrupted: no answer after {int((held_for or 0) // 60)} min, longer than any question waits in this demo's queue; "
+                "the work on it was stopped. Ask the question again."
+            )
         elif unheld:
             message = (
                 f"Interrupted: the work on this question stopped during the {run.stage} stage before it could record how it ended. Ask the question again."
