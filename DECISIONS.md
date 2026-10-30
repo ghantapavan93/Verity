@@ -1859,17 +1859,20 @@ Fixed, by teams in their own worktrees, each test written first and red, then me
   size is read from the reply's fields, never its wording; nothing comes between an answer and its clean start; a
   pinned model build is part of a run's identity.
 - **The store across releases**: versions are compared by number, so a build rolled back to opens records made under
-  rules it does not know, says so on their trust page and re-checks nothing; its pack prints NOT CHECKED and exits 2;
-  `status.py` counts such runs and documents. An old store's table whose CHECKs differ from the models', by name or by
-  body, is rebuilt by SQLite's documented procedure, foreign keys off before the transaction and every trigger dropped
-  and put back, its counts and foreign_key_check asserted; a row the new constraint refuses stops the opening and is
-  named. Stores created by release-2026-10-02 gain ck_findings_status_source at their next start (the 2026-10-02 entry
+  rules it does not know and says so on their trust page, judging none of their evidence with its own verifier or
+  reader; its pack prints NOT CHECKED and exits 2; `status.py` counts such runs and documents. An old store's table
+  whose CHECKs differ from the models', by name or by body, is rebuilt by SQLite's documented procedure, foreign keys
+  off before the transaction and every trigger dropped and put back, its counts asserted and no new dangling reference
+  allowed; a row the models' CHECKs or NOT NULLs refuse stops the opening and is named. Stores created by
+  release-2026-10-02 gain ck_findings_status_source at their next start (the 2026-10-02 entry
   had left them without it).
-- **Versions**: the code behind each version is the closure of its entry points, found by following it (the executor's,
-  for the policy, short of the other versions' entry points and a named list of what records rather than decides),
-  never a list of files: five planted edits outside the old list now each move a fingerprint. A fourth version,
-  `input-v1`, names what the model is handed of the sections and how its answer is read, and the reader's version is
-  held to its code the same way. A run's window is an argument everywhere it is used, never a default.
+- **Versions**: the code behind each version is the closure of its entry points, found by following it through names,
+  imports and a model's field types (the executor's, for the policy, short of the other versions' entry points and a
+  named list of what records rather than decides), never a list of files: five planted edits outside the old list now
+  each move a fingerprint. Code reached only through a method of an object cannot be followed and is named as an entry
+  point (the provider's request). A fourth version, `input-v1`, names what the model is handed of the sections, the
+  request that carries it and the schema its answer is read by; the reader's version is held to its code the same way.
+  A run's window is an argument everywhere it is used, never a default.
 - **The interface** shows a run only beside its own contract, shows every model- or file-written string through one
   display primitive, keys a memo by what it says, asks before an invite replaces a working session, runs no script
   without the response's nonce, and joins sections only where the reader recorded a split.
@@ -1888,9 +1891,10 @@ condition its quote left out when it shared two of the condition's words, so "â€
 during the Initial Term", which denies the condition, kept the pass the neutral answer lost, and the correct answer was
 lowered by the value check: of three answers only the wrong one passed. No test on an answer's words tells stating a
 condition from denying it ("with no exception for the Initial Term", "not subject to the Initial Term"), so the answer
-is not read for it: a pass keeps only when another verified quote of the same finding shows the condition whole. The
-status is now the same for any answer over the same evidence (a property test). The cost, replayed over the passes in
-the local QA and lab stores: 20 of 1,212 distinct passes are lowered that the old rule kept, about two thirds of them
+is not read for it: a pass keeps only when another verified quote of the same finding covers the condition where it
+stands (the same words quoted from another clause are not it). The status is now the same for any answer over the same
+evidence (a property test). The cost, replayed over the passes in the local QA and lab stores: 22 of 1,212 distinct
+passes are lowered that the old rule kept, about two thirds of them
 answers that state the condition correctly in their own words ("excluding liabilities under Section 7.2"), each now
 needs review with the left-out words in its reason; one pass the old rule lowered stands, its condition quoted beside
 it. A correct answer shown for review costs a reader a look; a denial shown as a pass cost a wrong answer.

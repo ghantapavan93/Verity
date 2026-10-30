@@ -21,7 +21,7 @@ steps at the previous commit: the old build needs the old `node_modules`.
 
 A rollback leaves the store as it was, so the older build opens records made under rules it does not know. From
 2026-10-30 a build names them rather than misreading them: its trust page says "recorded under rules this build does not
-know" and re-checks nothing, its pack's `verify.py` prints NOT CHECKED and exits 2 for a verifier newer than its own, and
+know" and judges none of their evidence with its own verifier or reader, its pack's `verify.py` prints NOT CHECKED and exits 2 for a verifier newer than its own, and
 `backend/scripts/status.py` counts such runs and documents on its `rules` line. Builds before it cannot: a844ebf and
 2e8fe68 call verifier v11 "earlier rules", and their packs of v11 runs can FAIL a span the candidate verified (a typed
 span ending at ';'). After rolling back to one of them, export no pack of a v11 run; roll forward and export it again.
