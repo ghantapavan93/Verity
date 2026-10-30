@@ -20,7 +20,7 @@ import re
 import unicodedata
 from html import escape
 
-from ..ingest.invisible import IGNORABLE, JOINERS, MARKS
+from ..unseen import IGNORABLE, JOINERS, MARKS
 
 _SHAPING = re.compile(f"[{JOINERS}{IGNORABLE}]")
 _ASCII_WORD = re.compile(r"[A-Za-z0-9]")
