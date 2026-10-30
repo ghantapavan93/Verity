@@ -88,7 +88,11 @@ def diff_out(diff: TrustDiff, from_document_id: str, to_document_id: str) -> Tru
         from_snapshot=diff.from_snapshot,
         to_snapshot=diff.to_snapshot,
         sections=TrustSectionChangesOut(
-            identical=diff.sections.identical, changed=list(diff.sections.changed), removed=list(diff.sections.removed), added=list(diff.sections.added)
+            identical=diff.sections.identical,
+            changed=list(diff.sections.changed),
+            removed=list(diff.sections.removed),
+            added=list(diff.sections.added),
+            not_compared=diff.sections.not_compared,
         ),
         sections_total=diff.sections_total,
         sections_searched=diff.sections_searched,

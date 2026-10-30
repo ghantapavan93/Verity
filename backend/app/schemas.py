@@ -1107,6 +1107,8 @@ class TrustSectionChangesOut(ApiModel):
     changed: list[str]
     removed: list[str]
     added: list[str]
+    # Of the removed, how many were not compared by their wording: the comparison is bounded (trust/diff.align).
+    not_compared: int = 0
 
 
 class TrustDiffOut(ApiModel):

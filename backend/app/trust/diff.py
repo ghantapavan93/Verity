@@ -85,6 +85,9 @@ class SectionChanges:
     changed: tuple[str, ...]  # named as the old version names them
     removed: tuple[str, ...]
     added: tuple[str, ...]
+    # Of the removed, how many were not compared by their wording because the pass reached its budget (align): each may
+    # have a counterpart among the added that was never looked for.
+    not_compared: int = 0
 
     @property
     def any(self) -> bool:
@@ -108,6 +111,8 @@ class TrustDiff:
         # a count of part of the document, and uniqueness is a statement about all of it.
         if self.sections_reused + self.sections_searched != self.sections_total:
             raise ValueError("a section of the revision was neither searched nor carried over")
+        if not 0 <= self.sections.not_compared <= len(self.sections.removed):
+            raise ValueError("a section left uncompared is a removed one")
 
     def counts(self) -> dict[str, int]:
         return {v.value: sum(1 for f in self.findings if f.verdict is v) for v in (Verdict.UNCHANGED, Verdict.REVALIDATED, Verdict.STALE)}
@@ -122,6 +127,14 @@ def _heading(section: SectionText) -> str:
 
 SHINGLE_WORDS = 4  # words per shingle when two sections are compared by what they say
 SAME_SECTION = 0.5  # the share of shingles two sections must have in common to be called one section, revised
+# What the comparison by wording may cost. Every pair of loose sections was scored and kept: memory and time grew with
+# the square of their number, 2 GiB and 23 s in one GET at 3,000 retitled sections, and any two documents a visitor
+# declares versions get there (stress test, 2026-10-30, abuse 1). A revision keeps its sections in order, so a loose
+# section is compared only with the loose sections within WORDING_BAND places of its own; a pass stops at
+# MAX_WORDING_COMPARISONS pairs, or MAX_WORDING_SHINGLES shingles read, and says how many it did not reach.
+WORDING_BAND = 32
+MAX_WORDING_COMPARISONS = 200_000
+MAX_WORDING_SHINGLES = 40_000_000
 
 
 def _shingles(section: SectionText) -> frozenset[tuple[str, ...]]:
@@ -138,6 +151,7 @@ def _overlap(a: frozenset[tuple[str, ...]], b: frozenset[tuple[str, ...]]) -> fl
 class Alignment:
     counterpart: dict[str, SectionText]  # old section key -> the section of the new version that took its place
     changes: SectionChanges
+    compared: int = 0  # pairs of sections scored by their wording
 
 
 def align(old: Sequence[SectionText], new: Sequence[SectionText]) -> Alignment:
@@ -147,7 +161,8 @@ def align(old: Sequence[SectionText], new: Sequence[SectionText]) -> Alignment:
     section was renumbered or retitled); the same number and heading; the same heading where it names one section
     on each side; and, for a section whose heading and text were both revised, the section it shares most of its
     wording with, when that is at least half (word shingles, best pairs first). A number alone is never enough:
-    inserting a clause moves every number after it.
+    inserting a clause moves every number after it. The last pass is bounded (WORDING_BAND and its budgets): a section
+    it does not pair is reported removed, and a quote is still looked for in every section of the revision.
     """
     new_keys = Counter(section.key for section in new)
     old_keys = Counter(section.key for section in old)
@@ -174,14 +189,32 @@ def align(old: Sequence[SectionText], new: Sequence[SectionText]) -> Alignment:
     pair(lambda s: s.content_hash, only_unique=False)
     pair(lambda s: (s.number, _heading(s)) if s.number and _heading(s) else None, only_unique=True)
     pair(lambda s: _heading(s) or None, only_unique=True)
-    # What is still loose is compared by wording. Only the leftovers are compared, so the cost is theirs alone.
+    # What is still loose is compared by wording: each old section with the new ones near its own place in the order,
+    # only where the two sizes allow a share of SAME_SECTION, and only pairs that reach it are kept.
     taken = {id(s) for s in counterpart.values()}
     rest_old = [(s, _shingles(s)) for s in loose_old if s.key not in counterpart]
     rest_new = [(s, _shingles(s)) for s in loose_new if id(s) not in taken]
-    scored = sorted(
-        ((_overlap(a, b), i, j) for i, (_, a) in enumerate(rest_old) for j, (_, b) in enumerate(rest_new)),
-        key=lambda item: (-item[0], item[1], item[2]),
-    )
+    found: list[tuple[float, int, int]] = []
+    compared = read = 0
+    cut_at = len(rest_old)  # the first old section whose band the budget cut short
+    scale = len(rest_new) / len(rest_old) if rest_old else 0.0
+    for i, (_, a) in enumerate(rest_old):
+        centre = round(i * scale)
+        for j in range(max(0, centre - WORDING_BAND), min(len(rest_new), centre + WORDING_BAND + 1)):
+            b = rest_new[j][1]
+            if not a or not b or min(len(a), len(b)) < SAME_SECTION * max(len(a), len(b)):
+                continue  # Jaccard cannot reach SAME_SECTION when one set is under that share of the other
+            if compared >= MAX_WORDING_COMPARISONS or read + len(a) + len(b) > MAX_WORDING_SHINGLES:
+                cut_at = i
+                break
+            compared += 1
+            read += len(a) + len(b)
+            score = _overlap(a, b)
+            if score >= SAME_SECTION:
+                found.append((score, i, j))
+        if cut_at < len(rest_old):
+            break
+    scored = sorted(found, key=lambda item: (-item[0], item[1], item[2]))
     used_old: set[int] = set()
     used_new: set[int] = set()
     for score, i, j in scored:
@@ -192,6 +225,7 @@ def align(old: Sequence[SectionText], new: Sequence[SectionText]) -> Alignment:
             used_old.add(i)
             used_new.add(j)
     taken = {id(s) for s in counterpart.values()}
+    not_compared = sum(1 for section, _ in rest_old[cut_at:] if section.key not in counterpart)
     return Alignment(
         counterpart,
         SectionChanges(
@@ -199,7 +233,9 @@ def align(old: Sequence[SectionText], new: Sequence[SectionText]) -> Alignment:
             changed=tuple(s.name for s in loose_old if s.key in counterpart),
             removed=tuple(s.name for s in loose_old if s.key not in counterpart),
             added=tuple(s.name for s in loose_new if id(s) not in taken),
+            not_compared=not_compared,
         ),
+        compared,
     )
 
 
