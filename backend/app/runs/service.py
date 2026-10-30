@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from functools import partial
@@ -19,7 +20,7 @@ from ..analysis.service import SectionForPrompt, analyze, build_user_message, lo
 from ..config import settings
 from ..document_names import run_prompt_name
 from ..hashing import sha256_text
-from ..ingest.sections import stated_clause_numbers
+from ..ingest.sections import PARAGRAPH_SEPARATOR, PART_HEADING, stated_clause_numbers
 from ..models import (
     RUN_STAGES,
     TERMINAL_STAGES,
@@ -179,6 +180,53 @@ def located_text(section: Section, located: Located) -> str:
     if "unprefixed:" in located.method and located.start == 0 and section.heading:
         return f"{section.heading} {covered}"
     return covered
+
+
+# A part's text that ends a passage: a stop, any closing quote or bracket after it (ingest.sections.PASSAGE_END at a
+# text's end, where no space follows).
+_ENDS_A_PASSAGE = re.compile(r"(?:[.!?;][\"'”’)\]]*|[。！？；][」』”’）)\]]*)\s*$")
+
+
+def reading_of(sections: Sequence[Section], section: Section) -> tuple[str, int]:
+    """The text a quote's sentence is read in, and where ``section``'s own text starts in it: the section's text, with
+    the parts of the same clause it runs on into. The reader stores a clause longer than its cap as parts ("… (part
+    2)"), cut where a passage ends, or, where none is within reach, at a space (reader v16): there a sentence runs from one
+    part into the next, and the edge of a part was read as the end of its sentence, so a condition at the head of the
+    sentence in the part before was never seen beside a quote in the part after (stress test, 2026-10-30). Only an edge
+    inside one paragraph is joined: both parts pieces of it (no paragraph break in either), the earlier not ending a
+    passage. An edge between paragraphs ends a sentence, as a paragraph break inside a part does (`_PASSAGE_END`): a cover
+    page's table rows, grouped into parts at their breaks, are not one sentence across them (Recording 6c, g25)."""
+    ordered = list(sections)
+    here = next((i for i, s in enumerate(ordered) if s.id == section.id), None)
+    if here is None:
+        return section.text, 0
+    before = ordered[here - 1].text if here > 0 and _runs_on(ordered[here - 1], section) else ""
+    after = ordered[here + 1].text if here + 1 < len(ordered) and _runs_on(section, ordered[here + 1]) else ""
+    lead = f"{before} " if before else ""
+    return f"{lead}{section.text}{' ' + after if after else ''}", len(lead)
+
+
+def _runs_on(earlier: Section, later: Section) -> bool:
+    """Whether a sentence runs on from ``earlier`` into ``later``: two pieces of one paragraph the reader cut for size,
+    the earlier not ending a passage."""
+    return (
+        _part_of(earlier, later)
+        and PARAGRAPH_SEPARATOR not in earlier.text
+        and PARAGRAPH_SEPARATOR not in later.text
+        and not _ENDS_A_PASSAGE.search(earlier.text)
+    )
+
+
+def _part_of(other: Section, section: Section) -> bool:
+    """Whether two sections are parts of one clause the reader split for size: the same number, and headings that are
+    one heading with its part marks ("Fees (part 1)", "Fees (part 2)"), or the heading the last part keeps."""
+
+    def base(heading: str) -> str:
+        found = PART_HEADING.match(heading or "")
+        return found.group("base") if found else heading or ""
+
+    marked = PART_HEADING.match(other.heading or "") or PART_HEADING.match(section.heading or "")
+    return bool(marked) and other.number == section.number and base(other.heading) == base(section.heading)
 
 
 class StaleRun(RuntimeError):
@@ -403,11 +451,13 @@ def execute_run(session: Session, run_id: str, provider: ModelProvider) -> None:
                 all_verified = all_verified and verified
                 if located is not None and section is not None:
                     read.append(located_text(section, located))
-                    # What the sentences around the quote point at that the model was not handed (runs.status).
-                    passage = enclosing_sentences(section.text, located.start, located.end)
+                    # What the sentences around the quote point at that the model was not handed (runs.status), read in the
+                    # clause's parts the sentence runs on into (`reading_of`).
+                    whole, at = reading_of(sections, section)
+                    passage = enclosing_sentences(whole, at + located.start, at + located.end)
                     passages.append(passage)
                     dependencies += [d for d in unseen_references(passage, every_section, handed) if d not in dependencies]
-                    if (condition := left_out_condition(section.text, located.start, located.end)) is not None:
+                    if (condition := left_out_condition(whole, at + located.start, at + located.end)) is not None:
                         conditions.append(condition)
                 total_count += 1
                 verified_count += 1 if verified else 0
