@@ -123,7 +123,7 @@ def test_only_a_pass_is_lowered_by_an_unknown_reference() -> None:
 
 
 def test_a_stated_position_the_quote_does_not_carry_lowers_the_status() -> None:
-    """Found while tracing (docs/SYSTEM_TRUTH.md H): `observed` and `required` were never compared with the record."""
+    """Found while tracing (docs/archive/SYSTEM_TRUTH.md H): `observed` and `required` were never compared with the record."""
     quote = "Customer may terminate on thirty (30) days' written notice."
     guidance = "We accept termination on 30 days' notice or more."
     # The model says 90 days; the verified quote says 30. Code refuses to compute a pass from 90.

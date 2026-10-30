@@ -93,7 +93,7 @@ async def upload_document(
         # The bytes are taken from the spooled upload only once a reading may start (reading_turn).
         return ingest_document(session, file.filename or "upload", file.file.read(), workspace, reading_wait=wait)
 
-    # Parsing is CPU work of up to seconds (docs/PARSER-COMPARISON.md: 44 s on a 1.25-million-character contract); it leaves the event loop.
+    # Parsing is CPU work of up to seconds (docs/archive/PARSER-COMPARISON.md: 44 s on a 1.25-million-character contract); it leaves the event loop.
     async with reading_turn(client_network(request)) as wait:
         ingested = await to_thread.run_sync(partial(read_and_ingest, wait), limiter=reading_threads)
     if not ingested.created:

@@ -23,7 +23,7 @@ def test_the_docx_memo_carries_its_record_and_its_links(client: TestClient) -> N
         assert 'name="workbench_run_id"' in custom and result["run_id"] in custom
         assert result["document"]["sha256"] in custom and "workbench_prompt_hash" in custom
         core = package.read("docProps/core.xml").decode("utf-8")
-        assert "Contract Workbench" in core and "agreement.txt" in core and "python-docx" not in core
+        assert "Verity" in core and "agreement.txt" in core and "python-docx" not in core
         body = package.read("word/document.xml").decode("utf-8")
         assert 'w:name="src_1"' in body and 'w:anchor="src_1"' in body, "the citation links to its bookmarked source row"
         assert "Observed language" in body and "Sources" in body

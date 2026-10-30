@@ -112,7 +112,7 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         bounded.release_handoff_dir()
 
     access.check_configuration()
-    app = FastAPI(title="Contract Workbench", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Verity", version="0.1.0", lifespan=lifespan)
     # Responses over 1 KB go out compressed; Starlette leaves text/event-stream alone, so the live
     # run stream is unaffected. Lighthouse found the document JSON going out raw. Level 6, not Starlette's 9: on the event
     # loop, a 10 MB document took 128 ms at 9 and 81 ms at 6, for 0.8% more bytes (backend audit, 2026-10-19).

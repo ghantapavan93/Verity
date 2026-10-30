@@ -231,7 +231,7 @@ two regressions; the record and the reasoning are in `docs/ROUTING.md`.
 **Recording 6, 2026-10-01 (02:38 to 04:05 local, two recordings sharing the GPU with each other and with the day's
 document and interface sweeps): 44 goldens, reader v4 document, verifier v5, Qwen3 8B, answer-v2, k = 6, one option at
 a time, judged by code against Recording 4/5's answer-v2 at k = 6 (37 of 44).** The goldens' report compares prompt
-versions, so the option recordings were judged by `backend/experiments/depth_pass/judge_options.py` (results in `results/goldens-*.json` beside it), which finds the run by its
+versions, so the option recordings were judged by `research/depth_pass/judge_options.py` (results in `results/goldens-*.json` beside it), which finds the run by its
 option under the same prompt, document and guidance.
 
 | Run | Result | Against the baseline | Verdict under the rule (`docs/RETRIEVAL.md`) |
@@ -252,7 +252,7 @@ six candidates are the same six sections in the same order under both readings, 
 two reconstructed model inputs differ in exactly one line, `CONTRACT: CP01.docx` against
 `CONTRACT: cloud-service-agreement.docx`, because every earlier golden document was the corpus copy of the sample and
 reader v5's is the bundled one; g30 withholds on the v5 document under the old window with the table off too (three
-runs, `backend/experiments/depth_pass/isolate_g30.py`, `results/g30-isolation.json`). So the movement is the model's sensitivity to the file's name on one prompt
+runs, `research/depth_pass/isolate_g30.py`, `results/g30-isolation.json`). So the movement is the model's sensitivity to the file's name on one prompt
 line, not the reader, the window or the table. The name is part of the input and the record says so; nothing is
 renamed to make the number look stiller. Reader v5 is held by its own criterion, the one the parser tournament set: it
 retains 377 of 377 exact quotes the record has over the 35 corpus and sample documents

@@ -1,4 +1,4 @@
-"""The parser tournament harness (docs/PARSER-COMPARISON.md). Runs every adapter it can import over a set of
+"""The parser tournament harness (docs/archive/PARSER-COMPARISON.md). Runs every adapter it can import over a set of
 documents through one contract, records per document what each read, how long it took and how much memory it
 used, replays the record's exact quotes over each challenger's text, and writes one JSON the document reads from.
 

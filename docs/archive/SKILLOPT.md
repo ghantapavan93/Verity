@@ -11,14 +11,14 @@ before the run.
 
 - **The skill** is the system prompt, seeded with `answer-v2.md` as it stands. Nothing else in the
   pipeline moves: the same reader, retrieval (BM25, six candidates), JSON schema, verifier and status
-  decision the interface uses. The rollout is `backend/experiments/skillopt/workbench_env/rollout.py`,
+  decision the interface uses. The rollout is `research/skillopt/workbench_env/rollout.py`,
   which calls those production functions and the workbench's own Ollama provider (temperature 0, a
   fixed seed, thinking off).
 - **The target model** is Qwen3 8B on the local GPU. **The optimizer model** is the same Qwen3 8B,
   through Ollama's OpenAI-compatible endpoint with thinking switched off (`reasoning_effort: none`;
   the paper uses a frontier model here, and this is the $0 substitute).
 - **The training data** are CUAD v1 contracts disjoint from CUAD-30: same eligibility and stride,
-  six positions later (`backend/experiments/skillopt/build_data.py`; manifest
+  six positions later (`research/skillopt/build_data.py`; manifest
   `backend/app/batch/corpora/cuad-skillopt.json`). SkillOpt trains on the whole training split, so the split is
   the budget: three contracts (21 items over the seven `cuad-clauses` questions), three more as the
   validation set that gates every edit (21 items), twenty-four in reserve that no run reads.

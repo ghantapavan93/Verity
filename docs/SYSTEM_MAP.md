@@ -1,18 +1,9 @@
 # System map
 
-Verified against commit `08a37ad` (the database and cloud rows: the cloud readiness work of 2026-10-12) and the "Why this answer?" work of 2026-09-30.
-
-**Rows re-checked on 2026-10-14 for the B1/B2 repairs: Ingestion (reader v13), Verifier (v9), Evidence pack (versioned checker).** **Partly re-checked on 2026-10-13, and only partly.** The war room's docs pass (R9) read these rows against the code of
-the repair worktree on `8b7b8fb` with the war room's repairs applied: Prompts, Ingestion (the parser version only),
-Model input rebuilt, Access, Quotas, Status, Engineering API (the experiments source only), Types and labels, Browser
-and unit, and the three rows it added: Bounded reading, Request body limit and Model wake. Every other row was last
-verified at `08a37ad` or before, and `8b7b8fb` is 298 commits past `08a37ad`: treat any row not named here as possibly
-stale and read its file. Gaps already known and not repaired here: the Settings row lacks 23 of the 38 `WORKBENCH_`
-variables `config.py` reads; the Cloud layout row was rewritten on 2026-10-16 for one Hetzner host with the model on it; the trust routes, `GET /api/runs` and retention have no row.
-
-An index, not documentation: each row names the owner, the file, the principal function or class, what goes in and
-what comes out. When a subsystem changes, update its row and the commit above. Never rewrite broadly because a row is
-stale.
+Each row names the files that own a subsystem and what they decide. Rows were last checked against the code at
+different commits and no test holds them, so read the owning file before relying on a row. The versions in force (the
+policy, the verifier, the reader, retrieval) are in `docs/STATUS.md`, which a test holds to the code. When a subsystem
+changes, update its row. Never rewrite broadly because a row is stale.
 
 ## Roots and locations
 
@@ -23,7 +14,7 @@ stale.
 | Database | SQLite in WAL mode at `{WORKBENCH_DATA_DIR or backend/data}/workbench.db` (`backend/app/config.py`), one connection per session (no pool), 30 s busy wait, secure delete, bound values kept out of error messages (`backend/app/db.py` `make_engine`). Schema owner `backend/app/models.py`. Additive column/index migration and immutability triggers: `backend/app/db.py` `init_db` → `ensure_columns`, `ensure_immutability` |
 | Data directory | `documents/{sha256}{ext}` (original upload, written after the commit), `memos/memo-{run_id}.docx`, `logs/`; all of `backend/data/` is gitignored |
 | Bundled sample | `public/samples/cloud-service-agreement.docx`, sha256 `cb72dad74b3af676…`: Common Paper Cloud Service Agreement v2.1, CC BY 4.0, unmodified (stated in `README.md` and the `document` block of `backend/app/goldens/set.json`). Under reader v4: 11 pages, 123 sections |
-| Evaluation data (never read by the API; see `docs/SYSTEM_TRUTH.md` E) | goldens `backend/app/goldens/set.json` (44); CUAD manifest and expert labels `backend/app/batch/corpora/{cuad-30.json, cuad-30-labels.json, cuad-skillopt.json}`; CUAD archive and texts `backend/data/cuad/` (gitignored; provenance in `SOURCE.txt`); public 20-contract corpus `../ivo-experiments/experiments/{b1-word-structure, pilot-redline-integrity}/corpus` (licences in `corpus_sources.csv`, `sources.csv`); family labels `backend/app/families/labels.json`; test fixtures `backend/tests/support.py`, `backend/tests/fixtures/services-agreement.pdf`; recorded model answers `e2e/replay.json` |
+| Evaluation data (never read by the API; see `docs/archive/SYSTEM_TRUTH.md` E) | goldens `backend/app/goldens/set.json` (44); CUAD manifest and expert labels `backend/app/batch/corpora/{cuad-30.json, cuad-30-labels.json, cuad-skillopt.json}`; CUAD archive and texts `backend/data/cuad/` (gitignored; provenance in `SOURCE.txt`); public 20-contract corpus `../ivo-experiments/experiments/{b1-word-structure, pilot-redline-integrity}/corpus` (licences in `corpus_sources.csv`, `sources.csv`); family labels `backend/app/families/labels.json`; test fixtures `backend/tests/support.py`, `backend/tests/fixtures/services-agreement.pdf`; recorded model answers `e2e/replay.json` |
 | Prompts | `backend/app/analysis/prompts/answer-v1.md`, `answer-v2.md` (default: `settings.prompt_version`), `answer-v3.md` (pre-registered candidate, not default), `answer-v4.md` (measured 2026-10-10, not adopted, kept frozen and unused) |
 | Model provider | Ollama at `WORKBENCH_OLLAMA_URL` (default `http://127.0.0.1:11434`, an address: `localhost` can try IPv6 first), model `qwen3:8b`. Provider by `WORKBENCH_PROVIDER`: `ollama` (default), `replay`, `record` |
 | API contract | `openapi.json` written by `backend/scripts/export_openapi.py` → `src/lib/api.schema.ts` by `npm run api:types` |
@@ -88,7 +79,7 @@ stale.
 | Kind | Where | What each holds |
 |---|---|---|
 | Backend tests | `backend/tests/` (`conftest.py`: temp DB and `FakeProvider` per test; `support.py`: `CONTRACT`, `GUIDANCE`, `FakeProvider` knobs, `FUZZ_SCALE`; `test_hostile_packages` entity bomb, deep nesting, twenty thousand members; `test_coverage`; `test_reconstruct_input`; `test_stream_resume`; `test_run_endings`; `test_memo_revisions`; `test_uniqueness`; `test_durations`; `test_tokens`; `test_transitions`; `test_owner`; `test_admission`; `test_explanation`; `test_data_audit`) | `test_api_flow` full path, paraphrase → unresolved, garbage → failed, SSE, reuse and retry, stale run, review; `test_failure_matrix` provider down and retry, 413 / 422 cases, triggers, prompt change, zip-slip, reference check; `test_api_fuzz` Schemathesis, no 5xx; `test_run_invariants_stateful` Hypothesis machine; `test_spans`, `test_spans_properties`, `test_verify_evidence` verifier; `test_retrieval_and_status`; `test_evidence_pack`; `test_memo_docx`; `test_ingest`, `test_pdf_ingest`, `test_sections`; `test_hashing`; `test_db_columns`; `test_batch`; `test_families`; `test_goldens`; `test_prose`; `test_replay_provider` |
-| Parser tournament | `backend/experiments/parser_tournament/run.py`; `docs/PARSER-COMPARISON.md`; research venv `backend/data/tournament/` (ignored) | adapters `current`, `docling`; per document: blocks, characters, seconds, peak MB, parts read, exact quotes of the record retained | corpus → `data/tournament/*.json`; nothing enters the application before a result |
+| Parser tournament | `research/parser_tournament/run.py`; `docs/archive/PARSER-COMPARISON.md`; research venv `backend/data/tournament/` (ignored) | adapters `current`, `docling`; per document: blocks, characters, seconds, peak MB, parts read, exact quotes of the record retained | corpus → `data/tournament/*.json`; nothing enters the application before a result |
 | Scripts | `backend/scripts/` | `run_goldens.py`, `run_batch.py`, `reverify.py`, `eval_retrieval.py` (`--mode`, `--k`, `--ranks`), `load_envelope.py`, `mutate_by_hand.py` (24 mutants), `domain_review_pack.py`, `score_cuad.py`, `cuad_corpus.py`, `cluster_corpus.py`, `export_openapi.py`, `data_audit.py` (every agreement by sha256: source, licence, role, measurements; the denominators kept apart; `--write` refreshes the block in `docs/DATA-EVIDENCE.md`) |
 | Browser and unit | `playwright.config.ts` (API 8001 in replay from `e2e/replay.json`, production web build on 3901, data `backend/data/e2e`; `E2E_PROVIDER=record` re-records); eight spec files, `e2e/{workbench, reliability, critical, defects, state, layout, break, revision}.spec.ts`, 38 flows on 2026-10-15 (`npx playwright test --list`; `backend/tests/test_docs_claims.py` holds the README's count to the specs); Vitest `src/**/*.test.tsx` (`useRunFollower`, `useUrlState`, `WhyThisAnswer` against the recorded explanation of the Phase 1 run) | flows against the real API; hooks |
 | Static checks | `backend/.importlinter` (verifier pure, providers blind, layers downward), `eslint.config.mjs`, ruff, mypy strict, prettier, tsc; `.github/dependabot.yml`; the CI workflow lives on a local branch `ci`, not on GitHub | |
@@ -101,10 +92,10 @@ stale.
 | `DECISIONS.md` | dated decision log |
 | `ENGINEERING_CONSTITUTION.md` | ownership map, binding rules, pre-change questions, audits |
 | `CLAUDE.md`, `AGENTS.md` | working rules; Next.js docs authority and the Next / FastAPI ownership table |
-| `docs/SYSTEM_TRUTH.md` | the system comprehension pass: workflow trace, upload capabilities, garbage matrix, provenance, model versus code, guidance, verification guarantees, scale, the Ivo comparison, adversarial questions, one-page truth |
-| `docs/DESIGN.md`, `docs/adr/0001-0004` | problem contract, domain model, invariants; local model behind a provider, citations verified by code, LangGraph only for stateful flow (not implemented), hybrid retrieval |
-| `docs/GOLDENS.md`, `docs/RETRIEVAL.md`, `docs/ROUTING.md`, `docs/SKILLOPT.md` | the golden set and recordings; retrieval measured against labels; model routing; prompt optimisation |
-| `docs/BATCH.md`, `docs/CUAD.md`, `docs/FAMILIES.md`, `docs/DOMAIN-REVIEW.md` | batch recording; CUAD-30 pre-registration; families against labels; the lawyer pack |
+| `docs/archive/SYSTEM_TRUTH.md` | the system comprehension pass: workflow trace, upload capabilities, garbage matrix, provenance, model versus code, guidance, verification guarantees, scale, the Ivo comparison, adversarial questions, one-page truth |
+| `docs/archive/DESIGN.md`, `docs/adr/0001-0004` | problem contract, domain model, invariants; local model behind a provider, citations verified by code, LangGraph only for stateful flow (not implemented), hybrid retrieval |
+| `docs/GOLDENS.md`, `docs/RETRIEVAL.md`, `docs/ROUTING.md`, `docs/archive/SKILLOPT.md` | the golden set and recordings; retrieval measured against labels; model routing; prompt optimisation |
+| `docs/BATCH.md`, `docs/CUAD.md`, `docs/FAMILIES.md`, `docs/archive/DOMAIN-REVIEW.md` | batch recording; CUAD-30 pre-registration; families against labels; the lawyer pack |
 | `docs/FAILURE-ENVELOPE.md`, `docs/SCALE.md`, `docs/PERFORMANCE.md` | cases and the test that holds each; the measured envelope and what each next step must earn; interface measurements |
 | `docs/DATA-EVIDENCE.md` | the data audit: which agreements, from where, under which licence, in which role, behind which measurement; each denominator its own; generated by `scripts/data_audit.py` |
-| `docs/VALIDATION.md`, `docs/REVIEW-INDEPENDENT.md`, `docs/DEMO.md`, `docs/DEMO-PROOF.md` | the validation audit; the independent review and its fixes; the walkthrough; the stranger's-document record (a never-seen DOCX through every step, read back from the record, with what it exposed; fixture from `backend/experiments/demo_proof/make_fixture.py`) |
+| `docs/archive/VALIDATION.md`, `docs/archive/REVIEW-INDEPENDENT.md`, `docs/DEMO.md`, `docs/DEMO-PROOF.md` | the validation audit; the independent review and its fixes; the walkthrough; the stranger's-document record (a never-seen DOCX through every step, read back from the record, with what it exposed; fixture from `research/demo_proof/make_fixture.py`) |

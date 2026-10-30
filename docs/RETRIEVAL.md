@@ -124,7 +124,7 @@ and the three misses remain retrieval's: reachable at depth, at a price paid els
 A section is split at 6,000 characters (`ingest/sections.py`) and the prompt hands the model the first 5,000 of each
 candidate (`analysis/service.py`); the verifier is bounded to the same 5,000, so a correct quote from the last thousand
 characters is withheld. The Phase 1 proof (`docs/DEMO-PROOF.md`) saw 13% of one contract never reach the model. The
-census (`backend/experiments/depth_pass/tail_measure.py`, result `results/window-census.json`, over the CUAD-30 batch `51398ed416634c15` and its expert spans): of 111
+census (`research/depth_pass/tail_measure.py`, result `results/window-census.json`, over the CUAD-30 batch `51398ed416634c15` and its expert spans): of 111
 expert spans, 45 lie in sections longer than 5,000 characters, 4 start beyond the window and 2 are cut by it; of those
 six, the recorded batch answered 4 wrong or "not found". The window is now a run option, `WORKBENCH_SECTION_WINDOW`,
 recorded on the run only when it is not the default and read back from the record by the explanation, the pack and the
@@ -138,7 +138,7 @@ and at least one of the six cases answered from the tail. The cost is prompt len
 failures (g08, g11, g12, g26, g35, g42, g44), no gain and no regression; one run was declared stale by a public API
 restarted on the old recovery code while it waited for the model and was re-made on the same document (g05, pass).
 The six census cases at 6,000: four answered with a located quote that hits the expert span, against two in the
-recorded batch at 5,000 (`backend/experiments/depth_pass/tail_cases.py`, result `results/tail-cases-6000.json`: 01 liability cap, 22, 25 and 02 governing law
+recorded batch at 5,000 (`research/depth_pass/tail_cases.py`, result `results/tail-cases-6000.json`: 01 liability cap, 22, 25 and 02 governing law
 correct; 01 uncapped liability not found; 14 non-compete cited elsewhere). Under the rule, **6,000 is the default**:
 `WORKBENCH_SECTION_WINDOW` is recorded on every run from now on, and a run without it was made at 5,000, which
 `analysis.service.MAX_SECTION_CHARS_IN_PROMPT` keeps for reading old runs back. Latency is not compared: both
@@ -149,7 +149,7 @@ idle machine), and the confirmation recording below is the one made alone.
 
 The two weak CUAD categories are vocabulary, not depth: a question says "non-compete" and the clause says "restrictive
 covenant"; "uncapped liability" against "shall not be limited". The field's answer is query expansion by a model
-(HyDE, multi-query), which the financial-RAG benchmark in `docs/RESEARCH.md` found to hurt on precise text. The $0,
+(HyDE, multi-query), which a financial-RAG benchmark found to hurt on precise text. The $0,
 model-free form is a table: seven concept groups (`retrieval/aliases.py`, non-compete, non-solicit, uncapped and capped
 liability, termination for convenience, governing law, assignment, confidentiality), each phrase added once to the BM25
 query when the question names the concept, the table versioned by its hash and recorded on the run

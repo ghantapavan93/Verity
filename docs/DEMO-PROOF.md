@@ -18,7 +18,7 @@ the provider was Ollama, not the replay file, and no golden or corpus document w
 | | |
 |---|---|
 | File | `MTI-Reseller-Agreement.docx`, 47,778 bytes, sha256 `d510d1d71a7b6629636d424c8756dbf24a02808d8b93c97e9f6842bfcb097f5a` |
-| Where it comes from | CUAD v1 (The Atticus Project, CC BY 4.0): the reseller agreement between McDATA Corporation and MTI Technology Corporation of 29 September 2004 (an SEC exhibit, 32,744 characters, 158 lines), rendered as one plain paragraph per line by `backend/experiments/demo_proof/make_fixture.py`. No heading styles, headers, footers, fields or tables were added. The script's output has every member byte-identical to the file above (`word/document.xml` sha256 `b63f7e82c92f67bb…`); the package hash differs because python-docx stamps zip members with the clock, which the script now pins, so its output hashes to `8961d52bc9c94838b06f189bcbbbc657b8828cea2c1897e6aade4bf34b4ee33c` on every machine |
+| Where it comes from | CUAD v1 (The Atticus Project, CC BY 4.0): the reseller agreement between McDATA Corporation and MTI Technology Corporation of 29 September 2004 (an SEC exhibit, 32,744 characters, 158 lines), rendered as one plain paragraph per line by `research/demo_proof/make_fixture.py`. No heading styles, headers, footers, fields or tables were added. The script's output has every member byte-identical to the file above (`word/document.xml` sha256 `b63f7e82c92f67bb…`); the package hash differs because python-docx stamps zip members with the clock, which the script now pins, so its output hashes to `8961d52bc9c94838b06f189bcbbbc657b8828cea2c1897e6aade4bf34b4ee33c` on every machine |
 | Why this one | not in CUAD-30, not in the SkillOpt set, not the golden document; never read by the workbench before; its notice clause writes the count in words and digits ("sixty (60) days"), which exercises the duration parser's agreement check |
 | Why a generated DOCX | no real Word file on this machine was outside the measured sets, and fetching one is a download Pavan makes, not the agent. The text is the real contract; only the container is plain |
 
@@ -63,7 +63,7 @@ Recorded before anything is changed; each is a candidate for a measured change, 
    as `.txt` sections under the line rules into 41 sections (one over 5,000 characters), with a quirk of
    its own: the address lines "380 INTERLOCKEN CRESCENT" and "BROOMFIELD, CO 80021" become sections
    "380" and "381". A DOCX reader that also applies the line rules to unstyled numbered paragraphs is a
-   reader change, to be measured against the record like any other (`docs/PARSER-COMPARISON.md`).
+   reader change, to be measured against the record like any other (`docs/archive/PARSER-COMPARISON.md`).
 2. **The section split is 6,000 characters; the prompt window is 5,000.** Every part between those two
    sizes loses its tail before the model sees it: here 4,375 of 32,704 characters, 13% of the contract,
    in five tails of 686 to 993 characters. The record is honest about it (the slices say `truncated`,

@@ -67,7 +67,7 @@ def render_verify_py() -> str:
     return text
 
 
-README_TXT = """Evidence pack for one Contract Workbench run.
+README_TXT = """Evidence pack for one Verity run.
 
   run.json        the run: question, stage, hashes of the document, sections, prompt and options, model
   sections.json   the canonical sections the run read, exactly as stored (offsets index into these texts)

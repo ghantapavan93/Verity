@@ -136,7 +136,7 @@ def _runs(visitor: Visitor | None = None) -> int:
 
 
 def _slow_reading(monkeypatch: pytest.MonkeyPatch, seconds: float = 0.3) -> None:
-    """A reading of a real contract takes seconds (docs/PARSER-COMPARISON.md); this one takes a fraction, which is
+    """A reading of a real contract takes seconds (docs/archive/PARSER-COMPARISON.md); this one takes a fraction, which is
     enough to hold every upload of a burst between its first count and its write."""
 
     def slow_ingest(name: str, data: bytes, *, wait: float | None = None) -> Ingested:

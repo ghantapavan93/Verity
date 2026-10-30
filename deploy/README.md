@@ -113,8 +113,7 @@ $cf = "$env:LOCALAPPDATA\Programs\cloudflared\cloudflared.exe"    # cloudflared 
 
 Then, in the Cloudflare dashboard, Zero Trust → Access → Applications → add a self-hosted
 application for `ivo.pavankg.dev` (every path), with one policy, action Allow, include Emails:
-Pavan's address and the addresses the link is sent to; or Emails ending in `@ivo.ai` if any Ivo
-employee should be able to open it. Session duration: a day is enough. Nothing else on the account
+the owner's address and the addresses the link is sent to. Session duration: a day is enough. Nothing else on the account
 needs to change; the tunnel opens no inbound port and the machine's address is not published.
 
 ## Every time
@@ -256,7 +255,7 @@ local model, two browsers entering by two invites: twenty-three checks, all pass
 hour (`api/access.py`), and per workspace and for everyone per day (`application/quotas.py`); visits have no daily
 bound. The store is still the one the measurements were made in.) No nginx or Caddy, no second
 hostname, no rate limiting beyond what Access gives, no separate data
-directory for the public instance: the store the Ivo engineer opens is the store the measurements
+directory for the public instance: the store a reviewer opens is the store the measurements
 were made in, so Runs shows the real record.
 
 ## What protects it, and what does not (measured 2026-10-02)

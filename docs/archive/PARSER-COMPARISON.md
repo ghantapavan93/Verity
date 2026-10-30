@@ -1,7 +1,7 @@
 # Parser tournament
 
 The reader (`backend/app/ingest/readers.py`, version v4) reads a DOCX as its accepted view and, as
-`docs/SYSTEM_TRUTH.md` and the coverage census record, leaves headers, footers, footnotes, endnotes,
+`docs/archive/SYSTEM_TRUTH.md` and the coverage census record, leaves headers, footers, footnotes, endnotes,
 comments, block-level content controls, embedded objects and imported chunks unread, keeps only the
 cached result of fields, and does not render automatic numbering. Two open-source readers claim more:
 Docling (MIT, IBM; a typed document model with body, furniture, hierarchy and provenance) and Docxodus
@@ -36,7 +36,7 @@ adversarial fixtures:
 
 Two of the five failing ends the tournament for the challenger; a challenger that wins is adopted
 behind a new reader version (v5), with v4 readings kept as they are and re-read only when a run asks.
-The harness is `backend/experiments/parser_tournament/run.py`; its own venv is
+The harness is `research/parser_tournament/run.py`; its own venv is
 `backend/data/tournament/venv` (ignored), so nothing enters the application's dependencies before the
 result. Offset stability between backend and interface (the reason OpenContracts pins Docxodus's WASM
 build to its server build) is not a criterion here: the workbench highlights from stored section text

@@ -182,7 +182,7 @@ repository is committed by the assistant.
   does not exercise; goldens with guidance are added when a change to that decision needs
   measuring.
 - No style-resolved hidden text: the reader drops runs marked hidden directly; a character style
-  that hides text is not resolved. Recorded as an open question in `docs/DESIGN.md`.
+  that hides text is not resolved. Recorded as an open question in `docs/archive/DESIGN.md`.
 - No virtualised document view: measured on 2,001 sections, not needed; the threshold that would
   earn it is in `docs/PERFORMANCE.md`.
 - No MinHash for document families: exact Jaccard over twenty documents is cheap and exact; the

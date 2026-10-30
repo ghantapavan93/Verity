@@ -177,7 +177,7 @@ def status_label(status: str, with_guidance: bool, source: str = "computed_days"
     return STATUS_LABELS.get(status, status)
 
 
-AUTHOR = "Contract Workbench"
+AUTHOR = "Verity"
 CUSTOM_PROPERTIES_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.custom-properties+xml"
 CUSTOM_PROPERTIES_FMTID = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}"
 
@@ -437,7 +437,7 @@ def _properties(document: WordDocument, run: Run, verified: int, total: int, rev
     core.author = AUTHOR
     core.last_modified_by = AUTHOR
     core.category = "Review memo"
-    core.keywords = "contract review; quoted passages; contract workbench"
+    core.keywords = "contract review; quoted passages; Verity"
     core.identifier = run.id
     core.version = run.prompt_version
     core.comments = f"run {run.id} · document sha256 {run.document_sha256} · model {run.model} · prompt {run.prompt_version} {run.prompt_hash}"

@@ -35,6 +35,7 @@ from app.verify.spans import VERIFIER_VERSION
 BACKEND = Path(__file__).resolve().parents[1]
 ROOT = BACKEND.parent
 README = ROOT / "README.md"
+STATUS = ROOT / "docs" / "STATUS.md"
 
 # Counts the README writes in words, zero to fifty-nine: "eighteen parts", "twenty-four hand mutants".
 _ONES = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
@@ -49,7 +50,9 @@ LEGACY = re.compile(r"policy-v2|before policy-v3|pre-v3")
 
 
 def readme() -> str:
-    return README.read_text(encoding="utf-8")
+    """What the repository states as current: the README, and docs/STATUS.md, which holds the counts and versions the
+    README's one screen leaves out (2026-10-30)."""
+    return "\n".join(path.read_text(encoding="utf-8") for path in (README, STATUS))
 
 
 def as_number(token: str) -> int | None:

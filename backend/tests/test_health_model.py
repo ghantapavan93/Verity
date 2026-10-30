@@ -32,7 +32,7 @@ def probes(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> list[int]:
     [
         ("http://localhost:11434", "", False, "server", ""),
         ("http://127.0.0.1:11434", "", False, "server", ""),
-        ("https://verity--ollama.modal.run", "a Modal GPU in the US", False, "hosted", "a Modal GPU in the US"),
+        ("https://example--ollama.modal.run", "a Modal GPU in the US", False, "hosted", "a Modal GPU in the US"),
         ("http://host.docker.internal:11434", "", False, "hosted", ""),
         # The Hetzner layout: the model is another container on this machine, and the deployment says so (env.example).
         ("http://ollama:11434", "", True, "server", ""),

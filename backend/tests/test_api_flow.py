@@ -243,7 +243,7 @@ def test_interrupted_runs_are_failed_on_restart_and_become_retryable(client: Tes
 
 
 def test_a_pass_without_guidance_is_a_plain_answer_not_within_guidance(client: TestClient) -> None:
-    """Found while tracing (docs/SYSTEM_TRUTH.md H, 2026-09-29): every pass was labelled "Within guidance", guidance or
+    """Found while tracing (docs/archive/SYSTEM_TRUTH.md H, 2026-09-29): every pass was labelled "Within guidance", guidance or
     not. The run and the findings list now say whether guidance was given, and the memo heads such a pass "Model's answer" (2026-10-08; "Answered" before)."""
     result = upload_and_ask(client, "Can the customer terminate for convenience?", with_guidance=False)
     run = result["run"]

@@ -40,8 +40,6 @@ its text is.
 
 ## The three reports
 
-`reports/` holds the three agents' reports as they were written on 2026-10-01: `reader-sweep.md` (115 uploads of
-the generated files, three tables and the ranked defects), `ui-sweep.md` (the product driven through Playwright on an
-isolated stack, ten area tables and 23 ranked defects) and `code-review.md` (the hostile read of the code, 26 findings).
-The reports name the files by their generated names (`gen\...`); the 115 screenshots the interface sweep took were not
-kept. Which findings became changes, and which were left with a reason, is in `DECISIONS.md`.
+The three agents' reports, as they were written on 2026-10-01, are in the history at
+`backend/experiments/depth_pass/reports/` (commit a844ebf); the defects they found and what each earned are in
+`DECISIONS.md` (the depth pass, 2026-10-01).

@@ -172,10 +172,10 @@ def audit(store_path: Path | None = None) -> Audit:
         a.licences.add("the repository's own")
         a.roles.add("fixture")
         a.measurements.add("backend tests")
-    demo = BACKEND / "experiments" / "demo_proof" / "make_fixture.py"
+    demo = ROOT / "research" / "demo_proof" / "make_fixture.py"
     if demo.exists():
         notes.append(
-            "the Phase 1 fixture (docs/DEMO-PROOF.md) is a CUAD contract rendered as a DOCX by experiments/demo_proof/make_fixture.py; "
+            "the Phase 1 fixture (docs/DEMO-PROOF.md) is a CUAD contract rendered as a DOCX by research/demo_proof/make_fixture.py; "
             "its bytes are in the store only where the proof was run"
         )
 

@@ -1,7 +1,7 @@
-"""Build docs/DOMAIN-REVIEW.md from the record, selecting runs by document, model, prompt and
+"""Build docs/archive/DOMAIN-REVIEW.md from the record, selecting runs by document, model, prompt and
 retrieval rather than by question text.
 
-    cd backend && .venv/Scripts/python scripts/domain_review_pack.py > ../docs/DOMAIN-REVIEW.md
+    cd backend && .venv/Scripts/python scripts/domain_review_pack.py > ../docs/archive/DOMAIN-REVIEW.md
 
 For each golden in the pack, the latest complete run on the bundled sample (found by the file's
 sha256, so a re-upload under another name is the same document) with the default model, the

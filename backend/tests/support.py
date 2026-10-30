@@ -108,7 +108,7 @@ class FakeProvider:
 
 
 # Multiplies every Hypothesis and Schemathesis budget. WORKBENCH_FUZZ_SCALE=20 is the deep pass recorded in
-# docs/VALIDATION.md; the default keeps the suite under half a minute.
+# docs/archive/VALIDATION.md; the default keeps the suite under half a minute.
 FUZZ_SCALE = int(os.environ.get("WORKBENCH_FUZZ_SCALE", "1"))
 
 

@@ -14,9 +14,9 @@ purpose, with the measurement that would earn it written down.
 
 | Capability | Mark | Held by | What is not held |
 |---|---|---|---|
-| Reading DOCX, PDF and text into numbered sections | proven | the reader tests; the failure matrix (malformed, empty, oversized, a DOCX declaring more than 64 MB, a PDF over 2,000 pages, any reading past 768 MB or 30 s, an encrypted PDF), Schemathesis on the upload route | hidden text set by a character style, and PDF headings by font size, are open questions in `docs/DESIGN.md` |
+| Reading DOCX, PDF and text into numbered sections | proven | the reader tests; the failure matrix (malformed, empty, oversized, a DOCX declaring more than 64 MB, a PDF over 2,000 pages, any reading past 768 MB or 30 s, an encrypted PDF), Schemathesis on the upload route | hidden text set by a character style, and PDF headings by font size, are open questions in `docs/archive/DESIGN.md` |
 | Retrieval within a document | proven, with a measured blind spot | `scripts/eval_retrieval.py`: Recall@6 0.85 on 164 CUAD cases with experts' spans, 0.92 on 38 goldens; uncapped-liability questions 0.44 | hybrid retrieval measured 0.95 and 0.97 and is available behind `WORKBENCH_RETRIEVAL=hybrid`, not default, after one golden regressed (`docs/RETRIEVAL.md`) |
-| Answering in the schema, Qwen3 8B, prompt v2 | proven on the golden set | `scripts/run_goldens.py`: 37 of 44 under BM25 (g08 g11 g12 g26 g35 g42 g44 fail), 40 of 44 under hybrid | the judge checks each run's stage, statuses and cited sections, never the answer's words, so these are scores of citations and statuses, not of correct answers (`docs/GOLDENS.md`, rule 4); one model measured; the 4B was rejected on the set (`docs/ROUTING.md`); SkillOpt proposed no edit to the prompt (`docs/SKILLOPT.md`) |
+| Answering in the schema, Qwen3 8B, prompt v2 | proven on the golden set | `scripts/run_goldens.py`: 37 of 44 under BM25 (g08 g11 g12 g26 g35 g42 g44 fail), 40 of 44 under hybrid | the judge checks each run's stage, statuses and cited sections, never the answer's words, so these are scores of citations and statuses, not of correct answers (`docs/GOLDENS.md`, rule 4); one model measured; the 4B was rejected on the set (`docs/ROUTING.md`); SkillOpt proposed no edit to the prompt (`docs/archive/SKILLOPT.md`) |
 | A quote is shown only when code finds it in the text | proven | `tests/test_spans.py`; seven Hypothesis properties; a replay of the verifier over 611 recorded spans; sixteen hand mutants of the evidence boundary (twenty-four since the evening of this phase), all killed | the verifier gained a boundary rule today (v3) after the independent review found "5 days" inside "fifteen (15) days"; there is still no similarity tier, by census |
 | Status decision under guidance | partial | the status tests; golden g29 | day-count parsing is exercised by one golden; more are added when a change to that decision needs measuring |
 | The run record: stages, hashes, immutability | proven | SQLite triggers on runs, stages, findings, spans and, since today, the sections and documents a finished run read; the stateful property that finished runs never change and verified spans read back as their quotes; `test_failure_matrix` | |
@@ -31,8 +31,8 @@ purpose, with the measurement that would earn it written down.
 | Scale | measured on one machine | `scripts/load_envelope.py`, `docs/SCALE.md`: 1, 5, 10 and 20 concurrent questions | the model is the bottleneck above one; two defects at twenty were found and fixed; nothing beyond one process and one GPU is claimed |
 | Continuous integration | missing | the workflow is written and sits on a branch `ci` that exists only on the development machine | it has never run: the GitHub token lacks the `workflow` scope; every check runs locally by hand before a push |
 | Dependency and code scanning | partial | Dependabot configuration in the tree; CodeQL in the CI workflow | neither has run, for the reason above |
-| Domain correctness | missing | ten findings packed for a lawyer, built from the record by document, model, prompt and retrieval (`docs/DOMAIN-REVIEW.md`) | not yet reviewed by anyone qualified |
-| Independent scrutiny | done once | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true (`docs/REVIEW-INDEPENDENT.md`) | one reviewer, one pass |
+| Domain correctness | missing | ten findings packed for a lawyer, built from the record by document, model, prompt and retrieval (`docs/archive/DOMAIN-REVIEW.md`) | not yet reviewed by anyone qualified |
+| Independent scrutiny | done once | a read-only reviewer told to assume the tree was AI-generated and find where the story becomes fake: seven findings, all true (`docs/archive/REVIEW-INDEPENDENT.md`) | one reviewer, one pass |
 | More than one user, authentication, tenancy | not justified | | a local single-user tool; `docs/SCALE.md` names what would earn each |
 | A worker queue, PostgreSQL, object storage, a persistent vector index, a virtualised document view, an agent framework | not justified | `ENGINEERING_CONSTITUTION.md`, `docs/SCALE.md` | each waits on a measurement it would have to win |
 | A mutation-testing dependency | not justified | twenty-four hand mutants in `scripts/mutate_by_hand.py`, each named for the decision it breaks | earned when the hand mutants stop finding gaps in the suite |
@@ -68,7 +68,7 @@ purpose, with the measurement that would earn it written down.
    a status and the guidance in the drawer; a malformed upload refused with the reason and nothing
    opened; a refresh once the run is in the URL, which brings it back (the run id reaches the URL
    only when the run has finished, so the reload happens after completion; a true mid-run refresh
-   is unproven, see `docs/SYSTEM_TRUTH.md`; **proven since that evening:** the run id is written to the URL as soon as
+   is unproven, see `docs/archive/SYSTEM_TRUTH.md`; **proven since that evening:** the run id is written to the URL as soon as
    the run exists, the replay provider holds its recorded answer back, and `e2e/critical.spec.ts` reloads while the
    run is still checking and reattaches to the same run). Twenty
    flows pass in replay in under a minute; the axe pass found one scrollable region without a
@@ -82,7 +82,7 @@ purpose, with the measurement that would earn it written down.
 8. **One independent read-only review** with the instruction to assume the tree was heavily
    AI-generated and find the first place the engineering story becomes fake. Seven findings, all
    true, recorded as delivered before any fix; the two that broke the story were the CI sentence
-   and the lawyer pack, both corrected at the source (`docs/REVIEW-INDEPENDENT.md`).
+   and the lawyer pack, both corrected at the source (`docs/archive/REVIEW-INDEPENDENT.md`).
 
 ## What the phase changed in the code
 

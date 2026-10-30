@@ -128,7 +128,7 @@ def test_a_verbatim_quote_with_a_boundary_is_still_found_even_when_it_drops_cont
 
 
 def test_a_number_alone_is_never_stripped_so_a_changed_number_cannot_hide_behind_a_label() -> None:
-    """Found by tracing (docs/SYSTEM_TRUTH.md, 2026-09-29): under verifier v2 and v3 the number of §1.5 was cut
+    """Found by tracing (docs/archive/SYSTEM_TRUTH.md, 2026-09-29): under verifier v2 and v3 the number of §1.5 was cut
     from "15 days' written notice" and the remainder verified against "forty-five (45) days' written notice"."""
     text = "Either party may terminate on forty-five (45) days' written notice to the other."
     assert locate("15 days' written notice", text, label="1.5 Termination") is None
@@ -145,7 +145,7 @@ def test_a_number_alone_is_never_stripped_so_a_changed_number_cannot_hide_behind
 
 
 def test_a_decimal_point_is_a_digit_to_the_alnum_tier() -> None:
-    """Found by tracing (docs/SYSTEM_TRUTH.md, 2026-09-29): the letters-and-digits tier read "$1,500" and "$15.00"
+    """Found by tracing (docs/archive/SYSTEM_TRUTH.md, 2026-09-29): the letters-and-digits tier read "$1,500" and "$15.00"
     as the same six characters, and "15%" as "1.5%"."""
     assert locate("fee of $15.00 per user", "The fee of “$1,500” per user is payable annually.") is None
     assert locate("interest at 15% per annum", "Interest accrues at “1.5%” per annum.") is None

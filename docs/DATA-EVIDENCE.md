@@ -9,8 +9,8 @@ author, adds the sets together into a number that means nothing.
 
 What the script does not do: it does not copy any measured result from the other documents. The
 results stay where they were recorded (`docs/GOLDENS.md`, `docs/CUAD.md`, `docs/RETRIEVAL.md`,
-`docs/BATCH.md`, `docs/FAMILIES.md`, `docs/PARSER-COMPARISON.md`, `docs/SCALE.md`,
-`docs/VALIDATION.md`), each with the command that regenerates it. This file only says what the
+`docs/BATCH.md`, `docs/FAMILIES.md`, `docs/archive/PARSER-COMPARISON.md`, `docs/SCALE.md`,
+`docs/archive/VALIDATION.md`), each with the command that regenerates it. This file only says what the
 measurements were made on.
 
 ```bash
@@ -186,7 +186,7 @@ Every measurement in this repository was made on one of 80 evaluation agreements
   (2026-09-28) and are kept because finished runs read them. They are the same bytes as versioned rows
   beside them.
 - The CUAD sets are text files, not Word files, and the SkillOpt thirty are disjoint from CUAD-30 by
-  construction (`docs/SKILLOPT.md`). Neither was ever read by the interface's upload path except through
+  construction (`docs/archive/SKILLOPT.md`). Neither was ever read by the interface's upload path except through
   the batch runner.
 - The public corpus of twenty is eight Common Paper agreements (CC BY 4.0) and twelve UK government
   documents (OGL v3.0); the pilot corpus that fed the families labels overlaps it, and the labels file
