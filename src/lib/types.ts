@@ -238,6 +238,35 @@ export function partOf(heading: string): { base: string; index: number } | null 
   return match ? { base: match[1], index: Number(match[2]) } : null;
 }
 
+/**
+ * The sections the reader split for size, by id, each with its base heading and its part: only a run of two or more in
+ * reading order, from an explicit part 1, each the next part of the same base under the same number, since the reader
+ * writes parts only so (backend ingest.sections _push). Any other heading ending in " (part N)" is the document's own and
+ * is shown as written: the paper read the suffix off any heading, so "2. Definitions (part 2)" lost its words and was
+ * shown as a continuation the reader made (stress test, 2026-10-30). Two unnumbered headings the document wrote as
+ * "X (part 1)" and "X (part 2)" cannot be told from a split by their text; the API would have to say which it made.
+ */
+export function readingParts(sections: readonly SectionView[]): Map<string, { base: string; index: number }> {
+  const parts = new Map<string, { base: string; index: number }>();
+  let run: { section: SectionView; base: string }[] = [];
+  const close = () => {
+    if (run.length >= 2) run.forEach(({ section, base }, i) => parts.set(section.id, { base, index: i + 1 }));
+    run = [];
+  };
+  for (const section of sections) {
+    const part = partOf(section.heading);
+    const last = run.at(-1);
+    if (part && last && part.index === run.length + 1 && part.base === last.base && section.number === last.section.number) {
+      run.push({ section, base: part.base });
+      continue;
+    }
+    close();
+    if (part?.index === 1) run = [{ section, base: part.base }];
+  }
+  close();
+  return parts;
+}
+
 export function citationLabel(section: SectionView): string {
   return section.number ? `§${section.number} · ${section.heading}` : section.heading;
 }

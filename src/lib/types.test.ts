@@ -6,6 +6,7 @@ import {
   evidenceJump,
   partOf,
   passageLabel,
+  readingParts,
   retrievalNote,
   sectionsReadNote,
   statusLabel,
@@ -104,6 +105,53 @@ describe("partOf", () => {
     expect(partOf("Intellectual Property (part 1)")).toEqual({ base: "Intellectual Property", index: 1 });
     expect(partOf("Fees (part 2) and more")).toBeNull();
     expect(partOf("Fees and Milestones")).toBeNull();
+  });
+});
+
+/**
+ * A heading the document wrote is shown as written. The paper took any heading ending in " (part N)" for the reader's
+ * size split: "2. Definitions (part 2)" lost its words and was shown as a continuation the reader made (stress test,
+ * 2026-10-30). The reader writes parts only as a run of two or more, "B (part 1)" first, one after another under the
+ * same number; only such a run is read as one.
+ */
+describe("readingParts", () => {
+  const sections = (...rows: [string, string][]) => rows.map(([number, heading], i) => ({ id: `s${i}`, number, heading, text: "" }) as SectionView);
+
+  it("reads as parts only a run the reader wrote: from part 1, in order, under one number", () => {
+    const parts = readingParts(sections(["5", "Fees (part 1)"], ["5", "Fees (part 2)"], ["5", "Fees (part 3)"], ["6", "Term"]));
+    expect([...parts.entries()]).toEqual([
+      ["s0", { base: "Fees", index: 1 }],
+      ["s1", { base: "Fees", index: 2 }],
+      ["s2", { base: "Fees", index: 3 }],
+    ]);
+  });
+
+  it("leaves a heading the document wrote as written, whatever its suffix", () => {
+    for (const rows of [
+      [
+        ["1", "Definitions (part 1)"],
+        ["2", "Definitions (part 2)"],
+      ], // two numbered clauses
+      [["", "Recitals (part 2)"]], // no part 1 before it
+      [
+        ["", "Schedule A (part 1)"],
+        ["", "Pricing"],
+      ], // a part 1 with no part 2
+      [
+        ["5", "Fees (part 1)"],
+        ["5", "Fees (part 3)"],
+      ], // not in order
+      [
+        ["5", "Fees (part 2)"],
+        ["5", "Fees (part 3)"],
+      ], // no part 1
+      [
+        ["5", "Fees (part 1)"],
+        ["5", "Charges (part 2)"],
+      ], // another base
+    ] as [string, string][][]) {
+      expect(readingParts(sections(...rows)).size, JSON.stringify(rows)).toBe(0);
+    }
   });
 });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { memo, type Ref } from "react";
+import { memo, useMemo, type Ref } from "react";
 import styles from "../Workbench.module.css";
 import { transitions } from "../shell/constants";
 import { SAMPLES, type SampleKind } from "../samples";
@@ -9,7 +9,7 @@ import { formatWhen, plural } from "@/lib/format";
 import { codePointLength } from "@/lib/text";
 import { Visible } from "../shell/primitives";
 import { EvidenceSpine } from "./EvidenceSpine";
-import { partOf, type DocumentView, type FindingView, type LocatedSpan, type SectionView, type SpanView } from "@/lib/types";
+import { readingParts, type DocumentView, type FindingView, type LocatedSpan, type SectionView, type SpanView } from "@/lib/types";
 
 /** The passage to mark: a section, and within it the exact span the API located. */
 export interface Highlight {
@@ -60,6 +60,8 @@ export function DocumentPane({
 }) {
   const { morph } = transitions(reduceMotion);
   const docMeta = doc ? describe(doc) : "";
+  // Which sections the reader split for size, read from the whole document: a heading alone cannot say (lib/types).
+  const parts = useMemo(() => readingParts(doc?.sections ?? []), [doc]);
   return (
     <motion.div
       className={styles.docPane}
@@ -94,6 +96,7 @@ export function DocumentPane({
           <SectionBlock
             key={section.id}
             section={section}
+            part={parts.get(section.id) ?? null}
             lit={lit === section.id}
             span={highlight?.sectionId === section.id ? highlight.span : null}
             readOnly={highlight?.sectionId === section.id && readNotRelied(findings, highlight.span)}
@@ -117,11 +120,14 @@ function readNotRelied(findings: FindingView[] | undefined, span: SpanView | nul
 // 1.25M-character contract under 4x CPU, 2026-10-09). Its props are stable, so only a block whose highlight changes renders.
 const SectionBlock = memo(function SectionBlock({
   section,
+  part,
   lit,
   span,
   readOnly = false,
 }: {
   section: SectionView;
+  /** The reader's part, when the reader split this section for size; null for a section as the document has it. */
+  part: { base: string; index: number } | null;
   lit: boolean;
   span: SpanView | null;
   readOnly?: boolean;
@@ -140,7 +146,6 @@ const SectionBlock = memo(function SectionBlock({
   ) : (
     <Visible text={section.text} />
   );
-  const part = partOf(section.heading);
   const heading = part ? part.base : section.heading;
   return (
     <section data-section={section.id} className={`${styles.clause} ${lit ? styles.clauseLit : ""}`}>
