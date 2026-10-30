@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from ..hashing import sha256_bytes
 from .coverage import PartCoverage
-from .invisible import visible_text
+from .invisible import has_visible_text, visible_text
 from .readers import SUPPORTED, ReadResult, TooLargeToRead, UnsupportedFile, read
 from .sections import ParsedSection, build_sections
 
@@ -123,6 +123,13 @@ def base_name(filename: str) -> str:
     name = filename.replace("\\", "/").rsplit("/", 1)[-1]
     # Invisible format characters too: "Invoice-\u202efdp.exe.txt" displayed as "Invoice-exe.pdf" (2026-10-08).
     name = visible_text("".join(ch for ch in name if ch >= " " and ch != "\x7f")).strip()
+    # A name that draws nothing is no name, nor is a stem that draws nothing before its type: "\u3164.pdf" was stored
+    # and shown as ".pdf" (second wave of the stress test, 2026-10-30). The type is kept: it is what the file is read as.
+    stem, dot, suffix = name.rpartition(".")
+    if dot and f".{suffix.lower()}" in SUPPORTED and not has_visible_text(stem):
+        name = f"document.{suffix}"
+    elif not has_visible_text(name):
+        name = ""
     if len(name) > MAX_NAME:
         # Cut the stem, not a supported extension: "....-copy-v12.txt" at 269 characters was stored without ".txt"
         # (QA campaign, 2026-10-08). Any other ending is only part of the name and is cut as before.
