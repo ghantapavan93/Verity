@@ -296,7 +296,8 @@ export const POLL_MAX_MS = 12000;
  * retries a few times before it reports, because the run's record outlives any one request, and waits while the
  * page is hidden: the run goes on without it, and the page asks again when it is shown.
  * `onDone` receives the final run once, after the terminal stage. `onAhead` receives how many runs are ahead of
- * this one on the model, as the stream or the record says it.
+ * this one on the model, as the stream or the record says it. Once the returned function is called, none of the
+ * callbacks is called again, whatever was on its way.
  */
 export function followRun(
   id: string,
@@ -305,7 +306,12 @@ export function followRun(
   onError: (message: string) => void,
   onAhead?: (ahead: number | null) => void,
 ): () => void {
+  // Two different facts. `finished`: the stream has ended, and the record is being read. `cancelled`: whoever followed
+  // the run wants nothing more of it. They were one flag, so stopping a follower whose record read was already on its
+  // way changed nothing, and the record of the run left behind was handed over after the reader had opened another
+  // contract, and shown beside it (stress test, 2026-10-30). Every callback below is called only while not cancelled.
   let finished = false;
+  let cancelled = false;
   let source: EventSource | null = null;
   let pollTimer: number | null = null;
   let failures = 0; // consecutive poll failures; the record is truth, so a blip is retried before anyone is told
@@ -329,9 +335,10 @@ export function followRun(
     source?.close();
     stopPolling();
     try {
-      onDone(await getRun(id));
+      const run = await getRun(id);
+      if (!cancelled) onDone(run);
     } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
+      if (!cancelled) onError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -346,7 +353,7 @@ export function followRun(
     if (finished) return;
     try {
       const run = await getRunDetail(id);
-      if (finished) return; // stopped while the record was on its way: it is no longer this page's to show
+      if (finished || cancelled) return; // stopped while the record was on its way: it is no longer this page's to show
       for (const row of run.stages) onStage(row.stage, row.detail);
       onStage(run.stage);
       onAhead?.(run.ahead ?? null);
@@ -358,6 +365,7 @@ export function followRun(
       delay = now === seen ? Math.min(POLL_MAX_MS, delay * 2) : POLL_MS;
       seen = now;
     } catch (error) {
+      if (cancelled) return;
       failures += 1;
       if (failures >= POLL_FAILURES_BEFORE_GIVING_UP) {
         onError(error instanceof Error ? error.message : String(error));
@@ -373,6 +381,7 @@ export function followRun(
   if (typeof EventSource !== "undefined") {
     source = new EventSource(`${API_URL}/api/runs/${id}/events`, { withCredentials: true });
     source.addEventListener("stage", (event) => {
+      if (cancelled) return;
       const data = JSON.parse((event as MessageEvent).data) as {
         stage: RunStage;
         detail?: string | null;
@@ -382,6 +391,7 @@ export function followRun(
       if (data.final) void finish();
     });
     source.addEventListener("queue", (event) => {
+      if (cancelled) return;
       onAhead?.((JSON.parse((event as MessageEvent).data) as { ahead: number | null }).ahead);
     });
     // The server's own `event: error` (an unknown run) carries data; the browser's transport error does not.
@@ -407,6 +417,7 @@ export function followRun(
   }
 
   return () => {
+    cancelled = true;
     finished = true;
     source?.close();
     stopPolling();

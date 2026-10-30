@@ -15,37 +15,45 @@ const TERMINAL: readonly RunStage[] = ["complete", "unresolved", "failed"];
  */
 export type FollowerState =
   | { phase: "idle"; error: string | null }
-  | { phase: "starting"; question: string; hasGuidance: boolean; error: null }
-  | { phase: "not_started"; question: string; hasGuidance: boolean; error: string }
-  | { phase: "following"; run: RunView; stage: RunStage; details: StageDetails; error: null }
-  | { phase: "loading_record"; run: RunView; stage: RunStage; details: StageDetails; error: null }
-  | { phase: "finished"; run: RunView; details: StageDetails; error: string | null }
-  | { phase: "disconnected"; run: RunView; stage: RunStage; details: StageDetails; error: string };
+  | { phase: "starting"; documentId: string; question: string; hasGuidance: boolean; error: null }
+  | { phase: "not_started"; documentId: string; question: string; hasGuidance: boolean; error: string }
+  | { phase: "following"; documentId: string | null; run: RunView; stage: RunStage; details: StageDetails; error: null }
+  | { phase: "loading_record"; documentId: string | null; run: RunView; stage: RunStage; details: StageDetails; error: null }
+  | { phase: "finished"; documentId: string | null; run: RunView; details: StageDetails; error: string | null }
+  | { phase: "disconnected"; documentId: string | null; run: RunView; stage: RunStage; details: StageDetails; error: string };
 
 type Action =
-  | { type: "start"; question: string; hasGuidance: boolean }
-  | { type: "created"; run: RunView }
+  | { type: "start"; documentId: string; question: string; hasGuidance: boolean }
+  | { type: "created"; documentId: string; run: RunView }
   | { type: "not_started"; error: string }
   | { type: "stage"; runId: string; stage: RunStage; detail?: string | null }
   | { type: "record"; run: RunView }
   | { type: "stream_error"; runId: string; error: string }
   | { type: "error"; error: string | null }
-  | { type: "show"; run: RunView }
+  | { type: "show"; documentId: string | null; run: RunView }
   | { type: "refresh"; run: RunView }
   | { type: "clear" };
 
 const IDLE: FollowerState = { phase: "idle", error: null };
+const NO_DETAILS: StageDetails = {};
+
+/** A run put on screen: followed while in flight, else finished as it is. */
+function shown(run: RunView, documentId: string | null): FollowerState {
+  return TERMINAL.includes(run.stage)
+    ? { phase: "finished", documentId, run, details: {}, error: null }
+    : { phase: "following", documentId, run, stage: run.stage, details: {}, error: null };
+}
 
 function reduce(state: FollowerState, action: Action): FollowerState {
   switch (action.type) {
     case "start":
-      return { phase: "starting", question: action.question, hasGuidance: action.hasGuidance, error: null };
+      return { phase: "starting", documentId: action.documentId, question: action.question, hasGuidance: action.hasGuidance, error: null };
     case "created":
-      return TERMINAL.includes(action.run.stage)
-        ? { phase: "finished", run: action.run, details: {}, error: null }
-        : { phase: "following", run: action.run, stage: action.run.stage, details: {}, error: null };
+      return shown(action.run, action.documentId);
     case "not_started":
-      return state.phase === "starting" ? { phase: "not_started", question: state.question, hasGuidance: state.hasGuidance, error: action.error } : state;
+      return state.phase === "starting"
+        ? { phase: "not_started", documentId: state.documentId, question: state.question, hasGuidance: state.hasGuidance, error: action.error }
+        : state;
     case "stage": {
       if ((state.phase !== "following" && state.phase !== "loading_record") || state.run.id !== action.runId) return state;
       const order = STAGE_ORDER as readonly string[];
@@ -54,27 +62,29 @@ function reduce(state: FollowerState, action: Action): FollowerState {
           ? { ...state.details, [action.stage]: action.detail }
           : state.details;
       // The terminal stage is not applied from the event: the record that carries the findings is fetched next.
-      if (TERMINAL.includes(action.stage)) return { phase: "loading_record", run: state.run, stage: state.stage, details, error: null };
+      if (TERMINAL.includes(action.stage))
+        return { phase: "loading_record", documentId: state.documentId, run: state.run, stage: state.stage, details, error: null };
       // A run's stages only move forward, and a poll repeats every stage the run has passed: an earlier stage keeps the
       // current one, and an event that changes nothing keeps the state itself, so a poll of an unchanged run renders nothing.
       const stage = order.indexOf(action.stage) < order.indexOf(state.stage) ? state.stage : action.stage;
       if (state.phase === "following" && stage === state.stage && details === state.details) return state;
-      return { phase: "following", run: state.run, stage, details, error: null };
+      return { phase: "following", documentId: state.documentId, run: state.run, stage, details, error: null };
     }
     case "record":
-      if ((state.phase === "following" || state.phase === "loading_record" || state.phase === "disconnected") && state.run.id !== action.run.id) return state;
-      return { phase: "finished", run: action.run, details: "details" in state ? state.details : {}, error: null };
+      // The record of the run being followed, and only that. A record taken in any other phase was one read after its
+      // run's terminal event and landing after the reader moved on: it replaced another finished run, turned a question
+      // still being created into the old run, and came back after the screen was cleared (stress test, 2026-10-30).
+      if ((state.phase !== "following" && state.phase !== "loading_record" && state.phase !== "disconnected") || state.run.id !== action.run.id) return state;
+      return { phase: "finished", documentId: state.documentId, run: action.run, details: state.details, error: null };
     case "stream_error":
       if ((state.phase !== "following" && state.phase !== "loading_record") || state.run.id !== action.runId) return state;
-      return { phase: "disconnected", run: state.run, stage: state.stage, details: state.details, error: action.error };
+      return { phase: "disconnected", documentId: state.documentId, run: state.run, stage: state.stage, details: state.details, error: action.error };
     case "error":
       if (action.error === null) return state.error === null ? state : ({ ...state, error: null } as FollowerState);
       if (state.phase === "idle" || state.phase === "finished") return { ...state, error: action.error };
       return state;
     case "show":
-      return TERMINAL.includes(action.run.stage)
-        ? { phase: "finished", run: action.run, details: {}, error: null }
-        : { phase: "following", run: action.run, stage: action.run.stage, details: {}, error: null };
+      return shown(action.run, action.documentId);
     case "refresh":
       // A newer copy of the finished run on screen, and only that: a refresh of any other run, or of one still in
       // flight, is a record from before the person moved on (m9 smoke, 2026-10-11) and changes nothing.
@@ -138,14 +148,14 @@ export function useRunFollower() {
       ++intent.current;
       const owner = ++screen.current;
       stop();
-      dispatch({ type: "start", question, hasGuidance: guidanceId !== null });
+      dispatch({ type: "start", documentId, question, hasGuidance: guidanceId !== null });
       try {
         const created = await createRun({ documentId, guidanceId, question });
         // The reader opened another contract or run, or asked again, while this was being created: the run is in the
         // record (Runs) and is not put over what is on screen now (2026-10-13: it landed on the other contract). When
         // nothing replaced the waiting question (an open that claimed and failed), it is shown as before (reviews).
         if (screen.current !== owner) return true;
-        dispatch({ type: "created", run: created });
+        dispatch({ type: "created", documentId, run: created });
         if (!TERMINAL.includes(created.stage)) attach(created.id);
         return true;
       } catch (error) {
@@ -159,15 +169,18 @@ export function useRunFollower() {
     [stop, attach],
   );
 
-  /** A run loaded from the record: shown as it is, and followed when it is still in flight. */
+  /**
+   * A run loaded from the record: shown as it is, and followed when it is still in flight. `documentId` is the contract
+   * the run reads (the record's RunDetail.documentId): a run is shown only beside it (`beside`).
+   */
   const show = useCallback(
-    (run: RunView | null) => {
+    (run: RunView | null, documentId: string | null = null) => {
       intent.current++;
       screen.current++;
       stop();
       if (run === null) dispatch({ type: "clear" });
       else {
-        dispatch({ type: "show", run });
+        dispatch({ type: "show", documentId, run });
         if (!TERMINAL.includes(run.stage)) attach(run.id);
       }
     },
@@ -177,7 +190,7 @@ export function useRunFollower() {
   /** Follow the run again after a dropped stream: the record is truth, so nothing is lost by reattaching. */
   const resume = useCallback(() => {
     if (state.phase === "disconnected") {
-      dispatch({ type: "show", run: { ...state.run, stage: state.stage } });
+      dispatch({ type: "show", documentId: state.documentId, run: { ...state.run, stage: state.stage } });
       attach(state.run.id);
     }
   }, [state, attach]);
@@ -200,10 +213,12 @@ export function useRunFollower() {
     }
   }, [state]);
   const pending = state.phase === "starting" || state.phase === "not_started" ? { question: state.question, hasGuidance: state.hasGuidance } : null;
-  const stageDetails: StageDetails = "details" in state ? state.details : {};
+  const stageDetails: StageDetails = "details" in state ? state.details : NO_DETAILS;
 
   return {
     state,
+    /** The contract the run or the question on screen belongs to; null when there is neither. */
+    documentId: "documentId" in state ? state.documentId : null,
     run,
     pending,
     runError: state.error,
@@ -220,3 +235,15 @@ export function useRunFollower() {
 }
 
 export type RunController = ReturnType<typeof useRunFollower>;
+
+/**
+ * The follower as the screen beside a contract shows it: its run or its question only when they belong to that contract,
+ * and otherwise nothing, as if idle. Every surface reads the run through this (the answer, the cards, the drawer, the live
+ * region, the address, the memo and the revision check), so none can show one contract's answer over another. Until
+ * 2026-10-30 the run carried no contract and the shell paired the two by the order its calls happened to land in: a verified
+ * quote from contract X was shown over contract Y as "Found word for word in the document text" (stress test).
+ */
+export function beside(runs: RunController, documentId: string | null): RunController {
+  if (runs.documentId === null ? runs.state.phase === "idle" : runs.documentId === documentId) return runs;
+  return { ...runs, state: IDLE, documentId: null, run: null, pending: null, runError: null, stageDetails: NO_DETAILS, ahead: null };
+}

@@ -67,6 +67,76 @@ describe("where the interface finds the API", () => {
   });
 });
 
+/** An event stream the test drives: the browser's EventSource, for the stream's half of followRun. */
+class FakeSource {
+  static last: FakeSource | null = null;
+  onerror: (() => void) | null = null;
+  private listeners: Record<string, ((event: MessageEvent) => void)[]> = {};
+  constructor(readonly url: string) {
+    FakeSource.last = this;
+  }
+  addEventListener(type: string, listener: (event: MessageEvent) => void) {
+    (this.listeners[type] ??= []).push(listener);
+  }
+  close() {}
+  emit(type: string, data: unknown) {
+    for (const listener of this.listeners[type] ?? []) listener(new MessageEvent(type, { data: JSON.stringify(data) }));
+  }
+}
+
+/**
+ * Whoever stopped following a run wants nothing more of it. The record read after the terminal event outlived stop():
+ * the canceller set the same flag the stream's own end had already set, so the record of contract X was handed over after
+ * the reader had opened contract Y, and shown beside it (stress test, 2026-10-30).
+ */
+describe("a follower that was stopped", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const record = (stage: string) => new Response(JSON.stringify({ id: "run1", stage }), { status: 200, headers: { "content-type": "application/json" } });
+
+  function streamed() {
+    vi.stubGlobal("EventSource", FakeSource);
+    let release: (r: Response) => void = () => {};
+    const fetch = vi.fn(() => new Promise<Response>((r) => (release = r)));
+    vi.stubGlobal("fetch", fetch);
+    const done = vi.fn();
+    const failed = vi.fn();
+    const stages = vi.fn();
+    const stop = followRun("run1", stages, done, failed);
+    return { fetch, done, failed, stages, stop, release: (r: Response) => release(r) };
+  }
+
+  it("hands over no record that was on its way when it was stopped", async () => {
+    const { fetch, done, failed, stop, release } = streamed();
+    FakeSource.last!.emit("stage", { stage: "complete", final: true });
+    expect(fetch).toHaveBeenCalledTimes(1); // the record read after the terminal event
+    stop();
+    release(record("complete"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(done).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it("reports no failure of a record read it no longer wants", async () => {
+    const { done, failed, stop, release } = streamed();
+    FakeSource.last!.emit("stage", { stage: "complete", final: true });
+    stop();
+    release(new Response(JSON.stringify({ detail: "boom" }), { status: 502, headers: { "content-type": "application/json" } }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(done).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it("control: a follower still following takes the record once", async () => {
+    const { done, failed, release } = streamed();
+    FakeSource.last!.emit("stage", { stage: "complete", final: true });
+    FakeSource.last!.emit("stage", { stage: "complete", final: true }); // a repeated final event reads nothing twice
+    release(record("complete"));
+    await vi.waitFor(() => expect(done).toHaveBeenCalledTimes(1));
+    expect(failed).not.toHaveBeenCalled();
+  });
+});
+
 /** A run followed by polling (the stream dropped, or the browser has none) asks less while nothing changes. */
 describe("following a run by polling", () => {
   const detail = (stage: string, ahead: number | null) =>
@@ -121,6 +191,23 @@ describe("following a run by polling", () => {
     for (let i = 0; i < 4; i++) await vi.advanceTimersByTimeAsync(POLL_MS);
     expect(fetch).toHaveBeenCalledTimes(5);
     stop();
+  });
+
+  it("a follower stopped while the finished record is on its way hands nothing over (stress test, 2026-10-30)", async () => {
+    // The poll path: the detail says complete, the record read is held, the reader leaves, then the record arrives.
+    vi.stubGlobal("EventSource", undefined);
+    let release: (r: Response) => void = () => {};
+    const fetch = vi.fn(async (url: string) => (url.endsWith("/detail") ? detail("complete", null) : new Promise<Response>((r) => (release = r))));
+    vi.stubGlobal("fetch", fetch);
+    const done = vi.fn();
+    const failed = vi.fn();
+    const stop = followRun("run1", () => {}, done, failed);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    stop();
+    release(new Response(JSON.stringify({ id: "run1", stage: "complete" }), { status: 200, headers: { "content-type": "application/json" } }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(done).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
   });
 
   it("asks nothing while the page is hidden, and asks at once when it is shown", async () => {
