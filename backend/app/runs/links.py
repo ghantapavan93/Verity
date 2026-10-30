@@ -35,6 +35,8 @@ from functools import lru_cache
 from typing import Literal, Protocol
 
 from ..ingest.sections import stated_clause_numbers
+from ..ingest.terms import OPENING_QUOTE as _OPENING_QUOTE
+from ..ingest.terms import QUOTED, definitions
 from .status import ATTACHMENT, references
 
 SEEDS = 3  # the top ranked sections whose definitions and references are followed; amendments from every handed one
@@ -46,29 +48,11 @@ MAX_LINKS = 2  # linked sections added after the ranked ones, at most
 LinkKind = Literal["amendment", "override", "amended definition", "definition", "reference"]
 _PRIORITY: dict[LinkKind, int] = {"amendment": 0, "override": 0, "amended definition": 1, "definition": 1, "reference": 2}
 
-# A defining sentence: the term between a pair of quotation marks, up to three words, then a defining verb. Every pair a
-# contract is drafted with (retrieval-v3, stress test 2026-10-30, retrieval corner): until then only double quotes were
-# read, so a definition in single quotes or guillemets, as UK and EU drafting writes them, was never linked. A single
-# quotation mark opens a term only where no letter precedes it and closes one only where none follows, so an apostrophe
-# never does ("the Parties' and the Members' interest includes"), and a term may hold one ("‘Customer’s Data’").
-_QUOTED = (
-    r"(?:[“\"](?P<double>[^”\"]{1,60})[”\"]"
-    r"|‘(?<!\w‘)(?P<curly>(?:[^‘’\n]|’(?=\w)){1,60}?)’(?!\w)"
-    r"|'(?<!\w')(?<!'')(?P<straight>(?:[^'\n]|'(?=\w)){1,60}?)'(?!\w)"
-    r"|«\s?(?P<guillemet>[^«»\n]{1,60}?)\s?»"
-    r"|„(?P<low>[^„“”\n]{1,60})[“”])"
-)
-_DEFINES = re.compile(_QUOTED + r"(?:\s+[\w-]+){0,3}?\s+(?:means|mean|shall mean|has the meaning|have the meaning|is to|are to|refers to|includes)\b")
+# A defining sentence, and the words of construction that define no term: the one reader of definitions
+# (ingest/terms.py, second wave of the stress test, 2026-10-30), moved there from here so that the reading's labels and
+# the family fingerprint ask the same question.
 # How an amending sentence names a definition it changes without restating it: 'the definition of "Cut-Off Date"'.
-_NAMES_DEFINITION = re.compile(r"\bdefinitions?\s+of\s+(?:the\s+(?:term|word)s?\s+)?" + _QUOTED, re.IGNORECASE)
-# The words of construction an interpretation clause defines ('"including" means "including without limitation"', '"to"
-# means "to but excluding"'). They are not terms: every clause uses them, so their definition took one of the two link
-# places from whatever the clause cites (CUAD, 2026-10-30: 198 of 17,850 runs).
-_CONSTRUCTION = frozenset(
-    {"to", "from", "until", "till", "through", "include", "includes", "including", "or", "and", "any", "will", "shall", "may"}
-    | {"herein", "hereof", "hereunder", "hereto", "hereby", "to the extent"}
-)
-_OPENING_QUOTE = "“\"‘'«„"
+_NAMES_DEFINITION = re.compile(r"\bdefinitions?\s+of\s+(?:the\s+(?:term|word)s?\s+)?" + QUOTED, re.IGNORECASE)
 # A run of text printed in capitals: four words or more in a row with no lower-case letter ("IN NO EVENT SHALL EITHER
 # PARTY'S AGGREGATE LIABILITY EXCEED THE FEES PAID").
 _CAPITALS = re.compile(r"[A-Z][^\sa-z]*(?:\s+[^\sa-z]+){3,}")
@@ -130,23 +114,9 @@ def _definitions(sections: Sequence[Readable]) -> dict[str, int]:
     filing, backend audit, 2026-10-19)."""
     found: dict[str, int] = {}
     for index, text in enumerate(s.text for s in sections):
-        for match in _DEFINES.finditer(text):
-            term = _term(match, text)
-            if term and term not in found:
-                found[term] = index
+        for term, _ in definitions(text):
+            found.setdefault(term, index)
     return found
-
-
-def _term(match: re.Match[str], text: str) -> str | None:
-    """The term a defining sentence defines, or None when it defines a word of construction: one of ``_CONSTRUCTION``, a
-    lower-case word the definition quotes again ('"including" means "including without limitation"'), or no word at all
-    ('"$" means', '"[***]" means')."""
-    term = (match.group(match.lastgroup or 0) or "").strip()
-    if not any(ch.isalpha() for ch in term) or term.casefold() in _CONSTRUCTION:
-        return None
-    if term.islower() and re.compile(rf"\s*[{_OPENING_QUOTE}]\s?{re.escape(term)}(?!\w)", re.IGNORECASE).match(text, match.end()):
-        return None
-    return term
 
 
 def _plural(term: str) -> str:
@@ -218,7 +188,7 @@ def _amending_sentence(sentence: str) -> _Amending:
     # amending "sentence" in a filing's table runs to thousands (0.2 s of a 2.8 MB filing, 2026-10-30).
     if not _CHANGING_WORD.search(sentence) or not _CHANGES.search(sentence):
         return _Amending(references(sentence), False, [])
-    defined = [term for match in _DEFINES.finditer(sentence) if (term := _term(match, sentence))]
+    defined = [term for term, _ in definitions(sentence)]
     named = [term for match in _NAMES_DEFINITION.finditer(sentence) if (term := (match.group(match.lastgroup or 0) or "").strip())]
     return _Amending(references(sentence), True, list(dict.fromkeys(defined + named)))
 

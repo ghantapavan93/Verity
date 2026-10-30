@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from ..hashing import sha256_bytes
 from .coverage import PartCoverage
-from .invisible import visible_text
+from .invisible import has_visible_text, visible_text
 from .readers import SUPPORTED, ReadResult, TooLargeToRead, UnsupportedFile, read
 from .sections import ParsedSection, build_sections
 
@@ -102,7 +102,15 @@ MAX_TEXT_CHARS = 3 * 4_400_000
 # page) is left out and counted, invisible text over an image (a scan's OCR layer) read and counted; a digit whose
 # ToUnicode entry names another than the glyph a non-embedded font draws is read as U+FFFD and counted; rotated text,
 # filled form fields and free-text notes are counted; a page is a scan only when nothing on it draws text.
-PARSER_VERSION = "v16"
+# v17 (2026-10-30, the stress test's second wave): every format. A definition is what the one defined-term reader says it
+# is (ingest/terms.py, shared with the links and the family fingerprint): a heading that is a definition is labelled by
+# its term where up to three words stand before the verb ('"Subsidiary" of any entity shall mean'), with "will have the
+# meaning", in any of the quotes a contract is drafted with, and never by a word of construction ('"including" means').
+# Measured against v16: 6 of 5,739 texts (8 headings) and 3 of 30 DOCX (Common Paper's "Personal Data" will have the
+# meaning …, labelled "Definitions" by its parent before) read differently; no PDF. Each section records which part of a
+# section the reader split for size it is (ParsedSection.part, 0 for none), so a document's own "X (part 2)" heading is
+# never taken for the reader's split.
+PARSER_VERSION = "v17"
 
 
 @dataclass
@@ -123,6 +131,13 @@ def base_name(filename: str) -> str:
     name = filename.replace("\\", "/").rsplit("/", 1)[-1]
     # Invisible format characters too: "Invoice-\u202efdp.exe.txt" displayed as "Invoice-exe.pdf" (2026-10-08).
     name = visible_text("".join(ch for ch in name if ch >= " " and ch != "\x7f")).strip()
+    # A name that draws nothing is no name, nor is a stem that draws nothing before its type: "\u3164.pdf" was stored
+    # and shown as ".pdf" (second wave of the stress test, 2026-10-30). The type is kept: it is what the file is read as.
+    stem, dot, suffix = name.rpartition(".")
+    if dot and f".{suffix.lower()}" in SUPPORTED and not has_visible_text(stem):
+        name = f"document.{suffix}"
+    elif not has_visible_text(name):
+        name = ""
     if len(name) > MAX_NAME:
         # Cut the stem, not a supported extension: "....-copy-v12.txt" at 269 characters was stored without ".txt"
         # (QA campaign, 2026-10-08). Any other ending is only part of the name and is cut as before.

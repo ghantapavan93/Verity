@@ -14,13 +14,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from ..ingest.terms import definitions
 from ..models import Document
 
 SHINGLE_WORDS = 5
 _WORD = re.compile(r"[a-z0-9]+")
 _NUMBERING = re.compile(r"^\s*(?:(?:section|clause|article|schedule|part)\s+)?[\dA-Za-z]{1,3}(?:\.[\d]{1,3})*[.)]?\s+", re.IGNORECASE)
-# “Term” means / "Term" has the meaning / Term: means — the vocabulary a contract builds for itself.
-_DEFINED = re.compile(r"[“\"]([A-Z][A-Za-z0-9 \-]{1,60}?)[”\"]\s+(?:means|has the meaning|shall mean|shall have the meaning|will have the meaning|includes)")
 
 # Fixed and disclosed: how the three views combine. Shingles carry the most weight because they
 # see the wording; headings and terms see the skeleton and the vocabulary.
@@ -67,7 +66,10 @@ def shingles(text: str, size: int = SHINGLE_WORDS) -> set[str]:
 
 
 def defined_terms(text: str) -> set[str]:
-    return {match.group(1).strip().lower() for match in _DEFINED.finditer(text)}
+    """The vocabulary a contract builds for itself: the capitalised terms it defines, lower-cased. What a definition is,
+    is the one reader's (ingest/terms.py, second wave of the stress test, 2026-10-30); this read double quotes only, so a
+    UK contract's ‘Customer Data’ was in no fingerprint."""
+    return {term.lower() for term, _ in definitions(text) if term[:1].isupper()}
 
 
 def fingerprint(document: Document, name: str | None = None) -> Fingerprint:

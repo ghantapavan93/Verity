@@ -117,6 +117,11 @@ class Section(Base):
     number: Mapped[str] = mapped_column(String(32), default="")
     heading: Mapped[str] = mapped_column(String(512), default="")
     text: Mapped[str] = mapped_column(Text)
+    # Which part of a section the reader split for size this is, from 1; 0 for a section not split (reader v17,
+    # ingest.sections.ParsedSection.part). NULL for a reading stored before parts were recorded: its parts are known only
+    # by the " (part N)" its headings end with, read strictly (ingest.sections.clause_label_in). Rows are immutable, so
+    # the column is never filled in afterwards.
+    part: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
     document: Mapped[Document] = relationship(back_populates="sections")
 
