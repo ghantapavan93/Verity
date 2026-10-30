@@ -479,6 +479,20 @@ describe("one drawer, another finding", () => {
     }
   });
 
+  it("heads a pass code computed before policy v2 as a pass on the day counts, nowhere as a conflict (2026-10-30)", async () => {
+    const base = finding(null);
+    const legacy = {
+      ...base,
+      status: "pass",
+      statusSource: "computed_days",
+      statusReason: "the contract provides 15 calendar days; the guidance requires at least 10 calendar days",
+    } as unknown as FindingView;
+    renderDrawer(legacy);
+    const code = await screen.findByTestId("layer-code");
+    expect(within(code).getByRole("heading", { level: 4 }).textContent).toBe("Code passed it on the day counts");
+    expect(document.body.textContent).not.toMatch(/conflict/);
+  });
+
   it("names every invisible character the model wrote, in each of its strings, instead of letting it act", async () => {
     api.getRunExplanation.mockRejectedValue(new Error("no record")); // the finding's own fields, not the proposal's
     const base = finding(null);

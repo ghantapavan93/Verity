@@ -4,7 +4,7 @@ import styles from "../Workbench.module.css";
 import { useRunExplanation } from "../hooks/useRunExplanation";
 import { Visible } from "../shell/primitives";
 import { shortHash } from "@/lib/format";
-import { codeRole, retrievalNote, statusLabel, type RunExplanationView } from "@/lib/types";
+import { codeRole, retrievalNote, statusLabel, type FindingStatus, type RunExplanationView } from "@/lib/types";
 
 /**
  * Why this answer: the run explained from its record. The API assembles the explanation
@@ -292,7 +292,7 @@ function Explanation({ explanation, findingId }: { explanation: RunExplanationVi
             <div>
               <dt>
                 {f.recordedPolicyEvaluation.deterministic
-                  ? codeRole(f.recordedPolicyEvaluation.statusSource)
+                  ? codeRole(f.recordedPolicyEvaluation.statusSource, f.recordedPolicyEvaluation.status as FindingStatus)
                   : f.recordedPolicyEvaluation.statusSource === "confirmed_days"
                     ? "Proposed by the model, confirmed by code"
                     : "Not decided by code"}

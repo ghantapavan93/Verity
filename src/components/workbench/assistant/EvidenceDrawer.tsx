@@ -228,7 +228,7 @@ function EvidenceBody({
             who: "Code",
             what: setByModel ? "did not decide" : plainLabel(statusLabel(finding.status, hasGuidance, finding.statusSource)),
             tone: setByModel ? "muted" : toneOf(finding.status),
-            note: setByModel ? undefined : codeAccount(finding.statusSource).note || undefined,
+            note: setByModel ? undefined : codeAccount(finding.statusSource, finding.status).note || undefined,
             decisive: !setByModel,
           },
           {
@@ -408,7 +408,7 @@ function EvidenceBody({
         {/* The heading is a claim. It says "Code found a conflict" only under a source where code compared two periods; the
             model's own phrases, its pointer into the guidance and its suggestion are in the layer above, never here. */}
         <div className={styles.layerHead}>
-          <h4>{codeRole(finding.statusSource)}</h4>
+          <h4>{codeRole(finding.statusSource, finding.status)}</h4>
           {!setByModel && setTag}
         </div>
         {guidance && (
@@ -429,7 +429,7 @@ function EvidenceBody({
                   ? "No comparable day counts, so the model's hint stands as its view."
                   : finding.statusSource === "no_evidence"
                     ? "No verified passage, so no status was given."
-                    : codeAccount(finding.statusSource).sentence)}
+                    : codeAccount(finding.statusSource, finding.status).sentence)}
             </dd>
           </div>
           {finding.unseenReason && (

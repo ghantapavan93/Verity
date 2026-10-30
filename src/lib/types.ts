@@ -175,12 +175,12 @@ export function decidedByCode(source: string | null | undefined): boolean {
  * a day comparison establishes: two periods that do not agree. Whether they concern the same point is the model's
  * reading. "Code confirmed" is a record made under policy v2, when code still confirmed a pass; it no longer does.
  */
-export function codeRole(source: string | null | undefined): CodeAccount["role"] {
-  return codeAccount(source).role;
+export function codeRole(source: string | null | undefined, status?: FindingStatus): CodeAccount["role"] {
+  return codeAccount(source, status).role;
 }
 
 export interface CodeAccount {
-  role: "Code found a conflict" | "Code lowered it" | "Code confirmed" | "Code withheld" | "Code did not decide";
+  role: "Code found a conflict" | "Code passed it on the day counts" | "Code lowered it" | "Code confirmed" | "Code withheld" | "Code did not decide";
   /** A few words for the drawer's summary strip. */
   note: string;
   /** What the check did, when the record carries no sentence of its own. */
@@ -203,8 +203,27 @@ const CODE_ACCOUNTS: Record<string, CodeAccount> = {
 };
 const NOT_DECIDED: CodeAccount = { role: "Code did not decide", note: "", sentence: STATUS_SOURCE_LABELS.model_hint };
 
-export function codeAccount(source: string | null | undefined): CodeAccount {
+/**
+ * computed_days is the one source the API allows with opposite statuses (STATUSES_BY_SOURCE): a conflict code found, or,
+ * before policy v2, a pass code computed from the day counts alone, whatever the model's own hint was. Such a pass was
+ * headed "Code found a conflict" on every surface that read the source alone (stress test, 2026-10-30, store
+ * evolution); it is described as what it is, and whether anything is raised against it is the API's account.
+ */
+const PASSED_ON_DAYS: CodeAccount = {
+  role: "Code passed it on the day counts",
+  note: "on the day counts alone, a rule since withdrawn",
+  sentence: "Pass computed by code from the day counts alone, under a rule withdrawn in policy v2: a record made before it, not a decision code makes now",
+};
+
+/** What code did about a status, by what its (status, source) pair means; a caller with no status reads the source alone. */
+export function codeAccount(source: string | null | undefined, status?: FindingStatus): CodeAccount {
+  if (source === "computed_days" && status === "pass") return PASSED_ON_DAYS;
   return (source != null && CODE_ACCOUNTS[source]) || NOT_DECIDED;
+}
+
+/** The sentence for who set a status (STATUS_SOURCE_LABELS), by its (status, source) pair, as codeAccount reads it. */
+export function statusSourceLabel(source: string, status: FindingStatus): string {
+  return source === "computed_days" && status === "pass" ? PASSED_ON_DAYS.sentence : (STATUS_SOURCE_LABELS[source] ?? source);
 }
 
 /**

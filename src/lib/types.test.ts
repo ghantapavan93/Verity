@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   stageAnnouncement,
+  codeAccount,
   codeRole,
+  STATUS_SOURCE_LABELS,
+  statusSourceLabel,
   decidedByCode,
   evidenceJump,
   partOf,
@@ -59,6 +62,54 @@ describe("statusLabel", () => {
     // Only a day comparison finds a conflict; the other checks lower a finding for their own named reason.
     for (const source of ["reference_check", "position_check", "ambiguous_fact"]) expect(codeRole(source)).toBe("Code lowered it");
     expect(codeRole("a_source_added_later")).toBe("Code did not decide");
+  });
+});
+
+/**
+ * A record is described by what its (status, source) pair means. computed_days is the one source the API allows with
+ * opposite statuses: before policy v2, code passed a finding on the day counts alone (15 days against at least 10), and
+ * every surface that chose its words from the source alone headed that pass "Code found a conflict" (stress test,
+ * 2026-10-30, store evolution). The chip, which reads the pair, was already right.
+ */
+describe("the account of a status, by its status and its source", () => {
+  const SOURCES = [
+    "computed_days",
+    "confirmed_days",
+    "model_hint",
+    "no_evidence",
+    "reference_check",
+    "position_check",
+    "ambiguous_fact",
+    "",
+    "a_source_added_later",
+  ];
+  const STATUSES = ["pass", "needs_review", "missing", "unresolved"] as const;
+
+  // The sources the API allows a pass under (backend models.STATUSES_BY_SOURCE), and one it does not know.
+  const PASSING = ["computed_days", "confirmed_days", "model_hint", "a_source_added_later"];
+
+  it("never words a pass as a conflict or a review, on any surface's sentence", () => {
+    for (const source of PASSING) {
+      const account = codeAccount(source, "pass");
+      const words = [account.role, account.note, account.sentence, statusSourceLabel(source, "pass")].join(" | ");
+      expect(words, source).not.toMatch(/conflict|needs review|lowered/i);
+    }
+  });
+
+  it("says a pass computed from the day counts is that, under a rule since withdrawn", () => {
+    expect(codeRole("computed_days", "pass")).toBe("Code passed it on the day counts");
+    expect(statusSourceLabel("computed_days", "pass")).toMatch(/day counts alone.*withdrawn/);
+  });
+
+  it("control: a shortfall code computed is still a conflict, and every other pair reads as its source does", () => {
+    expect(codeRole("computed_days", "needs_review")).toBe("Code found a conflict");
+    expect(statusSourceLabel("computed_days", "needs_review")).toBe(STATUS_SOURCE_LABELS.computed_days);
+    for (const source of SOURCES.filter((s) => s !== "computed_days")) {
+      for (const status of STATUSES) {
+        expect(codeAccount(source, status)).toEqual(codeAccount(source));
+        expect(statusSourceLabel(source, status)).toBe(STATUS_SOURCE_LABELS[source] ?? source);
+      }
+    }
   });
 });
 

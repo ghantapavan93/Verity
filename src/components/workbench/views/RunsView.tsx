@@ -37,7 +37,7 @@ import { shownText } from "@/lib/text";
 import {
   OUTCOME_LABELS,
   REASON_TITLES,
-  STATUS_SOURCE_LABELS,
+  statusSourceLabel,
   retrievalNote,
   type BatchSummary,
   type BatchValue,
@@ -547,7 +547,7 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
               <Visible text={f.conclusion} />
             </p>
             <p className={styles.quiet}>
-              {STATUS_SOURCE_LABELS[f.statusSource] ?? f.statusSource}
+              {statusSourceLabel(f.statusSource, f.status)}
               {f.statusReason ? ` Recorded: ${f.statusReason}.` : ""}
             </p>
             {f.spans.map((s, i) => (

@@ -86,7 +86,7 @@ export function checkLedger(
   }
 
   const source = finding.statusSource || "model_hint";
-  const account = codeAccount(source);
+  const account = codeAccount(source, finding.status);
   if (decidedByCode(source) || source === "confirmed_days") {
     rows.push({
       key: "comparison",

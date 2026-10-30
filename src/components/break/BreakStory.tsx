@@ -15,7 +15,7 @@ import { createContext, Fragment, useContext, useId, useMemo, useRef, useState, 
 import { INDEPENDENCE } from "@/lib/independence";
 
 import { StatusChip } from "../workbench/shell/primitives";
-import { STATUS_SOURCE_LABELS } from "@/lib/types";
+import { STATUS_SOURCE_LABELS, statusSourceLabel, type FindingStatus } from "@/lib/types";
 import { shortHash } from "@/lib/format";
 import { splitByCodePoints } from "@/lib/text";
 import styles from "./BreakStory.module.css";
@@ -595,7 +595,11 @@ function BoundaryPanel({ c, s }: { c: CaseRecord; s: SessionRecord }) {
             which did not fire on it.
           </li>
           <li>
-            <strong>Who set the status.</strong> {STATUS_SOURCE_LABELS[s.finding.statusSource] ?? s.finding.policy.summary}.
+            <strong>Who set the status.</strong>{" "}
+            {s.finding.statusSource in STATUS_SOURCE_LABELS
+              ? statusSourceLabel(s.finding.statusSource, s.finding.status as FindingStatus)
+              : s.finding.policy.summary}
+            .
           </li>
         </ul>
       </div>
