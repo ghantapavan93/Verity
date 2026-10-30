@@ -80,8 +80,18 @@ def _empty_target(target: Path) -> None:
     target.mkdir(parents=True, exist_ok=True)
 
 
-def create(data_dir: Path, out: Path, database: str = DATABASE) -> dict[str, object]:
-    """A consistent copy of ``data_dir`` in ``out`` with its manifest. The source is only read."""
+def _damaged_original(relative: Path, sha256: str) -> bool:
+    """An original under documents/ is named by the hash of its bytes; one whose bytes hash otherwise is damaged."""
+    stem = relative.name.split(".")[0]
+    return relative.parts[0] == "documents" and len(stem) == 64 and all(c in "0123456789abcdef" for c in stem) and stem != sha256
+
+
+def create(data_dir: Path, out: Path, database: str = DATABASE, accept_damaged: bool = False) -> dict[str, object]:
+    """A consistent copy of ``data_dir`` in ``out`` with its manifest. The source is only read.
+
+    An original whose bytes are not the hash it is named by is refused, unless ``accept_damaged`` lists it in the
+    manifest as damaged: the manifest names every file by its hash, and a damaged original was certified as the record
+    (stress test, 2026-10-30, ops 4)."""
     source_db = data_dir / database
     if not source_db.is_file():
         raise BackupError(f"no {database} in the data directory")
@@ -95,6 +105,7 @@ def create(data_dir: Path, out: Path, database: str = DATABASE) -> dict[str, obj
     if checked != "ok":
         raise BackupError(f"the copied database fails integrity_check: {checked}")
     files: dict[str, dict[str, object]] = {database: {"sha256": sha256_file(out / database), "bytes": (out / database).stat().st_size}}
+    damaged: list[str] = []
     for name in DIRECTORIES:
         folder = data_dir / name
         if not folder.is_dir():
@@ -107,6 +118,10 @@ def create(data_dir: Path, out: Path, database: str = DATABASE) -> dict[str, obj
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, target)
             files[relative.as_posix()] = {"sha256": sha256_file(target), "bytes": target.stat().st_size}
+            if _damaged_original(relative, str(files[relative.as_posix()]["sha256"])):
+                damaged.append(relative.as_posix())
+    if damaged and not accept_damaged:
+        raise BackupError(f"{len(damaged)} stored original(s) do not hold the bytes they are named by: {', '.join(damaged[:5])}")
     manifest: dict[str, object] = {
         "schema": SCHEMA,
         "database": database,
@@ -117,6 +132,7 @@ def create(data_dir: Path, out: Path, database: str = DATABASE) -> dict[str, obj
         "counts": counts(out / database),
         "triggers": triggers(out / database),
         "files": files,
+        **({"damaged": damaged} if damaged else {}),
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     return manifest
@@ -172,6 +188,7 @@ def main(argv: list[str] | None = None) -> int:
     made = commands.add_parser("create")
     made.add_argument("--data-dir", type=Path, required=True)
     made.add_argument("--out", type=Path, required=True)
+    made.add_argument("--accept-damaged", action="store_true", help="copy originals that do not hold their named bytes, listed as damaged")
     checked = commands.add_parser("verify")
     checked.add_argument("backup", type=Path)
     restored = commands.add_parser("restore")
@@ -180,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "create":
-            manifest = create(args.data_dir, args.out)
+            manifest = create(args.data_dir, args.out, accept_damaged=args.accept_damaged)
         elif args.command == "verify":
             manifest = verify(args.backup)
         else:

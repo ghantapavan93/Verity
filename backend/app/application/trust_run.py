@@ -16,6 +16,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from ..errors import Conflict
+from ..hashing import sha256_bytes
 from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile
 from ..ingest.bounded import read_file
 from ..models import TERMINAL_STAGES, Document, Run
@@ -57,7 +58,7 @@ _readings: OrderedDict[tuple[Path, str, str], tuple[Future[Reading], float]] = O
 _readings_lock = threading.Lock()
 
 
-def _read_again(path: Path, name: str, reader: str) -> Reading:
+def _read_again(path: Path, name: str, reader: str, sha256: str = "") -> Reading:
     """The stored bytes as today's reader reads them, or None when they cannot be read now. Nothing is written. Kept by
     path and reader, the latest _KEPT: the bytes are named by their hash and never change, so one reading per reader is
     enough. A refusal at a bound, or a failure, is not kept: a reading timed out under load once stayed "unreadable"
@@ -70,7 +71,7 @@ def _read_again(path: Path, name: str, reader: str) -> Reading:
                 del _readings[old_key]
         kept = _readings.get(key)
         if kept is None:
-            reading = _rereads.submit(_read_once, path, name)
+            reading = _rereads.submit(_read_once, path, name, sha256)
             _readings[key] = (reading, now)
             while len(_readings) > _KEPT:
                 _, (dropped, _) = _readings.popitem(last=False)
@@ -91,9 +92,14 @@ def _read_again(path: Path, name: str, reader: str) -> Reading:
         raise
 
 
-def _read_once(path: Path, name: str) -> Reading:
+def _read_once(path: Path, name: str, sha256: str = "") -> Reading:
     try:
-        parsed = read_file(name, path.read_bytes())
+        data = path.read_bytes()
+        if sha256 and sha256_bytes(data) != sha256:
+            # A damaged original is never read as the document (stress test, 2026-10-30, ops 4): not read now, and not
+            # kept as unreadable, so the upload that writes it whole again is read the next time.
+            raise _NotNow
+        parsed = read_file(name, data)
     except TooLargeToRead as refused:  # before UnsupportedFile, which it is a kind of
         raise _NotNow from refused
     except (UnsupportedFile, OSError):
@@ -115,7 +121,7 @@ def current_reading(session: Session, document: Document) -> tuple[SectionText, 
     if stored is not None:
         return sections_of(stored)
     original = original_path(document)
-    return _read_again(original, reading_name(document), PARSER_VERSION) if original.is_file() else None
+    return _read_again(original, reading_name(document), PARSER_VERSION, document.sha256) if original.is_file() else None
 
 
 def manifest_of(session: Session, run: Run) -> TrustManifest:

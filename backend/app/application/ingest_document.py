@@ -8,17 +8,20 @@ original bytes are kept under data/documents by hash so an evidence pack can car
 from __future__ import annotations
 
 import json
+import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..errors import Busy, InvalidInput, TooLarge
-from ..hashing import sha256_bytes
+from ..hashing import sha256_bytes, sha256_file
 from ..ingest import PARSER_VERSION, TooLargeToRead, UnsupportedFile, base_name
 from ..ingest.bounded import ReadingBusy, read_file
 from ..ingest.coverage import coverage_report
@@ -29,6 +32,12 @@ from .workspace import document_is_curated, grant_document, is_public
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 READINGS_BUSY = "Other contracts are being read right now, so this one was not added. Try again in a minute."
+STORE_BUSY = "The store is busy with another change, so nothing was written. Try again in a moment."
+log = logging.getLogger(__name__)
+
+
+class _Vanished(Exception):
+    """The stored reading an upload was about to reuse was deleted (a purge) before its grant could be written."""
 
 
 @dataclass(frozen=True)
@@ -72,7 +81,11 @@ def coverage_of(document: Document) -> dict[str, object] | None:
     if document.parser_version != PARSER_VERSION or not original.exists():
         return None
     try:
-        return coverage_report(read(reading_name(document), original.read_bytes()).coverage, PARSER_VERSION, "reconstructed")
+        data = original.read_bytes()
+        if sha256_bytes(data) != document.sha256:
+            log.warning("document_id=%s stored original damaged: its bytes are not the document's; not read", document.id)
+            return None
+        return coverage_report(read(reading_name(document), data).coverage, PARSER_VERSION, "reconstructed")
     except (UnsupportedFile, TooLargeToRead, OSError):
         return None
 
@@ -109,9 +122,13 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
     given = base_name(filename or "upload")  # the name this workspace gave the file, kept on its grant
     existing = stored_document(session, sha256_bytes(data))
     if existing is not None:
-        keep_original(existing, data)  # the same bytes by hash: a row whose file is not there is completed here
-        new_to_workspace = _grant(session, existing, workspace, new=False, name=given)
-        return IngestedDocument(existing, created=new_to_workspace)
+        try:
+            return _reuse(session, existing, data, workspace, given)
+        except _Vanished:
+            # A purge deleted the reading between the lookup and the grant: these bytes are read as new. Granted on the
+            # deleted row, the upload was a 500 (a foreign key), or a 200 for a document that then answered 404.
+            session.rollback()
+            session.expunge_all()
 
     # New bytes are counted against the day's before they are read, so a file that would be refused is not read (advice:
     # the count that decides is made again with the row, in store below).
@@ -169,17 +186,31 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
         winner = stored_document(session, parsed.sha256)
         if winner is None:
             raise
-        keep_original(winner, data)
-        _grant(session, winner, workspace, new=False, name=given)
-        return IngestedDocument(winner, created=False)
+        try:
+            # "Created" from this workspace's side: the race's loser was told a document new to it was "already in the
+            # workbench" (stress test, 2026-10-30, authz 3).
+            return _reuse(session, winner, data, workspace, given)
+        except _Vanished:
+            raise Busy(STORE_BUSY, retry_after=5) from None
     session.refresh(document)
     return IngestedDocument(document, created=True)
 
 
-def _grant(session: Session, document: Document, workspace: str | None, new: bool, name: str) -> bool:
+def _reuse(session: Session, document: Document, data: bytes, workspace: str | None, name: str) -> IngestedDocument:
+    """These bytes are already stored as ``document``: its original is made whole if it is not, and the workspace is
+    granted it. _Vanished when the row is deleted before the grant is written."""
+    keep_original(document, data)  # the same bytes by hash: a file that is missing or damaged is written again here
+    return IngestedDocument(document, created=_grant(session, document, workspace, new=False, name=name, data=data))
+
+
+def _grant(session: Session, document: Document, workspace: str | None, new: bool, name: str, data: bytes | None = None) -> bool:
     """Grant the workspace the document. A document this upload created is always granted to its uploader; one already
     stored is granted unless it is curated (no grants at all, readable by every workspace) or already the workspace's.
-    True when the grant is new: a document the workspace now holds, admitted against its quotas."""
+    True when the grant is new: a document the workspace now holds, admitted against its quotas.
+
+    Whether the stored row still exists, and its original with it, is decided under the write lock with the grant: the
+    purge deletes a row and its file under the same lock (application/retention.py). Decided before it, an upload kept
+    the file it saw, the purge then deleted it, and the row lived on with no original (stress test, 2026-10-30)."""
     if workspace is None:
         return False
     # A public store holds nothing curated (main.refuse_a_store_with_owner_records): a row with no grant there was left
@@ -187,30 +218,66 @@ def _grant(session: Session, document: Document, workspace: str | None, new: boo
     # about (stress test, 2026-10-30). It is granted like any other.
     if not new and not is_public(workspace) and document_is_curated(session, document.id):
         return False
-    _, created = admit(
-        session,
-        document_quotas(workspace),
-        lambda: grant_document(session, document, workspace, name),
-        find=lambda: session.get(DocumentAccess, (workspace, document.id)),
-    )
+
+    def create() -> DocumentAccess:
+        if session.execute(select(Document.id).where(Document.id == document.id)).first() is None:  # read afresh, under the lock
+            raise _Vanished
+        if data is not None:
+            original = original_path(document)
+            if not original.exists():
+                write_durable(original, data, document.sha256)
+        return grant_document(session, document, workspace, name)
+
+    _, created = admit(session, document_quotas(workspace), create, find=lambda: session.get(DocumentAccess, (workspace, document.id)))
     return created
 
 
-def keep_original(document: Document, data: bytes) -> None:
-    """Store the uploaded bytes under their hash once; the same bytes from any request are the same file."""
-    path = original_path(document)
+def _holds(path: Path, sha256: str) -> bool:
+    try:
+        return sha256_file(path) == sha256
+    except OSError:
+        return False
+
+
+def write_durable(path: Path, data: bytes, sha256: str) -> None:
+    """``data`` under ``path``, whole or not at all, across a crash: written aside, flushed to the disk, then renamed into
+    place (and the folder flushed, where the platform allows). With no flush, a crash soon after an upload could leave
+    the name with its size and zeros for its bytes, and every pack of the document then failed its hash for good (stress
+    test, 2026-10-30, ops 4). Windows refuses to replace a file another request is reading at that moment: tried again a
+    few times, then a file standing there that holds these bytes is accepted, and anything else is Busy."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        # Written aside and renamed, so a write cut short never leaves half a file under the hash's name.
-        partial = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.part")
-        try:
-            partial.write_bytes(data)
+    partial = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.part")
+    try:
+        partial.write_bytes(data)
+        with open(partial, "r+b") as handle:  # a handle that may write: Windows flushes only through one
+            os.fsync(handle.fileno())
+        for attempt in range(5):
             try:
-                partial.replace(path)
+                os.replace(partial, path)
+                break
             except PermissionError:
-                # Windows refuses to replace a file another request is writing or reading at that moment. The name is the
-                # bytes' hash, so a file standing there whole is these bytes (two visitors racing one upload, 2026-10-09).
-                if not (path.exists() and path.stat().st_size == len(data)):
-                    raise
-        finally:
-            partial.unlink(missing_ok=True)
+                if _holds(path, sha256):
+                    return
+                time.sleep(0.05 * (attempt + 1))
+        else:
+            raise Busy(STORE_BUSY, retry_after=5)
+        if os.name == "posix":
+            folder = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(folder)
+            finally:
+                os.close(folder)
+    finally:
+        partial.unlink(missing_ok=True)
+
+
+def keep_original(document: Document, data: bytes) -> None:
+    """Store the uploaded bytes under their hash; the same bytes from any request are the same file. A file there is
+    kept only when it holds them: a damaged one (cut short, zeroed by a crash) was kept as it was by every later upload
+    of the same bytes, since only its name was checked (stress test, 2026-10-30, ops 4), and is now written again."""
+    path = original_path(document)
+    if path.is_file() and _holds(path, document.sha256):
+        return
+    if path.exists():
+        log.warning("document_id=%s stored original damaged: written again from an upload of its bytes", document.id)
+    write_durable(path, data, document.sha256)
