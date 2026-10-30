@@ -234,7 +234,7 @@ class Recording:
 
 def rules_named(options: Mapping[str, object]) -> str:
     """The versions of the rules a run's options record, as the documents name them: "policy-v16, verifier v11, retrieval-v2"."""
-    named = {"policy_version": "", "verifier_version": "verifier ", "retrieval_version": ""}
+    named = {"policy_version": "", "verifier_version": "verifier ", "retrieval_version": "", "input_version": ""}
     return ", ".join(f"{prefix}{options[key]}" for key, prefix in named.items() if key in options)
 
 

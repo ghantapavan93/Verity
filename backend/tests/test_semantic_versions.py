@@ -1,9 +1,17 @@
 """A semantic version cannot be forgotten.
 
-A run's identity carries three versions (runs.versions): what a status means, when a quote counts as found, which
-sections are handed to the model. They only protect a reader of the record if the code behind each cannot change
-while its version stays the same: then a fixed rule would hand back the answers the broken rule made, which is the
-defect the versions exist to end.
+A run's identity carries four versions (runs.versions): what a status means, when a quote counts as found, which
+sections are handed to the model, and what the model is handed of them. A document's reading carries a fifth, the
+reader's. They only protect a reader of the record if the code behind each cannot change while its version stays the
+same: then a fixed rule would hand back the answers the broken rule made, which is the defect the versions exist to end.
+
+The code behind a version is the closure of its entry points (tests/code_closure.py): every function, class and
+assignment their code reaches inside the app, found by following it. Until 2026-10-30 it was a list of files and
+functions written by hand, and five edits outside it (a sub-reference pattern, a clause opening, the condition check
+gated in the executor, a section's label, the prompt's window) changed statuses with every fingerprint green; 117 of 503
+reached definitions sat in no boundary (stress test, architecture 2). What status a run's execution decides is the
+policy's: the executor and everything it reaches but the other versions' entry points and what is named below as
+recording rather than deciding.
 
 So each version is recorded here beside a fingerprint of the code it names. Change that code and the test fails until
 someone decides, by hand and in this file, which of two things happened:
@@ -20,32 +28,71 @@ Nothing here is read at runtime, and nothing is a commit hash.
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 
 import pytest
 
+from app.analysis.service import INPUT_VERSION
 from app.hashing import sha256_text
+from app.ingest import PARSER_VERSION
 from app.retrieval.lexical import RETRIEVAL_VERSION
 from app.runs.status import POLICY_VERSION
 from app.runs.versions import SEMANTIC_VERSIONS
 from app.verify.spans import VERIFIER_VERSION
+from tests.code_closure import Symbol, canonical, closure
 
-APP = Path(__file__).resolve().parents[1] / "app"
-
-# What each version names: whole modules, or one function of a module that also does other things.
-BOUNDARIES: dict[str, tuple[str | tuple[str, str], ...]] = {
-    "policy_version": ("runs/status.py", "policy/durations.py", "policy/proof.py", "runs/values.py", "runs/relations.py"),  # values: policy-v6; relations: v11
-    "verifier_version": ("verify/spans.py", "verify/tokens.py", ("runs/service.py", "verify_evidence")),
-    "retrieval_version": (
-        "retrieval/lexical.py",
-        "retrieval/hybrid.py",
-        ("retrieval/aliases.py", "expand_query"),  # the table itself is versioned by its own hash, on every run
-        ("retrieval/aliases.py", "_phrase_in"),
-        ("runs/service.py", "_retrieve"),  # the opening-sections fallback
-        "runs/links.py",  # retrieval-v2: the sections the ranked ones depend on
-        "ingest/terms.py",  # the defined-term reader links ask (reader v17 moved it out of links, 2026-10-30)
+# Where the code each version names begins. The alias table is versioned by its own hash, on every run; the prompt's
+# text by its own; the model's build by its digest.
+ENTRY_POINTS: dict[str, tuple[Symbol, ...]] = {
+    "verifier_version": (("runs/service.py", "verify_evidence"),),
+    "retrieval_version": (("runs/service.py", "_retrieve"),),
+    "input_version": (
+        ("analysis/service.py", "build_user_message"),
+        ("analysis/service.py", "analyze"),  # the note a rejected answer is sent back with
+        ("analysis/schema.py", "ANALYSIS_SCHEMA"),
+        ("analysis/service.py", "load_prompt"),
+        ("document_names.py", "run_prompt_name"),  # the contract's name as the model reads it
     ),
+    "policy_version": (("runs/service.py", "execute_run"),),
+    "parser_version": (("ingest/__init__.py", "ingest"),),
 }
+
+# Reached from the executor, and recording, reporting or configuring rather than deciding a status. Each must be reached
+# (a test says so); one that comes to decide leaves this list.
+NON_DECIDING: dict[Symbol, str] = {
+    ("runs/service.py", "_set_stage"): "records a stage",
+    ("runs/service.py", "_note_stage"): "records a stage's note",
+    ("runs/service.py", "_finish"): "records the end the executor chose",
+    ("runs/service.py", "_fail"): "records a failure",
+    ("runs/service.py", "finished_record"): "hashes the record decided",
+    ("runs/service.py", "_retrieval_record"): "records what retrieval chose",
+    ("runs/service.py", "_counted"): "words a count",
+    ("runs/service.py", "fired_alias_groups"): "reports which alias groups fired",
+    ("runs/service.py", "bound_to"): "binds the provider to the recorded model and decoding (the options' identity)",
+    ("runs/service.py", "log"): "logs",
+    ("runs/events.py", "bus"): "tells the page a stage moved",
+    ("runs/owner.py", "this_process"): "names the process that holds a run",
+    ("runs/transitions.py", "assert_transition"): "which stage may follow which",
+    ("runs/versions.py", "stale_versions"): "whether this build may execute a run at all (test_version_order)",
+    ("runs/versions.py", "SEMANTIC_VERSIONS"): "names the versions; it decides nothing",
+    ("models.py", "Run"): "a row",
+    ("models.py", "Finding"): "a row; the statuses it may hold are vocabularies status.py reaches itself",
+    ("models.py", "EvidenceSpan"): "a row",
+    ("models.py", "RunStage"): "a row",
+    ("models.py", "DocumentAccess"): "a row",
+    ("models.py", "new_id"): "an id",
+    ("models.py", "utcnow"): "a time",
+    ("config.py", "settings"): "configuration; what a run uses of it is recorded in its options (FrozenOptions)",
+    ("hashing.py", "sha256_text"): "hashes",
+    ("providers/base.py", "ProviderError"): "an error's type",
+}
+
+VERSIONS: dict[str, str] = {**SEMANTIC_VERSIONS, "parser_version": PARSER_VERSION}
+
+
+def recorded_as(boundary: str, version: str) -> str:
+    """A version's key in RECORDED: the reader's versions ("v17") are named apart from the verifier's ("v11")."""
+    return f"reader {version}" if boundary == "parser_version" else version
+
 
 # version -> fingerprint of the code it names. One line per version that ever recorded a run.
 RECORDED: dict[str, str] = {
@@ -95,8 +142,9 @@ RECORDED: dict[str, str] = {
     "policy-v16": "c185473f506d484f",
     # policy-v17, 2026-10-30 (the adversarial stress test): a period is read as the text writes it or not at all (ranges,
     # lists, number words, invisible characters, negations, ambiguous periods anywhere in the quotes); a range compares in
-    # one unit. v16 is released, so this is a bump. Re-recorded before release as each class of the stress test is closed.
-    "policy-v17": "b55e88edff292f73",
+    # one unit. v16 is released, so this is a bump. Re-recorded before release as each class of the stress test is closed,
+    # and when the boundaries became closures of their entry points (the executor's, for the policy).
+    "policy-v17": "84822b2da8786c12",
     "v6": "d73590a20b16ec34",
     "v7": "e9127a10c244afaa",
     # v8, 2026-10-13: no span begins or ends inside a number; a number's sign is part of its value (F-03). Re-recorded the
@@ -118,7 +166,7 @@ RECORDED: dict[str, str] = {
     # boundaries, and a label is stripped only whole. v11 is not committed to main, so its fingerprint was replaced, not
     # bumped. Replayed over 17,603 recorded spans in 94 stores: none lost or gained; six typed spans now end on their own
     # quote's closing semicolon.
-    "v11": "b305081d7b7012a7",
+    "v11": "e0c252050f95ddaa",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
     # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.
@@ -133,7 +181,13 @@ RECORDED: dict[str, str] = {
     # definition read in every pair of quotation marks, words of construction not terms, a term used in capitals; the
     # amendments of every handed section handed with it, a linked section's included (runs.links).
     # retrieval-v3 is not committed to main, so its fingerprint is replaced, not bumped, as the branch adds to it.
-    "retrieval-v3": "a0aecedd9e306a88",
+    "retrieval-v3": "2c2ac572d30e5348",
+    # input-v1, 2026-10-30: the first version of what the model is handed. Recorded with the boundaries' move to closures,
+    # which changed every fingerprint's definition; the versions above it are kept as they were recorded.
+    "input-v1": "8ed4812f0068d144",
+    # reader v17, 2026-10-30: the first reader version held to its code (columns, fields, branches, cells, checkboxes and
+    # text boxes read as Word displays them; the PDF page read by position).
+    "reader v17": "e6c604d8461a23ae",
 }
 
 
@@ -154,40 +208,63 @@ def fingerprint_of(source: str, symbol: str | None = None) -> str:
         found = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name == symbol]
         assert len(found) == 1, f"{symbol} is not a top-level definition; the boundary moved and this file must say where to"
         tree = found[0]
-    return repr(_canonical(_without_docstrings(tree)))
+    return repr(canonical(_without_docstrings(tree)))
 
 
-def _canonical(node: object) -> object:
-    """The tree as nested tuples of node names and the fields that carry something. Positions are not fields, and an
-    empty or absent field is left out, so a Python that adds an optional field to a node does not change the result."""
-    if isinstance(node, ast.AST):
-        return (type(node).__name__, tuple((name, _canonical(value)) for name, value in ast.iter_fields(node) if value not in (None, [], ())))
-    if isinstance(node, list):
-        return tuple(_canonical(item) for item in node)
-    return repr(node)
+def boundary(name: str) -> dict[Symbol, tuple[ast.stmt, ...]]:
+    """The code a version names: its entry points' closure, short of the other versions' entry points and NON_DECIDING."""
+    others = [entry for other, entries in ENTRY_POINTS.items() if other != name for entry in entries]
+    return closure(ENTRY_POINTS[name], stop=[*others, *NON_DECIDING])
 
 
-def fingerprint(boundary: str) -> str:
-    parts = []
-    for entry in BOUNDARIES[boundary]:
-        path, symbol = (entry, None) if isinstance(entry, str) else entry
-        parts.append(f"{path}:{symbol or '*'}\n{fingerprint_of((APP / path).read_text(encoding='utf-8'), symbol)}")
+def fingerprint(name: str) -> str:
+    parts = [f"{path}:{symbol}\n{canonical(list(nodes))!r}" for (path, symbol), nodes in sorted(boundary(name).items())]
     return sha256_text("\n\x1f\n".join(parts))[:16]
 
 
-def test_every_semantic_version_has_a_boundary_and_the_boundaries_are_the_versions() -> None:
-    assert set(BOUNDARIES) == set(SEMANTIC_VERSIONS), "a version with no code named for it cannot be kept honest"
-    assert {"policy_version": POLICY_VERSION, "verifier_version": VERIFIER_VERSION, "retrieval_version": RETRIEVAL_VERSION} == SEMANTIC_VERSIONS
+def test_every_version_has_entry_points_and_the_entry_points_are_the_versions() -> None:
+    assert set(ENTRY_POINTS) == set(VERSIONS), "a version with no code named for it cannot be kept honest"
+    assert {
+        "policy_version": POLICY_VERSION,
+        "verifier_version": VERIFIER_VERSION,
+        "retrieval_version": RETRIEVAL_VERSION,
+        "input_version": INPUT_VERSION,
+    } == SEMANTIC_VERSIONS
     assert len(set(RECORDED.values())) == len(RECORDED), "two versions with one fingerprint: one of them was bumped for nothing, or copied"
 
 
-@pytest.mark.parametrize("boundary", sorted(BOUNDARIES))
-def test_the_code_behind_a_version_is_the_code_that_version_was_recorded_for(boundary: str) -> None:
-    version = SEMANTIC_VERSIONS[boundary]
-    now = fingerprint(boundary)
-    assert version in RECORDED, f"{boundary} is {version!r}, which has no fingerprint on record. Add to RECORDED in this file:\n    {version!r}: {now!r},"
+def test_every_symbol_named_non_deciding_exists_and_is_reached_by_the_executor() -> None:
+    """A stale entry would excuse nothing, and a missing one would hide a symbol that decides."""
+    reached = closure(ENTRY_POINTS["policy_version"])
+    assert sorted(set(NON_DECIDING) - set(reached)) == []
+
+
+@pytest.mark.parametrize(
+    "planted",
+    [
+        ("runs/prose.py", "SUB_REFERENCE"),  # a range after a handle read as a sub-reference
+        ("ingest/sections.py", "clause_openings"),  # a whole number opening a clause without a title
+        ("runs/service.py", "execute_run"),  # the condition check gated on guidance
+        ("runs/service.py", "_label"),  # the label the verifier forgives before a quote
+        ("analysis/service.py", "MAX_SECTION_CHARS_IN_PROMPT"),  # the window of a run that recorded none
+        ("runs/status.py", "check_conditions"),
+        ("verify/tokens.py", "tokenize"),
+        ("retrieval/lexical.py", "tokenize"),
+    ],
+)
+def test_the_stress_tests_planted_rule_changes_each_move_a_fingerprint(planted: Symbol) -> None:
+    """Each of the five edits the stress test planted outside the hand-made boundaries, and three controls, is inside the
+    code some version names, so editing it moves that version's fingerprint."""
+    assert any(planted in boundary(name) for name in ENTRY_POINTS), f"{planted} decides and no version names it"
+
+
+@pytest.mark.parametrize("name", sorted(ENTRY_POINTS))
+def test_the_code_behind_a_version_is_the_code_that_version_was_recorded_for(name: str) -> None:
+    version = recorded_as(name, VERSIONS[name])
+    now = fingerprint(name)
+    assert version in RECORDED, f"{name} is {version!r}, which has no fingerprint on record. Add to RECORDED in this file:\n    {version!r}: {now!r},"
     assert RECORDED[version] == now, (
-        f"The code behind {boundary} changed and the version is still {version!r}.\n"
+        f"The code behind {name} changed and the version is still {version!r}.\n"
         f"  If what it decides changed: bump the version where it is declared and add  {'<new version>'!r}: {now!r}  to RECORDED.\n"
         f"  If it did not (a rename, a reworded reason, a refactor): replace the fingerprint of {version!r} with {now!r}.\n"
         "Until one of the two is done by hand, runs made under the old rule would be handed back as answers under the new one."

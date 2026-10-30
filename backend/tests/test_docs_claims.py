@@ -293,7 +293,7 @@ def test_what_the_hosted_page_says_reaches_the_model_is_what_the_deployment_send
     """The hosted page said the model is sent "only the sections a question needs"; every question also carries the
     file's name and the guidance, and the opening sections when retrieval ranks none (counter-review, 2026-10-13). The
     page now lists all of it with numbers; each is read here from where the deployment decides it."""
-    from app.analysis.service import SectionForPrompt, build_user_message
+    from app.analysis.service import MAX_SECTION_CHARS_IN_PROMPT, SectionForPrompt, build_user_message
 
     story = (ROOT / "src" / "components" / "workbench" / "landing" / "LandingStory.tsx").read_text(encoding="utf-8")
     env = _env_example()
@@ -306,7 +306,7 @@ def test_what_the_hosted_page_says_reaches_the_model_is_what_the_deployment_send
     assert (env.get("WORKBENCH_RETRIEVAL") or _config_default("WORKBENCH_RETRIEVAL")) == "bm25"
     # And the message carries what the page lists: the question, the guidance and the file's name, with the sections.
     section = SectionForPrompt(label="S1", number="1", heading="Term", text="This agreement lasts one year.")
-    message = build_user_message("How long is the term?", "Prefer a short term.", "acme-msa.pdf", [section])
+    message = build_user_message("How long is the term?", "Prefer a short term.", "acme-msa.pdf", [section], window=MAX_SECTION_CHARS_IN_PROMPT)
     assert all(part in message for part in ("How long is the term?", "Prefer a short term.", "acme-msa.pdf", "This agreement lasts one year."))
     assert "the question, any guidance, the contract's file name and the sections retrieval ranked" in story
     # What the model is shown on every deployment, hosted or not: the ranked sections, the linked ones, the window.

@@ -236,7 +236,9 @@ def test_a_two_megabyte_paragraph_ingests_quickly_into_sections_that_fit_the_pro
     assert time.perf_counter() - started < 2.0
     assert len(parsed.sections) > 300 and all(len(s.text) <= MAX_SECTION_CHARS for s in parsed.sections)
     assert " ".join(s.text for s in parsed.sections) == (sentence * 25_000).strip()
-    message = build_user_message("What must the Provider deliver?", None, "wall.txt", [SectionForPrompt("sec_0", "", "", parsed.sections[0].text)])
+    message = build_user_message(
+        "What must the Provider deliver?", None, "wall.txt", [SectionForPrompt("sec_0", "", "", parsed.sections[0].text)], window=MAX_SECTION_CHARS_IN_PROMPT
+    )
     assert len(message) < MAX_SECTION_CHARS_IN_PROMPT + 400
 
 

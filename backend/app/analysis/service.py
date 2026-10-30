@@ -32,6 +32,13 @@ def window_of(options: Mapping[str, object] | None) -> int:
 # A transport failure (connection refused, timeout) is retried once after a pause; a second failure is the run's failure.
 PROVIDER_RETRY_DELAY_S = 2.0
 
+# What the model is handed and how its answer is read: the user message built from the question, the guidance and the
+# sections (`build_user_message`), the answer's schema, and the note a rejected answer is sent back with. The prompt's
+# own text is versioned by its hash. A change here is a change of version, made by hand, as for the other three
+# (runs.versions): a cut window moved from 5000 to 4000 characters left every recorded identity unchanged, so a new
+# request was handed a run whose model had read other text (stress test, 2026-10-30, architecture 2).
+INPUT_VERSION = "input-v1"
+
 log = logging.getLogger(__name__)
 
 
@@ -69,9 +76,9 @@ def load_prompt(version: str | None = None) -> PromptPackage:
     return PromptPackage(version=name, system=text, sha256=sha256_text(text))
 
 
-def build_user_message(
-    question: str, guidance: str | None, document_name: str, sections: list[SectionForPrompt], window: int = MAX_SECTION_CHARS_IN_PROMPT
-) -> str:
+def build_user_message(question: str, guidance: str | None, document_name: str, sections: list[SectionForPrompt], *, window: int) -> str:
+    """The message the model answers. ``window`` is the run's own (`window_of` its options): a default here let a caller
+    rebuild an old run's message with a window it was never made with."""
     lines = [f"QUESTION: {question.strip()}", ""]
     lines.append(f"LEGAL GUIDANCE: {guidance.strip()}" if guidance and guidance.strip() else "LEGAL GUIDANCE: none supplied")
     lines += ["", f"CONTRACT: {document_name}", "", "SECTIONS (cite by the id in brackets):"]

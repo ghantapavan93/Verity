@@ -18,6 +18,7 @@ import re
 from collections.abc import Mapping
 from typing import Literal
 
+from ..analysis.service import INPUT_VERSION
 from ..retrieval.lexical import RETRIEVAL_VERSION
 from ..verify.spans import VERIFIER_VERSION
 from .status import POLICY_VERSION
@@ -26,6 +27,7 @@ SEMANTIC_VERSIONS: dict[str, str] = {
     "policy_version": POLICY_VERSION,  # runs.status and policy: how a status is decided
     "verifier_version": VERIFIER_VERSION,  # verify.spans: when a quote counts as found
     "retrieval_version": RETRIEVAL_VERSION,  # retrieval.lexical and the fallback: which sections are handed over
+    "input_version": INPUT_VERSION,  # analysis.service: what the model is handed of them, and how its answer is read (2026-10-30)
 }
 
 

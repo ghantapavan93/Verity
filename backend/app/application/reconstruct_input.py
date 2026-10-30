@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from ..analysis.service import MAX_SECTION_CHARS_IN_PROMPT, PROMPTS_DIR, SectionForPrompt, build_user_message, load_prompt, window_of
+from ..analysis.service import PROMPTS_DIR, SectionForPrompt, build_user_message, load_prompt, window_of
 from ..document_names import run_legacy_prompt_name, run_prompt_name
 from ..errors import NotFound
 from ..hashing import sha256_text
@@ -129,7 +129,7 @@ def _answer_problem(checking: RunStage, rounds: int | None, run: Run) -> str | N
     return later_round(rounds) if rounds is not None else rounds_not_recorded(checking.attempt)
 
 
-def context_slice(label: str, section: Section, rank: int, window: int = MAX_SECTION_CHARS_IN_PROMPT) -> ContextSlice:
+def context_slice(label: str, section: Section, rank: int, *, window: int) -> ContextSlice:
     end = min(len(section.text), window)
     return ContextSlice(
         label=label,
