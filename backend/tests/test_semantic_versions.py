@@ -120,6 +120,9 @@ RECORDED: dict[str, str] = {
     # Re-recorded 2026-10-19 (backend audit): a run's defined terms are read once for its seeds and no longer cached
     # between runs; old and new gave the same links on 580 cases over 150 EDGAR contracts.
     "retrieval-v2": "4829c7d19f9a7ba3",
+    # retrieval-v3, 2026-10-30 (the stress test's retrieval corner): text read as the verifier reads it (quotation marks
+    # folded, casefolded, a possessive its word).
+    "retrieval-v3": "34399207c1168a68",
 }
 
 
