@@ -35,10 +35,11 @@ import secrets
 import shutil
 import threading
 import time
+import weakref
 from collections import deque
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Literal
+from typing import ClassVar, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session as DbSession
@@ -47,7 +48,7 @@ from ..application.quotas import document_quotas, refuse_if_spent
 from ..application.workspace import PUBLIC_PREFIX, is_public
 from ..config import settings
 from ..db import SessionLocal, get_session
-from ..errors import AccessRequired, Forbidden, InvalidInput, NotFound, Paused, TooManyRequests
+from ..errors import AccessRequired, Conflict, Forbidden, InvalidInput, NotFound, Paused, TooManyRequests
 from ..hashing import mac_sha256
 from ..models import VisitorWorkspace, as_utc, utcnow
 from ..schemas import AccessOut, InviteIn
@@ -180,17 +181,34 @@ def current_workspace(request: Request) -> str:
 
 
 class SlidingWindow:
-    """At most ``limit`` events per key in any ``window_s`` seconds. Returns the seconds to wait when refused."""
+    """At most ``limit`` events per key in any ``window_s`` seconds. Returns the seconds to wait when refused.
+
+    A key whose newest event is older than the window is dropped once a window has passed since the last sweep, and at
+    every retention pass (prune_windows): pruned only past 4,096 keys, a visitor's address or /64 was kept for the life
+    of the process at demo traffic, the one place the API kept it (stress test, 2026-10-30, privacy 2)."""
+
+    _every: ClassVar[weakref.WeakSet[SlidingWindow]] = weakref.WeakSet()
 
     def __init__(self, limit: int, window_s: int) -> None:
         self.limit, self.window_s = limit, window_s
         self._events: dict[str, deque[float]] = {}
         self._lock = threading.Lock()
+        self._swept = time.monotonic()
+        SlidingWindow._every.add(self)
 
     def reset(self) -> None:
         """Forget every event: a new deployment, or a test that is its own reader."""
         with self._lock:
             self._events.clear()
+
+    def _sweep(self, current: float) -> None:
+        for stale in [k for k, v in self._events.items() if not v or v[-1] <= current - self.window_s]:
+            del self._events[stale]
+        self._swept = current
+
+    def prune(self, now: float | None = None) -> None:
+        with self._lock:
+            self._sweep(time.monotonic() if now is None else now)
 
     def take(self, key: str, now: float | None = None) -> float | None:
         current = time.monotonic() if now is None else now
@@ -201,10 +219,16 @@ class SlidingWindow:
             if len(events) >= self.limit:
                 return events[0] + self.window_s - current
             events.append(current)
-            if len(self._events) > 4096:  # a flood of distinct keys does not grow this without bound
-                for stale in [k for k, v in self._events.items() if not v or v[-1] <= current - self.window_s]:
-                    del self._events[stale]
+            # A flood of distinct keys does not grow this without bound, and no key outlives its window by more than one.
+            if len(self._events) > 4096 or current - self._swept >= self.window_s:
+                self._sweep(current)
             return None
+
+
+def prune_windows(now: float | None = None) -> None:
+    """Drop, from every window in this process, the keys past their window: at each retention pass (app.main)."""
+    for window in list(SlidingWindow._every):
+        window.prune(now)
 
 
 exchanges = SlidingWindow(EXCHANGE_LIMIT, EXCHANGE_WINDOW_S)
@@ -222,10 +246,19 @@ PACK_LIMIT, DOCUMENT_READ_LIMIT, PACKS_AT_ONCE = 30, 240, 2
 address_packs = SlidingWindow(PACK_LIMIT, ADDRESS_WINDOW_S)
 address_document_reads = SlidingWindow(DOCUMENT_READ_LIMIT, ADDRESS_WINDOW_S)
 packs_building = threading.BoundedSemaphore(PACKS_AT_ONCE)
+# A run's trust manifest locates every span in every section again, and its revision check scores every pair of loose
+# sections of the two versions: seconds to minutes of CPU and up to gigabytes per GET, with no bound of any kind (stress
+# test, 2026-10-30: GET /trust/diff on two 2,500-section versions took 15 s and 1.2 GB, and three at once three times
+# that). Built two at a time in every store, since one process serves every reader; in the public store each counts as
+# a contract view. What the diff costs itself is trust/diff.align's to bound.
+TRUST_READS_AT_ONCE = 2
+trust_reads_building = threading.BoundedSemaphore(TRUST_READS_AT_ONCE)
 
 
-def client_address(request: Request) -> str:
-    """The address Cloudflare saw, when the request came through the tunnel; the socket's otherwise."""
+def _client_address(request: Request) -> str:
+    """The address Cloudflare saw, when the request came through the tunnel; the socket's otherwise. Read by
+    client_network alone: the wake-up share was keyed by it while every other window counted by network, and twelve
+    addresses of one /64 spent the day's wake-ups (stress test, 2026-10-30), so no bound can be keyed by it."""
     return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "unknown")
 
 
@@ -235,7 +268,7 @@ def client_network(request: Request) -> str:
     given, so a host cannot multiply its share by using more of its own addresses. The hourly windows count by it too:
     by full address, a host with a /64 took a fresh address for every visit and no window filled (security audit,
     2026-10-30, reversing war room F-32 on the owner's instruction)."""
-    address = client_address(request)
+    address = _client_address(request)
     try:
         ip = ipaddress.ip_address(address)
     except ValueError:
@@ -289,8 +322,13 @@ def access(request: Request, response: Response) -> AccessOut:
 
 
 @router.post("/session", response_model=AccessOut)
-def enter(body: InviteIn, request: Request, response: Response) -> AccessOut:
-    """Exchange an invite for a session. The invite may be the bare token or the whole link it came in."""
+def enter(body: InviteIn, request: Request, response: Response, replace: bool = False) -> AccessOut:
+    """Exchange an invite for a session. The invite may be the bare token or the whole link it came in.
+
+    A browser holding another reader's working session keeps it, 409 and no cookie, unless the request says the person
+    chose to switch (``?replace=true``). An invite in the address silently replaced the session held, on arrival and on
+    a change of the address, and what the reader added next went into the inviter's workspace (stress test, 2026-10-30,
+    authz 1). A session of the same reader is renewed; an expired or revoked one is no session."""
     response.headers["Cache-Control"] = "no-store"
     if not enabled():
         return _out(None)
@@ -305,6 +343,12 @@ def enter(body: InviteIn, request: Request, response: Response) -> AccessOut:
     invited = verify(token, "verity-invite", settings.access_secret)
     if invited is None:
         raise InvalidInput("That invite is not valid, or it has expired. Ask for a new link.")
+    held = current_session(request)
+    if held is not None and _session_serves_here(held.subject) and held.subject != invited.subject and not replace:
+        raise Conflict(
+            f"This browser is already inside as {held.subject}. The link is for {invited.subject}; nothing was changed. "
+            "Switch only if you mean to work as that reader."
+        )
     lifetime = settings.access_session_days * 86400
     response.set_cookie(
         SESSION_COOKIE,

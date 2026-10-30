@@ -32,6 +32,8 @@ front of the public. A visitor's workspace reads only its own records, never cur
 | Questions per workspace per UTC day | 30 (`WORKBENCH_ANONYMOUS_MAX_RUNS_PER_DAY`) | `application/quotas.py`, counted with the run |
 | New sessions, uploads, questions per network address | 20, 30, 30 an hour | `api/access.py`, keyed by the address Cloudflare saw |
 | Uploads, everyone, per UTC day | 300 (`WORKBENCH_ANONYMOUS_MAX_UPLOADS_PER_DAY`) | `application/quotas.py`, counted with the grant; `api/access.py admit_upload` refuses before reading |
+| Bytes of new contracts, everyone, per UTC day | 1 GiB (`WORKBENCH_ANONYMOUS_MAX_UPLOAD_BYTES_PER_DAY`); bytes already held count none | `application/quotas.py`, counted with the document; refused before reading |
+| Requests in flight per network | 8 (`WORKBENCH_PUBLIC_REQUESTS_PER_NETWORK`), one past it waits 2 s; live run streams 4 per workspace, 16 per network | `api/in_flight.py`, at the door; health is never counted |
 | Questions, everyone, per UTC day | 200 (`WORKBENCH_MAX_RUNS_PER_DAY`, set by the supervisor) | `application/quotas.py`, counted with the run |
 | Upload size and type | 25 MB; PDF, DOCX, TXT, checked against the bytes; stored under its hash | `application/ingest_document.py` |
 | Model calls at once, model timeout | the admission bound; 600 s | `providers` |
@@ -273,8 +275,11 @@ interface still says `X-Powered-By: Next.js`: known, not fixed here.
 
 Logs under `backend/data/logs/deploy/` carry request ids, paths without query strings, statuses,
 durations, run and document ids, stages and restart events, and no contract text, guidance, prompt,
-model output or credential (searched for each on 2026-10-02). There is no rotation: one file per
-start, 745 KB after two days.
+model output or credential (searched for each on 2026-10-02). The API writes its own log to
+`backend/data/logs/deploy/api/` in segments of 10 MiB, the oldest deleted past 200 MiB in all
+(`WORKBENCH_LOG_SEGMENT_BYTES`, `WORKBENCH_LOG_KEEP_BYTES`); each line is cut at 2,000 characters and a flood of
+one kind of line (a 4xx, a refusal) is kept at 60 a minute (`backend/app/log_sink.py`). Each start's stamped output is
+removed after 14 days or past 200 MB in all, oldest first.
 
 ## Keeping the two servers up (2026-10-01)
 
@@ -316,7 +321,7 @@ runs verified themselves. Nothing schedules a backup.
 `deploy/supervise.ps1 -Name api|web` is the whole mechanism: start the server with its stdout and stderr in a stamped
 file under `backend/data/logs/deploy/`, wait for it to exit, write the exit code and how long it ran to
 `<name>.supervisor.log`, start it again after a delay that doubles from 5 s to 60 s while it keeps dying within a
-minute. A stop file ends the supervisor. The pid of the running server is in `<name>.pid`. No service manager, no
+minute. A stop file ends the supervisor. The pid of the running server and its start time are in `<name>.pid`; `deploy/down.ps1` stops a process only when both match, and removes the record. No service manager, no
 wrapper binary: a 70-line script and the task scheduler that ships with Windows. The connector (`cloudflared`) is
 already a Windows service started by the system and is not part of this.
 

@@ -168,7 +168,10 @@ def test_only_the_stop_file_ends_the_supervisor(tmp_path: Path) -> None:
 
 def run_function(name: str, body: str, logs: Path, tag: str = "t") -> subprocess.CompletedProcess[str]:
     script = SUPERVISE.read_text(encoding="utf-8")
-    prelude = f"$ErrorActionPreference = 'Stop'\n$logs = '{logs}'\n$Tag = '{tag}'\n$supervisorLog = '{logs / (tag + '.supervisor.log')}'\n$LOG_KEEP_DAYS = 14\n"
+    prelude = (
+        f"$ErrorActionPreference = 'Stop'\n$logs = '{logs}'\n$Tag = '{tag}'\n$supervisorLog = '{logs / (tag + '.supervisor.log')}'\n"
+        "$LOG_KEEP_DAYS = 14\n$LOG_KEEP_BYTES = 200MB\n"
+    )
     command = prelude + function_source(script, name) + "\n" + body
     return subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", command], capture_output=True, text=True, timeout=60)
 
@@ -193,6 +196,50 @@ def test_old_output_of_this_server_is_removed_and_nothing_else(tmp_path: Path) -
     assert result.stdout.strip() == "2"
     assert not [path for path in old if path.exists()]
     assert all(path.exists() for path in kept)
+
+
+def sized(path: Path, size: int, days: float) -> Path:
+    path.write_bytes(b"x" * size)
+    then = time.time() - days * 86400
+    os.utime(path, (then, then))
+    return path
+
+
+def test_output_past_its_byte_budget_is_removed_oldest_first(tmp_path: Path) -> None:
+    # By age alone, a server that wrote fast or restarted in a loop kept every byte for two weeks (stress test, 2026-10-30).
+    oldest = [sized(tmp_path / f"t.2026102{n}-000000.err.log", 400, 5 - n) for n in range(3)]  # 1,200 bytes, oldest first
+    newest = sized(tmp_path / "t.20261029-000000.err.log", 400, 1)
+    others = [sized(tmp_path / "web.20261020-000000.err.log", 5000, 5), sized(tmp_path / "t.supervisor.log", 5000, 5)]
+    result = run_function("Remove-OldLogs", "$LOG_KEEP_BYTES = 900\nRemove-OldLogs", tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "2"
+    assert [path.exists() for path in oldest] == [False, False, True] and newest.exists()
+    assert all(path.exists() for path in others), "only this server's stamped output counts"
+
+
+def test_control_output_inside_its_byte_budget_is_kept(tmp_path: Path) -> None:
+    files = [sized(tmp_path / f"t.2026102{n}-000000.out.log", 400, 5 - n) for n in range(3)]
+    result = run_function("Remove-OldLogs", "$LOG_KEEP_BYTES = 1200\nRemove-OldLogs", tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "0" and all(path.exists() for path in files)
+
+
+def test_an_api_exit_reads_its_last_line_from_its_own_log_when_its_error_output_is_empty(tmp_path: Path) -> None:
+    # The API writes its log to segments of its own (backend/app/log_sink.py); its standard error is then usually empty.
+    script = SUPERVISE.read_text(encoding="utf-8")
+    segments = tmp_path / "t"
+    segments.mkdir()
+    (segments / "api.20261030-000000.100.00001.log").write_text("INFO older segment\n", encoding="utf-8")
+    (segments / "api.20261030-000000.100.00002.log").write_text("ERROR app: Application startup failed\n", encoding="utf-8")
+    (tmp_path / "empty.err.log").write_text("", encoding="utf-8")
+    (tmp_path / "said.err.log").write_text("RuntimeError: refusing to start\n", encoding="utf-8")
+    prelude = f"$ErrorActionPreference = 'Stop'\n$Name = 'api'\n$apiLogs = '{segments}'\n"
+    functions = function_source(script, "Get-LastLine") + "\n" + function_source(script, "Get-LastServerLine")
+    body = f"\"[$(Get-LastServerLine '{tmp_path / 'empty.err.log'}')]\"\n\"[$(Get-LastServerLine '{tmp_path / 'said.err.log'}')]\""
+    command = prelude + functions + "\n" + body
+    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", command], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["[ERROR app: Application startup failed]", "[RuntimeError: refusing to start]"]
 
 
 def test_an_end_with_no_record_is_named_with_its_last_line(tmp_path: Path) -> None:
@@ -235,3 +282,80 @@ def test_an_exit_carries_the_last_line_the_server_wrote(tmp_path: Path) -> None:
     assert named == "[RuntimeError: no access secret]"
     assert cut == "[" + "x" * 300 + "...]"
     assert missing == "[]"
+
+
+# ---------------------------------------------------------------------------- what down.ps1 stops
+# down.ps1 stopped whatever process held the pid a record named, with its whole tree, and never removed the record:
+# after an end the supervisor did not see, Windows gave that pid to an unrelated process and down.ps1 killed it
+# (stress test, 2026-10-30, ops 6). A process is now the one recorded only when its start time matches too.
+
+DOWN = SUPERVISE.with_name("down.ps1")
+
+
+@contextmanager
+def a_live_process() -> Iterator[subprocess.Popen[bytes]]:
+    sleeper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        yield sleeper
+    finally:
+        if sleeper.poll() is None:
+            sleeper.kill()
+        sleeper.wait(10)
+
+
+def start_token(pid: int) -> str:
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", f"(Get-Process -Id {pid}).StartTime.ToFileTimeUtc()"], capture_output=True, text=True
+    )
+    return result.stdout.strip()
+
+
+def run_down(tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    (tmp_path / "deploy").mkdir(exist_ok=True)
+    shutil.copy(DOWN, tmp_path / "deploy" / "down.ps1")
+    return subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-File", str(tmp_path / "deploy" / "down.ps1")], capture_output=True, text=True, timeout=60
+    )
+
+
+def _logs(tmp_path: Path) -> Path:
+    logs = tmp_path / "backend" / "data" / "logs" / "deploy"
+    logs.mkdir(parents=True, exist_ok=True)
+    return logs
+
+
+@pytest.mark.parametrize("record", ["another start", "no start time"])
+def test_a_record_naming_another_process_stops_nothing_and_is_removed(tmp_path: Path, record: str) -> None:
+    logs = _logs(tmp_path)
+    with a_live_process() as other:
+        token = "" if record == "no start time" else str(int(start_token(other.pid)) - 10_000_000)  # a second earlier
+        (logs / "api.pid").write_text(f"{other.pid} {token}".strip(), encoding="ascii")
+        result = run_down(tmp_path)
+        assert result.returncode == 0, result.stderr
+        assert other.poll() is None, "the unrelated process is alive"
+        assert "stale" in result.stdout
+    assert not (logs / "api.pid").exists(), "the stale record is gone"
+
+
+def test_control_the_recorded_server_is_stopped_and_its_record_removed(tmp_path: Path) -> None:
+    logs = _logs(tmp_path)
+    with a_live_process() as server:
+        (logs / "web.pid").write_text(f"{server.pid} {start_token(server.pid)}", encoding="ascii")
+        result = run_down(tmp_path)
+        assert result.returncode == 0, result.stderr
+        assert server.wait(10) is not None and "stopped supervised web" in result.stdout
+    assert not (logs / "web.pid").exists()
+
+
+def test_the_unsupervised_record_is_held_to_the_same_rule(tmp_path: Path) -> None:
+    import json
+
+    logs = _logs(tmp_path)
+    with a_live_process() as ours, a_live_process() as other:
+        record = {"api": {"pid": ours.pid, "started": start_token(ours.pid)}, "web": {"pid": other.pid, "started": "1"}, "tunnel": other.pid}
+        (logs / "pids.json").write_text(json.dumps(record), encoding="utf-8")
+        result = run_down(tmp_path)
+        assert result.returncode == 0, result.stderr
+        assert ours.wait(10) is not None, "the recorded api is stopped"
+        assert other.poll() is None, "a pid another process holds now, with or without a start time, is left alone"
+    assert not (logs / "pids.json").exists()

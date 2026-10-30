@@ -16,8 +16,10 @@ from dataclasses import dataclass
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..db import refused_as_not_open
 from ..errors import Conflict, InvalidInput
 from ..models import DocumentVersion, new_id
+from .quotas import admit, workspace_open
 from .workspace import require_document
 
 
@@ -32,35 +34,49 @@ def _placed(session: Session, workspace: str, document_id: str) -> DocumentVersi
 
 
 def declare_supersedes(session: Session, workspace: str, document_id: str, previous_document_id: str) -> Declared:
-    """Record that ``document_id`` is the version after ``previous_document_id``, in this workspace."""
+    """Record that ``document_id`` is the version after ``previous_document_id``, in this workspace.
+
+    Written through quotas.admit with the workspace's being open, like every other row a workspace adds: the lookup,
+    the conflict check and both inserts in one transaction under the write lock retention deletes under. Written apart,
+    a statement let in just before its workspace ended and committed after the purge left rows for a workspace no purge
+    would list again; they kept two visitors' shared contracts for good, and the next start of the public API refused
+    the store (stress test, 2026-10-30, concurrency 4 and journeys 1)."""
     require_document(session, document_id, workspace)
     require_document(session, previous_document_id, workspace)
     if document_id == previous_document_id:
         raise InvalidInput("a document cannot supersede itself")
-    # Two attempts: a statement that loses a race to another statement about a different document (both opening the
-    # earlier document's line) is the statement after it, as if made a moment later. Before 2026-10-08 it was refused
-    # with "placed by another request" although its own document was in no line (QA campaign, two versions of one base).
-    for _ in range(2):
+
+    def already_said() -> DocumentVersion | None:
         placed = _placed(session, workspace, document_id)
-        if placed is not None:
-            if placed.supersedes_document_id == previous_document_id:
-                return Declared(placed, created=False)
-            raise Conflict("This document already has a place in a line of versions. A version supersedes one document, and that cannot be changed.")
+        if placed is None:
+            return None
+        if placed.supersedes_document_id == previous_document_id:
+            return placed
+        raise Conflict("This document already has a place in a line of versions. A version supersedes one document, and that cannot be changed.")
+
+    def say() -> DocumentVersion:
+        # A statement about a different document that opened the earlier document's line first is the line this one
+        # joins, as if made a moment later (QA campaign, 2026-10-08: two versions of one base).
+        previous = _placed(session, workspace, previous_document_id)
+        if previous is None:  # the earlier document opens a line
+            previous = DocumentVersion(workspace_id=workspace, lineage_id=new_id(), document_id=previous_document_id, supersedes_document_id=None)
+            session.add(previous)
+            session.flush()
+        version = DocumentVersion(workspace_id=workspace, lineage_id=previous.lineage_id, document_id=document_id, supersedes_document_id=previous_document_id)
+        session.add(version)
+        session.flush()
+        return version
+
+    # Two attempts: under the write lock no statement can interleave, but a lookup that missed the line another statement
+    # opened is answered as the statement after it, as before the lock (2026-10-08), not refused.
+    for _ in range(2):
         try:
-            previous = _placed(session, workspace, previous_document_id)
-            if previous is None:  # the earlier document opens a line
-                previous = DocumentVersion(workspace_id=workspace, lineage_id=new_id(), document_id=previous_document_id, supersedes_document_id=None)
-                session.add(previous)
-                session.flush()
-            version = DocumentVersion(
-                workspace_id=workspace, lineage_id=previous.lineage_id, document_id=document_id, supersedes_document_id=previous_document_id
-            )
-            session.add(version)
-            session.commit()
-            return Declared(version, created=True)
-        except IntegrityError:
-            # Another request placed one of the two between the lookup and the insert; the next pass reads what it recorded.
-            session.rollback()
+            version, created = admit(session, workspace_open(workspace), say, find=already_said)
+            return Declared(version, created=created)
+        except IntegrityError as error:
+            if refused_as_not_open(error):
+                raise  # the store's refusal: the workspace has ended (answered as quotas.workspace_open would, app.main)
+            continue  # admit has rolled it back; the next pass reads what is recorded
     raise Conflict("Another request was changing this line of versions at the same moment. Try again.")
 
 

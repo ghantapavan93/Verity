@@ -101,6 +101,9 @@ class Document(Base):
     # JSON list of what this reading did with each part of the file (ingest.coverage); NULL for readings made before it was recorded.
     coverage_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # The uploaded file's size, so a day's uploads into the public store are bounded by what they hold, not only by how
+    # many (application/quotas.py; DECISIONS.md, 2026-10-30). NULL on documents stored before 2026-10-30.
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     sections: Mapped[list[Section]] = relationship(back_populates="document", order_by="Section.ordinal", cascade="all, delete-orphan")
 
@@ -225,6 +228,10 @@ class Run(Base):
     fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The process that made the run (runs.owner: host, pid, start time), written with its row: until its worker's first
+    # stage row a run had no owner, so a crash left it open for the whole staleness window (stress test, 2026-10-30).
+    # NULL on runs made before; recovery then reads the stage rows' owner, or staleness (application/recover_runs.py).
+    owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     document: Mapped[Document] = relationship()
     guidance: Mapped[Guidance | None] = relationship()

@@ -99,7 +99,7 @@ def test_the_triggers_come_back_exactly_and_still_refuse(public: TestClient) -> 
     work(cast(Reviewer, a))
     kept = work(cast(Reviewer, b), contract=CONTRACT + "\nAnother clause.")
     before = triggers()
-    assert len(before) == 12
+    assert len(before) == 12 + 4  # the immutability triggers, and since 2026-10-30 the guard on each table a workspace adds to
     end(a)
     assert purge_expired_workspaces(db_module.engine).runs == 1
     assert triggers() == before, "the same triggers, byte for byte"

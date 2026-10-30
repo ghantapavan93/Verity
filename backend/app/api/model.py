@@ -16,10 +16,11 @@ from . import access
 
 router = APIRouter(prefix="/api/model", tags=["model"])
 
-# One address's share of the day's wake-ups: a script holding a session could otherwise spend all of them (security
-# review, 2026-10-13). Three an hour still wakes the model for a reader each time it has gone back to sleep.
-WAKES_PER_ADDRESS, WAKE_WINDOW_S = 3, 3600
-address_wakes = access.SlidingWindow(WAKES_PER_ADDRESS, WAKE_WINDOW_S)
+# One network's share of the day's wake-ups (access.client_network, as every other window): a script holding a session
+# could otherwise spend all of them (security review, 2026-10-13). Three an hour still wakes the model for a reader each
+# time it has gone back to sleep. By full address, one IPv6 /64 spent the day's ten in an hour (stress test, 2026-10-30).
+WAKES_PER_NETWORK, WAKE_WINDOW_S = 3, 3600
+address_wakes = access.SlidingWindow(WAKES_PER_NETWORK, WAKE_WINDOW_S)
 
 
 @router.post("/wake", response_model=ModelWakeOut)
@@ -32,5 +33,5 @@ def wake(request: Request, session: DbSession = Depends(get_session)) -> ModelWa
         refuse_if_spent(session, run_quotas(access.current_workspace(request)))
     except (TooManyRequests, Busy):  # Busy: the visitors' queue is full (quotas.run_quotas); a wake would wait behind it
         return ModelWakeOut(state="limit")
-    address = access.client_address(request)
-    return ModelWakeOut(state=waker.request(allow=lambda: address_wakes.take(address) is None))
+    network = access.client_network(request)
+    return ModelWakeOut(state=waker.request(allow=lambda: address_wakes.take(network) is None))

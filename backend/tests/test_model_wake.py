@@ -289,3 +289,29 @@ def test_a_full_visitor_queue_wakes_nothing_and_is_not_an_error(route: tuple[Tes
     assert visitor.post("/api/model/wake").json() == {"state": "waking"}
     settle(model_api.waker)
     assert wakes.count == 1
+
+
+def test_one_network_has_one_share_whatever_address_it_takes(route: tuple[TestClient, ModelWaker, Wakes], monkeypatch: pytest.MonkeyPatch) -> None:
+    # The share was counted by full address while every other window counts by network: twelve addresses of one IPv6
+    # /64 spent the whole day's ten wake-ups in an hour (stress test, 2026-10-30, abuse 4).
+    client, waker, wakes = route
+    monkeypatch.setattr(config.settings, "model_wakeups_per_day", 10)
+    monkeypatch.setattr(config.settings, "model_awake_s", 0)
+    visitor, _ = arrive(client, address="2001:db8:1:2::1")
+    states = []
+    for n in range(1, 7):
+        visitor.headers["CF-Connecting-IP"] = f"2001:db8:1:2::{n:x}"
+        states.append(visitor.post("/api/model/wake").json()["state"])
+        settle(waker)
+    assert states == ["waking"] * model_api.WAKES_PER_NETWORK + ["limit"] * (6 - model_api.WAKES_PER_NETWORK)
+    visitor.headers["CF-Connecting-IP"] = "2001:db8:1:3::1"  # control: the next /64 has a share of its own
+    assert visitor.post("/api/model/wake").json()["state"] == "waking"
+    settle(waker)
+    assert wakes.count == model_api.WAKES_PER_NETWORK + 1
+
+
+def test_no_window_outside_the_gate_can_key_by_a_raw_address() -> None:
+    # The full address is read in one place, for client_network alone: a bound keyed by it is not a choice left open.
+    from app.api import access
+
+    assert not hasattr(access, "client_address")

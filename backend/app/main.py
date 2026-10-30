@@ -16,22 +16,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from . import db as db_module
+from . import log_sink
 from .api import access, batches, documents, engineering, findings, guidance, health, memos, model, runs, trust
 from .api.body_limit import BodyLimitMiddleware, BodyRefused
-from .application import trust_run
+from .api.in_flight import InFlightMiddleware
+from .application.quotas import VISIT_ENDED
 from .application.recover_runs import recover_interrupted_runs
-from .application.retention import purge_expired_workspaces, sweep_orphaned_files
+from .application.retention import forget_process_state, purge_expired_workspaces, sweep_orphaned_files
 from .config import settings
 from .db import SessionLocal, init_db
-from .errors import WorkbenchError
+from .errors import AccessRequired, WorkbenchError
 from .ingest import bounded
 from .providers import make_provider
 from .providers.base import ModelProvider
 from .runs.events import bus
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# Every logger through one bounded sink: each line cut, floods shaped, the file's total capped (app/log_sink.py). Below
+# the store's own free-space floor a line is dropped and counted rather than written.
+log_sink.configure(
+    settings.log_dir,
+    settings.log_segment_bytes,
+    settings.log_keep_bytes,
+    settings.public_min_free_bytes if settings.anonymous_sessions else health.MIN_FREE_BYTES,
+)
 log = logging.getLogger("app")
 # An id a caller may give its request (X-Request-ID): letters, digits and hyphens, at most 64 of them.
 _REQUEST_ID = re.compile(r"[A-Za-z0-9-]{1,64}")
@@ -62,7 +72,10 @@ async def _retain_hourly() -> None:
             try:
                 await asyncio.to_thread(purge_expired_workspaces, db_module.engine)
             finally:
-                trust_run.forget_readings()  # no document read again outlives a pass that deleted it, even one that failed midway
+                # Nothing derived from a deleted document, and no address past its window, outlives a pass, even one
+                # that failed midway (stress test, 2026-10-30).
+                forget_process_state()
+                access.prune_windows()
             await asyncio.to_thread(sweep_orphaned_files, db_module.engine)
         except Exception:  # a failed pass is logged and tried again next hour; it never takes the API down
             log.exception("retention pass failed")
@@ -120,6 +133,9 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
     # Every body is bounded before its route, gate or parser reads it (api/body_limit.py). Inside CORS and the request
     # log, so a refusal carries their headers like any other answer.
     app.add_middleware(BodyLimitMiddleware)
+    # Outside the body's bound: a network past its requests in flight is refused before the door asks anything of the
+    # request threads (api/in_flight.py).
+    app.add_middleware(InFlightMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -136,15 +152,37 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
         if error.status_code in (429, 503):
             # Five limits answer 429 and three conditions 503; the request line alone cannot say which one refused.
-            log.warning("refused path=%s status=%d kind=%s detail=%s", request.url.path, error.status_code, type(error).__name__, error)
+            log.warning(
+                "refused path=%s status=%d kind=%s detail=%s",
+                request.url.path,
+                error.status_code,
+                type(error).__name__,
+                error,
+                extra={"shape": f"refused {error.status_code} {type(error).__name__}"},
+            )
         return JSONResponse({"detail": str(error)}, status_code=error.status_code, headers=headers)
+
+    @app.exception_handler(IntegrityError)
+    async def store_refused(request: Request, error: IntegrityError) -> JSONResponse:
+        # The store's own refusal of a row for a public workspace that has ended (db.workspace_guards), met by a write that
+        # did not ask quotas.workspace_open first: the same answer as that check. Any other integrity error is the server's.
+        if not db_module.refused_as_not_open(error):
+            raise error
+        return await workbench_error(request, AccessRequired(VISIT_ENDED))
 
     @app.exception_handler(BodyRefused)
     async def body_refused(request: Request, error: BodyRefused) -> Response:
         # A body refused while FastAPI reads it (a full spool, for one) reaches here, not the door's own answer; it is
         # logged the same way (fresh review, 2026-10-19: a SpoolFull 503 met there left no line).
         if error.status_code in (429, 503):
-            log.warning("refused path=%s status=%d kind=%s detail=%s", request.url.path, error.status_code, type(error).__name__, error.detail)
+            log.warning(
+                "refused path=%s status=%d kind=%s detail=%s",
+                request.url.path,
+                error.status_code,
+                type(error).__name__,
+                error.detail,
+                extra={"shape": f"refused {error.status_code} {type(error).__name__}"},
+            )
         return await http_exception_handler(request, error)
 
     @app.middleware("http")
@@ -176,8 +214,17 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
         if request.url.path != "/api/health":
+            # A 4xx line is the one an outsider repeats at will (an unknown path, no session): shaped by its status, so a
+            # flood of them cannot push the record out of the log's bound (app/log_sink.py).
+            status_code = response.status_code
             log.info(
-                "request_id=%s method=%s path=%s status=%d duration_ms=%.0f", request_id, request.method, request.url.path, response.status_code, duration_ms
+                "request_id=%s method=%s path=%s status=%d duration_ms=%.0f",
+                request_id,
+                request.method,
+                request.url.path,
+                status_code,
+                duration_ms,
+                extra={"shape": f"status {status_code}"} if 400 <= status_code < 500 else None,
             )
         return response
 

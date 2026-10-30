@@ -93,3 +93,68 @@ def test_a_refused_or_unknown_pack_spends_none_of_the_hour(public: TestClient, m
             access.packs_building.release()
     assert visitor.get(f"/api/runs/{run_id}/evidence-pack").status_code == 200  # the one slot was still there
     assert visitor.get(f"/api/runs/{run_id}/evidence-pack").status_code == 429  # control: and now it is spent
+
+
+# ---------------------------------------------------------------------------- reads that redo document-wide work
+# A run's trust manifest locates every span in every section of the document again, and its revision check compares
+# every loose section pair: a GET of either cost seconds to minutes and up to gigabytes, and neither had a bound of any
+# kind (stress test, 2026-10-30: one visitor's GET /trust/diff on two 2,500-section versions took 15 s and 1.2 GB, and
+# three at once three times that). They are now built a few at a time and count as contract views.
+
+
+def _visitor_with_revision(public: TestClient) -> tuple[Visitor, str, str]:
+    from tests.test_trust import REVISED
+
+    visitor, first, run_id = _visitor_with_run(public)
+    second = visitor.post("/api/documents", files={"file": ("agreement-v2.txt", REVISED.encode("utf-8"), "text/plain")})
+    assert second.status_code == 201, second.text
+    later = second.json()["id"]
+    assert visitor.post(f"/api/documents/{later}/supersedes", json={"previousDocumentId": first}).status_code == 201
+    return visitor, run_id, later
+
+
+@pytest.mark.parametrize("kind", ["trust", "diff"])
+def test_a_network_asking_for_a_trust_read_in_a_loop_is_told_to_wait(public: TestClient, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    monkeypatch.setattr(access.address_document_reads, "limit", 3)
+    visitor, run_id, later = _visitor_with_revision(public)
+    path = f"/api/runs/{run_id}/trust" if kind == "trust" else f"/api/runs/{run_id}/trust/diff?documentId={later}"
+    codes = [visitor.get(path).status_code for _ in range(4)]
+    assert codes == [200, 200, 200, 429]
+
+
+@pytest.mark.parametrize("kind", ["trust", "diff"])
+def test_trust_reads_are_built_a_few_at_a_time(public: TestClient, kind: str) -> None:
+    visitor, run_id, later = _visitor_with_revision(public)
+    path = f"/api/runs/{run_id}/trust" if kind == "trust" else f"/api/runs/{run_id}/trust/diff?documentId={later}"
+    for _ in range(access.TRUST_READS_AT_ONCE):
+        assert access.trust_reads_building.acquire(blocking=False)
+    try:
+        refused = visitor.get(path)
+        assert refused.status_code == 503 and refused.headers["Retry-After"]
+    finally:
+        for _ in range(access.TRUST_READS_AT_ONCE):
+            access.trust_reads_building.release()
+    assert visitor.get(path).status_code == 200  # control: with room, it is built
+
+
+def test_a_refused_or_unknown_trust_read_spends_none_of_the_hour(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(access.address_document_reads, "limit", 1)
+    visitor, run_id, _ = _visitor_with_revision(public)
+    assert visitor.get("/api/runs/no-such-run/trust").status_code == 404
+    for _ in range(access.TRUST_READS_AT_ONCE):
+        assert access.trust_reads_building.acquire(blocking=False)
+    try:
+        assert visitor.get(f"/api/runs/{run_id}/trust").status_code == 503
+    finally:
+        for _ in range(access.TRUST_READS_AT_ONCE):
+            access.trust_reads_building.release()
+    assert visitor.get(f"/api/runs/{run_id}/trust").status_code == 200
+    assert visitor.get(f"/api/runs/{run_id}/trust").status_code == 429
+
+
+def test_control_the_owner_store_counts_no_trust_reads(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(access.address_document_reads, "limit", 1)
+    from tests.support import upload_and_ask
+
+    run_id = upload_and_ask(client, "What notice applies?")["run_id"]
+    assert [client.get(f"/api/runs/{run_id}/trust").status_code for _ in range(3)] == [200, 200, 200]

@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..analysis.schema import AnalysisOut
+from ..analysis.service import window_of
 from ..errors import NotFound
 from ..models import EvidenceSpan, Run, Section
 from ..runs.service import verify_evidence
@@ -71,6 +72,9 @@ def reverify_run(session: Session, run_id: str) -> Replay:
         replay.problem = f"raw output is not a valid proposal: {str(error)[:120]}"
         return replay
 
+    # Read from the record, not FrozenOptions.of(run), which refuses a run made under older rules: replaying those is the
+    # tool's purpose.
+    window = window_of(json.loads(run.options_json or "{}"))
     candidates = json.loads(run.candidates_json or "[]")
     chosen: list[Section] = []
     by_label: dict[str, Section] = {}
@@ -83,7 +87,9 @@ def reverify_run(session: Session, run_id: str) -> Replay:
 
     for finding_ordinal, item in enumerate(proposal.findings):
         for span_ordinal, evidence in enumerate(item.evidence):
-            section, located, method = verify_evidence(evidence.quote, evidence.section_id, by_label, chosen)
+            # The window the run was verified over, as execution, the explanation and the pack read it: left out, the replay
+            # searched the legacy 5,000 characters of runs verified over 6,000 (stress test, 2026-10-30).
+            section, located, method = verify_evidence(evidence.quote, evidence.section_id, by_label, chosen, window=window)
             was = stored.get((finding_ordinal, span_ordinal))
             replay.spans.append(
                 SpanReplay(

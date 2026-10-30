@@ -3,10 +3,14 @@ about it: a second datastore is added when a measurement needs one."""
 
 from __future__ import annotations
 
+import threading
+import time
+import weakref
 from collections.abc import Iterator
 from contextlib import contextmanager
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.engine import ExceptionContext
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -19,6 +23,43 @@ from .errors import Busy
 
 class Base(DeclarativeBase):
     pass
+
+
+# What the engine met that the file system cannot show (stress test, 2026-10-30, ops 3: a damaged page answered 500 on
+# every read of its table while health said ok). By SQLite's error name, with when it was first met. A damaged file
+# (CORRUPT, NOTADB) is reported until the process starts again: a later commit elsewhere in a damaged file succeeds while
+# the damage stays. An I/O error, a read-only or full store, a file that cannot be opened, until the next successful
+# commit. A lost race for the write lock (BUSY, "locked") is contention, not a fault, and is not noted.
+DAMAGED = ("SQLITE_CORRUPT", "SQLITE_NOTADB")
+PASSING = ("SQLITE_IOERR", "SQLITE_READONLY", "SQLITE_FULL", "SQLITE_CANTOPEN")
+# Kept per engine, the store the process serves being `engine` below.
+_faults: weakref.WeakKeyDictionary[Engine, dict[str, float]] = weakref.WeakKeyDictionary()
+_faults_lock = threading.Lock()
+
+
+def note_store_error(error: BaseException, target: Engine | None = None) -> None:
+    name = str(getattr(error, "sqlite_errorname", "") or "")
+    if name.startswith(DAMAGED) or name.startswith(PASSING):
+        with _faults_lock:
+            _faults.setdefault(target or engine, {}).setdefault(name, time.time())
+
+
+def _committed(target: Engine) -> None:
+    with _faults_lock:
+        held = _faults.get(target)
+        if held is not None:
+            for name in [n for n in held if not n.startswith(DAMAGED)]:
+                del held[name]
+
+
+def store_faults(target: Engine | None = None) -> dict[str, float]:
+    """What the engine has met and not since seen pass, by SQLite's error name, with when it was first met."""
+    with _faults_lock:
+        return dict(_faults.get(target or engine, {}))
+
+
+def store_fault(target: Engine | None = None) -> str | None:
+    return next(iter(sorted(store_faults(target))), None)
 
 
 def make_engine(url: str | None = None) -> Engine:
@@ -47,6 +88,14 @@ def make_engine(url: str | None = None) -> Engine:
             # visitor added is gone when their workspace ends (application/retention.py; release review, 2026-10-11).
             cursor.execute("PRAGMA secure_delete=ON")
             cursor.close()
+
+        @event.listens_for(engine, "handle_error")
+        def _noted(context: ExceptionContext) -> None:
+            note_store_error(context.original_exception, engine)
+
+        @event.listens_for(engine, "commit")
+        def _cleared(_connection: object) -> None:
+            _committed(engine)
 
     return engine
 
@@ -120,15 +169,53 @@ def immutability_triggers() -> list[tuple[str, str]]:
     return triggers
 
 
+# A workspace an anonymous visit made: application/workspace.PUBLIC_PREFIX, which this bottom layer cannot import.
+PUBLIC_WORKSPACE_LIKE = "pw-%"
+WORKSPACE_NOT_OPEN = "a public workspace that is not open takes no row"
+
+
+def refused_as_not_open(error: BaseException) -> bool:
+    """The store's own refusal of a row for a public workspace that is not listed (workspace_guards)."""
+    return WORKSPACE_NOT_OPEN in str(getattr(error, "orig", error))
+
+
+def workspace_tables() -> list[str]:
+    """Every table whose rows a workspace adds, read off the models (a workspace_id column), the registry of visitor
+    workspaces itself apart: a table added later is in it without anyone remembering."""
+    from . import models  # noqa: F401  (registers the tables)
+
+    return sorted(t.name for t in Base.metadata.sorted_tables if "workspace_id" in t.columns and t.name != "visitor_workspaces")
+
+
+def workspace_guards() -> list[tuple[str, str]]:
+    """The triggers that refuse a row for a public workspace that is not listed in visitor_workspaces: (name, CREATE
+    statement). A request let in before the purge cannot write after it (quotas.workspace_open says so for the rows
+    written through quotas.admit); here the store says it for every row, whatever wrote it. A version statement written
+    outside admit outlived its workspace's purge and kept two visitors' contracts for good (stress test, 2026-10-30).
+    Listed is enough: a row written after the workspace ended, before its purge, is deleted with it by workspace id."""
+    guards = []
+    for table in workspace_tables():
+        name = f"trg_{table}_only_open_workspaces"
+        statement = (
+            f"CREATE TRIGGER IF NOT EXISTS {name} BEFORE INSERT ON {table} "
+            f"WHEN NEW.workspace_id LIKE '{PUBLIC_WORKSPACE_LIKE}' "
+            "AND NOT EXISTS (SELECT 1 FROM visitor_workspaces WHERE workspace_id = NEW.workspace_id) "
+            f"BEGIN SELECT RAISE(ABORT, '{WORKSPACE_NOT_OPEN} ({table})'); END"
+        )
+        guards.append((name, statement))
+    return guards
+
+
 def ensure_immutability(target_engine: Engine) -> None:
     """A finished run, its stages, its findings and their spans cannot be updated or deleted: the
     database refuses, not just the code. Reviews and memos are separate rows, so adjudicating a
-    finding or writing a memo never touches the record it is about. SQLite only; Postgres would
-    carry the same rule as a trigger function."""
+    finding or writing a memo never touches the record it is about. A public workspace that is not
+    listed takes no row (workspace_guards). SQLite only; Postgres would carry the same rules as
+    trigger functions."""
     if target_engine.url.get_backend_name() != "sqlite":
         return
     with target_engine.begin() as connection:
-        for _name, statement in immutability_triggers():
+        for _name, statement in [*immutability_triggers(), *workspace_guards()]:
             connection.exec_driver_sql(statement)
 
 

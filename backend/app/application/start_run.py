@@ -24,13 +24,16 @@ from ..config import settings
 from ..errors import InvalidInput, NotFound
 from ..hashing import fingerprint
 from ..ingest.invisible import visible_text
-from ..models import Document, Guidance, Run, Section, utcnow
+from ..models import Document, Guidance, Run, Section, new_id, utcnow
 from ..providers.base import ModelProvider
 from ..retrieval.aliases import ALIASES_SHA256
 from ..routing.router import ModelRouter, task_for
+from ..runs.owner import this_process
 from ..runs.relations import reached_start, replacement_starts
 from ..runs.versions import SEMANTIC_VERSIONS
 from .quotas import admit, run_quotas
+from .recover_runs import run_ended, run_started
+from .visible_input import has_visible_text
 from .workspace import require_document, require_guidance
 
 FINGERPRINT_KIND = "run/v1"
@@ -77,6 +80,10 @@ def run_options(model: str | None = None) -> RunOptions:
 _STARTS: OrderedDict[tuple[str, str], tuple[str, ...]] = OrderedDict()
 _STARTS_KEPT = 256
 _STARTS_LOCK = threading.Lock()
+# One reading of a document's starts at a time: concurrent questions on a document not yet read each read it, in the
+# request before admission, so three at once on a fresh 1.85 MB document took 32, 39 and 71 s (stress test, 2026-10-30).
+# The others wait for the one and are handed its answer. A lock per document, dropped once it is read.
+_READING_STARTS: dict[tuple[str, str], threading.Lock] = {}
 
 
 def _document_starts(session: Session, document: Document) -> tuple[str, ...]:
@@ -85,12 +92,21 @@ def _document_starts(session: Session, document: Document) -> tuple[str, ...]:
         if key in _STARTS:
             _STARTS.move_to_end(key)
             return _STARTS[key]
-    sections = session.query(Section).filter(Section.document_id == document.id).order_by(Section.ordinal).all()
-    starts = replacement_starts(sections)
-    with _STARTS_LOCK:
-        _STARTS[key] = starts
-        while len(_STARTS) > _STARTS_KEPT:
-            _STARTS.popitem(last=False)
+        reading = _READING_STARTS.setdefault(key, threading.Lock())
+    with reading:
+        with _STARTS_LOCK:
+            if key in _STARTS:  # read by the request this one waited for
+                return _STARTS[key]
+        try:
+            sections = session.query(Section).filter(Section.document_id == document.id).order_by(Section.ordinal).all()
+            starts = replacement_starts(sections)
+            with _STARTS_LOCK:
+                _STARTS[key] = starts
+                while len(_STARTS) > _STARTS_KEPT:
+                    _STARTS.popitem(last=False)
+        finally:
+            with _STARTS_LOCK:
+                _READING_STARTS.pop(key, None)
     return starts
 
 
@@ -146,7 +162,9 @@ def start_run(
     question = visible_text(question).strip()
     # The length check before this counted invisible characters: a question of nothing but zero-width spaces passed it,
     # was stored empty and cost a model call. What is left once they are removed is what is asked.
-    if not question:
+    # Nor did a question of characters that render nothing alone (a joiner, a direction mark): it started a run (stress test,
+    # 2026-10-30).
+    if not has_visible_text(question):
         raise InvalidInput("The question has no visible text. Type a question about the contract.")
     prompt = load_prompt(prompt_version)
     task = task_for(guidance is not None)
@@ -158,6 +176,7 @@ def start_run(
     key = compute_fingerprint(document.id, guidance.id if guidance else None, question, prompt.sha256, options, workspace)
 
     run = Run(
+        id=new_id(),  # known before the row is written: the run is held for its worker under this id (write below)
         document_id=document.id,
         guidance_id=guidance.id if guidance else None,
         question=question,
@@ -174,14 +193,24 @@ def start_run(
         fingerprint=key,
         workspace_id=workspace,
         created_at=now,
+        owner=this_process().render(),
     )
 
     def write() -> Run:
+        # Held for its worker before its row commits, so no read sees a run of this process that no one holds
+        # (application/recover_runs.py); the caller that starts its worker lets it go when the worker ends.
+        run_started(run.id)
         session.add(run)
         return run
 
     # A question asked before is handed its run before any quota is counted: it creates nothing and calls no model.
-    written, created = admit(session, run_quotas(workspace), write, find=lambda: active_run(session, key))
+    try:
+        written, created = admit(session, run_quotas(workspace), write, find=lambda: active_run(session, key))
+    except BaseException:
+        run_ended(run.id)  # never written
+        raise
+    if not created:
+        run_ended(run.id)
     return StartedRun(written, created=created)
 
 

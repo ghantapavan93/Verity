@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections import Counter
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
@@ -15,7 +16,7 @@ from ..application.clause_location import ClauseLocator
 from ..application.create_memo import review_head
 from ..application.evidence_pack import build_evidence_pack
 from ..application.explain_run import explain_run
-from ..application.recover_runs import recover_interrupted_runs
+from ..application.recover_runs import recover_interrupted_runs, run_ended
 from ..application.review_finding import latest_review_id, review_out
 from ..application.start_run import start_run
 from ..application.workspace import require_run, visible_runs
@@ -50,6 +51,7 @@ from .deps import get_provider
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 HEARTBEAT_SECONDS = 15
+log = logging.getLogger(__name__)
 
 
 # ----------------------------------------------------------------------------- mapping
@@ -132,20 +134,25 @@ def runs_ahead(run: Run) -> int | None:
     return session.scalar(select(func.count(Run.id)).where(Run.stage.notin_(sorted(TERMINAL)), Run.created_at < run.created_at, Run.id != run.id)) or 0
 
 
-def run_out(run: Run, locator: ClauseLocator | None = None) -> RunOut:
+def run_out(run: Run, locator: ClauseLocator | None = None, built: dict[str, FindingOut] | None = None) -> RunOut:
     # Unresolved findings are kept on the run but not shown as answers. The document's sections are read only for a run
     # with findings to place: the page asks for a run every few seconds while it is working, and every ask read the whole
-    # contract to place findings it did not have yet (backend audit, 2026-10-19).
+    # contract to place findings it did not have yet (backend audit, 2026-10-19). ``built``: each finding's answer
+    # already made, by its id (run_detail).
     if locator is None and run.findings:
         locator = ClauseLocator(run.document.sections)
-    shown = [finding_out(f, locator) for f in run.findings if f.status != "unresolved"] if run.stage == "complete" else []
+
+    def out(finding: Finding) -> FindingOut:
+        return built[finding.id] if built is not None else finding_out(finding, locator)
+
+    shown = [out(f) for f in run.findings if f.status != "unresolved"] if run.stage == "complete" else []
     return RunOut(
         id=run.id,
         question=run.question,
         shared=run.workspace_id is None,
         stage=run.stage,
         findings=shown,
-        withheld=[finding_out(f, locator) for f in run.findings if f.status == "unresolved"],
+        withheld=[out(f) for f in run.findings if f.status == "unresolved"],
         model=run.model,
         prompt_version=run.prompt_version,
         prompt_hash=run.prompt_hash,
@@ -168,8 +175,11 @@ def run_detail(run: Run) -> RunDetail:
     # As in run_out: no findings, nothing to place. A page whose stream dropped polls this every few seconds while the run
     # works, and every poll read the whole contract (fresh review, 2026-10-19).
     locator = ClauseLocator(run.document.sections) if run.findings else None
-    base = run_out(run, locator).model_dump(by_alias=False)
-    base["findings"] = [finding_out(f, locator) for f in run.findings]
+    # Each finding's answer is made once and used twice: building it again for the list doubled every detail read, and
+    # an account re-reads the values its guidance, question and quotes state (stress test, 2026-10-30).
+    built = {f.id: finding_out(f, locator) for f in run.findings}
+    base = run_out(run, locator, built).model_dump(by_alias=False)
+    base["findings"] = [built[f.id] for f in run.findings]
     spans = [s for f in run.findings for s in f.spans]
     return RunDetail(
         **base,
@@ -239,12 +249,24 @@ RUN_EXECUTOR = ThreadPoolExecutor(max_workers=64, thread_name_prefix="run")
 
 
 def _worker(run_id: str, provider: ModelProvider) -> None:
-    with SessionLocal() as session:
-        execute_run(session, run_id, provider_for(session.get(Run, run_id), provider))
+    """Answer the run, then let it go however that ended. A run whose ending could not be written (its own failure met a
+    write lock past the busy wait, a full disk) is then held by no worker, and the next read fails it
+    (application/recover_runs.py); the error is logged here with its run, not raised to the server, where it read
+    "Exception in ASGI application" and named no run (stress test, 2026-10-30)."""
+    try:
+        with SessionLocal() as session:
+            execute_run(session, run_id, provider_for(session.get(Run, run_id), provider))
+    except Exception:
+        log.exception("run_id=%s worker ended without recording how; the next read ends the run", run_id)
+    finally:
+        run_ended(run_id)
 
 
 async def _run_on_own_thread(run_id: str, provider: ModelProvider) -> None:
-    await asyncio.get_running_loop().run_in_executor(RUN_EXECUTOR, _worker, run_id, provider)
+    future = RUN_EXECUTOR.submit(_worker, run_id, provider)
+    # A run whose turn on a thread never comes (the executor shut down while it waited) is let go too.
+    future.add_done_callback(lambda done: run_ended(run_id) if done.cancelled() else None)
+    await asyncio.wrap_future(future)
 
 
 def provider_for(run: Run | None, default: ModelProvider) -> ModelProvider:
@@ -264,12 +286,20 @@ def create_run(
     workspace: str = Depends(current_workspace),
 ) -> RunOut:
     """202 with a new run, or 200 with this workspace's running or completed run that already has these inputs."""
+    # A run no one is answering any more gives its question back before the question is looked up: handed back, it
+    # would be followed until the next read ended it.
+    recover_interrupted_runs(session)
     started = start_run(session, body.document_id, body.guidance_id, body.question, provider, workspace=workspace)
+    try:
+        out = run_out(started.run)
+    except BaseException:
+        if started.created:
+            run_ended(started.run.id)  # no worker will be started for it: the next read ends it
+        raise
     if started.created:
         background.add_task(_run_on_own_thread, started.run.id, provider)
     else:
         response.status_code = status.HTTP_200_OK
-    out = run_out(started.run)
     out.reused = not started.created
     # The request's session lives until the background task ends (FastAPI closes yield-dependencies after
     # the response, and Starlette runs background tasks inside the response). Reading the run after the

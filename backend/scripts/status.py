@@ -1,5 +1,5 @@
-"""One look at the deployment: is the API answering, which model build is loaded, how much room the store has, how much
-of the day's run budget is spent, whether a run is stuck, and what each supervisor last wrote.
+"""One look at the deployment: is the API answering, which model build is loaded, how much room the store has, whether
+it passes its own check, how much of the day's run budget is spent, whether a run is stuck, and what each supervisor last wrote.
 
     .venv/Scripts/python scripts/status.py                                  # the owner's store (backend/data)
     .venv/Scripts/python scripts/status.py --data-dir <public store> --public  # the public demo's store and floor
@@ -163,6 +163,23 @@ def check_cache(server_log: Path) -> bool:
     return line("cache", False, "host-RAM prompt cache on: answers depend on what was asked before; set LLAMA_ARG_CACHE_RAM=0 and restart Ollama")
 
 
+def check_store(database: Path) -> bool:
+    """PRAGMA quick_check through the read-only engine: it reads every table and index, where the runs line reads two.
+    A damaged page in any other table was never seen here (stress test, 2026-10-30, ops 3)."""
+    if not database.exists():
+        return line("store", False, f"no {database.name} in the data directory")
+    engine = read_only(database)
+    try:
+        with engine.connect() as connection:
+            found = [str(row[0]) for row in connection.exec_driver_sql("PRAGMA quick_check")]
+    except Exception as error:  # noqa: BLE001 - a store that cannot even be checked is the problem this line names
+        return line("store", False, f"quick_check could not run: {type(error).__name__}")
+    finally:
+        engine.dispose()
+    ok = found == ["ok"]
+    return line("store", ok, "quick_check ok" if ok else f"quick_check: {len(found)} problem(s), first: {found[0][:120] if found else '?'}")
+
+
 def check_supervisor(logs: Path, tag: str) -> bool:
     path = logs / f"{tag}.supervisor.log"
     if not path.exists():
@@ -188,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         check_model(),
         check_cache(args.ollama_log),
         check_disk(args.data_dir, args.public),
+        check_store(args.data_dir / "workbench.db"),
         check_runs(args.data_dir / "workbench.db", args.max_runs_per_day if args.max_runs_per_day is not None else ceiling),
         check_tunnel(args.metrics.rstrip("/")),
         check_supervisor(args.logs, "api"),

@@ -259,3 +259,46 @@ def test_the_run_start_limit_is_20_unless_the_browser_flows_raise_it(environment
     probe = "from app.api import access; print(access.RUN_LIMIT, access.run_starts.limit)"
     out = subprocess.run([sys.executable, "-c", probe], cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True, check=True)
     assert out.stdout.split() == [str(expected), str(expected)]
+
+
+# ---------------------------------------------------------------------------- an invite over another reader's session
+# An invite in the address replaced the working session the browser held, with nothing on screen to say so: what the
+# reader added next went into the inviter's workspace (stress test, 2026-10-30, authz 1). The exchange now refuses to
+# put one reader's session over another's unless the request says so (?replace=true, sent once a person has chosen to
+# switch), and sets no cookie when it refuses.
+
+
+def _held_subject(gated: TestClient) -> str | None:
+    held = verify(gated.cookies.get(SESSION_COOKIE), "verity-session", SECRET)
+    return held.subject if held else None
+
+
+def test_an_invite_for_another_reader_does_not_replace_the_session_held(gated: TestClient) -> None:
+    enter(gated, invite("bea"))
+    refused = gated.post("/api/access/session", json={"invite": f"{ORIGIN}/#invite={invite('ari')}"})
+    assert refused.status_code == 409 and "set-cookie" not in refused.headers
+    assert "bea" in refused.json()["detail"] and "ari" in refused.json()["detail"], "both readers are named"
+    assert _held_subject(gated) == "bea"
+
+
+def test_a_switch_the_person_chose_is_made(gated: TestClient) -> None:
+    enter(gated, invite("bea"))
+    switched = gated.post("/api/access/session?replace=true", json={"invite": invite("ari")})
+    assert switched.status_code == 200 and switched.json()["subject"] == "ari"
+    assert _held_subject(gated) == "ari"
+
+
+@pytest.mark.parametrize("held", ["none", "same", "expired", "revoked"])
+def test_control_an_invite_over_no_working_session_or_its_own_enters(gated: TestClient, monkeypatch: pytest.MonkeyPatch, held: str) -> None:
+    if held == "same":
+        enter(gated, invite("ari"))
+    elif held == "expired":
+        gated.cookies.set(SESSION_COOKIE, mint("bea", "verity-session", 60, SECRET, now=time.time() - 3600), domain="testserver")
+    elif held == "revoked":
+        enter(gated, invite("bea"))
+        monkeypatch.setattr(config.settings, "access_revoked", ["bea"])
+    answer = gated.post("/api/access/session", json={"invite": invite("ari")})
+    given = re.search(rf"{SESSION_COOKIE}=([^;]+)", answer.headers.get("set-cookie", ""))
+    assert answer.status_code == 200 and given is not None
+    session = verify(given.group(1), "verity-session", SECRET)
+    assert session is not None and session.subject == "ari"

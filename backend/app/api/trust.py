@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from collections.abc import Iterator
+from contextlib import contextmanager
+
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.orm import Session, object_session
 
-from ..application.trust_run import diff_against, document_snapshot, manifest_of
+from ..application.trust_run import diff_with, document_snapshot, later_version, manifest_of
 from ..application.versions import declare_supersedes, lineage
 from ..application.workspace import require_run
 from ..db import get_session
 from ..document_names import display_name
+from ..errors import Busy
 from ..models import DocumentVersion, iso
 from ..schemas import (
     DocumentVersionOut,
@@ -25,7 +29,7 @@ from ..schemas import (
 )
 from ..trust.diff import TrustDiff
 from ..trust.model import TrustManifest
-from .access import current_workspace
+from .access import current_workspace, limit_document_reads, trust_reads_building
 
 router = APIRouter(prefix="/api", tags=["trust"])
 
@@ -136,22 +140,42 @@ def version_out(version: DocumentVersion) -> DocumentVersionOut:
 # ----------------------------------------------------------------------------- routes
 
 
+@contextmanager
+def _trust_read(request: Request) -> Iterator[None]:
+    """A few trust reads built at a time (access.TRUST_READS_AT_ONCE), each counted in the public store as a contract
+    view, only once it is built: a run or document this workspace cannot see, or a "try again", spends none of the hour."""
+    if not trust_reads_building.acquire(blocking=False):
+        raise Busy("Other readers' trust checks are being worked out; nothing was lost. Try again in a few seconds.", retry_after=5)
+    try:
+        limit_document_reads(request)
+        yield
+    finally:
+        trust_reads_building.release()
+
+
 @router.get("/runs/{run_id}/trust", response_model=TrustManifestOut)
-def run_trust(run_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> TrustManifestOut:
+def run_trust(run_id: str, request: Request, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> TrustManifestOut:
     """What each finding of a finished run stands on: its quotes, whether each stands once, the typed values they
     state, and the reader and rules it was made under."""
-    return manifest_out(manifest_of(session, require_run(session, run_id, workspace)))
+    run = require_run(session, run_id, workspace)
+    with _trust_read(request):
+        return manifest_out(manifest_of(session, run))
 
 
 @router.get("/runs/{run_id}/trust/diff", response_model=TrustDiffOut)
 def run_trust_diff(
-    run_id: str, document_id: str = Query(alias="documentId"), session: Session = Depends(get_session), workspace: str = Depends(current_workspace)
+    run_id: str,
+    request: Request,
+    document_id: str = Query(alias="documentId"),
+    session: Session = Depends(get_session),
+    workspace: str = Depends(current_workspace),
 ) -> TrustDiffOut:
     """What a later version of the document does to this run's findings: which are stale and why, which were
     established again, which the revision did not reach. Nothing is changed by asking."""
     run = require_run(session, run_id, workspace)
-    diff, later = diff_against(session, workspace, run, document_id)
-    return diff_out(diff, run.document_id, later.id)
+    later = later_version(session, workspace, run, document_id)
+    with _trust_read(request):
+        return diff_out(diff_with(session, run, later), run.document_id, later.id)
 
 
 @router.post("/documents/{document_id}/supersedes", response_model=DocumentVersionOut, status_code=status.HTTP_201_CREATED)

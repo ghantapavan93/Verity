@@ -162,3 +162,26 @@ def test_a_review_that_cannot_take_the_write_lock_is_refused_as_busy_and_writes_
         holder.close()
     assert rows(finding) == 0
     assert review(client, finding, "confirmed", "A. Reviewer", based_on=0).status_code == 201
+
+
+def test_the_same_decision_sent_at_once_without_a_base_is_written_once(client: TestClient) -> None:
+    # Without basedOn the repeat check read the reviews outside any transaction: four identical decisions released
+    # together wrote up to four rows, each answered 201 (stress test, 2026-10-30, concurrency 5).
+    finding = answered(client)
+    for round_, verdict in enumerate(["confirmed", "dismissed"] * 4):
+        before = rows(finding)
+        go = threading.Barrier(4)
+        created: list[bool] = []
+
+        def decide(verdict: ReviewVerdictName = verdict, go: threading.Barrier = go, created: list[bool] = created) -> None:
+            with db_module.SessionLocal() as session:
+                go.wait()
+                created.append(review_finding(session, finding, verdict, "Pat", None).created)
+
+        threads = [threading.Thread(target=decide) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+        assert sorted(created) == [False, False, False, True], (round_, created)
+        assert rows(finding) == before + 1
