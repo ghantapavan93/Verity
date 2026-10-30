@@ -33,6 +33,7 @@ from ..runs.relations import reached_start, replacement_starts
 from ..runs.versions import SEMANTIC_VERSIONS
 from .quotas import admit, run_quotas
 from .recover_runs import run_ended, run_started
+from .visible_input import has_visible_text
 from .workspace import require_document, require_guidance
 
 FINGERPRINT_KIND = "run/v1"
@@ -148,7 +149,9 @@ def start_run(
     question = visible_text(question).strip()
     # The length check before this counted invisible characters: a question of nothing but zero-width spaces passed it,
     # was stored empty and cost a model call. What is left once they are removed is what is asked.
-    if not question:
+    # Nor did a question of characters that render nothing alone (a joiner, a direction mark): it started a run (stress test,
+    # 2026-10-30).
+    if not has_visible_text(question):
         raise InvalidInput("The question has no visible text. Type a question about the contract.")
     prompt = load_prompt(prompt_version)
     task = task_for(guidance is not None)

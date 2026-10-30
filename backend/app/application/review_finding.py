@@ -9,14 +9,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from ..errors import Busy, Conflict, NotFound
+from ..db import write_locked
+from ..errors import Conflict, InvalidInput, NotFound
 from ..ingest.invisible import visible_text
 from ..models import Finding, FindingReview, ReviewVerdictName, iso
 from ..schemas import ReviewOut
+from .visible_input import has_visible_text
 
 
 def review_out(review: FindingReview | None) -> ReviewOut | None:
@@ -58,34 +58,27 @@ def review_finding(
         raise Conflict("only a finding shown as an answer can be reviewed; this one was withheld or its run did not complete")
 
     reviewer = visible_text(reviewer).strip()
-    note = visible_text(note or "").strip() or None
-    if based_on is not None and session.get_bind().dialect.name == "sqlite":
-        # Take the write lock before reading the latest review: two stale tabs cannot both pass the check below.
-        session.commit()
-        try:
-            session.execute(text("BEGIN IMMEDIATE"))
-        except OperationalError as error:
-            # SQLite waits for the lock (db.make_engine: 30 s), then says "database is locked": a 500 until the triage review.
-            session.rollback()
-            if "locked" not in str(error):
-                raise
-            raise Busy("Another decision is being recorded; nothing was written. Try again in a moment.") from error
+    if not has_visible_text(reviewer):
+        # A name of spaces or zero-width characters was recorded as "", and one of a joiner alone was printed in the memo
+        # as the reviewer (stress test, 2026-10-30): nothing is written.
+        raise InvalidInput("The reviewer's name has no visible text. Type the name the decision is recorded under.")
+    note = visible_text(note or "").strip()
+    note = note if has_visible_text(note) else None
+    # Every check and the write share one transaction under the write lock, with or without based_on: without it, the
+    # repeat check read the reviews outside any transaction, and four identical decisions sent at once wrote four rows
+    # (stress test, 2026-10-30). Busy, with nothing written, when the lock is not had in time.
+    session.commit()  # what was read above ends here; write_locked begins the transaction that decides
+    with write_locked(session):
         session.expire(finding, ["reviews"])
-    latest = finding.reviews[-1] if finding.reviews else None
-    if latest is not None and (latest.verdict, latest.reviewer, latest.note) == (verdict, reviewer, note):
-        session.commit()
-        return Reviewed(finding, finding.review, created=False)
-    if verdict == "cleared" and finding.review is None:
-        session.commit()
-        return Reviewed(finding, None, created=False)
-    if based_on is not None and based_on != latest_review_id(finding):
-        current = finding.review
-        session.rollback()
-        said = f"{current.verdict} by {current.reviewer}" if current else "returned to unreviewed"
-        raise Conflict(f"This finding was {said} after you opened it. Its current decision is shown; decide again if you still disagree.")
-
-    row = FindingReview(finding_id=finding.id, verdict=verdict, reviewer=reviewer, note=note, access_subject=access_subject)
-    session.add(row)
-    session.commit()
+        latest = finding.reviews[-1] if finding.reviews else None
+        if latest is not None and (latest.verdict, latest.reviewer, latest.note) == (verdict, reviewer, note):
+            return Reviewed(finding, finding.review, created=False)
+        if verdict == "cleared" and finding.review is None:
+            return Reviewed(finding, None, created=False)
+        if based_on is not None and based_on != latest_review_id(finding):
+            current = finding.review
+            said = f"{current.verdict} by {current.reviewer}" if current else "returned to unreviewed"
+            raise Conflict(f"This finding was {said} after you opened it. Its current decision is shown; decide again if you still disagree.")
+        session.add(FindingReview(finding_id=finding.id, verdict=verdict, reviewer=reviewer, note=note, access_subject=access_subject))
     session.refresh(finding)
     return Reviewed(finding, finding.review, created=True)

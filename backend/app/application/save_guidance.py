@@ -13,6 +13,7 @@ from ..hashing import sha256_text
 from ..ingest.invisible import visible_text
 from ..models import Guidance
 from .quotas import admit, workspace_open
+from .visible_input import has_visible_text
 from .workspace import is_public
 
 
@@ -31,8 +32,9 @@ def stored_guidance(session: Session, sha256: str, workspace: str | None = None)
 
 def save_guidance(session: Session, text: str, source: str = "pasted", workspace: str | None = None) -> SavedGuidance:
     text = visible_text(text).strip()  # guidance is read by the day parser too: no invisible characters in it
-    if not text:
-        # Found while tracing (2026-09-29): whitespace was stored as empty guidance and the status logic was told guidance existed.
+    if not has_visible_text(text):
+        # Found while tracing (2026-09-29): whitespace was stored as empty guidance and the status logic was told guidance existed;
+        # then characters that render nothing (a joiner, a direction mark) passed the same test (stress test, 2026-10-30).
         raise InvalidInput("guidance is empty once whitespace is removed; paste a rule, a note or an instruction, or ask without guidance")
     digest = sha256_text(text)
 
