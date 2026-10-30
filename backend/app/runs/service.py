@@ -221,8 +221,9 @@ class FrozenOptions:
 
 def _retrieve(sections: list[Section], question: str, guidance: str | None, frozen: FrozenOptions) -> tuple[list[Section], RetrievalModeName, dict[str, str]]:
     """The sections handed to the model, how they were chosen, and, by section id, why each section the contract points
-    to was added (retrieval-v2, runs.links). `opening_fallback` means the retriever ranked no section for the question,
-    and the opening sections were handed over instead: they were not chosen for it, and no link is followed from them."""
+    to was added (retrieval-v2, runs.links). `opening_fallback` means the retriever ranked no section for the question
+    (since retrieval-v3: no section shares a word with it), and the opening sections were handed over instead: they were
+    not chosen for it, and no link is followed from them."""
     pairs = [(s.heading, s.text) for s in sections]
     hybrid = frozen.retriever == "hybrid"
     index: LexicalIndex | HybridIndex = HybridIndex(pairs, embed=partial(ollama_embed, model=frozen.embed_model)) if hybrid else LexicalIndex(pairs)

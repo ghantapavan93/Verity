@@ -55,6 +55,7 @@ layers =
     app.batch | app.goldens | app.families
     app.application
     app.runs | app.routing | app.trust
-    app.analysis | app.retrieval | app.verify | app.ingest | app.memo | app.policy
+    app.analysis | app.retrieval | app.ingest | app.memo | app.policy
+    app.verify
     app.providers
     app.document_names : app.models : app.db : app.schemas : app.config : app.hashing : app.errors : app.unseen : app.log_sink

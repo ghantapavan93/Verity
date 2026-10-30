@@ -126,6 +126,13 @@ RECORDED: dict[str, str] = {
     # Re-recorded 2026-10-19 (backend audit): a run's defined terms are read once for its seeds and no longer cached
     # between runs; old and new gave the same links on 580 cases over 150 EDGAR contracts.
     "retrieval-v2": "4829c7d19f9a7ba3",
+    # retrieval-v3, 2026-10-30 (the stress test's retrieval corner): text read as the verifier reads it (quotation marks
+    # folded, casefolded, a possessive its word); every section sharing a word with the query ranked while places remain;
+    # an alias group fires only on a phrase that names its concept, never on its clause wording (aliases.WORDING); a
+    # definition read in every pair of quotation marks, words of construction not terms, a term used in capitals; the
+    # amendments of every handed section handed with it, a linked section's included (runs.links).
+    # retrieval-v3 is not committed to main, so its fingerprint is replaced, not bumped, as the branch adds to it.
+    "retrieval-v3": "1e7162826fdb5559",
 }
 
 

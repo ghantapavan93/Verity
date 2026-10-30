@@ -214,3 +214,54 @@ stop, ARTICLE lines joined to their titles, long wrapped clause lines as body) m
 to 0.965: one SkillOpt contract that the earlier reading cut into four blocks, each of which carried every span, is now
 read into its clauses, and its cap on liability sits in §4.2, ranked seventh. The study's unstyled DOCX went from 0 of
 293 headings to 293 of 293, and its TXT and PDF readings from 260 to 275.
+
+## What the stress test found: retrieval-v3 (2026-10-30, BM25, no model call)
+
+The stress test's retrieval corner (2026-10-30, outside the repository) found five ways the sections handed to the model
+broke their own rules: the same question typed with a straight or a curly apostrophe was handed different sections; an
+alias group fired on generic words no question about its concept needs ("time", "reason", "including but not limited
+to"); BM25Okapi gave a word in exactly half the sections an IDF of 0 and the score > 0 cut dropped the section holding
+it while places were free; a definition in single quotes or guillemets was never linked, and a word an interpretation
+clause defines ("including", "to") took link places; and a definition or cited clause handed as a link came in its
+superseded wording, without the amendment that changed it. Each is fixed at its shared primitive (`retrieval/lexical.py`
+`tokenize` and `LexicalIndex.search`, the alias table's `WORDING`, `runs/links.py`), with property tests and controls in
+`test_lexical.py`, `test_aliases.py` and `test_retrieval_links.py`. The worst-case prompt is unchanged: at most k ranked
+sections and `MAX_LINKS` linked ones, within k full windows.
+
+Measured on the control and the study above, and on all of CUAD read by the product's reader (the stress test's reading
+cache): production `_retrieve`, the alias table on, 35 questions, 3 with guidance and the batch's cap question over 510
+contracts, 17,850 runs, 6,194 of them with an expert span. Scripts: outside the repository.
+
+| Measure | retrieval-v2 | retrieval-v3 |
+|---|---|---|
+| CUAD: handed lists that differ between the straight and curly question (governing law, audit, no-solicit, the batch cap question) | 395, 206, 54, 270 | 0, 0, 0, 0 |
+| CUAD: governing law handed for "Which state's law governs this contract?" | 0.842 | 0.941 |
+| CUAD: cap handed for the batch's "What is the cap on each party's liability?" | 0.920 | 0.949 |
+| CUAD: runs ranking fewer than min(6, N) while a section sharing a word was left out | 381 | 0 |
+| CUAD: twelve questions that name no alias concept, against the table off | 1.4 to 13.4 points below | equal |
+| CUAD: runs spending a link place on a word of construction | 198 | 0 |
+| CUAD: definitions of the terms an expert span uses, handed when its clause was | 0.551 | 0.589 |
+| CUAD: answer handed, 6,194 labelled runs | 0.914 | 0.941 (213 gained, 43 lost) |
+| Control (202 labelled cases), R@6 handed / MRR | 0.965 / 0.843 | 0.965 / 0.860 |
+| Control, mean section characters handed | 19,225 | 19,724 (+2.6%) |
+| Study: every needed passage handed (147) / definitions (42) | 137 / 42 | 137 / 42 |
+| `_retrieve` on the four largest EDGAR texts (2.0 to 4.6 MB) | 0.4 to 1.4 s | 0.6 to 1.6 s |
+
+Of the 43 answers lost on CUAD, 30 are questions that name no alias concept, now handed exactly what they are handed with
+the table off: the group that fired by accident had found their clause. 11 are questions with a possessive, now handed
+what their curly and possessive-dropped forms are (audit rights straight 0.986 to 0.977; the curly form was 0.972). One
+is a four-section contract whose answer shares no word of the question: the opening fallback had handed it all four
+sections, and now only the two that share a word. One is a termination question whose ranking moved. The eval_retrieval sets keep R@6 (CUAD both 0.976, goldens 0.921); the handed
+list changes in 59 of their 202 cases and in 15 of the 38 present goldens, none losing its label.
+
+Measured and rejected on the way: matching an alias name with stopwords kept, as the stress test proposed, lost change of
+control's natural question ("is acquired or merges" no longer meets "acquired by": 0.950 to 0.736), so the matcher is
+kept and only `WORDING` stopped firing. Following every sentence with an amending word from every handed section cost
+definition recall (0.595 to 0.538): most name a clause in passing ("Notwithstanding Section 8.2", "as amended from time to
+time in accordance with Section 20.3"). Only a sentence that changes a provision it names ("Section 1.3 of the Agreement
+is hereby amended", "amend Article 16") reaches every handed section, a link's included, and a clause's numbered parent;
+with it, links changed in 103 of 15,810 CUAD runs, no amendment link was lost, and the 113 added are mostly real amending
+instruments filed with their agreement.
+
+**Not yet measured:** the 44 goldens with the model under retrieval-v3, against retrieval-v2 on the same prompt, the rule
+every earlier retrieval change met. Their labels are all still handed; their order is not the same.

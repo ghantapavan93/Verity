@@ -8,6 +8,13 @@ a concept by any of its phrases, the other phrases of that concept join the quer
 versioned by its hash, and recorded on every run that used it (`retrieval_aliases` in the run's options), so a
 run's candidates stay reproducible after the table changes. Off by default when it was built; on by default since the
 measurement in docs/RETRIEVAL.md adopted it (`WORKBENCH_RETRIEVAL_ALIASES=0` turns it off).
+
+A phrase in ``WORDING`` is how a clause of the concept is worded, not a name for the concept: it joins the query when the
+group fires and never fires it (retrieval-v3, stress test 2026-10-30, retrieval corner). Matched on the question's words
+with stopwords removed, "at any time" and "for any reason" were "time" and "reason", and "not limited" sat inside every
+"including but not limited to", so the termination and uncapped-liability groups fired on questions about insurance,
+warranties and audits, and the clause that answered them lost its place: on CUAD-510, "How much time does a party have
+to obtain the required insurance?" was handed the insurance clause in 0.976 of contracts with the table off and 0.928 on.
 """
 
 from __future__ import annotations
@@ -111,7 +118,24 @@ ALIAS_GROUPS: tuple[tuple[str, ...], ...] = (
     ),
 )
 
-ALIASES_SHA256 = sha256_text(json.dumps(ALIAS_GROUPS, sort_keys=True))
+# Clause boilerplate of the groups above, added on expansion and never a trigger. A phrase is a name, and fires, only if
+# no question that does not name its concept loses its answer with the table on (docs/RETRIEVAL.md, retrieval-v3).
+WORDING: frozenset[str] = frozenset(
+    {
+        "not limited",
+        "shall not apply",
+        "notwithstanding the foregoing",
+        "shall not exceed",
+        "for any reason",
+        "at any time",
+        "for no reason",
+        "prior written notice",
+        "days notice",
+        "days' notice",
+    }
+)
+
+ALIASES_SHA256 = sha256_text(json.dumps({"groups": ALIAS_GROUPS, "wording": sorted(WORDING)}, sort_keys=True))
 
 
 def _phrase_in(tokens: list[str], phrase_tokens: list[str]) -> bool:
@@ -122,16 +146,16 @@ def _phrase_in(tokens: list[str], phrase_tokens: list[str]) -> bool:
 
 
 def expand_query(query: str) -> str:
-    """The query with the other phrases of every concept it names appended, once each, in table order.
-    A query that names no concept is returned unchanged, so a run without a match keeps its candidates."""
+    """The query with the other phrases of every concept it names appended, once each, in table order: named by a
+    phrase of its group that is not ``WORDING``. A query that names no concept is returned unchanged, so a run without a
+    match keeps its candidates."""
     tokens = tokenize(query)
     extra: list[str] = []
     seen = set(tokens)
     for group in ALIAS_GROUPS:
-        phrases = [tokenize(p) for p in group]
-        if not any(_phrase_in(tokens, p) for p in phrases if p):
+        if not any(_phrase_in(tokens, tokenize(name)) for name in group if name not in WORDING):
             continue
-        for phrase_tokens in phrases:
+        for phrase_tokens in (tokenize(p) for p in group):
             for token in phrase_tokens:
                 if token not in seen:
                     seen.add(token)
