@@ -321,14 +321,16 @@ def get_run_explanation(run_id: str, session: Session = Depends(get_session), wo
     return explain_run(session, run_id)
 
 
-@router.get("/{run_id}/evidence-pack", dependencies=[Depends(limit_pack_downloads)])
-def evidence_pack(run_id: str, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> Response:
+@router.get("/{run_id}/evidence-pack")
+def evidence_pack(run_id: str, request: Request, session: Session = Depends(get_session), workspace: str = Depends(current_workspace)) -> Response:
     """A zip with the original bytes, the canonical sections, the run record, every located span and a stdlib verify.py."""
     require_run(session, run_id, workspace)
     # A few at a time: each holds the contract's bytes twice over while it is zipped (access.PACKS_AT_ONCE).
     if not packs_building.acquire(blocking=False):
         raise Busy("Evidence packs are being built for other readers; nothing was lost. Try again in a few seconds.", retry_after=5)
     try:
+        # Counted only for a pack that is built: a run this workspace cannot see, or a "try again", spends none of the hour.
+        limit_pack_downloads(request)
         pack = build_evidence_pack(session, run_id)
     finally:
         packs_building.release()

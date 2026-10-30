@@ -76,3 +76,20 @@ def test_control_the_owner_store_is_not_bounded(client: TestClient, monkeypatch:
 
     run_id = upload_and_ask(client, "What notice applies?")["run_id"]
     assert [client.get(f"/api/runs/{run_id}/evidence-pack").status_code for _ in range(3)] == [200, 200, 200]
+
+
+def test_a_refused_or_unknown_pack_spends_none_of_the_hour(public: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The hourly pack slot was taken before the run was looked up and before a pack could be built, so a 404 or a 503
+    # ("try again in a few seconds") spent one of the thirty (fresh review, 2026-10-30).
+    monkeypatch.setattr(access.address_packs, "limit", 1)
+    visitor, _, run_id = _visitor_with_run(public)
+    assert visitor.get("/api/runs/no-such-run/evidence-pack").status_code == 404
+    for _ in range(access.PACKS_AT_ONCE):
+        assert access.packs_building.acquire(blocking=False)
+    try:
+        assert visitor.get(f"/api/runs/{run_id}/evidence-pack").status_code == 503
+    finally:
+        for _ in range(access.PACKS_AT_ONCE):
+            access.packs_building.release()
+    assert visitor.get(f"/api/runs/{run_id}/evidence-pack").status_code == 200  # the one slot was still there
+    assert visitor.get(f"/api/runs/{run_id}/evidence-pack").status_code == 429  # control: and now it is spent

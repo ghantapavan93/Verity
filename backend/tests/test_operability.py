@@ -174,3 +174,36 @@ def test_health_asks_the_model_server_at_most_once_in_a_while(client: TestClient
     for _ in range(5):
         assert client.get("/api/health").json()["ok"] is True
     assert len(calls) == 1
+
+
+def test_requests_at_the_cache_s_expiry_share_one_probe() -> None:
+    # Concurrent health checks at the moment the cached answer expired each asked the model server (fresh review,
+    # 2026-10-30): one asks, the others wait for its answer.
+    import threading
+    import time
+
+    from app.api.health import probe_model
+
+    calls: list[int] = []
+
+    class Slow:
+        name, model = "ollama", "qwen3:8b"
+
+        def healthy(self) -> tuple[bool, str]:
+            calls.append(1)
+            time.sleep(0.2)
+            return True, "qwen3:8b ready"
+
+    provider = Slow()
+    gate = threading.Barrier(8)
+
+    def ask() -> None:
+        gate.wait()
+        assert probe_model(provider) == (True, "qwen3:8b ready")  # type: ignore[arg-type]
+
+    threads = [threading.Thread(target=ask) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(calls) == 1

@@ -49,16 +49,16 @@ _probes_lock = threading.Lock()
 
 
 def probe_model(provider: ModelProvider) -> tuple[bool, str]:
-    """The provider's health, asked at most once per HEALTH_PROBE_TTL_S for each provider."""
-    now = time.monotonic()
+    """The provider's health, asked at most once per HEALTH_PROBE_TTL_S for each provider. One probe at a time: requests
+    that arrive while it is asked wait for its answer, rather than each asking the model server again."""
     with _probes_lock:
+        now = time.monotonic()
         kept = _probes.get(provider)
         if kept is not None and now - kept[0] < HEALTH_PROBE_TTL_S:
             return kept[1]
-    answer = provider.healthy()
-    with _probes_lock:
+        answer = provider.healthy()
         _probes[provider] = (now, answer)
-    return answer
+        return answer
 
 
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
