@@ -217,9 +217,7 @@ def align(old: Sequence[SectionText], new: Sequence[SectionText]) -> Alignment:
     scored = sorted(found, key=lambda item: (-item[0], item[1], item[2]))
     used_old: set[int] = set()
     used_new: set[int] = set()
-    for score, i, j in scored:
-        if score < SAME_SECTION:
-            break
+    for _score, i, j in scored:  # every pair kept reached SAME_SECTION
         if i not in used_old and j not in used_new:
             counterpart[rest_old[i][0].key] = rest_new[j][0]
             used_old.add(i)

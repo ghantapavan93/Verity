@@ -27,7 +27,7 @@ FAULTS: tuple[tuple[str, str, str, str], ...] = (
     ("a finding with no quote is supported", "model.py", "    if not quotes or any(", "    if any("),
     ("any document may be diffed without a recorded version", "../application/trust_run.py", "if later.id != run.document_id and not is_later_version(", "if False and not is_later_version("),
     ("lineage is read without the workspace", "../application/versions.py", "filter_by(workspace_id=workspace, document_id=document_id).one_or_none()", "filter_by(document_id=document_id).first()"),
-    ("sections align on wording at any overlap", "diff.py", "        if score < SAME_SECTION:", "        if score < 0.0:"),
+    ("sections align on wording at any overlap", "diff.py", "            if score >= SAME_SECTION:\n                found.append", "            if score >= 0.0:\n                found.append"),
     ("an old reader is always compatible", "compile.py", "    if reader_version == current_reader:", "    if True:"),
     ("an old reader is compatible though a quote is lost", "compile.py", "    lost = [item for item in located if not any(locate(item.quote, section.text, section.label) for section in current_reading)]", "    lost = []"),
     ("an unreadable document counts as compatible", "compile.py", "    if current_reading is None:", "    if False:"),

@@ -103,7 +103,10 @@ def holds_connections(loop: str | None, tmp_path: Path, held: int = 600) -> bool
             assert time.monotonic() < deadline, "the API did not start"
             time.sleep(0.3)
         for _ in range(held):
-            client = socket.create_connection(("127.0.0.1", port), timeout=5)
+            try:
+                client = socket.create_connection(("127.0.0.1", port), timeout=5)
+            except OSError:  # refused or unanswered: a loop past its socket limit is not holding them (seen on the gate, 2026-10-30)
+                return False
             sockets.append(client)
         time.sleep(1)
         return healthy(port)
