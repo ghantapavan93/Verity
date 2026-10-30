@@ -3,11 +3,16 @@ about it: a second datastore is added when a measurement needs one."""
 
 from __future__ import annotations
 
+import functools
+import logging
+import re
+import sqlite3
 import threading
 import time
 import weakref
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine import ExceptionContext
@@ -19,6 +24,8 @@ from sqlalchemy.schema import CreateIndex
 
 from .config import settings
 from .errors import Busy
+
+log = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -110,6 +117,7 @@ def init_db(target_engine: Engine | None = None) -> None:
     target = target_engine or engine
     Base.metadata.create_all(target)
     ensure_columns(target)
+    ensure_checks(target)
     ensure_immutability(target)
 
 
@@ -135,6 +143,155 @@ def ensure_columns(target_engine: Engine) -> None:
                 connection.execute(CreateIndex(index, if_not_exists=True))
             for name in SUPERSEDED_INDEXES.get(table.name, ()):
                 connection.exec_driver_sql(f'DROP INDEX IF EXISTS "{name}"')
+
+
+class StoreDrift(RuntimeError):
+    """The store holds rows a constraint the models declare refuses: it is not opened, and nothing in it was changed."""
+
+
+def _normalised(sql: str) -> str:
+    return " ".join(sql.split())
+
+
+def check_bodies(table_sql: str) -> dict[str, str]:
+    """Each named CHECK of a CREATE TABLE statement, by name, its body with whitespace normalised. The body is read to
+    its own closing parenthesis, past any parenthesis or quote inside it."""
+    checks = {}
+    for match in re.finditer(r'CONSTRAINT\s+"?(\w+)"?\s+CHECK\s*\(', table_sql, re.IGNORECASE):
+        depth, at, quote = 1, match.end(), ""
+        while depth:
+            character = table_sql[at]
+            if quote:
+                quote = "" if character == quote else quote  # a doubled quote closes and opens again
+            elif character in "'\"":
+                quote = character
+            else:
+                depth += {"(": 1, ")": -1}.get(character, 0)
+            at += 1
+        checks[match.group(1)] = _normalised(table_sql[match.end() : at - 1])
+    return checks
+
+
+def describe_store(connection: Any) -> dict[str, dict[str, Any]]:  # noqa: ANN401 - a SQLAlchemy or DB-API connection
+    """What a store's schema says, table by table: its columns (type, NOT NULL, default, primary key), its foreign keys,
+    its CHECKs by name and body, its indexes and its triggers by name and statement. One description for a store and for
+    the models (a fresh store in memory), so the two can be compared whole."""
+    run = connection.exec_driver_sql if hasattr(connection, "exec_driver_sql") else connection.execute
+    tables = {str(name): str(sql) for name, sql in run("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")}
+    described: dict[str, dict[str, Any]] = {}
+    for name, sql in tables.items():
+        described[name] = {
+            "columns": {str(c[1]): (str(c[2]).upper(), bool(c[3]), c[4], int(c[5])) for c in run(f'PRAGMA table_info("{name}")')},
+            "foreign_keys": sorted((str(k[3]), str(k[2]), str(k[4]), str(k[6])) for k in run(f'PRAGMA foreign_key_list("{name}")')),
+            "checks": check_bodies(sql),
+            "indexes": {},
+            "triggers": {},
+        }
+    for kind, name, table, sql in run("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type IN ('index', 'trigger') AND sql IS NOT NULL"):
+        if str(table) in described:
+            described[str(table)]["indexes" if kind == "index" else "triggers"][str(name)] = _normalised(str(sql))
+    return described
+
+
+@functools.cache
+def declared_tables() -> dict[str, str]:
+    """Each table's CREATE statement as the models make it: a fresh store, built in memory."""
+    from . import models  # noqa: F401  (registers the tables)
+
+    memory = create_engine("sqlite://")
+    Base.metadata.create_all(memory)
+    with memory.connect() as connection:
+        made = {str(name): str(sql) for name, sql in connection.exec_driver_sql("SELECT name, sql FROM sqlite_master WHERE type = 'table'")}
+    memory.dispose()
+    return made
+
+
+def ensure_checks(target_engine: Engine) -> None:
+    """A table whose CHECKs differ from the models', by name or by body, is rebuilt with the models' statement.
+
+    SQLite cannot add or change a CHECK in place, and init_db only added columns: stores created by release-2026-10-02
+    and before never gained ck_findings_status_source, and accepted every pair a fresh store refuses. A vocabulary
+    widened under the same name would have been worse: the old store would refuse the new build's legitimate rows, in
+    production only (stress test, 2026-10-30, store evolution 4). Comparing bodies covers added, widened and narrowed.
+    A store that matches is only read (sqlite_master), never written."""
+    if target_engine.url.get_backend_name() != "sqlite":
+        return
+    with target_engine.connect() as connection:
+        stored = {str(name): str(sql) for name, sql in connection.exec_driver_sql("SELECT name, sql FROM sqlite_master WHERE type = 'table'")}
+    for table, declared in declared_tables().items():
+        if table in stored and check_bodies(stored[table]) != check_bodies(declared):
+            _rebuild(target_engine, table, declared)
+
+
+def _rebuild(target_engine: Engine, table: str, declared: str) -> None:
+    """SQLite's documented procedure for a change ALTER TABLE cannot make (sqlite.org/lang_altertable.html, "Making
+    Other Kinds Of Table Schema Changes"), in one transaction on one connection, with the two steps whose absence the
+    stress test's skeptic reproduced:
+
+    - foreign keys off before the transaction begins (inside one the PRAGMA does nothing, and make_engine turns them
+      on): with them on, DROP TABLE findings deleted every evidence span and review by cascade, and foreign_key_check
+      saw nothing wrong;
+    - every trigger dropped first and put back after: another table's trigger names this one, and RENAME failed on it.
+
+    Every row is checked against the models' CHECKs before anything changes, and the store is refused, its ids named,
+    if any fails. No backup file is written beside the store: the transaction is all or nothing, and a copy of the
+    public store would keep visitors' contracts past their retention (application/retention.py)."""
+    raw = target_engine.raw_connection()
+    connection = raw.driver_connection
+    assert isinstance(connection, sqlite3.Connection)
+    rebuilt = f"{table}__rebuilt"
+    manual = connection.isolation_level
+    connection.isolation_level = None  # the transaction below is begun and ended here, and nowhere else
+    try:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            stored_columns = [str(c[1]) for c in connection.execute(f'PRAGMA table_info("{table}")')]
+            key = next((str(c[1]) for c in connection.execute(f'PRAGMA table_info("{table}")') if c[5] == 1), "rowid")
+            refused = []
+            for name, body in check_bodies(declared).items():
+                ids = [str(row[0]) for row in connection.execute(f'SELECT "{key}" FROM "{table}" WHERE NOT ({body}) LIMIT 20')]
+                if ids:
+                    refused.append(f"{name} refuses {table} {', '.join(ids)}")
+            dropped = [c for c in stored_columns if c not in Base.metadata.tables[table].columns]
+            if dropped:
+                refused.append(f"{table} holds column(s) the models no longer declare, which the rebuild would lose: {', '.join(dropped)}")
+            if refused:
+                raise StoreDrift(
+                    f"The store's {table} table cannot take the models' constraints, so it was not opened and nothing was changed: {'; '.join(refused)}"
+                )
+            tables = [str(r[0]) for r in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")]
+            before = {name: connection.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0] for name in tables}
+            triggers = [(str(n), str(s)) for n, s in connection.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'")]
+            indexes = [
+                str(s) for (s,) in connection.execute("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL", (table,))
+            ]
+            for name, _statement in triggers:
+                connection.execute(f'DROP TRIGGER "{name}"')
+            connection.execute(re.sub(rf'^CREATE TABLE\s+"?{table}"?(?=\s*\()', f'CREATE TABLE "{rebuilt}"', declared, count=1))
+            columns = ", ".join(f'"{c}"' for c in stored_columns)
+            connection.execute(f'INSERT INTO "{rebuilt}" ({columns}) SELECT {columns} FROM "{table}"')
+            connection.execute(f'DROP TABLE "{table}"')
+            connection.execute(f'ALTER TABLE "{rebuilt}" RENAME TO "{table}"')
+            for statement in indexes:
+                connection.execute(statement)
+            for _name, statement in triggers:
+                connection.execute(statement)
+            after = {name: connection.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0] for name in tables}
+            dangling = connection.execute("PRAGMA foreign_key_check").fetchall()
+            if after != before or dangling:
+                raise RuntimeError(
+                    f"rebuilding {table} would change the store (rows {before} then {after}; {len(dangling)} dangling reference(s)): rolled back"
+                )
+            connection.execute("COMMIT")
+        except BaseException:
+            connection.execute("ROLLBACK")
+            raise
+        log.warning("rebuilt table %s with the models' constraints (%d rows)", table, before[table])
+    finally:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.isolation_level = manual
+        raw.close()
 
 
 def immutability_triggers() -> list[tuple[str, str]]:
