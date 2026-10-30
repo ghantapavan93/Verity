@@ -173,7 +173,9 @@ def _read_as(suffix: str, data: bytes) -> ReadResult:
     except Exception as error:
         # pypdf's LimitReachedError is among these: it guards decompression and also flags damaged structure ("Invalid CID
         # width range"), so it is not evidence of size; a file the parsers cannot finish is unreadable, whatever the shape.
-        log.warning("reader refused a damaged %s: %s: %s", suffix, type(error).__name__, str(error)[:200])
+        # By kind only: the parsers' messages quote the file ("Invalid Elementary Object starting with b'}' @61:" and 80
+        # bytes of the page stream after it), and a log line outlives the visitor's data (privacy review, 2026-10-30).
+        log.warning("reader refused a damaged %s: %s", suffix, type(error).__name__)
         raise UnsupportedFile(UNREADABLE.get(suffix, "the file is not readable plain text")) from error
 
 

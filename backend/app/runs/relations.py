@@ -249,6 +249,27 @@ class _Document:
         self._openings: dict[int, list[tuple[str, int]]] = {}
         self._numbered: dict[str, list[int]] | None = None
         self._defined: dict[str, set[str]] | None = None
+        self._definitions: dict[str, Passage] | None = None
+        self._index: dict[str, int] | None = None
+
+    def index_of(self, section_id: str) -> int:
+        if self._index is None:
+            self._index = {section.id: index for index, section in enumerate(self.sections)}
+        return self._index[section_id]
+
+    def definition(self, term: str, parts: dict[str, str]) -> Passage | None:
+        """Where the body of the agreement (no amendment) first defines ``term``: from its term to the end of its sentence."""
+        if self._definitions is None:
+            self._definitions = {}
+            for section in self.sections:
+                if parts.get(section.id) == "amendment":
+                    continue
+                whole = Passage(section.id, _label(section), 0, len(section.text), section.text)
+                for match in _FRESH_DEFINITION.finditer(section.text):
+                    found = _definition_in(whole, f'the definition of "{match.group("term")}"')
+                    if found is not None:
+                        self._definitions.setdefault(match.group("term"), found)
+        return self._definitions.get(term)
 
     def openings(self, index: int) -> list[tuple[str, int]]:
         if index not in self._openings:
@@ -374,22 +395,68 @@ def _replacements(document: _Document, section: Readable, as_of: date) -> Iterat
         definition = _definition_in(replaced, only) if replaced is not None and only else None
         if definition is not None:
             replaced, limits = definition, limits[1:]
-        effective = None
-        starts: list[str] = []
-        for begins in _STARTS.finditer(stated):
-            when, said = document.date_named(begins.group("when")), " ".join(begins.group(0).split())
-            if when is not None:
-                starts.append(when.isoformat())
-            if when is not None and when <= as_of:
-                effective = f"{when.isoformat()}, {' '.join(begins.group('when').split())}"
-            else:
-                limits.append(said if when is None else f"{said} ({when.isoformat()}, not reached on {as_of.isoformat()})")
+        effective, starts = _started(document, stated, as_of, limits)
         yield Relation(
             "replaces",
             Passage(section.id, _label(section), head, tail, text[head:tail]),
             target=target,
             replaced=replaced,
             replacement=Passage(section.id, _label(section), wording[0], wording[1], text[wording[0] : wording[1]]) if wording else None,
+            scope="; ".join(limits) or None,
+            effective=effective,
+            starts=tuple(starts),
+        )
+
+
+def _started(document: _Document, stated: str, as_of: date, limits: list[str]) -> tuple[str | None, list[str]]:
+    """The start a statement states and code found already reached ("2025-09-18, the Amendment Date"), and every start it
+    read (ISO dates); a start code cannot read, or one not yet reached, is added to ``limits``, as written."""
+    effective = None
+    starts: list[str] = []
+    for begins in _STARTS.finditer(stated):
+        when, said = document.date_named(begins.group("when")), " ".join(begins.group(0).split())
+        if when is not None:
+            starts.append(when.isoformat())
+        if when is not None and when <= as_of:
+            effective = f"{when.isoformat()}, {' '.join(begins.group('when').split())}"
+        else:
+            limits.append(said if when is None else f"{said} ({when.isoformat()}, not reached on {as_of.isoformat()})")
+    return effective, starts
+
+
+# A definition stated afresh: the term in quotation marks, then its defining verb, "now" or "shall" allowed between
+# ("With effect from the Amendment Date, "Notice Period" means thirty (30) days", "… so that "Notice Period" now means …").
+_FRESH_DEFINITION = re.compile(
+    r"[\"“](?P<term>[^\"”]{1,60})[\"”]\s+(?:(?:shall\s+)?now\s+|shall\s+(?:hereby\s+)?)?(?:means?|has\s+the\s+meaning|refers?\s+to)\b", re.IGNORECASE
+)
+
+
+def _fresh_definitions(document: _Document, section: Readable, as_of: date, located: Sequence[Relation], parts: dict[str, str]) -> Iterator[Relation]:
+    """A term an amendment defines afresh that the body of the agreement defines already: the body's definition is
+    replaced text and the amendment's the replacement (policy-v17). Until then a fresh '"Notice Period" means thirty (30)
+    days' in an amendment was no statement at all, and a pass quoting the body's ninety days stood with code's day count
+    of it (stress test, 2026-10-30). Not a statement: a term the body does not define ("Amendment Date"), or a definition
+    inside the new wording another statement quotes, which that statement already locates."""
+    text = section.text
+    for match in _FRESH_DEFINITION.finditer(text):
+        if any(
+            r.replacement is not None and r.replacement.section_id == section.id and r.replacement.start <= match.start() < r.replacement.end for r in located
+        ):
+            continue
+        replaced = document.definition(match.group("term"), parts)
+        if replaced is None or any(r.replaced == replaced for r in located):
+            continue
+        head, tail = _sentence(text, match.start(), match.end(), colon_ends=False)
+        stop = _DEFINITION_ENDS.search(text, match.end())
+        end = stop.end() if stop is not None and stop.group(0) != "\n" else (stop.start() if stop is not None else len(text))
+        limits = [" ".join(m.group(0).split()) for m in _LIMIT.finditer(text[head : match.start()])]
+        effective, starts = _started(document, text[head : match.start()], as_of, limits)
+        yield Relation(
+            "replaces",
+            Passage(section.id, _label(section), head, tail, text[head:tail]),
+            target=document.sections[document.index_of(replaced.section_id)].number or None,
+            replaced=replaced,
+            replacement=Passage(section.id, _label(section), match.start(), end, text[match.start() : end]),
             scope="; ".join(limits) or None,
             effective=effective,
             starts=tuple(starts),
@@ -426,11 +493,16 @@ def _precedences(section: Readable) -> Iterator[Relation]:
 
 def locate_relations(sections: Sequence[Readable], as_of: date) -> list[Relation]:
     """Every replacement and precedence statement in the document, in reading order. One regex pass over each section;
-    a target is found through a clause index built once, only when some statement names one."""
+    a target is found through a clause index built once, only when some statement names one. In an amendment, a term
+    the body defines that it defines afresh is a replacement of that definition (`_fresh_definitions`)."""
     document = _Document(sections)
+    parts = parts_of(sections)
     found: list[Relation] = []
     for section in sections:
-        found += _replacements(document, section, as_of)
+        here = list(_replacements(document, section, as_of))
+        if parts.get(section.id) == "amendment":
+            here += _fresh_definitions(document, section, as_of, here, parts)
+        found += here
         found += _precedences(section)
     return found
 
@@ -638,6 +710,26 @@ def assess(
                     )
                 )
     return notes
+
+
+def unhanded_amendment(relations: Sequence[Relation], spans: Sequence[tuple[str, int, int]], handed: set[str], question: str) -> str | None:
+    """Code's sentence when a verified quote lies in text a located statement changes and the statement's section was
+    not handed to the model, or None. The model answered from the wording before the change without seeing the change:
+    a pass is not established (`runs.status.check_unhanded`). A full replacement the answer does not follow already sets
+    the status (`check_replaced`); this reaches what it does not: a limited change, a dated question, a definition. A
+    question about the original agreement asks about the wording before the change, and raises nothing (policy-v17,
+    stress test 2026-10-30: the retrieval corner's amendments the links could not hand)."""
+    if perspective(question) == "historical":
+        return None
+    for relation in relations:
+        if relation.kind != "replaces" or relation.statement.section_id in handed or not any(_inside(span, relation.replaced) for span in spans):
+            continue
+        what = f"clause {relation.target}" if relation.target else "passage"
+        return (
+            f"the quoted {what} is changed by {relation.statement.label} (“{_excerpt(relation.statement.text)}”), which was not handed to the model; "
+            "the answer rests on its wording before that change, and which wording governs is not decided by code"
+        )
+    return None
 
 
 # ----------------------------------------------------------------------------- the record

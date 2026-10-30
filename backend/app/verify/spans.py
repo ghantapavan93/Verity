@@ -133,7 +133,14 @@ IGNORABLE_RANGES = (
     (0x1D173, 0x1D17A),
     (0xE0000, 0xE0FFF),
 )
-_QUOTE_MAP: dict[int, str] = {**_QUOTE_MAP_V10, **{code: "" for low, high in IGNORABLE_RANGES for code in range(low, high + 1)}}
+# And every apostrophe a keyboard or a font writes is one: the modifier letter, the fullwidth form, the grave and the acute
+# accent typed for it (the retrieval team's report, 2026-10-30).
+QUOTE_FOLDS_V11 = {"\u02bc": "'", "\uff07": "'", "`": "'", "\u00b4": "'"}
+_QUOTE_MAP: dict[int, str] = {
+    **_QUOTE_MAP_V10,
+    **{code: "" for low, high in IGNORABLE_RANGES for code in range(low, high + 1)},
+    **str.maketrans(QUOTE_FOLDS_V11),
+}
 
 
 @dataclass(frozen=True)
@@ -340,9 +347,12 @@ def _quote_words(quote: str) -> tuple[str, ...]:
 
 def _read_quote_words(quote: str) -> tuple[str, ...]:
     # An amount word ("usd10k") is a number to the typed tier (v9), which may find it written apart ("USD 10K"). A word
-    # is read whole and compared caseless as the typed tier reads it (v11): "ou" with U+0300 is the word "où".
-    words = whole_words(quote, tokenize(quote))
-    return tuple(sorted({caseless(quote[t.start : t.end]) for t in words if t.kind is Kind.WORD and not is_amount(quote, t)}, key=len, reverse=True))
+    # is read whole and compared caseless as the typed tier reads it (v11): "ou" with U+0300 is the word "où". Both sides
+    # are first read through the quote table, as the normalized tier reads them: it folds U+02BC, a letter, to an
+    # apostrophe, so a word holding one is two words to the tiers that find it (v11).
+    folded = quote.translate(_QUOTE_MAP)
+    words = whole_words(folded, tokenize(folded))
+    return tuple(sorted({caseless(folded[t.start : t.end]) for t in words if t.kind is Kind.WORD and not is_amount(folded, t)}, key=len, reverse=True))
 
 
 def _cannot_hold(quote: str, text: str) -> bool:
@@ -359,7 +369,7 @@ def _cannot_hold(quote: str, text: str) -> bool:
 
 
 def _read_caseless(text: str) -> str:
-    return caseless(text.translate(_DELETED))
+    return caseless(text.translate(_QUOTE_MAP))
 
 
 def _ladder(quote: str, text: str, whole: str | None = None) -> Located | None:

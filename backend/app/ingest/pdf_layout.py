@@ -47,7 +47,14 @@ from itertools import pairwise
 from typing import Any, cast
 
 from pypdf import PageObject
-from pypdf._font import Font
+
+# pypdf 6.21 moved Font from pypdf._font into pypdf.generic; the lock pins 6.21.2, so a reader importing the old path
+# failed to import at all under the lock (found by the lead running the reader tests under it, 2026-10-30). The second
+# path serves an environment still on 6.19; every signature this module uses is the same in both.
+try:
+    from pypdf.generic._font import Font  # type: ignore[import-not-found,unused-ignore]
+except ImportError:  # pragma: no cover - pypdf before 6.21
+    from pypdf._font import Font  # type: ignore[no-redef,import-not-found,unused-ignore]
 from pypdf._text_extraction import LAYOUT_NEW_BT_GROUP_SPACE_WIDTHS
 from pypdf._text_extraction._layout_mode import fixed_char_width, fixed_width_page, y_coordinate_groups
 from pypdf._text_extraction._layout_mode._fixed_width_page import BTGroup, bt_group, resolve_font
@@ -361,7 +368,11 @@ class _Walk:
         font = params.font
         if not self.named_glyphs or isinstance(font.encoding, str) or not font.character_map:
             return
-        decoded = cast(str, getattr(params, "_decoded_value", ""))
+        if not isinstance(params.value, bytes):
+            return
+        # What the encoding names at each code, before the ToUnicode map: read here from the font, not from pypdf's private
+        # _decoded_value, which pypdf 6.21 removed (the check then saw nothing to compare under the lock, 2026-10-30).
+        decoded = "".join(font.encoding.get(code, chr(code)) for code in params.value)
         if len(decoded) != len(params.text):
             return
         chars = list(params.text)

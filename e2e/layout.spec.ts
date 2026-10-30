@@ -126,3 +126,55 @@ test("every stop Tab reaches in an answered workbench is visible and moves nothi
     }
   }
 });
+
+// A file name with no break point, as document-management exports name contracts. 68 characters widened the questions
+// pane past the screen at 375, 768 and 1024 px, 91 at 1280 and 1440: the pane's one implicit grid track grew to the
+// header's document chip, and its hidden overflow clipped the status, the conclusion, Ctrl K and Send (stress test,
+// 2026-10-30). The check is the class, not a named box that grows with its content: every element is compared with its
+// nearest box that clips (overflow hidden or clip) and with the viewport, and no clipping pane is wider inside than out.
+const LONG_NAMES = [
+  "Master_Services_Agreement_AcmeCorp_v12_FINAL_executed_2026-10-01.txt",
+  "Master_Services_Agreement_AcmeCorp_Holdings_International_v12_FINAL_executed_2026-10-01.txt",
+];
+
+/** Every visible element that reaches past the box that clips it, or past the screen; and every clipping pane wider inside. */
+async function clipped(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const found: string[] = [];
+    const clips = (style: CSSStyleDeclaration) => ["hidden", "clip"].includes(style.overflowX);
+    const scrolls = (style: CSSStyleDeclaration) => ["auto", "scroll"].includes(style.overflowX);
+    for (const el of document.querySelectorAll<HTMLElement>("body *")) {
+      const r = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      // A fixed or absolute box is placed against something other than its parent (the skip link, a visually hidden label).
+      if (r.width === 0 || r.height === 0 || style.visibility === "hidden" || style.position === "fixed" || style.position === "absolute") continue;
+      if (clips(style) && el.scrollWidth > el.clientWidth + 1 && style.textOverflow !== "ellipsis")
+        found.push(`a pane that clips is ${el.scrollWidth} px inside and ${el.clientWidth} out: ${el.className}`);
+      let box = el.parentElement;
+      while (box && !clips(getComputedStyle(box)) && !scrolls(getComputedStyle(box))) box = box.parentElement;
+      if (box && scrolls(getComputedStyle(box))) continue; // inside a box the reader can scroll, it can be reached
+      const edge = Math.min(window.innerWidth, box ? box.getBoundingClientRect().right : window.innerWidth);
+      if (r.right > edge + 1) found.push(`${(el.textContent ?? "").trim().slice(0, 40)} ends at ${Math.round(r.right)}, past ${Math.round(edge)}`);
+    }
+    return found;
+  });
+}
+
+test("a long file name with no break point keeps every row of the questions pane on screen at 375, 768 and 1280 px", async ({ page }) => {
+  for (const name of LONG_NAMES) {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    const text = `${name}\n\n1. Notices\n\nNotices shall be sent to the address the Customer names in writing.\n\n2. Term\n\nThis Agreement runs for one year.\n`;
+    await page.locator('input[type="file"]').setInputFiles({ name, mimeType: "text/plain", buffer: Buffer.from(text) });
+    await expect(page.locator("section[data-section]").first()).toBeAttached();
+    for (const width of [375, 768, 1280]) {
+      await page.setViewportSize({ width, height: width < 400 ? 812 : 900 });
+      await page.waitForTimeout(300);
+      expect(await clipped(page), `${name.length} characters at ${width} px`).toEqual([]);
+      for (const label of ["Send", "Open commands"]) {
+        const box = await page.getByLabel(label).boundingBox();
+        expect(box !== null && box.x >= 0 && box.x + box.width <= width + 1, `${label} at ${width} px is on screen`).toBe(true);
+      }
+    }
+  }
+});

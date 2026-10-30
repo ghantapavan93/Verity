@@ -66,6 +66,7 @@ class Kind(StrEnum):
     SECTION = "section"  # "8.1.2", "12.4(a)": an identifier made of numbers, never a quantity
     PUNCT = "punct"
     BREAK = "break"  # v11: the mark that ends a sentence, which the typed tier compares (`compared`); `tokenize` makes none
+    SYMBOL = "symbol"  # v11: a symbol that states a choice or an unread character (`_CHOICE_MARKS`), compared as written
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,10 @@ SIGN_OPENERS_V11 = SIGN_OPENERS | _COMPARATORS | frozenset(".")
 # brackets, that a space and a letter not in lower case follow ("Inc. shall" goes on, "terminate. Without" does not), or,
 # with no space, a capitalised word after a lower-case letter ("terminate.Without"); and every semicolon.
 _SENTENCE_END = re.compile(r"""[.!?…](?=["'”’)\]»]*(?:\s+["'“‘(\[«]*(?P<next>[^\W\d_])|(?P<tight>[^\W\d_])[^\W\d_]))|;""")
+# A symbol that states a choice, a ballot box ticked or not, a check or a cross mark, or that marks a character a reader
+# could not read (U+FFFD): compared by the typed tier, never dropped as punctuation. Reader v16 reads a form's checkboxes
+# as U+2612 and U+2610, and a quote with the box inverted verified (the readers team's report, 2026-10-30).
+_CHOICE_MARKS = frozenset("\u2610\u2611\u2612\u2713\u2714\u2717\u2718\ufffd")
 # A clause's letter or numeral standing in parentheses, "(a)", "(A)", "(iv)", "(IV)": its case names a different clause.
 _CLAUSE_LETTER = re.compile(r"\((?:[^\W\d_]|[ivxlcdm]+|[IVXLCDM]+)\)")
 # A combining mark or a zero-width (non-)joiner belongs to the word it is written in, as Unicode's word boundaries read it.
@@ -487,7 +492,8 @@ def compared(text: str, version: int = VERSION, invisible: frozenset[str] = froz
     if version < 11:
         return kept
     ends = [Token(Kind.BREAK, "", at, at + 1) for at in sentence_ends(text, invisible)]
-    return sorted(whole_words(text, kept) + ends, key=lambda t: t.start)
+    choices = [Token(Kind.SYMBOL, ch, at, at + 1) for at, ch in enumerate(text) if ch in _CHOICE_MARKS]
+    return sorted(whole_words(text, kept) + ends + choices, key=lambda t: t.start)
 
 
 def caseless(text: str) -> str:

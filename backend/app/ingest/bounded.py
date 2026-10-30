@@ -31,6 +31,7 @@ import sys
 import tempfile
 import threading
 import time
+import warnings
 from multiprocessing import connection
 from multiprocessing.connection import Connection
 from pathlib import Path
@@ -201,7 +202,26 @@ def _outcome(kind: str, value: object) -> Ingested:
     raise RuntimeError(f"reading the file failed in its child process: {value}")
 
 
+def _seal_output() -> None:
+    """Nothing the child writes reaches the output it shares with the API. The readers' libraries log what they repair,
+    and pypdf's messages quote the file ("Expecting a NameObject for key but found 'Tenant Ocelot Ltd'"); the child has no
+    logging set up, so Python's last-resort handler printed each to the stderr it inherits from the API, a log no
+    retention reaches (privacy review, 2026-10-30). So every logger is silenced, warnings are ignored, and the child's
+    own stdout and stderr, Python's and the process's, go nowhere. Its answer goes back through the pipe alone."""
+    logging.disable(logging.CRITICAL)
+    logging.lastResort = None
+    warnings.simplefilter("ignore")
+    sink = os.open(os.devnull, os.O_WRONLY)
+    for descriptor in (1, 2):
+        with contextlib.suppress(OSError):  # a stream the child was started without
+            os.dup2(sink, descriptor)
+    os.close(sink)
+    sys.stdout = sys.stderr = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115 - held for the child's whole life
+
+
 def _read_in_child(path: str, answer: Connection) -> None:
+    if multiprocessing.parent_process() is not None:  # in a reading child, never in a process that calls this itself
+        _seal_output()
     try:
         with open(path, "rb") as file:
             filename = file.read(int.from_bytes(file.read(4), "big")).decode("utf-8", "surrogatepass")

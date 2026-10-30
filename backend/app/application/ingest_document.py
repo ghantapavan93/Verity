@@ -160,7 +160,7 @@ def ingest_document(session: Session, filename: str, data: bytes, workspace: str
         coverage_json=json.dumps(coverage_report(parsed.coverage, PARSER_VERSION, "persisted")),
         size_bytes=len(data),
     )
-    document.sections = [Section(ordinal=i, number=s.number, heading=s.heading, text=s.text) for i, s in enumerate(parsed.sections)]
+    document.sections = [Section(ordinal=i, number=s.number, heading=s.heading, text=s.text, part=s.part) for i, s in enumerate(parsed.sections)]
 
     def store() -> Document:
         # The bytes are on disk before the row exists. The row used to be committed first: a write that failed after it

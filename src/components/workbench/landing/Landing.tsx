@@ -12,7 +12,7 @@ import { getCitations, getRun, listDocuments, type Health } from "@/lib/api";
 import { plural } from "@/lib/format";
 import { modelPlace } from "@/lib/modelPlace";
 import { SOURCE, TopLinks } from "./TopLinks";
-import { AccessModeKnown, PublicDemo } from "../access/PublicDemo";
+import { AccessModeKnown, PublicDemo, Reader } from "../access/PublicDemo";
 import { INDEPENDENCE } from "@/lib/independence";
 import { locatedNote, runOutcome } from "@/lib/checks";
 import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
@@ -134,6 +134,8 @@ export function Landing({
   const privatePreview = doorKnown && (apiHealth?.access === "required" || apiHealth?.access === "entered");
   // A public demo: this browser's own workspace, deleted on schedule (access/AccessGate.tsx, backend retention).
   const demo = useContext(PublicDemo);
+  // The reader this browser is inside as, by invitation (access/AccessGate); null when there is none to name.
+  const reader = useContext(Reader);
   // The API could not be asked at all: nothing that needs it is offered. A model that is offline is something else:
   // the API still reads documents, and only questions fail (2026-10-09: an outage read "Model offline: 502").
   const unreachable = apiHealth !== null && !apiHealth.ok && !accessKnown;
@@ -160,6 +162,8 @@ export function Landing({
             <span className={styles.previewDot} aria-hidden="true" />
             {demo ? "Public demo" : openPreview ? "Open preview" : privatePreview ? "Private preview" : "Preview"}
           </span>
+          {/* Whose workspace what is added here goes into: an invite once switched the session silently (authz 1). */}
+          {reader && !demo && <span className={styles.preview}>Inside as {reader}</span>}
         </div>
       </header>
 

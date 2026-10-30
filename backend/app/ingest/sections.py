@@ -20,12 +20,11 @@ from dataclasses import dataclass, field
 from itertools import pairwise
 
 from ..verify.spans import bounded, verification_pass
+from .terms import defined_at_start
 
 # Nine digits per part: a "number" longer than that is not a clause number, and Python refuses to parse thousands of digits.
 HEADING_NUMBER = re.compile(r"^\s*(?:(?:Section|Clause|Article)\s+)?(\d{1,9}(?:\.\d{1,9})*)[.)]?\s+(.*\S)\s*$", re.IGNORECASE)
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
-# "Agreement" means …: a definition is labelled by its term and the whole sentence is its body.
-DEFINED_TERM = re.compile(r"^[“\"‘']([^”\"’']{1,60})[”\"’']\s+(?:means|has the meaning|shall mean|shall have the meaning|includes)", re.IGNORECASE)
 SENTENCE_MIN_WORDS = 6
 MAX_LEAD_IN_CHARS = 60
 MAX_LEAD_IN_WORDS = 8
@@ -74,8 +73,9 @@ def inline_clause(paragraph: str, last_top: int) -> tuple[str, str] | None:
     return number, title.group(1).strip()
 
 
-# A section longer than MAX_SECTION_CHARS is stored as parts headed "<heading> (part N)"; `_push` writes the heading and
-# `clause_label_in` reads it back, through these two definitions only.
+# A section longer than MAX_SECTION_CHARS is stored as parts headed "<heading> (part N)", and each part says which it is
+# as data (ParsedSection.part, stored on the section; reader v17): the heading's words alone could not tell the reader's
+# split from a document that writes such headings itself (second wave of the stress test, 2026-10-30).
 PART_HEADING = re.compile(r"^(?P<base>.*) \(part (?P<index>\d+)\)$")
 
 
@@ -83,27 +83,46 @@ def part_heading(heading: str, index: int) -> str:
     return f"{heading} (part {index})"
 
 
-def clause_label_in(sections: Sequence[tuple[str, str, str]], index: int, start: int) -> str | None:
-    """``clause_label`` for a passage at ``start`` of ``sections[index]`` (each section as number, heading, text, in
-    reading order). A part after the first is read after the parts before it, because they are one section of the source
-    split for size: a clause that opened in part 2 still holds a passage at the top of part 3, unless a numbered paragraph
-    outside it came between, which ends it as within one part."""
-    number, heading, text = sections[index]
-    texts = [text]
-    part = PART_HEADING.match(heading)
-    if part:
-        expected, i = int(part.group("index")) - 1, index - 1
-        while expected >= 1 and i >= 0:
-            earlier_number, earlier_heading, earlier_text = sections[i]
-            earlier = PART_HEADING.match(earlier_heading)
-            first = expected == 1 and earlier_heading == part.group("base")
-            if earlier_number != number or not (first or (earlier and earlier.group("base") == part.group("base") and int(earlier.group("index")) == expected)):
-                break
-            texts.insert(0, earlier_text)
-            expected, i = expected - 1, i - 1
+def clause_label_in(sections: Sequence[Sequence[object]], index: int, start: int) -> str | None:
+    """``clause_label`` for a passage at ``start`` of ``sections[index]``, each section as (number, heading, text, part) in
+    reading order, ``part`` as the reading recorded it. A part after the first is read after the parts before it, because
+    they are one section of the source split for size: a clause that opened in part 2 still holds a passage at the top of
+    part 3, unless a numbered paragraph outside it came between, which ends it as within one part (`_earlier_parts`)."""
+    number, _, text = (str(field) for field in sections[index][:3])
+    texts = [text, *(earlier for earlier in _earlier_parts(sections, index))]
+    texts = [*reversed(texts[1:]), texts[0]]
     offset = sum(len(t) + len(PARAGRAPH_SEPARATOR) for t in texts[:-1])
     top = number.split(".", 1)[0]
     return clause_label(PARAGRAPH_SEPARATOR.join(texts), offset + start, int(top) if top.isdigit() else 0)
+
+
+def _earlier_parts(sections: Sequence[Sequence[object]], index: int) -> list[str]:
+    """The texts of the parts before ``sections[index]`` of the one section the reader split, nearest first. Where the
+    reading recorded parts (a fourth field, reader v17), the parts it made: the same number, parts running down by one to
+    1; a section it did not split (part 0) has none, whatever its heading says. A reading stored before parts were
+    recorded (no fourth field, or None) is read by its headings, strictly: an explicit "(part k)" after "(part k-1)" of
+    the same base and number, down to "(part 1)". A bare heading is never part 1: no reading has written one, and the
+    branch that took it joined headings a document wrote ("Recitals" and "Recitals (part 2)"; interface corner, 2026-10-30)."""
+    number, heading = str(sections[index][0]), str(sections[index][1])
+    recorded = sections[index][3] if len(sections[index]) > 3 else None
+    found: list[str] = []
+    if isinstance(recorded, int):
+        expected, i = recorded - 1, index - 1
+        while expected >= 1 and i >= 0 and str(sections[i][0]) == number and len(sections[i]) > 3 and sections[i][3] == expected:
+            found.append(str(sections[i][2]))
+            expected, i = expected - 1, i - 1
+        return found if expected == 0 else []
+    part = PART_HEADING.match(heading)
+    if not part:
+        return found
+    expected, i = int(part.group("index")) - 1, index - 1
+    while expected >= 1 and i >= 0:
+        earlier = PART_HEADING.match(str(sections[i][1]))
+        if str(sections[i][0]) != number or not earlier or earlier.group("base") != part.group("base") or int(earlier.group("index")) != expected:
+            break
+        found.append(str(sections[i][2]))
+        expected, i = expected - 1, i - 1
+    return found if expected == 0 else []
 
 
 def _ends_clause(number: str, clause: str) -> bool:
@@ -121,9 +140,16 @@ SENTENCE_START = re.compile(r"(?<=[.;:])\s+(?=\d)")
 # at the start of a paragraph, or "… in writing. 4.1 Late fees …" after a sentence end. A bare whole number must be
 # followed by "." or ")" so that "30 days after notice" is not clause 30, and must open a titled clause (`inline_clause`)
 # so that a list item ("2. invoice monthly;") is not clause 2; a cross-reference ("Subject to Section 9") opens nothing.
-_OPENING_NUMBER = r"(\d{1,9}(?:\.\d{1,9})+|\d{1,9}(?=[.)]))[.)]?[ \t]+(?=\S)"
+# A number the words after it go on naming opens nothing (second wave of the stress test, 2026-10-30): "Section 5.4 of
+# the Lease is deleted and replaced …" opened clause 5.4, so an amendment's sentence was taken for the document's own
+# 5.4. The words a reference goes on with, in the case they are written in: "To the extent …" opens a clause.
+_NAMING_WORDS = r"(?-i:of|OF|and|AND|or|OR|through|THROUGH|hereof|HEREOF|herein|hereunder|hereto|thereof|above|below)\b"
+_NAMING = rf"(?![ \t]*{_NAMING_WORDS})"
+# A paragraph that opens by naming a clause ("Section 5.4 of the Lease is deleted …"): it ends no clause either.
+_NAMES_A_CLAUSE = re.compile(rf"^\s*(?:(?:Section|Clause|Article)s?\s+)?\d{{1,9}}(?:\.\d{{1,9}})*[.)]?[ \t]*{_NAMING_WORDS}", re.IGNORECASE)
+_OPENING_NUMBER = rf"(\d{{1,9}}(?:\.\d{{1,9}})+|\d{{1,9}}(?=[.)]))[.)]?{_NAMING}[ \t]+(?=\S)"
 _CLAUSE_OPENING = re.compile(
-    rf"^[ \t]*(?:(?:Section|Clause|Article)[ \t]+(\d{{1,9}}(?:\.\d{{1,9}})*)[.)]?[ \t]+(?=\S)|{_OPENING_NUMBER})"
+    rf"^[ \t]*(?:(?:Section|Clause|Article)[ \t]+(\d{{1,9}}(?:\.\d{{1,9}})*)[.)]?{_NAMING}[ \t]+(?=\S)|{_OPENING_NUMBER})"
     # After a sentence end the opening must carry a title: "Fees are due. 1.5 times the fee" opens nothing (bug hunt).
     rf"|(?<=[.;:])[ \t]+{_OPENING_NUMBER}(?-i:(?=[A-Z]))",
     re.IGNORECASE | re.MULTILINE,
@@ -202,7 +228,12 @@ def clause_label(text: str, start: int, seed: int = 0) -> str | None:
         clause = inline_clause(paragraph, last_top)
         if clause is not None:
             found, last_top = clause, int(clause[0].split(".", 1)[0])
-        elif found is not None and (numbered := HEADING_NUMBER.match(paragraph)) and _ends_clause(numbered.group(1), found[0]):
+        elif (
+            found is not None
+            and (numbered := HEADING_NUMBER.match(paragraph))
+            and _ends_clause(numbered.group(1), found[0])
+            and not _NAMES_A_CLAUSE.match(paragraph)
+        ):
             found = None
         for sentence in SENTENCE_START.finditer(paragraph):
             if found is None or offset + sentence.end() > start:
@@ -254,6 +285,9 @@ class ParsedSection:
     heading: str
     paragraphs: list[str] = field(default_factory=list)
     number_computed: bool = False
+    # Which part of a section the reader split for size this is, from 1 (its heading then ends " (part N)"); 0 for a
+    # section not split, whatever its heading says (reader v17).
+    part: int = 0
 
     @property
     def text(self) -> str:
@@ -275,9 +309,12 @@ def split_lead_in(text: str) -> tuple[str, str]:
     """('Access and Use', 'During the Subscription Period …') when a heading carries its body;
     ('Agreement', '"Agreement" means …') for a definition; a sentence that is a clause in its own
     right keeps all its text as body under a short label, so every word of it stays quotable."""
-    term = DEFINED_TERM.match(text)
+    # "Agreement" means …: a definition is labelled by its term and the whole sentence is its body. What a definition
+    # is, is the one reader's (ingest/terms.py, reader v17): this module had its own pattern, which read fewer quotes and
+    # verbs and took words of construction ('"including" means …') for terms.
+    term = defined_at_start(text)
     if term:
-        return term.group(1).strip(), text
+        return term, text
     match = _lead_in(text)
     if match:
         lead = match[0].rstrip(".:").strip()
@@ -651,21 +688,26 @@ def _push(sections: list[ParsedSection], section: ParsedSection) -> None:
     for paragraph in section.paragraphs:
         if len(paragraph) > MAX_SECTION_CHARS:
             if part:
-                sections.append(ParsedSection(section.number, part_heading(section.heading, index), part, section.number_computed))
+                sections.append(ParsedSection(section.number, part_heading(section.heading, index), part, section.number_computed, index))
                 index += 1
                 part, size = [], 0
             for chunk in split_paragraph(paragraph, MAX_SECTION_CHARS):
-                sections.append(ParsedSection(section.number, part_heading(section.heading, index), [chunk], section.number_computed))
+                sections.append(ParsedSection(section.number, part_heading(section.heading, index), [chunk], section.number_computed, index))
                 index += 1
             continue
         if part and size + len(paragraph) > MAX_SECTION_CHARS:
-            sections.append(ParsedSection(section.number, part_heading(section.heading, index), part, section.number_computed))
+            sections.append(ParsedSection(section.number, part_heading(section.heading, index), part, section.number_computed, index))
             index += 1
             part, size = [], 0
         part.append(paragraph)
         size += len(paragraph) + len(PARAGRAPH_SEPARATOR)
     if part:
-        sections.append(ParsedSection(section.number, part_heading(section.heading, index) if index > 1 else section.heading, part, section.number_computed))
+        split = index > 1
+        sections.append(
+            ParsedSection(
+                section.number, part_heading(section.heading, index) if split else section.heading, part, section.number_computed, index if split else 0
+            )
+        )
 
 
 def split_paragraph(text: str, cap: int) -> list[str]:

@@ -21,7 +21,7 @@ TOKEN = re.compile(r"[a-z0-9]+(?:'[a-z]+)?")
 # that met "U.S." and "Product(s)", so the same question typed on a desktop or a phone handed different sections in 76
 # to 98% of CUAD runs. The four apostrophes the verifier's table does not hold yet are folded here too; the verifier is
 # the place for them. A change to that table bumps the verifier's version, which is part of every run's identity.
-_FOLD = _QUOTE_MAP | str.maketrans({"\u02bc": "'", "\uff07": "'", "`": "'", "\u00b4": "'"})
+_FOLD = _QUOTE_MAP  # every apostrophe form is now in the verifier's own table
 # The characters the fold changes, found by one scan: str.translate looks every character up, 0.3 s of a 4.6 MB filing.
 _FOLDED = re.compile("[" + re.escape("".join(chr(code) for code, to in _FOLD.items() if to != chr(code))) + "]")
 STOPWORDS = frozenset(
