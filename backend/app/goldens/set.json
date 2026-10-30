@@ -5,7 +5,7 @@
     "sha256": "cb72dad74b3af676",
     "note": "Common Paper Cloud Service Agreement, CC BY 4.0, unmodified. The sha256 prefix identifies the file; the runner ingests it with the current reader."
   },
-  "rules": "A golden is 'present' when the contract addresses the point: the run must cite a verified passage in one of the listed sections and must not call it missing; when a status is named, the finding carrying that citation must have it. A golden is 'absent' when the contract does not address it: the run must not assert that it does (a 'not found' answer or a withheld run both pass). Guidance is supplied only where the golden says so.",
+  "rules": "A golden is 'present' when the contract addresses the point: the run must cite a verified passage in one of the listed sections and must not call it missing; when a status is named, every finding carrying a citation in those sections must have it, and when a period is named, the answer must state it. A golden is 'absent' when the contract does not address it: the run must not assert that it does (a 'not found' answer or a withheld run both pass). Guidance is supplied only where the golden says so.",
   "categories": {
     "direct_extraction": "a period, count or condition stated in one clause",
     "absence": "the contract does not address the point",
@@ -18,6 +18,51 @@
     "negation": "the answer is no, and a clause says so",
     "amendment_conflict": "which document or form controls",
     "adversarial": "the question carries an instruction or a false premise the model must not follow"
+  },
+  "anchor_rule": "Each section a golden names is identified by its text, not its number: the first 16 hex digits of the SHA-256 of the section's text, casefolded, whitespace collapsed, as reader v15 reads the sample. A run is judged by the text of the section its quote verified in, so a reader that renumbers a section judges the same. A section with no text (a heading alone) holds no quote and has no anchor.",
+  "anchors": {
+    "1.1": "8ea2876ba73d1b39",
+    "1.2": "79ebc674992f2857",
+    "1.3": "5411e860b51509d2",
+    "1.4": "3546f17a85476ce1",
+    "2.1(a)": "ffd045b9849e3ab1",
+    "2.2": "4a43341c37da6080",
+    "3.1": "e2c08a104e18cf2f",
+    "4.2": "180913756cb4e66b",
+    "4.5": "df325b2b45e6959e",
+    "4.6": "38554b7005b4c7cb",
+    "5.2": "34e2e2b4f85b78bb",
+    "5.3": "bdcfb406683774c7",
+    "5.3(a)": "385111e596aedc2d",
+    "5.3(b)": "9a7a9c56f5737e4c",
+    "5.4": "ea200272fc2076cf",
+    "5.5": "873a3a419d122e56",
+    "5.5(b)": "e761865e9292e382",
+    "5.5(c)": "bcecbbce409088ed",
+    "5.6(a)": "bb5cd9e8bca0b1ba",
+    "5.6(b)": "1c7e8915426fdd10",
+    "6.3": "bd51b2cda5cfe3b2",
+    "6.4": "9f8b94d030822740",
+    "8.1(a)": "5bee4ea994e214e9",
+    "8.1(b)": "268ec783d4200dff",
+    "8.2": "f044f617d57cf0d6",
+    "8.4": "1886a52934595b9f",
+    "9.1": "93a51589bf28773e",
+    "9.4": "f734f33d0852c988",
+    "11.1": "fd26f4bdff281727",
+    "12.1": "554e1d5d5c7f3619",
+    "12.2": "d8b27fd8f6d8ec72",
+    "12.3": "ca8a0fdd2441da7e",
+    "12.6": "ee29b105c8c3b618",
+    "12.12": "d8826486bed8321a",
+    "13.2": "71bd466d3bb67cc1",
+    "13.17": "1c3908418152b7ff",
+    "13.27": "c76b07e84654fb57",
+    "13.32": "c05d044a030c5265"
+  },
+  "earlier_anchors_rule": "The same sections as an earlier reader read them, where their text differs from today's, taken from that reader's reading of the sample in the store: readers v2 and v3 kept the lead-in of 5.6(a) in its heading, so its text was the list alone.",
+  "earlier_anchors": {
+    "5.6(a)": ["04a064c585900135"]
   },
   "goldens": [
     {
@@ -384,6 +429,7 @@
       "sections": [
         "4.6"
       ],
+      "expected_value": "30 days",
       "why": "30 days to dispute sits next to 15 days to resolve."
     },
     {
@@ -394,6 +440,7 @@
       "sections": [
         "5.3(b)"
       ],
+      "expected_value": "60 days",
       "why": "60 days in a clause that also names the 30-day cure period one line above."
     },
     {

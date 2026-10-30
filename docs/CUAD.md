@@ -87,30 +87,58 @@ compared against this one with the same rule.
 ## Results
 
 **Recorded 2026-09-29 (batch `51398ed416634c15`, task `cuad-clauses`, corpus `cuad-30`, qwen3:8b, 210 values, 210 runs,
-reader v4, BM25 k = 6, answer-v2; started 16:14 local, finished 19:59; model latency p50 49.8 s, p95 147.4 s).**
-The full per-case list is `backend/data/logs/cuad-30-score.log`; `scripts/score_cuad.py 51398ed416634c15` reproduces it.
+reader v4, BM25 k = 6, answer-v2; started 16:14 local, finished 19:59; model latency p50 49.8 s, p95 147.4 s). Scored
+2026-10-30 by the corrected scorer (see "Corrections after the run" below), from the committed recording
+`backend/app/batch/recordings/cuad-30-51398ed416634c15.json`:**
+`scripts/score_cuad.py --recording backend/app/batch/recordings/cuad-30-51398ed416634c15.json` prints this table and the
+per-case list from git alone, and `backend/tests/test_docs_claims.py` fails if a cell here differs from what it prints.
 
-| Category | expert spans | correct | cited elsewhere | missed | correct absence | asserted, experts found none | precision | recall | absence agreement |
-|---|---|---|---|---|---|---|---|---|---|
-| Change Of Control | 5 | 4 | 0 | 1 | 24 | 1 | 1.00 | 0.80 | 0.96 |
-| Governing Law | 28 | 24 | 3 | 1 | 1 | 1 | 0.89 | 0.86 | 0.50 |
-| Cap On Liability | 15 | 10 | 0 | 5 | 15 | 0 | 1.00 | 0.67 | 1.00 |
-| Most Favored Nation | 1 | 0 | 0 | 1 | 29 | 0 | n/a | 0.00 | 1.00 |
-| Non-Compete | 8 | 1 | 4 | 3 | 10 | 12 | 0.20 | 0.12 | 0.45 |
-| Termination For Convenience | 11 | 8 | 0 | 3 | 16 | 3 | 1.00 | 0.73 | 0.84 |
-| Uncapped Liability | 7 | 3 | 2 | 2 | 9 | 14 | 0.60 | 0.43 | 0.39 |
-| **all** | 75 | 50 | 9 | 16 | 104 | 31 | **0.85** | **0.67** | 0.77 |
+| Category | expert spans | correct | cited elsewhere | missed | correct absence | asserted, experts found none | failed | in progress | not run | precision | recall | absence agreement |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Change Of Control | 5 | 4 | 0 | 1 | 24 | 1 | 0 | 0 | 0 | 1.00 | 0.80 | 0.96 |
+| Governing Law | 28 | 24 | 3 | 1 | 1 | 1 | 0 | 0 | 0 | 0.89 | 0.86 | 0.50 |
+| Cap On Liability | 15 | 10 | 0 | 5 | 15 | 0 | 0 | 0 | 0 | 1.00 | 0.67 | 1.00 |
+| Most Favored Nation | 1 | 0 | 0 | 1 | 29 | 0 | 0 | 0 | 0 | n/a | 0.00 | 1.00 |
+| Non-Compete | 8 | 1 | 4 | 3 | 10 | 12 | 0 | 0 | 0 | 0.20 | 0.12 | 0.45 |
+| Termination For Convenience | 11 | 8 | 0 | 3 | 16 | 3 | 0 | 0 | 0 | 1.00 | 0.73 | 0.84 |
+| Uncapped Liability | 7 | 1 | 4 | 2 | 9 | 14 | 0 | 0 | 0 | 0.20 | 0.14 | 0.39 |
+| **all** | 75 | 48 | 11 | 16 | 104 | 31 | 0 | 0 | 0 | 0.81 | 0.64 | 0.77 |
 
-Against the floors written above the run: citation precision 0.85 (floor 0.80) and recall 0.67 (floor 0.50), so the
+Against the floors written above the run: citation precision 0.81 (floor 0.80) and recall 0.64 (floor 0.50), so the
 clause lookup is fit to draft a repository review of these seven categories, with two categories named as unfit on
 their own: non-compete (precision 0.20: twelve assertions where the experts marked nothing, mostly exclusivity and
-non-solicitation language read as a non-compete) and uncapped liability (precision 0.60, fourteen such assertions:
-indemnities and disclaimers read as an uncapped exposure). Retrieval: 7 of the 25 misses had no expert span among
-the six sections handed to the model (28%), below the one-third trigger, so BM25 did not fail this measurement; the
-misses are mostly the model's, answering "not found" from sections that carried the clause, as ContractEval reported
-for open-weight models. Nothing was retuned. A second recording under another prompt, retrieval depth or model is
-compared with this table under the same rule; the golden runs at k = 10 and under answer-v3 that followed this
-batch on the same GPU are recorded in `docs/GOLDENS.md` and `docs/RETRIEVAL.md`.
+non-solicitation language read as a non-compete) and uncapped liability (precision 0.20, fourteen such assertions:
+indemnities and disclaimers read as an uncapped exposure). The overall margin is one value: 48 correct of 59 answered
+with expert spans; at 47 precision would be 0.797, below the floor. Retrieval: 7 of the 27 misses had no expert span
+among the six sections handed to the model (26%), below the one-third trigger, so BM25 did not fail this measurement;
+the misses are mostly the model's, answering "not found" from sections that carried the clause, as ContractEval
+reported for open-weight models. Nothing was retuned. A second recording under another prompt, retrieval depth or model
+is compared with this table under the same rule; the golden runs at k = 10 and under answer-v3 that followed this batch
+on the same GPU are recorded in `docs/GOLDENS.md` and `docs/RETRIEVAL.md`.
+
+The table first published here, until 2026-10-30, read precision 0.85 and recall 0.67 overall, and 0.60 and 0.43 for
+uncapped liability (3 correct, 2 cited elsewhere), with 7 of 25 misses unretrieved. The model's answers are the same;
+the scorer was not the rule written above.
+
+## Corrections after the run (2026-10-30)
+
+Written after the run, and marked so. Neither changes a threshold or the rule; each makes the scorer do what the rule
+says, and both were found by a stress test of the published figures (EVL-4 and EVL-5).
+
+1. **The unit is the reported value.** The rule scores "the batch's value for that field: the first finding whose
+   citation verified, with the text the verifier located". The scorer compared the located texts of every asserting
+   finding of the run, so in two uncapped-liability values (`04-audibleinc`, run `52ad295f8df34cef`, and
+   `24-raesystemsinc`, run `5fa5f7845523427f`) the value the batch reported cited a passage the experts did not mark,
+   and a later finding's quote made it count as correct. The scorer now compares only the texts of the finding the
+   batch reports; one function picks that finding for the batch, the scorer and the SkillOpt rollout
+   (`backend/app/batch/cuad_match.py`, `answer_index`). Where the rule's table reads "answered, and a verified citation
+   hits a span", that citation is the reported value's.
+2. **The population is the manifest's, and failures count.** The scorer built its denominators from the batch's own
+   items, so a failed run, one still in progress, or a contract the batch never read left all of them: a batch with six
+   of seven questions failed read "recall 1.00, fit to draft". Every contract of the manifest asked every question of
+   the task (210 pairs) now gets one outcome, joined to the batch by the document's sha256. A pair the experts labelled
+   whose run failed, is in progress or was not run is a miss for recall, and a recording with any such pair gets no
+   verdict: the scorer prints "not scorable" and the counts. This batch had none, so this correction moves nothing here.
 
 The run was started with:
 

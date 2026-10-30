@@ -23,12 +23,17 @@ runner and the regression report are `backend/scripts/run_goldens.py`. The inter
    an entry in `DECISIONS.md` that says why the original expectation was wrong.
 4. **Code judges.** A verdict is computed from the run record: the run's stage and reason, each
    finding's status, and each evidence span's verified flag, method and section. No one reads a
-   run and decides it "looks right". Nor does the judge: it never reads the answer's words, so a
-   run that cites the expected section with the expected status passes whatever its conclusion
-   says. A review probe (2026-10-13) passed g35 with the wrong number of days and g37 with its answer
-   inverted. A score here is a score of citations and statuses, not of answers; the
-   `numeric_precision` and `negation` categories cannot see a number or a polarity until their
-   goldens carry an expected value.
+   run and decides it "looks right". Nor does the judge read the answer's words, with one
+   exception: since 2026-10-30 each `numeric_precision` golden names the period it asks for (g35
+   30 days, g36 60 days), and the carrying finding's conclusion or observed value must state it, as
+   the parser the status decision uses reads it. Otherwise a run that cites the expected section
+   with the expected status passes whatever its conclusion says: a review probe (2026-10-13) passed
+   g37 with its answer inverted, and g35 with the wrong number of days, which now fails. A score
+   here is a score of citations, statuses and those two periods, not of answers; the `negation`
+   category cannot see a polarity, and no word check is claimed to. A pass carried by a finding
+   that code lowered to needs review (a reference, position or ambiguity check) stays a pass, since
+   the lowering can be right about a wrong section number in a right answer, and says which check
+   lowered it; the report counts those passes.
 5. **The comparison is between recorded runs.** Runs are immutable and fingerprinted on their
    inputs (document, guidance, question, prompt hash, model and decoding options), so the same
    golden under the same prompt and model is one run, reused. Re-running the set never
@@ -41,9 +46,10 @@ runner and the regression report are `backend/scripts/run_goldens.py`. The inter
 
 - **present**: the contract addresses the point. The run must be `complete` and must carry a
   finding whose status is `pass` or `needs_review` with a verified citation in one of the
-  sections the golden names. When the golden names a status, that finding must have it. A run
-  that withholds, fails, cites the wrong section, answers "not found", or decides the other
-  status fails the golden.
+  sections the golden names. When the golden names a status, every such finding must have it,
+  so a pass and a needs review on the same clause fail it in either order (until 2026-10-30 that
+  pair satisfied either expectation). A run that withholds, fails, cites the wrong section,
+  answers "not found", or decides the other status fails the golden.
 - **absent**: the contract does not address the point. The run must not assert that it does.
   A `complete` run whose findings are all `missing` passes; an `unresolved` run (no supporting
   passage, or citations that did not verify) passes; a `pass` or `needs_review` finding fails.
@@ -86,6 +92,20 @@ live provider (Ollama, Qwen3 8B by default). Existing runs are reused. Forty-two
 half an hour on a laptop. The report prints, for the two latest prompt versions: improvements,
 regressions, unchanged passes, unchanged failures, the count with different citations or
 statuses under the same verdict, the mean latency delta, and the verdict under the rule.
+
+The report and the model comparison read recordings by what each run stored (its reading of the
+sample, question, guidance, prompt hash and options), not by today's fingerprint: for each prompt
+version they show its most complete recording, labelled with the reader, the rules and the options
+it was made under, and say when none is under today's rules. Two recordings are compared only when
+they share a reading and options. A golden names its sections by their text (`anchors` in the set,
+with the text an earlier reader gave a section where it differs), so a reader that renumbers a
+section judges a recording the same: reader v14 renumbered 14 of the sample's 123 sections, and
+until 2026-10-30 the report found nothing recorded under today's rules ("no golden run is recorded
+yet" over a store of 673 golden runs) and every committed recording judged 28 of 44 under the
+relabelled set. On a copy of that store the report now reads Recording 3 for answer-v1 (32 of 42),
+Recording 6c for answer-v2 (37 of 44, g38 carried by a finding the reference check lowered) and
+Recording 5 at k = 10 for answer-v3 (38 of 44), and the qwen3:4b comparison in `docs/ROUTING.md`
+again reads 36 of 42 against 34.
 
 ## Results
 
@@ -288,3 +308,14 @@ the remedy adopted is the interface's wording (the pass is named the model's ans
 found in the document, not to support it). Each control pass stopped part way at the API's run-start limit (20 in 10
 minutes, counting a start that hands back an existing run) and was resumed; the resumed pass was handed the runs already
 finished, same inputs, same runs.
+
+**Recording 6c replayed, 2026-10-30: no model call, and the figure every summary states.** Until this day no code
+derived the published 37 of 44: the report could not find Recording 6c, and the tool cited above for the option
+recordings, run at that commit, printed 28 of 44, every baseline missing, because the set had been relabelled for
+reader v14's numbering. Recording 6c's 44 runs (the same run ids as `research/depth_pass/results/goldens-v5.json`) and
+the model's raw output for each are committed in `backend/app/goldens/recordings/6c.json`, written from a copy of the
+store by `scripts/run_goldens.py --record`. Judged as recorded: 37 of 44, failing g08, g11, g12, g26, g30, g35 and g42.
+`scripts/run_goldens.py --replay` hands the 44 outputs back through today's reader (v15), retrieval, verifier, policy
+and judge, in a store of its own: 37 of 44, the same seven failures, g44 passing by withholding. Four of the 37 passes
+now rest on a finding code lowered to needs review (g14, g28, g38 and g43; as recorded, only g38). `tests/test_goldens.py`
+replays the file and fails when the code moves a verdict; `tests/test_docs_claims.py` holds `docs/STATUS.md` to it.

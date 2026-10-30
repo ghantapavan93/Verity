@@ -18,9 +18,13 @@ from __future__ import annotations
 
 import ast
 import html
+import importlib.util
+import json
 import re
+import sys
 from collections.abc import Iterator
 from pathlib import Path
+from types import ModuleType
 from typing import NamedTuple
 
 import pytest
@@ -166,6 +170,111 @@ def test_what_the_readme_says_the_gate_does_not_run_it_does_not_run(step: str, i
     assert (step in not_run[0]) != (in_gate in gate), (
         f"scripts/release-gate.sh {'runs' if in_gate in gate else 'does not run'} {step}, and the README says otherwise"
     )
+
+
+# ----------------------------------------------------------------------------- measured figures, derived by code
+#
+# A figure written into prose is derived by code from committed inputs, or labelled with what it was measured on and
+# when. The stress test of 2026-10-30 found that none of the measured figures was held anywhere: CUAD-30's table was the
+# scorer's output on an unfaithful unit (0.85 published, 0.81 on the reported answer, EVL-4), the golden figure had no
+# code that derived it at all (EVL-2), and the retrieval figure was a superseded configuration's (EVL-6).
+
+
+def _script(name: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(f"docs_claims_{name}", BACKEND / "scripts" / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+CUAD_RECORDING = BACKEND / "app" / "batch" / "recordings" / "cuad-30-51398ed416634c15.json"
+
+
+def test_the_cuad_30_table_is_the_committed_recording_scored_by_the_scorer_in_force() -> None:
+    """docs/CUAD.md's table and verdict are what scripts/score_cuad.py prints for the committed recording of batch
+    51398ed416634c15, row by row, so a change to the unit, the rule or the population that moves a cell fails here."""
+    score_cuad = _script("score_cuad")
+    recording = score_cuad.load_recording(CUAD_RECORDING)
+    scored = score_cuad.score_recording(recording)
+    cuad = (ROOT / "docs" / "CUAD.md").read_text(encoding="utf-8")
+    for row in score_cuad.table(scored).splitlines():
+        assert row in cuad, f"docs/CUAD.md does not carry this row of the scored recording: {row}"
+    first, second = score_cuad.verdict(scored, score_cuad.refusals(recording)).splitlines()[:2]
+    figures = re.search(r"citation precision (\d\.\d\d) \(floor (\d\.\d\d)\), recall (\d\.\d\d) \(floor (\d\.\d\d)\)", first)
+    assert figures, first
+    stated = f"citation precision {figures.group(1)} (floor {figures.group(2)}) and recall {figures.group(3)} (floor {figures.group(4)})"
+    assert stated in cuad, f"docs/CUAD.md should state the scored verdict's figures: {stated}"
+    assert second == "verdict: fit to draft a repository review of these categories" and "so the\nclause lookup is fit to draft" in cuad
+
+
+GOLDEN_RECORDING = BACKEND / "app" / "goldens" / "recordings" / "6c.json"
+
+
+def _listed(ids: list[str]) -> str:
+    return ids[0] if len(ids) == 1 else ", ".join(ids[:-1]) + f" and {ids[-1]}"
+
+
+def test_the_golden_figure_is_the_committed_recording_replayed_by_the_code_in_force() -> None:
+    """docs/STATUS.md states the golden figure as Recording 6c's answers replayed through the code in force: the count,
+    the goldens that fail and the passes a lowered finding carries are the recording file's replayed block, which
+    tests/test_goldens.py derives by replaying it. Every other golden count STATUS states names what it was measured
+    on. STATUS said "37 of 44 under the current reader", which no code derived, and that the false-premise golden "fails
+    today", which no recording since Recording 6c shows (stress test EVL-2)."""
+    replayed = json.loads(GOLDEN_RECORDING.read_text(encoding="utf-8"))["replayed"]
+    status = " ".join(STATUS.read_text(encoding="utf-8").split())
+    figure = f"replayed through the code in force pass {replayed['passes']} of {replayed['of']}, failing {_listed(replayed['fails'])}"
+    assert figure in status, f"docs/STATUS.md should state: {figure}"
+    lowered = f"{len(replayed['lowered'])} of those {replayed['passes']} passes rest on a finding code lowered ({_listed(replayed['lowered'])})"
+    assert lowered in status, f"docs/STATUS.md should state: {lowered}"
+    for sentence in sentences(STATUS.read_text(encoding="utf-8")):
+        if re.search(r"\b\d+ of 4[24]\b", sentence):
+            assert re.search(r"Recording \w+|\bS0\b|replay", sentence), f"a golden count names no recording: {sentence[:160]}"
+        if re.search(r"false[- ]premise", sentence) and re.search(r"\bfails\b", sentence):
+            assert "g44" in replayed["fails"], f"g44 passes in the replay, and this says it fails: {sentence[:160]}"
+
+
+RETRIEVAL_RESULTS = BACKEND / "scripts" / "results" / "eval_retrieval-bm25.json"
+_FIGURE = re.compile(r"\b0\.\d\d\b|\bBM25 \d+, hybrid \d+")
+_DATE = re.compile(r"\b20\d\d-\d\d-\d\d\b")
+
+
+def undated_figures(text: str) -> list[str]:
+    """Clauses that state a measured retrieval figure and name no day it was measured."""
+    return [clause for clause in sentences(text) if _FIGURE.search(clause) and not _DATE.search(clause)]
+
+
+def test_the_retrieval_figure_is_the_committed_measurement_labelled_with_its_configuration() -> None:
+    """docs/STATUS.md gave BM25 Recall@6 as 0.85, undated, beside a hybrid's 0.95: the figure of BM25 without the alias
+    table, which had made it 0.98 since 2026-10-01 (stress test EVL-6). The figure stated is the committed measurement
+    (scripts/eval_retrieval.py --results), with the configuration it was measured under; it may be called the code in
+    force only while the code's fingerprint is the file's; and every other retrieval figure in the row names its day."""
+    eval_retrieval = _script("eval_retrieval")
+    results = json.loads(RETRIEVAL_RESULTS.read_text(encoding="utf-8"))
+    bm25 = results["modes"]["bm25"]
+    sets, measured_under = bm25["sets"], bm25["fingerprint"]
+    row = next(line for line in STATUS.read_text(encoding="utf-8").splitlines() if line.startswith("| Retrieval |"))
+    cuad, goldens = sets["CUAD both"], sets["goldens"]
+    stated = f"Recall@6 {cuad['R@6']:.2f} on {cuad['cases']} CUAD cases with experts' spans and {goldens['R@6']:.2f} on {goldens['cases']} goldens"
+    assert stated in row, f"docs/STATUS.md should state: {stated}"
+    under = (
+        f"measured {results['measured']} at {measured_under['retrieval_version']}, reader {measured_under['reader']}, "
+        f"alias table {measured_under['aliases']}, k = {measured_under['k']}"
+    )
+    assert under in row, f"docs/STATUS.md should say what the figure was measured under: {under}"
+    if "in force" in row:
+        assert eval_retrieval.fingerprint("bm25") == measured_under, "the row calls a measurement of other code the code in force"
+    assert undated_figures(row) == []
+
+
+def test_control_the_old_retrieval_row_fails_the_check() -> None:
+    old = (
+        "| Retrieval | BM25 scored against labels, 164 CUAD cases with experts' spans and 38 goldens: Recall@6 0.85 and 0.92; "
+        "a hybrid with a local embedding model measured at 0.95 and 0.97 and built behind a setting; on the 44 goldens BM25 37, "
+        "hybrid 40 with one regression, so BM25 stays the default by the rule (`docs/RETRIEVAL.md`) |"
+    )
+    assert len(undated_figures(old)) == 3
 
 
 def _env_example() -> dict[str, str]:

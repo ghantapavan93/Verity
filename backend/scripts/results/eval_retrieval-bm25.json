@@ -1,0 +1,70 @@
+{
+ "measured": "2026-10-30",
+ "modes": {
+  "bm25": {
+   "fingerprint": {
+    "mode": "bm25",
+    "retrieval_version": "retrieval-v2",
+    "reader": "v15",
+    "aliases": "fe44dfcfc495",
+    "k": 6,
+    "cuad_30": "6fbb938e084b7964",
+    "cuad_skillopt": "8088e50598b83469",
+    "goldens": "bd0331c02cd4aba5"
+   },
+   "data_read": {
+    "cuad_30_texts": "d84144821dfcc8bb",
+    "skillopt_train_items": "07fad687dc33af1e",
+    "skillopt_val_items": "bc51462b2cf1b33c",
+    "skillopt_test_items": "e0ea285ee9a06cfd",
+    "skillopt_contracts": "f1c6e8dce15021af"
+   },
+   "sets": {
+    "CUAD-30": {
+     "cases": 75,
+     "reachable": 75,
+     "R@1": 0.7867,
+     "R@3": 0.9333,
+     "R@5": 0.9867,
+     "R@6": 0.9867,
+     "R@8": 0.9867,
+     "MRR": 0.8669,
+     "noise@6": 0.7629
+    },
+    "CUAD-SkillOpt-30": {
+     "cases": 89,
+     "reachable": 89,
+     "R@1": 0.7528,
+     "R@3": 0.9101,
+     "R@5": 0.9663,
+     "R@6": 0.9663,
+     "R@8": 0.9888,
+     "MRR": 0.8434,
+     "noise@6": 0.7537
+    },
+    "goldens": {
+     "cases": 38,
+     "reachable": 38,
+     "R@1": 0.6842,
+     "R@3": 0.8947,
+     "R@5": 0.8947,
+     "R@6": 0.9211,
+     "R@8": 0.9474,
+     "MRR": 0.7888,
+     "noise@6": 0.8281
+    },
+    "CUAD both": {
+     "cases": 164,
+     "reachable": 164,
+     "R@1": 0.7683,
+     "R@3": 0.9207,
+     "R@5": 0.9756,
+     "R@6": 0.9756,
+     "R@8": 0.9878,
+     "MRR": 0.8542,
+     "noise@6": 0.7579
+    }
+   }
+  }
+ }
+}

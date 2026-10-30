@@ -371,7 +371,7 @@ expected effect and its one command are in `docs/GOLDENS.md`.
 
 Backend 216 tests. Next, once the chain has finished and its results are recorded: verifier v5 (typed tier in place of alnum, matches bounded to the ContextSlice the model saw, match count on the span), status from typed facts (`position_check` becomes the policy evaluation with its reasons), stage owner and immediate recovery of dead owners, the explicit run transition table, ParseCoverage in the reader with an honest list of what a DOCX reading omits, the evidence pack carrying reconstruction, slices, coverage and review head, and provider admission measured before anything is scheduled.
 
-**CUAD-30 recorded; a reading says what it did not read; three measurements taken before the wiring (2026-09-29, late).** The CUAD-30 batch finished at 19:59 local: citation precision 0.85 against the pre-registered floor of 0.80, recall 0.67 against 0.50, so the clause lookup is fit to draft a repository review of the seven categories, with non-compete (precision 0.20) and uncapped liability (0.60) named as unfit on their own; 7 of 25 misses lacked the expert span among the retrieved sections, under the one-third trigger, so BM25 did not fail this measurement. The table and the reading of it are in `docs/CUAD.md`; nothing was retuned; the golden runs that followed on the GPU are recorded when they finish.
+**CUAD-30 recorded; a reading says what it did not read; three measurements taken before the wiring (2026-09-29, late).** The CUAD-30 batch finished at 19:59 local: citation precision 0.85 against the pre-registered floor of 0.80, recall 0.67 against 0.50, so the clause lookup is fit to draft a repository review of the seven categories, with non-compete (precision 0.20) and uncapped liability (0.60) named as unfit on their own; 7 of 25 misses lacked the expert span among the retrieved sections, under the one-third trigger, so BM25 did not fail this measurement. The table and the reading of it are in `docs/CUAD.md`; nothing was retuned; the golden runs that followed on the GPU are recorded when they finish. (Re-scored 2026-10-30 on the value the batch reports, as the rule says: precision 0.81 and recall 0.64, uncapped liability 0.20; see that day's entry on published figures.)
 
 ParseCoverage (`ingest/coverage.py`). A DOCX "parsed successfully" while its headers, footers, footnotes, endnotes, comments, block-level content controls, embedded objects and imported chunks were never read, fields kept only their cached result, and automatic numbering was not rendered. A census of the 36 licensed contracts and the sample first: 32 have footers with real text, 12 headers with real text, 2 footnotes, 5 content controls, 17 fields, 27 automatic numbering. The reading now records, at upload, what it did with each of seventeen fixed parts (read, accepted, excluded, partial, omitted, absent, unknown) with a count and a note; the document carries it, the paper says "Not read by this reading: footers (1)…", and the evidence pack records it under `parse_coverage`. The section text is unchanged, so the reader version stays v4 and no document is re-read; a reading made before coverage was recorded is described from its stored bytes under the same reader, on demand and never written back, because a document a finished run read is immutable. The invariant, in one line: anything the reader does not read is represented as unread.
 
@@ -1749,7 +1749,10 @@ rules, the interface, and the repository as a stranger first reads it. What they
   probe and no longer lists the machine's models.
 - **The interface**: phone heights (100dvh), chips that wrap, landmarks and a heading outline, live regions, one name
   per action. The repository: one-screen README, docs/STATUS.md, docs/archive/, research/.
-- **Dependencies**: pypdf 6.21.2, certifi 2026.10.19, Next 16.4.1; npm audit and pip-audit clean. The Next install
+- **Dependencies**: pypdf 6.21.2, certifi 2026.10.19, Next 16.4.1; `npm audit --omit=dev` and pip-audit clean. The full
+  `npm audit` is not: against the same lockfile it reports 6 advisories, all in development packages (2 critical,
+  3 high, 1 moderate: vitest, tinypool, @vitest/mocker, undici, vite, zod), found by the stress test the same day
+  (TLS-3); this line said "npm audit and pip-audit clean" until then. The Next install
   dropped the @emnapi/runtime lock entry a third time; `test_lockfile.py` caught it.
 
 Open, each recorded with what it would take:
@@ -1766,3 +1769,49 @@ Open, each recorded with what it would take:
 - On the laptop, the owner's steps: Redis listens on every interface with no password (stop it, or bind 127.0.0.1 and
   set a password, and remove its firewall rule); the MySQL firewall rules allow every profile; Postgres listens on
   every interface; llama-server's `/slots` is on (`LLAMA_ARG_ENDPOINT_SLOTS=0`); Ollama updates itself.
+
+## 2026-10-30: published figures derived by code
+
+A stress test of the evidence the repository publishes about itself found figures no code derived, scorers that judged
+a kinder unit than the rule, and one superseded number stated as current (EVL-2 to EVL-6). Each figure is now produced
+by a committed script from committed inputs, and `backend/tests/test_docs_claims.py` fails when the prose and the code
+disagree.
+
+- **CUAD-30 is scored on the value the batch reports.** The rule in `docs/CUAD.md` scores the first finding whose
+  citation verified; the scorer compared the located texts of every asserting finding, so two uncapped-liability values
+  that cited the wrong passage counted as correct through a later finding, and the SkillOpt rollout, said to score the
+  same way, did not. One function picks the answer for the batch, the scorer and the rollout
+  (`cuad_match.answer_index`). The same table, re-scored: precision 0.81 (was 0.85) and recall 0.64 (was 0.67), still
+  fit to draft with one value of margin; uncapped liability 0.20 and 0.14 (was 0.60 and 0.43). The scorer's population
+  is now the manifest's 210 pairs joined by sha256, not the batch's items: a failed, in-progress or never-run pair is a
+  miss for recall and withholds the verdict (six failed questions of seven had read "recall 1.00, fit"; this batch had
+  none). The batch's scoring inputs are committed (`backend/app/batch/recordings/`), so the table is re-derived without
+  the store.
+- **The golden judge holds a status golden to one status, and two goldens to a number.** A pass and a needs review on
+  the same clause passed a status golden whichever was expected, in either order; now every finding citing the clause
+  must carry the expected status. A pass carried by a finding code lowered (reference, position or ambiguity check)
+  stays a pass, because the lowering can be right about a wrong section number in a right answer (Recording 6c's g38),
+  but the verdict names the check and `run_goldens.py --report` counts such passes. g35 and g36, the two
+  `numeric_precision` goldens, now name the period they ask for (30 and 60 days), and the answer must state it; a run
+  answering 30 days for g36 passed before. This tightens two goldens' expectations, which rule 3 of `docs/GOLDENS.md`
+  allows only with this entry: neither expectation was wrong, both were unread.
+- **The golden report reads every recording, judged by section text.** It found runs by today's fingerprint on today's
+  reading only, so every version bump hid the record: over a copy of the store holding 673 golden runs it said "no
+  golden run is recorded yet". And reader v14 renumbered 14 of the sample's 123 sections, the set was relabelled with
+  them, and every committed recording judged 28 of 44 under today's set against 37 under the set it was made with. The
+  report now reads recordings by what the runs stored and labels each with its reader, rules and options; a golden names
+  its sections by text. The dead fallback in `run_for` is gone. On that store copy the report reads Recordings 3, 6c
+  and 5 as published (32 of 42, 37 of 44, 38 of 44), and the routing comparison 36 of 42 against 34.
+- **The golden figure is a replay.** No code derived the "37 of 44 under the current reader" `docs/STATUS.md` stated,
+  and its "the false-premise one fails today" was false: g44 passes in every recording since 6c. Recording 6c's runs and
+  raw outputs are committed (`backend/app/goldens/recordings/6c.json`); replayed through the code in force, with no model
+  call, they give 37 of 44 with the same seven failures, four of the passes resting on a lowered finding. A test replays
+  them, and `docs/STATUS.md` states the replay's figure, held to the file.
+- **The retrieval figure names what it was measured under.** `docs/STATUS.md` gave BM25 Recall@6 as 0.85 on the CUAD
+  cases, undated, beside the hybrid's 0.95: 0.85 was BM25 without the alias table (2026-09-29, reader v4), and the table
+  has been on since 2026-10-01. Today's BM25, measured with no model: 0.98 on the 164 CUAD cases and 0.92 on the 38
+  goldens (retrieval-v2, reader v15, alias table fe44dfcfc495, k = 6). `scripts/eval_retrieval.py --results` writes the
+  figures with the inputs that decide them; the test holds the row to that file, and lets the row call the figure the
+  code in force only while the code's inputs are the file's. The hybrid was measured against the older BM25 and is not
+  re-measured here (it needs the embedding model). The full `npm audit` reports six development advisories where this
+  log said it was clean; the line above now says which audit is clean.
