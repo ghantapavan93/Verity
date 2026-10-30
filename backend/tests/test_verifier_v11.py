@@ -391,7 +391,7 @@ def test_a_window_cut_is_never_a_boundary() -> None:
             "Supplier's liability under this Agreement is unlimited.",
             "Except as stated, the Customer's liability under this Agreement is unlimited.",
             "8 Supplier",
-        ),  # noqa: E501
+        ),
         ("Schedule 1,500 units per month", "The Customer may order up to 500 units per month.", "Schedule 1"),
         ("Annex 10% discount", "Customers get a 0% discount.", "Annex 1"),
     ],
