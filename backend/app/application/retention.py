@@ -25,7 +25,7 @@ from pathlib import Path, PureWindowsPath
 from sqlalchemy import Connection, Engine, text
 
 from ..config import settings
-from ..db import immutability_triggers
+from ..db import PUBLIC_WORKSPACE_LIKE, immutability_triggers, workspace_tables
 from ..ingest.bounded import HANDOFF_PREFIX, handoff_folder
 from ..ingest.readers import SUFFIX_OF
 from ..models import TERMINAL_STAGES, utcnow
@@ -68,6 +68,14 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None) -> Pur
         # the store without its immutability triggers (triage review, 2026-10-09).
         connection.exec_driver_sql("BEGIN IMMEDIATE")
         expired = _ids(connection, "SELECT workspace_id FROM visitor_workspaces WHERE expires_at <= :now", now=moment)
+        # Rows of public workspaces no longer listed: written past an earlier purge before the store refused them
+        # (db.workspace_guards). Purged like an ended workspace, so they no longer keep the documents they name, and a
+        # store that holds them heals (stress test, 2026-10-30).
+        unlisted = " UNION ".join(
+            f"SELECT workspace_id FROM {table} WHERE workspace_id LIKE :public AND workspace_id NOT IN (SELECT workspace_id FROM visitor_workspaces)"
+            for table in workspace_tables()
+        )
+        expired = sorted(set(_ids(connection, unlisted, public=PUBLIC_WORKSPACE_LIKE)) - set(expired)) + expired
         purgeable: list[str] = []
         for workspace in expired:
             running = connection.execute(
@@ -94,7 +102,15 @@ def purge_expired_workspaces(engine: Engine, now: datetime | None = None) -> Pur
                     rwhere, rparams = _in("id", runs)
                     connection.execute(text(f"DELETE FROM runs WHERE {rwhere}"), rparams)
                     report.runs += len(runs)
-                granted = _ids(connection, "SELECT document_id FROM document_access WHERE workspace_id = :w", w=workspace)
+                # The documents the workspace held, and those its version statements name: a document a statement alone
+                # kept past its holders' purge has no grant left, and is let go here once nothing else uses it.
+                granted = _ids(
+                    connection,
+                    "SELECT document_id FROM document_access WHERE workspace_id = :w UNION SELECT document_id FROM document_versions "
+                    "WHERE workspace_id = :w UNION SELECT supersedes_document_id FROM document_versions WHERE workspace_id = :w "
+                    "AND supersedes_document_id IS NOT NULL",
+                    w=workspace,
+                )
                 connection.execute(text("DELETE FROM guidance WHERE workspace_id = :w"), {"w": workspace})
                 connection.execute(text("DELETE FROM document_versions WHERE workspace_id = :w"), {"w": workspace})
                 connection.execute(text("DELETE FROM document_access WHERE workspace_id = :w"), {"w": workspace})

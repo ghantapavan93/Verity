@@ -178,7 +178,10 @@ def _grant(session: Session, document: Document, workspace: str | None, new: boo
     True when the grant is new: a document the workspace now holds, admitted against its quotas."""
     if workspace is None:
         return False
-    if not new and document_is_curated(session, document.id):
+    # A public store holds nothing curated (main.refuse_a_store_with_owner_records): a row with no grant there was left
+    # behind, and reading it as curated answered an upload 200 with a document its uploader could neither read nor ask
+    # about (stress test, 2026-10-30). It is granted like any other.
+    if not new and not is_public(workspace) and document_is_curated(session, document.id):
         return False
     _, created = admit(
         session,

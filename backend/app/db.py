@@ -120,15 +120,53 @@ def immutability_triggers() -> list[tuple[str, str]]:
     return triggers
 
 
+# A workspace an anonymous visit made: application/workspace.PUBLIC_PREFIX, which this bottom layer cannot import.
+PUBLIC_WORKSPACE_LIKE = "pw-%"
+WORKSPACE_NOT_OPEN = "a public workspace that is not open takes no row"
+
+
+def refused_as_not_open(error: BaseException) -> bool:
+    """The store's own refusal of a row for a public workspace that is not listed (workspace_guards)."""
+    return WORKSPACE_NOT_OPEN in str(getattr(error, "orig", error))
+
+
+def workspace_tables() -> list[str]:
+    """Every table whose rows a workspace adds, read off the models (a workspace_id column), the registry of visitor
+    workspaces itself apart: a table added later is in it without anyone remembering."""
+    from . import models  # noqa: F401  (registers the tables)
+
+    return sorted(t.name for t in Base.metadata.sorted_tables if "workspace_id" in t.columns and t.name != "visitor_workspaces")
+
+
+def workspace_guards() -> list[tuple[str, str]]:
+    """The triggers that refuse a row for a public workspace that is not listed in visitor_workspaces: (name, CREATE
+    statement). A request let in before the purge cannot write after it (quotas.workspace_open says so for the rows
+    written through quotas.admit); here the store says it for every row, whatever wrote it. A version statement written
+    outside admit outlived its workspace's purge and kept two visitors' contracts for good (stress test, 2026-10-30).
+    Listed is enough: a row written after the workspace ended, before its purge, is deleted with it by workspace id."""
+    guards = []
+    for table in workspace_tables():
+        name = f"trg_{table}_only_open_workspaces"
+        statement = (
+            f"CREATE TRIGGER IF NOT EXISTS {name} BEFORE INSERT ON {table} "
+            f"WHEN NEW.workspace_id LIKE '{PUBLIC_WORKSPACE_LIKE}' "
+            "AND NOT EXISTS (SELECT 1 FROM visitor_workspaces WHERE workspace_id = NEW.workspace_id) "
+            f"BEGIN SELECT RAISE(ABORT, '{WORKSPACE_NOT_OPEN} ({table})'); END"
+        )
+        guards.append((name, statement))
+    return guards
+
+
 def ensure_immutability(target_engine: Engine) -> None:
     """A finished run, its stages, its findings and their spans cannot be updated or deleted: the
     database refuses, not just the code. Reviews and memos are separate rows, so adjudicating a
-    finding or writing a memo never touches the record it is about. SQLite only; Postgres would
-    carry the same rule as a trigger function."""
+    finding or writing a memo never touches the record it is about. A public workspace that is not
+    listed takes no row (workspace_guards). SQLite only; Postgres would carry the same rules as
+    trigger functions."""
     if target_engine.url.get_backend_name() != "sqlite":
         return
     with target_engine.begin() as connection:
-        for _name, statement in immutability_triggers():
+        for _name, statement in [*immutability_triggers(), *workspace_guards()]:
             connection.exec_driver_sql(statement)
 
 

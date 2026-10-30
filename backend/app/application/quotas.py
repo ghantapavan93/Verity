@@ -72,6 +72,9 @@ def _ended(session: Session, workspace: str) -> int:
     return 1 if expires is None or as_utc(expires) <= utcnow() else 0
 
 
+VISIT_ENDED = "This visit has ended and what it added has been deleted, so nothing was added. Reload the page to start again."
+
+
 def workspace_open(workspace: str | None) -> tuple[Quota, ...]:
     """A public workspace takes a row only while it is registered and has not ended: a quota of one ended workspace,
     which an open one never reaches. Counted under the write lock with the rest, the lock retention deletes under
@@ -86,7 +89,7 @@ def workspace_open(workspace: str | None) -> tuple[Quota, ...]:
         Quota(
             1,
             lambda session: _ended(session, workspace),
-            lambda: AccessRequired("This visit has ended and what it added has been deleted, so nothing was added. Reload the page to start again."),
+            lambda: AccessRequired(VISIT_ENDED),
         ),
     )
 

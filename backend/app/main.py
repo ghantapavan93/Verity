@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from . import db as db_module
 from . import log_sink
@@ -23,11 +24,12 @@ from .api import access, batches, documents, engineering, findings, guidance, he
 from .api.body_limit import BodyLimitMiddleware, BodyRefused
 from .api.in_flight import InFlightMiddleware
 from .application import trust_run
+from .application.quotas import VISIT_ENDED
 from .application.recover_runs import recover_interrupted_runs
 from .application.retention import purge_expired_workspaces, sweep_orphaned_files
 from .config import settings
 from .db import SessionLocal, init_db
-from .errors import WorkbenchError
+from .errors import AccessRequired, WorkbenchError
 from .ingest import bounded
 from .providers import make_provider
 from .providers.base import ModelProvider
@@ -157,6 +159,14 @@ def create_app(provider: ModelProvider | None = None) -> FastAPI:
                 extra={"shape": f"refused {error.status_code} {type(error).__name__}"},
             )
         return JSONResponse({"detail": str(error)}, status_code=error.status_code, headers=headers)
+
+    @app.exception_handler(IntegrityError)
+    async def store_refused(request: Request, error: IntegrityError) -> JSONResponse:
+        # The store's own refusal of a row for a public workspace that has ended (db.workspace_guards), met by a write that
+        # did not ask quotas.workspace_open first: the same answer as that check. Any other integrity error is the server's.
+        if not db_module.refused_as_not_open(error):
+            raise error
+        return await workbench_error(request, AccessRequired(VISIT_ENDED))
 
     @app.exception_handler(BodyRefused)
     async def body_refused(request: Request, error: BodyRefused) -> Response:
