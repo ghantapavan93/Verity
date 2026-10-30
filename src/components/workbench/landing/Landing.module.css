@@ -3,6 +3,7 @@
 
 .page {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr auto auto;
 }
@@ -146,7 +147,7 @@
 .dropActive,
 .drop:focus-within {
   border-style: solid;
-  border-color: var(--accent-line);
+  border-color: var(--accent);
   box-shadow: var(--halo-active);
 }
 
@@ -616,6 +617,7 @@
 
 .receiptDecisionHead {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -1072,7 +1074,7 @@
 }
 
 .gateInput:focus {
-  border-color: var(--accent-line);
+  border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(216, 180, 106, 0.08);
 }
 

@@ -273,7 +273,11 @@ export function RunsView({
             }}
           />
         )}
-        {error && runs && <p className={styles.notice}>{error}</p>}
+        {error && runs && (
+          <p className={styles.notice} role="alert">
+            {error}
+          </p>
+        )}
         {!runs && !error && <ListSkeleton rows={8} label="Runs" />}
 
         <nav className={styles.jump} aria-label="On this page">

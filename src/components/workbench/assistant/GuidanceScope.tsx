@@ -27,12 +27,12 @@ export function GuidanceScope({ documentName, guidance, reduceMotion }: { docume
               className={styles.chipText}
               onClick={() => guidance.setOpen((o) => !o)}
               aria-expanded={guidance.open}
-              aria-label={`Legal instructions: ${guidance.guidance.text}`}
+              aria-label={`Legal guidance: ${guidance.guidance.text}`}
               title={guidance.guidance.text}
             >
               {excerpt(guidance.guidance.text)}
             </button>
-            <button type="button" className={styles.chipRemove} aria-label="Remove legal instructions" onClick={guidance.remove}>
+            <button type="button" className={styles.chipRemove} aria-label="Remove legal guidance" onClick={guidance.remove}>
               <IconClose />
             </button>
           </span>

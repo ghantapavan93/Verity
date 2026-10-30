@@ -64,7 +64,7 @@ describe("FindingsView", () => {
     render(<FindingsView notice={null} onOpen={vi.fn()} />);
     expect(await screen.findByRole("button", { name: "Confirm: Termination for convenience" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Dismiss: Termination for convenience" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Undo: Governing law" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Clear decision: Governing law" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull(); // no bare, ambiguous name
   });
 
@@ -81,7 +81,7 @@ describe("FindingsView", () => {
   it("control: a failure that is not a conflict is shown and the list is not read again", async () => {
     api.reviewFinding.mockRejectedValue(new Error("The workbench API is not reachable."));
     render(<FindingsView notice={null} onOpen={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Undo: Governing law" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Clear decision: Governing law" }));
     expect(await screen.findByText(/not reachable/)).toBeTruthy();
     expect(api.reviewFinding).toHaveBeenCalledWith("f2", { verdict: "cleared", reviewer: "B. Reviewer", note: null, basedOn: 3 });
     expect(api.listFindings).toHaveBeenCalledTimes(1);
@@ -130,7 +130,7 @@ describe("FindingsView: what needs a person comes first", () => {
     api.reviewFinding.mockResolvedValue({ review: CONFIRMED, latestReviewId: 1 } as Awaited<ReturnType<typeof reviewFinding>>);
     render(<FindingsView notice={null} onOpen={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Confirm: Liability cap" }));
-    await screen.findByRole("button", { name: /Undo/ });
+    await screen.findByRole("button", { name: /Clear decision/ });
     const cap = screen.getByText("Liability cap");
     expect(cap.compareDocumentPosition(screen.getByText("Payment terms")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

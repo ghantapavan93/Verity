@@ -19,7 +19,7 @@ export function Divider({
       className={styles.divider}
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize document and Assistant"
+      aria-label="Resize contract and questions"
       aria-valuenow={Math.round(docWidth)}
       aria-valuemin={MIN_DOC_WIDTH}
       aria-valuemax={MAX_DOC_WIDTH}

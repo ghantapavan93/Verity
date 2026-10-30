@@ -33,8 +33,13 @@ export function CommandPalette({ getCommands, onClose, reduceMotion }: { getComm
     return commands.filter((c) => terms.every((t) => `${c.group} ${c.label} ${c.hint ?? ""}`.toLowerCase().includes(t))).slice(0, 40);
   }, [commands, query]);
 
+  // Focus returns to what held it when the palette closes; a command that moves focus (the evidence sheet) does so after.
   useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     inputRef.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
   }, []);
 
   useEffect(() => {
@@ -53,6 +58,7 @@ export function CommandPalette({ getCommands, onClose, reduceMotion }: { getComm
       <motion.div
         className={styles.palette}
         role="dialog"
+        aria-modal="true"
         aria-label="Commands"
         onMouseDown={(e) => e.stopPropagation()}
         initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.98, y: reduceMotion ? 0 : -6 }}

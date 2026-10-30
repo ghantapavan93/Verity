@@ -110,7 +110,7 @@ test.describe("state that must survive", () => {
     // The flows share one data directory across runs and the run is reused by fingerprint, so a previous run may
     // have confirmed this finding already; a review is append-only and undo is a review too.
     await expect(page.getByText(/awaiting review/)).toBeVisible(); // the list has loaded
-    const undo = page.getByRole("button", { name: "Undo" }).first();
+    const undo = page.getByRole("button", { name: "Clear decision" }).first();
     if (await undo.isVisible().catch(() => false)) {
       await undo.click();
     }
@@ -121,10 +121,10 @@ test.describe("state that must survive", () => {
       await name.fill("Playwright");
       await page.getByRole("button", { name: "Confirm" }).first().click();
     }
-    await expect(page.getByRole("button", { name: "Undo" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clear decision" }).first()).toBeVisible();
     await page.reload();
     await page.getByRole("button", { name: "Findings" }).click();
-    await expect(page.getByRole("button", { name: "Undo" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clear decision" }).first()).toBeVisible();
   });
 
   test("a decision made in an out-of-date tab is refused, and that tab then shows the decision that stands", async ({ page, context }) => {
@@ -142,7 +142,7 @@ test.describe("state that must survive", () => {
         .filter({ hasText: `Asked: ${LIABILITY}` })
         .first();
     // The data directory is shared across runs and the run is reused, so the finding may carry a decision already.
-    const undo = rowIn(page).getByRole("button", { name: "Undo" });
+    const undo = rowIn(page).getByRole("button", { name: "Clear decision" });
     if (await undo.isVisible().catch(() => false)) await undo.click();
     await expect(rowIn(page).getByRole("button", { name: "Confirm" })).toBeVisible();
 
@@ -152,7 +152,7 @@ test.describe("state that must survive", () => {
     await expect(rowIn(other).getByRole("button", { name: "Dismiss" })).toBeVisible(); // undecided, as the second tab read it
 
     await rowIn(page).getByRole("button", { name: "Confirm" }).click();
-    await expect(rowIn(page).getByRole("button", { name: "Undo" })).toBeVisible();
+    await expect(rowIn(page).getByRole("button", { name: "Clear decision" })).toBeVisible();
 
     await rowIn(other).getByRole("button", { name: "Dismiss" }).click();
     await expect(other.getByText(/confirmed by Playwright after you opened it/)).toBeVisible();

@@ -130,7 +130,7 @@ describe("Landing: where the model runs", () => {
     // War room F-06, 2026-10-13: the hosted sentence said "to its model and nowhere else", leaving out the edge and the server.
     renderLanding(at("hosted", "a Modal GPU in the US"), true);
     const text = document.body.textContent ?? "";
-    expect(text).toContain("It keeps the contract on its own server and sends its model the question and sections of the contract.");
+    expect(text).toContain("It sends its model nothing beyond the question, guidance, file name and the sections retrieval hands over.");
     // Everything a question sends is listed, the file's name and the guidance included, and the opening sections when
     // retrieval ranks none: "only the sections a question needs" said less than the model receives (counter-review).
     expect(text).toContain("is sent the question, any guidance, the contract's file name and the sections retrieval ranked for the question");

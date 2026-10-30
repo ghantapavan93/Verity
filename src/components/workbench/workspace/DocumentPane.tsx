@@ -73,7 +73,7 @@ export function DocumentPane({
       {doc && onJump && <EvidenceSpine doc={doc} findings={findings} highlight={highlight} onJump={onJump} />}
       <header className={styles.docHeader}>
         <div className={styles.docKicker}>Contract</div>
-        <div className={styles.docTitle}>{doc?.name}</div>
+        <h1 className={styles.docTitle}>{doc?.name}</h1>
         <div className={styles.docMeta}>
           {docMeta} · Uploaded {doc ? formatWhen(doc.createdAt) : ""}
         </div>

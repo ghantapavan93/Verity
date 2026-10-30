@@ -135,7 +135,7 @@ describe("EvidenceDrawer", () => {
     const heads = within(drawer)
       .getAllByRole("heading", { level: 4 })
       .map((h) => h.textContent);
-    expect(heads).toEqual(["Model proposed", "Source", "Code found a conflict", "Human"]);
+    expect(heads).toEqual(["Model proposed", "Source", "Code found a conflict", "Person"]);
     expect(drawer.textContent).not.toContain("sec_4");
 
     // Model proposed: the model's hint under guidance is its view, in its own words, read from the explanation.
@@ -175,7 +175,7 @@ describe("EvidenceDrawer", () => {
     const human = within(drawer).getByTestId("layer-human");
     expect(human.textContent).toContain("Confirmed");
     expect(human.textContent).toContain("by Pavan");
-    expect(within(human).getByRole("button", { name: "Clear the decision" })).toBeTruthy();
+    expect(within(human).getByRole("button", { name: "Clear decision" })).toBeTruthy();
 
     // Prove it: collapsed by default; open, it holds the run facts and the full explanation without a second read.
     expect(screen.queryByTestId("why-this-answer")).toBeNull();
@@ -199,7 +199,7 @@ describe("EvidenceDrawer", () => {
     const heads = within(drawer)
       .getAllByRole("heading", { level: 4 })
       .map((h) => h.textContent);
-    expect(heads).toEqual(["Model proposed", "Source", "Code did not decide", "Human"]);
+    expect(heads).toEqual(["Model proposed", "Source", "Code did not decide", "Person"]);
     const code = within(drawer).getByTestId("layer-code");
     expect(code.textContent).toContain("the model's hint stands as its view");
     expect(code.textContent).not.toContain("Code found");
@@ -240,7 +240,7 @@ describe("EvidenceDrawer", () => {
     const heads = within(drawer)
       .getAllByRole("heading", { level: 4 })
       .map((h) => h.textContent);
-    expect(heads).toEqual(["Model proposed", "Source", "Code confirmed", "Human"]);
+    expect(heads).toEqual(["Model proposed", "Source", "Code confirmed", "Person"]);
     const code = within(drawer).getByTestId("layer-code");
     expect(code.textContent).toContain("Confirmed by code");
     expect(code.textContent).not.toContain("Code found");
@@ -296,7 +296,7 @@ describe("EvidenceDrawer", () => {
     api.reviewFinding.mockResolvedValue({ review: null, latestReviewId: 8 } as Awaited<ReturnType<typeof reviewFinding>>);
     renderDrawer(finding(CONFIRMED), onReviewed);
     const human = within(screen.getByLabelText("Evidence")).getByTestId("layer-human");
-    fireEvent.click(within(human).getByRole("button", { name: "Clear the decision" }));
+    fireEvent.click(within(human).getByRole("button", { name: "Clear decision" }));
     expect(api.reviewFinding).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Your name, recorded with the decision"), { target: { value: "R. Reviewer" } });
     fireEvent.click(screen.getByRole("button", { name: "Clear as R. Reviewer" }));
@@ -311,7 +311,7 @@ describe("EvidenceDrawer", () => {
     api.reviewFinding.mockRejectedValue(stale);
     renderDrawer(finding(CONFIRMED), onReviewed);
     const human = within(screen.getByLabelText("Evidence")).getByTestId("layer-human");
-    fireEvent.click(within(human).getByRole("button", { name: "Clear the decision" }));
+    fireEvent.click(within(human).getByRole("button", { name: "Clear decision" }));
     await vi.waitFor(() => expect(within(human).getByRole("alert").textContent).toContain("dismissed by B. Reviewer after you opened it"));
     expect(api.reviewFinding).toHaveBeenCalledWith("afa60a7574984690", { verdict: "cleared", reviewer: "Pavan", note: null, basedOn: 7 });
     expect(onReviewed).toHaveBeenCalledWith("afa60a7574984690", undefined);

@@ -7,6 +7,7 @@
 .root {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
@@ -46,6 +47,7 @@
 
 .workspace {
   height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);
 }
@@ -132,11 +134,13 @@
 .main {
   min-width: 0;
   height: 100vh;
+  height: 100dvh;
 }
 
 .split {
   display: grid;
   height: 100vh;
+  height: 100dvh;
   min-width: 0;
 }
 
@@ -163,6 +167,7 @@
   z-index: 2;
   width: 22px;
   height: calc(100vh - 96px);
+  height: calc(100dvh - 96px);
   margin: 0 -6px 0 0;
 }
 
@@ -234,7 +239,7 @@
 }
 
 .docTitle {
-  margin-top: 6px;
+  margin: 6px 0 0;
   font-family: var(--font-serif);
   font-size: 22px;
   font-weight: 500;
@@ -361,7 +366,7 @@
 .passageRead {
   color: inherit;
   background: none;
-  text-decoration: underline dotted var(--text-3);
+  text-decoration: underline dotted var(--doc-text-2);
   text-underline-offset: 3px;
 }
 
@@ -420,7 +425,7 @@
   width: 3px;
   height: 32px;
   border-radius: 3px;
-  background: var(--border-strong);
+  background: var(--text-4);
   transition:
     background var(--dur-fast) var(--ease),
     height var(--dur-fast) var(--ease);
@@ -440,6 +445,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   height: 100vh;
+  height: 100dvh;
   background: var(--assistant-bg);
   border-left: 1px solid var(--hairline);
   overflow: hidden;
@@ -459,6 +465,7 @@
 }
 
 .assistantTitle {
+  margin: 0;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -604,7 +611,7 @@
 }
 
 .popoverInput:focus {
-  border-color: var(--accent-line);
+  border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(216, 180, 106, 0.08);
 }
 
@@ -786,18 +793,21 @@
   align-items: center;
   gap: 6px;
   flex: none;
-  height: 22px;
-  padding: 0 8px 0 7px;
+  max-width: 100%;
+  min-height: 22px;
+  padding: 3px 8px 3px 7px;
   border-radius: 6px;
   border: 1px solid transparent;
   font-size: 11.5px;
   font-weight: 600;
+  line-height: 1.3;
   letter-spacing: 0.005em;
-  white-space: nowrap;
 }
 
+/* The dot keeps its size when a long label wraps beside it. */
 .statusChip::before {
   content: "";
+  flex: none;
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -872,6 +882,7 @@
 
 .resultTopic {
   min-width: 0;
+  margin: 0;
   overflow-wrap: anywhere;
   font-family: var(--font-serif);
   font-size: 17px;
@@ -1276,8 +1287,12 @@
   resize: none;
 }
 
+/* One line, as the box is one row tall: wrapped at 375 px it showed half of each of two lines. */
 .composerInput::placeholder {
   color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sendButton {
@@ -1844,6 +1859,11 @@
   margin-top: 6px;
 }
 
+/* Its sections sit inside a drawer section already indented for the layer rule. */
+.proof .drawerSection {
+  padding-left: 0;
+}
+
 .proveLede {
   margin: 0 0 12px;
   font-size: 12.5px;
@@ -2003,7 +2023,7 @@
   margin-top: 6px;
 }
 
-.withheld {
+.withheldProposal {
   padding: 12px 14px 6px;
   border: 1px dashed var(--status-bad-border);
   border-radius: var(--radius-m);
@@ -2015,7 +2035,7 @@
   color: var(--text-2);
 }
 
-.withheldText {
+.withheldProposalText {
   margin: 4px 0 0;
   font-size: 13px;
   line-height: 1.5;
@@ -2126,6 +2146,10 @@
 @media (max-width: 640px) {
   .workspace {
     grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .popoverInput {
+    font-size: 16px;
   }
 
   .main {

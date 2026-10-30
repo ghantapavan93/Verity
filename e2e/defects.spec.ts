@@ -34,15 +34,15 @@ test("a decision made on Findings is the one the evidence drawer shows when Revi
   await expect(drawer.getByText("Limitation of Liability")).toBeVisible();
   const shownId = param(page, "finding");
 
-  // On Findings, change the decision on every finding of this run (Confirm, or Undo a decision an earlier flow made).
+  // On Findings, change the decision on every finding of this run (Confirm, or Clear a decision an earlier flow made).
   await page.getByRole("button", { name: "Findings" }).click();
-  const decisions = page.getByRole("button", { name: /^(Confirm|Undo): Limitation of Liability$/ });
+  const decisions = page.getByRole("button", { name: /^(Confirm|Clear decision): Limitation of Liability$/ });
   await expect(decisions.first()).toBeVisible();
   const count = await decisions.count();
   for (let i = 0; i < count; i++) {
     const posted = page.waitForResponse((r) => r.url().includes("/api/findings/") && r.request().method() === "POST");
     await page
-      .getByRole("button", { name: /^(Confirm|Undo): Limitation of Liability$/ })
+      .getByRole("button", { name: /^(Confirm|Clear decision): Limitation of Liability$/ })
       .nth(i)
       .click();
     await posted;

@@ -65,9 +65,9 @@ export function WithheldList({
     <div className={styles.withheldList}>
       <div className={styles.evidenceHead}>What the model proposed · withheld by the verifier</div>
       {findings.map((finding) => (
-        <div key={finding.id} className={styles.withheld}>
+        <div key={finding.id} className={styles.withheldProposal}>
           <div className={styles.withheldTopic}>{finding.topic}</div>
-          <p className={styles.withheldText}>{finding.conclusion}</p>
+          <p className={styles.withheldProposalText}>{finding.conclusion}</p>
           {finding.spans.map((span, i) => {
             const section = span.sectionId ? sectionsById.get(span.sectionId) : undefined;
             const where = section ? citationLabel(section) : span.citedSectionLabel ? `the model's ${span.citedSectionLabel}` : "the sections handed over";

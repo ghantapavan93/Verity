@@ -967,7 +967,7 @@ function YourTurn() {
           <p className={styles.warningTitle}>Use public or synthetic contracts only.</p>
           <p>
             Do not upload confidential, privileged or personal documents. Verity does not detect sensitive content and does not refuse it: what you add is
-            stored on the Verity server, in a workspace only your browser can open.
+            stored on the Verity server; the workbench’s first screen says who else can open it.
           </p>
         </aside>
       </div>

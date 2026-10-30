@@ -128,7 +128,7 @@ export function FindingsView({
           {records && <span className={styles.count}>{records.length}</span>}
         </h1>
         <p className={styles.lede}>
-          Every finding cites text code found in the contract. Found is not right: open one, read the passage, decide.
+          Code found every cited passage in the contract. Found is not the same as right: open one, read the passage, decide.
           {records && records.length > 0 && ` ${plural(awaiting, "finding")} awaiting review · ${reviewed} reviewed.`}
         </p>
         {records && records.length > 0 && (
@@ -157,7 +157,11 @@ export function FindingsView({
             }}
           />
         )}
-        {error && records && <p className={styles.notice}>{error}</p>}
+        {error && records && (
+          <p className={styles.notice} role="alert">
+            {error}
+          </p>
+        )}
         {!records && !error && <ListSkeleton rows={6} label="Findings" />}
 
         {records && records.length === 0 && (
@@ -258,9 +262,9 @@ export function FindingsView({
                           className={styles.reviewButton}
                           disabled={busyId === r.id}
                           onClick={() => void decide(r, "cleared")}
-                          aria-label={`Undo: ${r.topic}`}
+                          aria-label={`Clear decision: ${r.topic}`}
                         >
-                          Undo
+                          Clear decision
                         </button>
                       </>
                     ) : pending?.id === r.id ? (

@@ -473,7 +473,7 @@ function EvidenceBody({
                   <dd className={styles.whyMono}>{run.id}</dd>
                 </div>
                 <div>
-                  <dt>Take it away</dt>
+                  <dt>Check it yourself</dt>
                   <dd>
                     <PackLink runId={run.id} className={styles.actionLink} />
                   </dd>
@@ -537,7 +537,7 @@ function HumanLayer({
   return (
     <section className={`${styles.drawerSection} ${styles.layer} ${styles.layerLast} ${finding.review ? styles.layerHuman : ""}`} data-testid="layer-human">
       <div className={styles.layerHead}>
-        <h4>Human</h4>
+        <h4>Person</h4>
       </div>
       {finding.review ? (
         <dl className={styles.drawerFacts}>
@@ -557,7 +557,7 @@ function HumanLayer({
         <div className={styles.resultActions}>
           {finding.review ? (
             <button type="button" className={styles.actionButton} disabled={busy} onClick={() => void decide("cleared")}>
-              Clear the decision
+              Clear decision
             </button>
           ) : (
             <>
@@ -644,7 +644,10 @@ function DecisionStrip({ cells }: { cells: StripCell[] }) {
       {cells.map((cell) => (
         <li key={cell.who} className={`${styles.stripCell} ${tones[cell.tone]} ${cell.decisive ? styles.stripDecisive : ""}`}>
           <span className={styles.stripWho}>{cell.who}</span>
-          <span className={`${styles.stripWhat} ${cell.struck ? styles.stripStruck : ""}`}>{cell.what}</span>
+          <span className={`${styles.stripWhat} ${cell.struck ? styles.stripStruck : ""}`}>
+            {cell.what}
+            {cell.struck && <span className={styles.visuallyHidden}> (changed by code)</span>}
+          </span>
           {cell.note && <span className={styles.stripNote}>{cell.note}</span>}
         </li>
       ))}

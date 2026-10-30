@@ -24,10 +24,10 @@ export function ListSkeleton({ rows = 5, label }: { rows?: number; label: string
 export function ReadFailed({ what, error, onRetry }: { what: string; error: string; onRetry: () => void }) {
   return (
     <div className={styles.failed} role="alert">
-      <p className={styles.failedHead}>Could not read {what}. Nothing here is known.</p>
+      <p className={styles.failedHead}>Could not read {what}. This is not an empty list.</p>
       <p className={styles.failedText}>{error}</p>
       <button type="button" className={styles.reviewButton} onClick={onRetry}>
-        Read it again
+        Try again
       </button>
     </div>
   );

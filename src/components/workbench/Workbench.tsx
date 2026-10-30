@@ -640,7 +640,7 @@ function WorkbenchSurface() {
             reduceMotion={reduceMotion}
           />
         ) : (
-          <motion.section key="shell" id="main" tabIndex={-1} className={styles.workspace} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={morph}>
+          <motion.main key="shell" id="main" tabIndex={-1} className={styles.workspace} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={morph}>
             <Rail active={view} hasDocument={!!doc} onNavigate={navigate} onSearch={openSearch} onHome={goHome} />
 
             <AnimatePresence mode="wait" initial={false}>
@@ -719,7 +719,7 @@ function WorkbenchSurface() {
             <AnimatePresence>
               {paletteOpen && <CommandPalette getCommands={buildCommands} onClose={() => setPaletteOpen(false)} reduceMotion={reduceMotion} />}
             </AnimatePresence>
-          </motion.section>
+          </motion.main>
         )}
       </AnimatePresence>
     </div>

@@ -41,7 +41,7 @@ export function FindingCard({
   return (
     <article className={styles.result}>
       <header className={styles.resultHead}>
-        <span className={styles.resultTopic}>{finding.topic}</span>
+        <h3 className={styles.resultTopic}>{finding.topic}</h3>
         <StatusChip status={finding.status} hasGuidance={hasGuidance} source={finding.statusSource} />
       </header>
       <p className={styles.resultText}>{finding.conclusion}</p>

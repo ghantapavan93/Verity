@@ -9,13 +9,13 @@ import { StageList } from "./StageList";
 
 afterEach(cleanup);
 
-const note = () => screen.getByText(/the stages above are the API/i).textContent ?? "";
+const note = () => screen.getByText(/these stages are the server's own reports/i).textContent ?? "";
 
 describe("what the wait for the model can hold", () => {
-  it("a hosted model that sleeps: waking it adds one and a half to three minutes to the first answer", () => {
+  it("a hosted model that sleeps: waking it adds 1.5 to 3 minutes to the first answer", () => {
     render(<StageList current="checking" details={{}} checkingLabel="Checking" reduceMotion modelPlace="Modal (US)" modelSleeps />);
     expect(note()).toContain("The model runs on Modal (US).");
-    expect(note()).toContain("waking it adds one and a half to three minutes to the first answer");
+    expect(note()).toContain("Waking it adds 1.5 to 3 minutes to the first answer");
     expect(note()).not.toContain("under two minutes");
   });
 

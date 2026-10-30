@@ -130,7 +130,7 @@ export function Landing({
   const place = modelPlace(accessKnown ? apiHealth : null);
 
   return (
-    <motion.section
+    <motion.main
       id="main"
       tabIndex={-1}
       className={styles.page}
@@ -199,7 +199,7 @@ export function Landing({
                 <span className={styles.fileName}>
                   <IconFile /> <span>{pendingName}</span>
                 </span>
-                <span className={styles.stateLine}>
+                <span className={styles.stateLine} role="status">
                   <Shimmer />
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.span
@@ -442,6 +442,6 @@ export function Landing({
         )}
         <span>{INDEPENDENCE}</span>
       </footer>
-    </motion.section>
+    </motion.main>
   );
 }

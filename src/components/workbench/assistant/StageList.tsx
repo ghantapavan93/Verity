@@ -77,11 +77,11 @@ export function StageList({
             ? // What is counted, said as counted: questions asked earlier and not yet answered. Which of them the model is
               // answering now is not known here (a later question on a shorter contract can reach it first). Under load
               // the sentence below was the only one, while thirty questions were waiting (audit, 2026-10-19).
-              `${modelPlace ? "It" : "The model"} answers one question at a time, and ${ahead === 1 ? "one question" : `${ahead} questions`} asked before this one ${ahead === 1 ? "is" : "are"} still being answered. The stages above are the API's own.`
+              `${modelPlace ? "It" : "The model"} answers one question at a time, and ${ahead === 1 ? "one question" : `${ahead} questions`} asked before this one ${ahead === 1 ? "is" : "are"} still being answered. These stages are the server's own reports, not an estimate.`
             : modelSleeps
               ? // Measured on Modal, 2026-10-13: 95-168 s from asleep to the first token; awake, a run's p95 was 14.5 s.
-                "It sleeps when no one has asked for a few minutes, and waking it adds one and a half to three minutes to the first answer; awake, most answers take under half a minute. The stages above are the API's own."
-              : "Most answers take under two minutes; the stages above are the API's own."}
+                "It sleeps after a few idle minutes. Waking it adds 1.5 to 3 minutes to the first answer; awake, most answers take under 30 seconds. These stages are the server's own reports, not an estimate."
+              : "Most answers take under two minutes. These stages are the server's own reports, not an estimate."}
         </p>
       )}
     </>

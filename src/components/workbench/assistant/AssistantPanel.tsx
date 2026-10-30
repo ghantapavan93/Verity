@@ -121,7 +121,7 @@ export function AssistantPanel({
     <div className={styles.assistantPane}>
       <header className={styles.assistantHeader} inert={covered}>
         <div className={styles.assistantTitleRow}>
-          <div className={styles.assistantTitle}>Questions</div>
+          <h2 className={styles.assistantTitle}>Questions</h2>
           <button type="button" className={styles.kbdHint} onClick={onOpenPalette} aria-label="Open commands">
             {apple ? (
               <>
@@ -242,16 +242,20 @@ export function AssistantPanel({
                         </a>
                         {runMemo.reviewHead !== run.reviewHead && (
                           <button type="button" className={styles.memoButton} onClick={() => void memo.generate(run)} disabled={memo.busy}>
-                            {memo.busy ? "Writing the memo" : "Write a new memo"}
+                            {memo.busy ? "Generating the memo…" : "Generate a new memo"}
                           </button>
                         )}
                       </>
                     ) : (
                       <button type="button" className={styles.memoButton} onClick={() => void memo.generate(run)} disabled={memo.busy}>
-                        {memo.busy ? "Writing the memo" : "Generate review memo"}
+                        {memo.busy ? "Generating the memo…" : "Generate review memo"}
                       </button>
                     )}
-                    {memo.error && <span className={styles.errorLine}>{memo.error}</span>}
+                    {memo.error && (
+                      <span className={styles.errorLine} role="alert">
+                        {memo.error}
+                      </span>
+                    )}
                   </div>
                   <p className={styles.runMeta}>
                     {run.reused && <span>answered earlier for this exact question</span>}
@@ -259,7 +263,7 @@ export function AssistantPanel({
                       <code>{run.model}</code> · prompt <code>{run.promptVersion}</code>
                       {run.latencyMs !== null ? ` · ${(run.latencyMs / 1000).toFixed(0)} s` : ""}
                     </span>
-                    <span>every quoted passage found in the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}</span>
+                    <span>every passage shown was found in the document text{run.withheld.length > 0 ? ` · ${run.withheld.length} withheld` : ""}</span>
                     {run.sectionsRead != null && doc && <span>{sectionsReadNote(run.retrievalMode, run.sectionsRead, doc.sections.length)}</span>}
                   </p>
                   {doc && <RevisionCheck key={run.id} runId={run.id} documentId={doc.id} run={run} prepared={sample === "standard" ? SAMPLE_REVISION : null} />}

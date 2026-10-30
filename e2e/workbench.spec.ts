@@ -80,7 +80,7 @@ test("a question ends in a finding whose citation opens the document's own text"
   // The drawer reads top-down: the model, the source, code, the person; the machinery sits behind "Prove it".
   // This question has no guidance, so code decided nothing about the status and the third heading says so.
   const heads = await drawer.getByRole("heading", { level: 4 }).allTextContents();
-  expect(heads).toEqual(["Model proposed", "Source", "Code did not decide", "Human"]);
+  expect(heads).toEqual(["Model proposed", "Source", "Code did not decide", "Person"]);
   await expect(drawer.getByTestId("layer-human")).toContainText(/decided|Confirmed|Dismissed/);
   // Prove it: the run explained from its record by the API, in the drawer, per finding.
   await drawer.getByRole("button", { name: "Prove it" }).click();
@@ -162,7 +162,7 @@ test("a question asked right after a review keeps its own answer on screen", asy
   await expect(drawer).toBeVisible();
   // One review, whichever the finding offers: the flows share one data directory, so an earlier flow may have confirmed
   // it already, and clearing it is a review too, re-read the same way.
-  const decision = drawer.getByRole("button", { name: /^(Confirm|Clear the decision)$/ }).first();
+  const decision = drawer.getByRole("button", { name: /^(Confirm|Clear decision)$/ }).first();
   await decision.scrollIntoViewIfNeeded();
   const decided = page.waitForResponse((r) => r.url().includes("/api/findings/") && r.request().method() === "POST");
   await decision.click();

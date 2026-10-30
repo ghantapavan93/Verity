@@ -312,7 +312,7 @@ function whereItGoes(place: { hosted: boolean; place: string } | null): { head: 
         // a question needs" left out the file's name and the guidance, and the opening sections retrieval hands over
         // when it ranks none (runs/service.py _retrieve; counter-review, 2026-10-13). The numbers are the deployed
         // settings (WORKBENCH_RETRIEVAL_K, WORKBENCH_SECTION_WINDOW), pinned by backend/tests/test_docs_claims.py.
-        head: "It keeps the contract on its own server and sends its model the question and sections of the contract.",
+        head: "It sends its model nothing beyond the question, guidance, file name and the sections retrieval hands over.",
         text: `An upload reaches the Verity server through Cloudflare, which serves this site and so handles its traffic. With each question, the model on ${place.place} is sent the question, any guidance, the contract's file name and the sections retrieval ranked for the question, at most six and each cut at 6,000 characters; when it ranks none, the opening six go instead, which for a short contract is all of it. ${record}`,
       }
     : {
