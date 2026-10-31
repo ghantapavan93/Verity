@@ -2,7 +2,7 @@ fastapi
 uvicorn[standard]
 python-multipart
 sqlalchemy>=2.0
-pydantic>=2.7
+pydantic>=2.13.5
 python-docx
 pypdf
 rank-bm25
