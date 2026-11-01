@@ -1,5 +1,8 @@
 # Working in this repository
 
+Start with `docs/BOOK.md`: the whole prototype, every file, how to run it and how to change it safely, written so an
+agent can work without reading the codebase first.
+
 `ENGINEERING_CONSTITUTION.md` is binding: where responsibility lives (the model proposes, deterministic code verifies,
 the database freezes a finished run). Answer its five questions before every meaningful change. The rule under
 everything: a finding may come from the model; a claim that its evidence is verified may only come from deterministic

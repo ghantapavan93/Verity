@@ -27,8 +27,8 @@ Tunnel. Nothing a visitor adds is sent to a model host anywhere else, and the si
 3. **Check.** Code looks for every quote, word for word, in the document's own text, and withholds a finding whose quote
    it cannot find. Where guidance states a rule code can compare (a notice period against a minimum), code reports the
    shortfall itself. It lowers some passes whose quote leaves out an "unless", "except" or "subject to" from its own
-   sentence, where the answer does not mention it, and it locates the contract's own amendment and precedence wording.
-   Everything else stays the model's view, and the screen says which is which.
+   sentence, unless another of the answer's quotes shows it, and it locates the contract's own amendment and precedence
+   wording. Everything else stays the model's view, and the screen says which is which.
 4. **Decide and keep.** A person confirms or dismisses each finding under a name. A finished run cannot be changed, and
    it can be rebuilt from its record to the same hash. Each run exports a memo and an evidence pack that checks itself
    with plain Python.
@@ -60,6 +60,8 @@ bash scripts/release-gate.sh <commit>                   # all of it on a fresh c
 What each check covers, and every number this README leaves out, is in [docs/STATUS.md](docs/STATUS.md).
 
 ## Reading it in ten minutes
+
+[docs/BOOK.md](docs/BOOK.md) is the full guide: every file, the life of a question, how to run and change it.
 
 | Read | To see |
 |---|---|
