@@ -335,8 +335,8 @@ export function Refusals({ reduceMotion, place }: { reduceMotion: boolean; place
     {
       head: "It does not pass a clause on its own.",
       // Since policy-v14 code checks one kind of left-out condition (runs/status.py, check_conditions); this said it did
-      // not until 2026-10-16. "Some": the rule's edges are docs/FAILURE-ENVELOPE.md's (tests/test_docs_claims.py).
-      text: "A pass is the model's proposal. Code lowers it to review when the evidence shown does not establish it. Code also lowers some passes whose quote leaves out an “unless”, “except” or “subject to” from its own sentence, where the answer does not mention it. Whether the answer carries every condition, and who holds a right, code does not check.",
+      // not until 2026-10-16. Since policy-v17 the evidence decides it, not the answer's words. "Some": the rule's edges are docs/FAILURE-ENVELOPE.md's (tests/test_docs_claims.py).
+      text: "A pass is the model's proposal. Code lowers it to review when the evidence shown does not establish it. Code also lowers some passes whose quote leaves out an “unless”, “except” or “subject to” from its own sentence, unless another of the answer's quotes shows it. Whether the answer carries every condition, and who holds a right, code does not check.",
     },
     {
       head: "It does not hide a miss.",
