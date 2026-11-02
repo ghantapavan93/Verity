@@ -271,7 +271,7 @@ _V11_ONE = (
 _WRITTEN_V9 = _written(_V9_ONE)
 _WRITTEN_V10 = _written_v10(_V9_ONE)
 _WRITTEN = _written_v11(_V11_ONE)
-VERSION = 12  # the verifier version these definitions are (spans.VERIFIER_VERSION)
+VERSION = 13  # the verifier version these definitions are (spans.VERIFIER_VERSION)
 
 
 def written_numbers(text: str, version: int = VERSION, invisible: frozenset[str] = frozenset()) -> list[tuple[int, int]]:
@@ -504,7 +504,7 @@ def compared(text: str, version: int = VERSION, invisible: frozenset[str] = froz
         return kept
     ends = [Token(Kind.BREAK, "", at, at + 1) for at in sentence_ends(text, invisible)]
     choices = [Token(Kind.SYMBOL, ch, at, at + 1) for at, ch in enumerate(text) if ch in _CHOICE_MARKS]
-    return sorted(whole_words(text, kept) + ends + choices, key=lambda t: t.start)
+    return sorted(whole_words(text, kept, version) + ends + choices, key=lambda t: t.start)
 
 
 def caseless(text: str) -> str:
@@ -513,11 +513,15 @@ def caseless(text: str) -> str:
     return unicodedata.normalize("NFC", unicodedata.normalize("NFD", text).casefold())
 
 
-def whole_words(text: str, tokens: list[Token]) -> list[Token]:
+def whole_words(text: str, tokens: list[Token], version: int = VERSION) -> list[Token]:
     """v11's words as the typed tier compares them, by canonical caseless match (`caseless`). A word runs on through the
     combining marks and joiners written in it and the letters after them (a decomposed "payément" is one word, never
     "paye" and "ment"), so a decomposed "où" is "où", never "ou"; and a clause's letter or numeral alone in parentheses
-    keeps its case, so "(A)" is not "(a)". A word `signed` made part of a number keeps the value it was given there."""
+    keeps its case, so "(A)" is not "(a)". A word `signed` made part of a number keeps the value it was given there.
+
+    From v13 a word that reaches into a token takes the token whole, and runs on through any mark after it: until then
+    the token was dropped though it could end past the word, so in "cafe\u0301USD 900" the word took "USD" of "USD 900" and
+    "900" was never compared. Every character the tokens held stays compared."""
     out: list[Token] = []
     k = 0
     while k < len(tokens):
@@ -527,12 +531,18 @@ def whole_words(text: str, tokens: list[Token]) -> list[Token]:
             out.append(token)
             continue
         end = token.end
-        while end < len(text) and marked(text[end]):
-            end += 1
-            while end < len(text) and (text[end].isalnum() or marked(text[end])):
+        while True:
+            while end < len(text) and marked(text[end]):
                 end += 1
-        while k < len(tokens) and tokens[k].start < end:
-            k += 1  # the letters after a mark, which `tokenize` read as a word of their own
+                while end < len(text) and (text[end].isalnum() or marked(text[end])):
+                    end += 1
+            reached = end
+            while k < len(tokens) and tokens[k].start < end:
+                if version >= 13:
+                    end = max(end, tokens[k].end)
+                k += 1  # the letters after a mark, which `tokenize` read as a word of their own
+            if end == reached:
+                break
         surface = text[token.start : end]
         if end > token.end or token.canonical == surface.casefold():
             if text[token.start - 1 : token.start] == "(" and _CLAUSE_LETTER.fullmatch(text, token.start - 1, end + 1):

@@ -54,6 +54,9 @@ still checked as v10 read it.
 For a run verified under verifier v12 or later, the typed check reads both texts as a reader sees them, the characters
 normalisation deletes left out: an invisible character inside a word does not part it, so "the rapist" is not found
 in a "therapist" written with a zero-width space. A v11 run is still checked as v11 read it.
+For a run verified under verifier v13 or later, a word read whole through a combining mark takes every token it
+reaches whole: in "cafe\u0301USD 900" the number is compared, so a quote saying 500 there is not found. A v12 run is
+still checked as v12 read it.
 Since the stress test of 2026-10-30 every field of findings.json, relations.json and run.json is either checked or
 printed UNCHECKED, with why. run.json carries the run's stage rows as the run wrote them (stages: what each stage read
 and produced, as hashes), and this file recomputes each one from the files here:
@@ -245,8 +248,9 @@ def typed_tokens(text, version=0):
     keeps its written precision. Under v8 a number also carries its sign and parentheses, and starts and ends where it
     is written (verify/tokens.signed). Under v11 a number whose digits "/" or ":" join is one token, and the end of each
     sentence is a token of kind "break" (verify/tokens.compared). Under v12 the tokens are v11's of the text as a reader
-    sees it, the characters normalisation deletes left out, each mapped back onto the original. For an earlier run, the
-    pack's reading before v7."""
+    sees it, the characters normalisation deletes left out, each mapped back onto the original. Under v13 a word read
+    through a mark takes every token it reaches whole (verify/tokens.whole_words). For an earlier run, the pack's
+    reading before v7."""
     if version >= 12:
         hidden = deleted(version)
         where = [at for at, ch in enumerate(text) if ch not in hidden]
@@ -341,7 +345,7 @@ def typed_tokens(text, version=0):
                 first[1:3] = [before + head, low]
                 last[1], last[3] = tail + after, high
     if version >= 11:
-        tokens = whole_words(text, tokens)
+        tokens = whole_words(text, tokens, version)
         choices = [["symbol", ch, at, at + 1] for at, ch in enumerate(text) if ch in CHOICE_MARKS]
         tokens = sorted(tokens + [["break", "", at, at + 1] for at in sentence_ends(text)] + choices, key=lambda t: t[2])
     return tokens
@@ -357,9 +361,9 @@ def marked(ch):
     return ch in JOINERS or unicodedata.category(ch)[0] == "M"
 
 
-def whole_words(text, tokens):
+def whole_words(text, tokens, version=0):
     """v11's words, read whole through their marks and joiners and compared caseless; a clause's letter alone in
-    parentheses keeps its case (verify/tokens.whole_words)."""
+    parentheses keeps its case. Under v13 a word that reaches into a token takes the token whole (verify/tokens.whole_words)."""
     out = []
     k = 0
     while k < len(tokens):
@@ -369,12 +373,18 @@ def whole_words(text, tokens):
             out.append(token)
             continue
         end = token[3]
-        while end < len(text) and marked(text[end]):
-            end += 1
-            while end < len(text) and (text[end].isalnum() or marked(text[end])):
+        while True:
+            while end < len(text) and marked(text[end]):
                 end += 1
-        while k < len(tokens) and tokens[k][2] < end:
-            k += 1
+                while end < len(text) and (text[end].isalnum() or marked(text[end])):
+                    end += 1
+            reached = end
+            while k < len(tokens) and tokens[k][2] < end:
+                if version >= 13:
+                    end = max(end, tokens[k][3])
+                k += 1
+            if end == reached:
+                break
         surface = text[token[2]:end]
         if end > token[3] or token[1] == surface.casefold():
             if text[token[2] - 1:token[2]] == "(" and CLAUSE_LETTER.fullmatch(text, token[2] - 1, end + 1):

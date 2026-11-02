@@ -173,6 +173,9 @@ RECORDED: dict[str, str] = {
     # character normalisation deletes left out, so "the rapist" is not found in "the​rapist". v11 is on main, so
     # this is a bump.
     "v12": "fbe0d75864ef5f45",
+    # v13, 2026-11-02: a word read whole through a mark takes every token it reaches whole (tokens.whole_words); a bump:
+    # "cafe\u0301USD 900" no longer drops "900" (test_verifier_v13.py).
+    "v13": "4c8be9e9fb42eaad",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
     # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.
@@ -195,7 +198,9 @@ RECORDED: dict[str, str] = {
     # text boxes read as Word displays them; the PDF page read by position).
     # Replaced 2026-11-01: the reader reaches tokens.VERSION, which v12 moved; every check it reaches reads it as
     # "11 or later", so no reading changes (verifier v12 changes only tokens.compared, outside the reader).
-    "reader v17": "0322077df4f338ea",
+    # Replaced 2026-11-02 for the same reason: v13 moved tokens.VERSION again and changes only tokens.whole_words, which
+    # the reader does not reach.
+    "reader v17": "16292d2c28f92734",
 }
 
 

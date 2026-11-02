@@ -1967,3 +1967,24 @@ Replayed read-only under v11 and v12 over 32,731 recorded spans in 1,905 distinc
 the public store not opened), 283 span and section pairs holding such a character: none lost or gained. The reader's
 fingerprint moved only because it reaches `tokens.VERSION`, which every check it reaches reads as "11 or later"; it was
 replaced, not bumped. The same gate failed `test_data_audit.py` on the browser-flow count the frontend commit moved to 49.
+
+## 2026-11-02 — Verifier v13: a word read whole through a mark takes every token it reaches
+
+The release review of f46057b found a false "found" that 865356b already had. `spans.locate("fee is caféUSD 500",
+"The fee is caféUSD 900 per month.")` returned a typed match: a quote saying 500 shown as verified against text
+saying 900. Since v11 a word runs on through a combining mark and the letters and digits after it (`whole_words`), so a
+decomposed "café" is one word. It then skipped every token that began inside that run, and a token could begin there
+and end past it: the run is "caféUSD", the token "USD 900" began at "U", and "900" was never compared. The same
+dropped the rest of "1,500", "15%", "1.2.3" and "US$500" written straight after a mark.
+
+Invariant: the typed tier compares every character the tokens held; reading a word whole only merges tokens, never
+drops one. Decision: from v13 a word that reaches into a token takes that token whole, and runs on through any mark
+after it (`tokens.whole_words`, and the pack's copy). The evidence pack reads a v13 run that way and a v12 run as v12 did.
+Rejected: stopping the word where a number begins, which reads "caféUSD 900" as "café" and "USD 900" and so
+forgives the space in "café USD 900", the class v6 closed.
+
+Tests (`test_verifier_v13.py`): the six members of the class withheld, controls found and highlighted whole, a property
+that reading words whole drops no character, and a property that a changed digit is never found (both run at the deep
+fuzz scale, 20). Replayed read-only under v12 and v13 over 32,731 recorded spans in 1,905 distinct stores (the public
+store not opened): no span was searched in a section holding a mark, and none of the 14 distinct recorded sections that
+hold one tokenizes differently. The reader's fingerprint moved only through `tokens.VERSION` again, and was replaced.
