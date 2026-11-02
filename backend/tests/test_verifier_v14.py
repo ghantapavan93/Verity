@@ -139,3 +139,24 @@ def test_the_pack_reads_clause_letters_as_the_workbench_does_under_v14(tmp_path_
 def test_the_prefilter_never_refuses_a_clause_the_tiers_find(quote: str, text: str) -> None:
     if _tiers(quote, text) is not None:
         assert not _cannot_hold(quote, text), (ascii(quote), ascii(text))
+
+
+# The review of the second v14 (8e12f4d, not released): a letter that the compatibility form makes two letters lost its
+# clause; and symbols the first rule missed (a squared unit, a negative circled or squared capital) were still dropped.
+@pytest.mark.parametrize(
+    ("quote", "text"),
+    [
+        ("see (" + chr(0x1C4) + ") now", "see (" + chr(0x1C6) + ") now"),
+        ("see (" + chr(0x132) + ") now", "see (" + chr(0x133) + ") now"),
+        ("see (FF) now", "see (" + chr(0xFB00) + ") now"),
+        ("5 " + chr(0x338E) + " daily", "5 " + chr(0x338F) + " daily"),
+        ("see " + chr(0x1F151) + " now", "see " + chr(0x1F150) + " now"),
+        ("see " + chr(0x1F171) + " now", "see " + chr(0x1F170) + " now"),
+    ],
+)
+def test_a_letter_is_tested_as_stored_and_every_enclosed_form_is_compared(quote: str, text: str) -> None:
+    assert locate(quote, text) is None
+
+
+def test_control_a_trade_mark_sign_is_still_no_part_of_what_a_quote_says() -> None:
+    assert locate("Acme Widget", "The Acme" + chr(0x2122) + " Widget ships.") is not None

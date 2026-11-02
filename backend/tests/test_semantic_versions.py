@@ -180,7 +180,7 @@ RECORDED: dict[str, str] = {
     "v13": "58d938c3496876e3",
     # v14, 2026-11-02: a clause's letter is read as a reader sees it, invisible characters left out and marks composed
     # (tokens.clause_letters); v13 is on main, so a bump.
-    "v14": "58ae5e53091c4813",
+    "v14": "60069c458a7787eb",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
     # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.

@@ -195,31 +195,48 @@ _CLAUSE_LETTER = re.compile(r"\((?:[^\W\d_]|[ivxlcdm]+|[IVXLCDM]+)\)")
 _JOINERS = frozenset("\u200c\u200d")
 
 
-def enclosed(ch: str) -> bool:
-    """Whether ``ch`` is a symbol that reads as a letter or a digit, "\u24d0", "\u249c", "\u24b6" (verifier v14): until v14 the
-    typed tier dropped it as punctuation, so a circled "a" was found where the text has a circled "b"."""
-    if unicodedata.category(ch) != "So" or not any(c.isalnum() for c in unicodedata.normalize("NFKC", ch)):
-        return False
-    return any(form in unicodedata.name(ch, "") for form in _ENCLOSURES)  # never "TRADE MARK SIGN", "NUMERO SIGN"
+def enclosed(ch: str) -> str | None:
+    """What a symbol that reads as a letter, a digit or a unit reads as (verifier v14), or None: a circled, parenthesised,
+    squared or numbered letter or digit, a squared unit ("mg"), by its compatibility form or, where Unicode gives it none
+    (a negative circled or squared capital), by the letter its name gives. Until v14 the typed tier dropped such a
+    symbol as punctuation, so a circled "a" was found where the text has a circled "b". A trade mark or numero sign is
+    never one: it is not part of what a quote says."""
+    if unicodedata.category(ch) != "So":
+        return None
+    name = unicodedata.name(ch, "")
+    if not any(form in name for form in _ENCLOSURES):
+        return None
+    compat = unicodedata.normalize("NFKC", ch)
+    if any(c.isalnum() for c in compat):
+        return compat
+    letter = _NAMED_LETTER.search(name)
+    return None if letter is None else letter[2] if letter[1] == "CAPITAL" else letter[2].lower()
 
 
-_ENCLOSURES = ("CIRCLED", "PARENTHESIZED", "FULL STOP", "SQUARED")
+_ENCLOSURES = ("CIRCLED", "PARENTHESIZED", "FULL STOP", "SQUARED", "SQUARE ")
+_NAMED_LETTER = re.compile(r"LATIN (CAPITAL|SMALL) LETTER ([A-Z])$")
 
 
 def clause_letters(text: str, invisible: frozenset[str]) -> list[str]:
     """The clause letters in ``text``, "(a)", "(iv)", as a reader sees them (verifier v14): the characters in ``invisible``
-    left out, the text read in its compatibility form (full-width parentheses are parentheses, a circled or parenthesised
-    letter a letter in parentheses), spaces inside the parentheses no part of it, and a letter with its marks, wherever
-    they are written, still one letter: "(C" with U+200E, "( a )", "(" U+0301 "a)", "(i" U+0301 "v)" are each a clause
-    letter, compared with its case. Until v14 the casefold and typed tiers read them as stored, and forgave the case of a
-    letter they did not see."""
+    left out; full-width parentheses read as parentheses and a circled or parenthesised letter as a letter in parentheses
+    (`enclosed`); spaces inside the parentheses no part of it; and a letter with its marks, wherever they are written,
+    still one letter, tested as stored ("(" U+01C4 ")" is one letter, never "DZ"): "(C" with U+200E, "( a )",
+    "(" U+0301 "a)", "(i" U+0301 "v)" are each a clause letter, compared with its case. Until v14 the casefold and typed
+    tiers read them as stored, and forgave the case of a letter they did not see."""
     pieces = []
     for ch in text:
         if ch in invisible:
             continue
+        value = enclosed(ch)
         compat = unicodedata.normalize("NFKC", ch)
-        pieces.append(f"({compat})" if enclosed(ch) and compat.isalpha() else ch)
-    visible = unicodedata.normalize("NFKC", "".join(pieces))
+        if value is not None and value.isalpha():
+            pieces.append(f"({value})")
+        elif value is not None and value.startswith("("):
+            pieces.append(value)
+        else:
+            pieces.append(compat if compat in ("(", ")") else ch)
+    visible = unicodedata.normalize("NFC", "".join(pieces))
     letters = []
     for match in _PARENTHESISED.finditer(visible):
         bare = "".join(ch for ch in unicodedata.normalize("NFD", match[1]) if not marked(ch))
@@ -562,7 +579,7 @@ def compared(text: str, version: int = VERSION, invisible: frozenset[str] = froz
     ends = [Token(Kind.BREAK, "", at, at + 1) for at in sentence_ends(text, invisible)]
     choices = [Token(Kind.SYMBOL, ch, at, at + 1) for at, ch in enumerate(text) if ch in _CHOICE_MARKS]
     if version >= 14:  # a symbol that reads as a letter or digit is compared as it reads, its case kept (`enclosed`)
-        choices += [Token(Kind.SYMBOL, unicodedata.normalize("NFKC", ch), at, at + 1) for at, ch in enumerate(text) if enclosed(ch)]
+        choices += [Token(Kind.SYMBOL, value, at, at + 1) for at, ch in enumerate(text) if (value := enclosed(ch)) is not None]
     return sorted(whole_words(text, kept, version) + ends + choices, key=lambda t: t.start)
 
 
