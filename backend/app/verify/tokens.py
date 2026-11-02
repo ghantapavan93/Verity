@@ -240,7 +240,7 @@ def clause_letters(text: str, invisible: frozenset[str]) -> list[str]:
     letters = []
     for match in _PARENTHESISED.finditer(visible):
         bare = "".join(ch for ch in unicodedata.normalize("NFD", match[1]) if not marked(ch))
-        if (len(bare) == 1 and bare.isalpha()) or _ROMAN.fullmatch(bare):
+        if (len(bare) == 1 and bare.isalpha()) or _ROMAN.fullmatch(unicodedata.normalize("NFKC", bare)):  # "IV" or U+2163
             letters.append("(" + unicodedata.normalize("NFC", match[1]) + ")")
     return letters
 

@@ -152,6 +152,10 @@ def test_the_prefilter_never_refuses_a_clause_the_tiers_find(quote: str, text: s
         ("5 " + chr(0x338E) + " daily", "5 " + chr(0x338F) + " daily"),
         ("see " + chr(0x1F151) + " now", "see " + chr(0x1F150) + " now"),
         ("see " + chr(0x1F171) + " now", "see " + chr(0x1F170) + " now"),
+        # The review of 7b38f5a: a Unicode roman numeral is a number, not a letter, and still a clause's numeral.
+        ("see (" + chr(0x2163) + ") now", "see (" + chr(0x2173) + ") now"),
+        ("see (" + chr(0x2160) + ") now", "see (" + chr(0x2170) + ") now"),
+        ("see " + chr(0xFF08) + chr(0x2163) + chr(0xFF09) + " now", "see " + chr(0xFF08) + chr(0x2173) + chr(0xFF09) + " now"),
     ],
 )
 def test_a_letter_is_tested_as_stored_and_every_enclosed_form_is_compared(quote: str, text: str) -> None:

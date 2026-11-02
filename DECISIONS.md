@@ -2028,7 +2028,9 @@ such a symbol (`tokens.enclosed`: circled, parenthesised, squared or numbered wi
 circled or squared capital by the letter its name gives; never "TRADE MARK SIGN" or "NUMERO SIGN") is a token compared as
 it reads, its case kept. The review of the second v14 (8e12f4d, not released) found that reading the compatibility form
 before testing for one letter made a ligature letter ("(" U+01C4 ")", "(" U+FB00 ")") two letters, whose case was then
-forgiven: a letter is now tested as stored, the compatibility form read only for parentheses and enclosed symbols. Left
+forgiven: a letter is now tested as stored, the compatibility form read only for parentheses and enclosed symbols. The
+review of the third (7b38f5a, not released) found that a Unicode roman numeral (U+2163, a number, not a letter) then
+failed both tests, where b5dffaf had kept its case: a roman numeral is tested in its compatibility form. Left
 open: a service mark sign is found where the text has a trade mark sign, both no part of what a quote says. A v13 run's
 pack reads as v13 did.
 
