@@ -74,7 +74,6 @@ from .tokens import (
     Kind,
     attaches,
     caseless,
-    is_amount,
     joins_digits,
     locate_tokens,
     marked,
@@ -352,15 +351,15 @@ def _read_quote_words(quote: str) -> tuple[str, ...]:
     # is read whole and compared caseless as the typed tier reads it (v11): "ou" with U+0300 is the word "où". Both sides
     # are first read through the quote table, as the normalized tier reads them: it folds U+02BC, a letter, to an
     # apostrophe, so a word holding one is two words to the tiers that find it (v11).
-    # The words are read as the typed tier reads them (`tokens.compared`), and only a word whose value is its letters is
-    # looked for as written: a word the typed tier compares by a value, an amount or one that took a number or a section
-    # identifier through a mark (v13), may stand in the text written otherwise ("USD10K" as "USD 10K").
+    # The words are read as the typed tier reads them (`tokens.compared`), and only a word of letters alone, compared as
+    # its letters, is looked for as written: a word holding a digit may be an amount, or have taken a number or a section
+    # identifier through a mark (v13), and stand in the text written otherwise ("$10M" as "$ 10M", "USD10K" as "USD 10K").
     folded = quote.translate(_QUOTE_MAP)
     words = whole_words(folded, significant(signed(folded, tokenize(folded))))
     plain = {
         caseless(folded[t.start : t.end])
         for t in words
-        if t.kind is Kind.WORD and not is_amount(folded, t) and t.canonical == caseless(folded[t.start : t.end])
+        if t.kind is Kind.WORD and all(ch.isalpha() or marked(ch) for ch in folded[t.start : t.end]) and t.canonical == caseless(folded[t.start : t.end])
     }
     return tuple(sorted(plain, key=len, reverse=True))
 

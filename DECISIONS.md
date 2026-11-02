@@ -1982,8 +1982,8 @@ Decision: from v13 a word that reaches into a token takes that token whole, and 
 (`tokens.whole_words`, and the pack's copy); its value is its letters caseless with each taken number or section
 identifier kept apart as that token's value (`tokens._merged_value`), so the word is never looser than what it took:
 "1500" after a mark is still "1,500", and a clause letter keeps its case. The prefilter reads the quote's words as the typed
-tier does and looks only for a word whose value is its letters (`spans._read_quote_words`). The evidence pack reads a
-v13 run that way, its words among the significant tokens as the workbench's are, and a v12 run as v12 did.
+tier does and looks only for a word of letters alone, compared as its letters (`spans._read_quote_words`). The evidence
+pack reads a v13 run that way, its words among the significant tokens as the workbench's are, and a v12 run as v12 did.
 Rejected: stopping the word where a number begins, which reads "caféUSD 900" as "café" and "USD 900" and so
 forgives the space in "café USD 900", the class v6 closed.
 
@@ -1995,7 +1995,12 @@ and so was "1.2.3(b)" as "1.2.3(B)" since v11; v13 was rewritten, its fingerprin
 edba092 (not released) found no false "found", but the pack took a second stacked mark ("Nguye" with U+0302 and
 U+0303, a decomposed Vietnamese name) as a value of the word and failed a span the workbench verified, and the prefilter
 looked for "USD10K" as written where the text says "USD 10K"; both fixed, and a fourth property holds the pack to the
-workbench under v13, each text against itself in the other normal form. Replayed read-only under
+workbench under v13, each text against itself in the other normal form. A third review of f3ef1f5 (not released) found
+no false "found", but the pack still read words among tokens that held punctuation `signed` left in place, so a currency
+before a leading decimal point after a mark ("cafe" with U+0301 and "USD .5") was two tokens to it and one word to the
+workbench; and the prefilter, now reading signed tokens, looked for "$10M" as written where the text says "$ 10M", which
+f46057b had found. The pack now drops punctuation before it reads words under v13, and the prefilter asks only for words
+of letters alone; a fifth property holds the prefilter to the tiers over amounts written apart. Replayed read-only under
 v12 and v13 over 32,731 recorded spans in 1,905 distinct stores (the public store not opened): no span was searched in
 a section holding a mark, and none of the 14 distinct recorded sections that hold one tokenizes differently. The
 reader's fingerprint moved only through `tokens.VERSION` again, and was replaced.

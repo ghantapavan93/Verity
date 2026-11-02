@@ -345,6 +345,8 @@ def typed_tokens(text, version=0):
                 first[1:3] = [before + head, low]
                 last[1], last[3] = tail + after, high
     if version >= 11:
+        if version >= 13:  # words are read among the significant tokens, as the workbench reads them (tokens.compared)
+            tokens = [t for t in tokens if t[0] != "punct"]
         tokens = whole_words(text, tokens, version)
         choices = [["symbol", ch, at, at + 1] for at, ch in enumerate(text) if ch in CHOICE_MARKS]
         tokens = sorted(tokens + [["break", "", at, at + 1] for at in sentence_ends(text)] + choices, key=lambda t: t[2])
@@ -384,8 +386,7 @@ def whole_words(text, tokens, version=0):
             while k < len(tokens) and tokens[k][2] < end:
                 if version >= 13:
                     end = max(end, tokens[k][3])
-                    if tokens[k][0] != "punct":  # the workbench reads words among the significant tokens only
-                        taken.append(tokens[k])
+                    taken.append(tokens[k])
                 k += 1
             if end == reached:
                 break

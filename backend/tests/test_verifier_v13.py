@@ -21,7 +21,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from app.verify.spans import _INVISIBLE as INVISIBLE
-from app.verify.spans import VERIFIER_VERSION, locate
+from app.verify.spans import VERIFIER_VERSION, _cannot_hold, _tiers, locate
 from app.verify.tokens import compared, locate_tokens, signed, significant, tokenize, whole_words
 from tests.support import FUZZ_SCALE
 from tests.test_pack_parity import _checker, _pack, _verdict
@@ -177,6 +177,8 @@ V13_PARTS = [
     TILDE,
     "USD",
     "10K",
+    ".",
+    ".5",
     "1,500",
     "2.1(a)",
     "(B)",
@@ -203,3 +205,48 @@ def test_the_pack_compares_typed_tokens_as_the_workbench_does_under_v13(tmp_path
 
     expected = any(ch.isalnum() for ch in b) and bool(runtime(a)) and runtime(a) == runtime(b)
     assert checker.same(a, b, "typed", 13) == expected, (ascii(a), ascii(b))
+
+
+# The third review of v13: a currency before a leading decimal point, straight after a mark. The pack read words among
+# every token, the punctuation `signed` left in place among them, and stopped before the number the workbench's word took.
+@pytest.mark.parametrize(
+    ("quote", "text"),
+    [
+        ("cafe\u0301USD.5", "The cafe\u0301USD .5 due."),
+        ("e\u0301EUR.5 bn", "Then e\u0301EUR .5 bn."),
+    ],
+)
+def test_control_a_v13_pack_passes_a_word_that_took_a_currency(tmp_path: Path, quote: str, text: str) -> None:
+    located = locate(quote, text)
+    assert located is not None
+    assert _verdict(_pack(tmp_path / "v13", text, located.start, located.end, quote, located.method, "v13"))
+
+
+# The prefilter asks only for the quote's words of letters alone: an amount the typed tier finds written otherwise
+# ("$10M" as "$ 10M") is not looked for as written (the third review of v13, against f46057b's prefilter).
+@pytest.mark.parametrize(
+    ("quote", "text"),
+    [
+        ("fee of $10M", "The fee of $ 10M is due."),
+        ("fee of -$5M", "The fee of -$ 5M is due."),
+        ("cost of \u20ac30BN", "The cost of \u20ac 30bn is due."),
+        ("The cafe\u0301USD10K fee", "The cafe\u0301USD 10K fee."),
+    ],
+)
+def test_the_prefilter_never_refuses_an_amount_the_typed_tier_finds(quote: str, text: str) -> None:
+    assert _tiers(quote, text) is not None
+    assert not _cannot_hold(quote, text)
+    assert locate(quote, text) is not None
+
+
+AMOUNTS = st.lists(
+    st.sampled_from(["fee", " ", "\u00a0", "$", "\u20ac", "-", "10M", "5m", "30bn", ".5", "USD", "10K", "e", ACUTE, "(", ")"]), min_size=1, max_size=8
+)
+
+
+@settings(max_examples=400 * FUZZ_SCALE, deadline=None)
+@given(quote=AMOUNTS, text=AMOUNTS)
+def test_the_prefilter_never_refuses_what_the_tiers_find(quote: list[str], text: list[str]) -> None:
+    q, t = "".join(quote), "".join(text)
+    if _tiers(q, t) is not None:
+        assert not _cannot_hold(q, t), (ascii(q), ascii(t))
