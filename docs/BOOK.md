@@ -125,7 +125,7 @@ The backend is layered, and `backend/.importlinter` enforces it (`lint-imports`)
 | `backend/tests/` | about 195 test files: behaviour, properties (Hypothesis), a fuzz of every route (Schemathesis), hostile files | 9 |
 | `backend/scripts/` | operator and research tools: status, backup, data audit, goldens, CUAD scoring, exports | 9 |
 | `src/` | the Next.js interface | 8 |
-| `e2e/` | 46 Playwright browser flows against the production build, with recorded model answers replayed | 8 |
+| `e2e/` | 49 Playwright browser flows against the production build, with recorded model answers replayed | 8 |
 | `deploy/` | the laptop deployment (supervisor, installer, stop and build swap) and a one-server cloud kit not used live | 9 |
 | `docs/` | status table, casebook, failure envelope, troubleshooting, measurements, ADRs, archive | 9 |
 | `research/`, `proof/` | experiments run against the product, kept as run; a static page of one recorded run | 9 |
@@ -3461,7 +3461,7 @@ is open the rest of the questions panel is `inert`.
 |---|---|---|---|
 | 1 | Decision strip | none (`aria-label="The finding's trail"`) | Four cells, left to right: Model (its proposed status, struck through when code changed it), Source ("N of M found", never in the pass colour), Code ("did not decide" or the status code set, marked decisive), Person (confirmed, dismissed or not yet) |
 | 2 | Model proposed | `layer-model` | Its hint (a status chip), "In its words" (observed against required), "It cited N passages", "Its sentence" (the withheld conclusion), "It pointed at", "It suggested". Tagged "Status set here" when the status source is `model_hint` |
-| 3 | Source | `layer-source` | Each quoted span: a button to jump to it (a static label on a phone), the quote, "Found word for word in the document text · exact" or the method, or "Not found verbatim ... · withheld"; whether it was found where the model cited it, how many times it occurs, whether it lies outside the model's visible text; on a phone a "Text around this quote" disclosure; then the limit sentence and a link to `/break` |
+| 3 | Source | `layer-source` | Each quoted span: a button to jump to it (a static label on a phone), the quote, "Found word for word in the document text · exact" or the method, or "Not found verbatim ... · withheld"; whether it was found where the model cited it, how many times it occurs, whether it lies outside the model's visible text; a "Text around this quote" disclosure (at every width since 2026-11-01); then the limit sentence and a link to `/break` |
 | 4 | The contract on these clauses | `layer-relations` | Relation statements in full, when the finding has any |
 | 5 | Code | `layer-code` | Heading from `codeRole`: "Code found a conflict", "Code passed it on the day counts", "Code lowered it", "Code confirmed", "Code withheld" or "Code did not decide"; the guidance text; the day gauge; the reason code recorded; "Not shown to the model" when the quote points at a section the model never saw; the resulting status chip |
 | 6 | Person | `layer-human` | The recorded review, or "No one has decided on this finding yet"; Confirm / Dismiss, or Clear decision; the name form. A curated (`run.shared`) record shows the review and no controls |
@@ -3845,7 +3845,7 @@ count was not verified here (tests were not run). Tests use the real `api.ts` an
 | `components/workbench/hooks/useMemoAction.test.ts` | 5 | a memo stays with its run; late answers do not replace newer ones |
 | `components/workbench/hooks/useModelWake.test.ts` | 7 | wakes only on intent, at most every 4 minutes, never for a server-side model |
 | `components/workbench/access/AccessGate.test.tsx` | 24 | door states, invite fragment, public demo, two tabs at once, an invite for another reader |
-| `components/workbench/assistant/EvidenceDrawer.test.tsx` | 19 | layers, strip tones, review flow and conflicts, coverage findings, phone sheet |
+| `components/workbench/assistant/EvidenceDrawer.test.tsx` | 19 | layers, strip tones, review flow and conflicts, coverage findings, phone sheet, quote context at every width |
 | `components/workbench/assistant/FindingCard.test.tsx` | 4 | a finding reported as not found: wording, collapsed model sentence |
 | `components/workbench/assistant/GuidanceScope.test.tsx` | 2 | a refused guidance says why in the popover |
 | `components/workbench/assistant/RelationNotes.test.tsx` | 12 | relation ends, summaries by effect, word diffs |
@@ -3858,9 +3858,10 @@ count was not verified here (tests were not run). Tests use the real `api.ts` an
 | `components/workbench/landing/LandingStory.test.tsx` | 4 | counts are shown before any animation |
 | `components/workbench/landing/OneRun.test.tsx` | 4 | the proof story says only what the run's record says |
 | `components/workbench/landing/proofRun.test.ts` | 4 | `chooseProof` |
-| `components/workbench/views/FindingsView.test.tsx` | 11 | ordering for attention, filters, inline review, conflicts, hostile text |
-| `components/workbench/views/RunsView.test.tsx` | 7 | public demo hides owner tools; batch read failure said; outcomes; golden-set notes; record hash |
+| `components/workbench/views/FindingsView.test.tsx` | 13 | ordering for attention, filters and the way back from an empty one, inline review, a failed decision kept beside its row, conflicts, hostile text |
+| `components/workbench/views/RunsView.test.tsx` | 8 | public demo hides owner tools; batch read failure said; outcomes; golden-set notes; record hash; a late earlier record read does not replace the latest selection |
 | `components/workbench/views/ContractState.test.tsx` | 2 | an arrival from the record; not-connected and edited-file states |
+| `components/workbench/workspace/Divider.test.tsx` | 1 | resize keys do not scroll the page; Home and End go to the bounds; double-click resets |
 | `components/workbench/workspace/DocumentPane.test.tsx` | 6 | memoised blocks, exact highlight offsets, invisible characters in names and headings, reader parts |
 | `components/workbench/workspace/EvidenceSpine.test.tsx` | 1 | marks for verified quotes; read-not-relied marks |
 | `components/workbench/shell/PackLink.test.tsx` | 3 | real address, wait, refusal in place |
@@ -3876,7 +3877,7 @@ count was not verified here (tests were not run). Tests use the real `api.ts` an
 
 #### Browser flows (Playwright)
 
-`npm run e2e` runs 46 flows in 9 specs (`backend/tests/test_docs_claims.py` counts `test(` calls and holds the README
+`npm run e2e` runs 49 flows in 10 specs (`backend/tests/test_docs_claims.py` counts `test(` calls and holds the README
 to that number). Each runs against a production build of the interface and the real FastAPI app, with the model's
 answers replayed. `workbench.spec.ts` fails a flow on any console error or page error.
 
@@ -3890,6 +3891,7 @@ answers replayed. `workbench.spec.ts` fails a flow on any console error or page 
 | `state.spec.ts` | 4 | `/state` on desktop and phone from the fixture (served by `page.route`), no overflow, no console errors, axe clean; keyboard nav and arrival picker in the URL; an unavailable record is said with a retry |
 | `break.spec.ts` | 1 | `/break` at 1280 and 375 px: the failure reads, the investigation controls work, no `/api/` request, no serious axe violation |
 | `revision.spec.ts` | 1 | the prepared revision is recorded, the same question asked of it, and the two answers set side by side with who decided |
+| `polish.spec.ts` | 3 | a delayed contracts read announces loading, then shows the real records; question fields grow, shrink and reflow with Send on screen; quote context keeps the sheet header reachable and Escape returns focus |
 | `security.spec.ts` | 1 | the CSP carries a nonce and no `unsafe-inline`; injected markup and an injected inline script do not run; the nonce changes per response |
 
 #### The replay provider and `e2e/replay.json`
@@ -4331,7 +4333,7 @@ checkout, and do not interrupt it (not verified what an interrupted run leaves; 
   `NEXT_DIST_DIR=.next-e2e`, so `.next` (the live build on the serving machine) is untouched.
 
 Outside `CI`, `reuseExistingServer` is true: a server already on 8001 or 3901 is reused. On the serving laptop a Docker
-stack once held 8001. If results look wrong, check those ports first. 46 flows in `e2e/*.spec.ts` (`docs/STATUS.md`;
+stack once held 8001. If results look wrong, check those ports first. 49 flows in `e2e/*.spec.ts` (`docs/STATUS.md`;
 counted by `test_docs_claims.py`). Traces and screenshots are kept on failure only.
 
 ---

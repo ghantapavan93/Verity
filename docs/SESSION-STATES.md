@@ -86,5 +86,5 @@ the existing isolated browser-test ports and `.next-e2e` build directory.
 - TypeScript, ESLint, Prettier and all **22 documentation claim checks passed**.
   Generated browser reports and traces are explicitly excluded from application lint.
 - No backend source, evidence decision, persistence rule or runtime dependency changed.
-  No commit, push or production deployment was performed. Earlier broader backend
+  No push or production deployment was performed. Earlier broader backend
   gate limitations remain recorded in [FRONTEND-POLISH.md](FRONTEND-POLISH.md).
