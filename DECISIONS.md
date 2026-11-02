@@ -1943,3 +1943,27 @@ The new `npm run test:sessions` audit uses the production interface and real API
 provider. Its fresh temporary store allows genuine empty-state checks without touching existing workspaces. Network
 failures are induced, not replaced with success fixtures. No backend or semantic-version change. The bounded state
 inventory, repeatable command, measured coverage and remaining limits are in `docs/SESSION-STATES.md`.
+
+
+## 2026-11-01 — Verifier v12: an invisible character is absent to the typed tier too
+
+The release gate on ad4b1a8 failed one property: `test_locate_prefilter.py` drew the quote "0", U+200B, "X" against the
+text "0 X", and the prefilter and the tiers disagreed. The prefilter reads the quote as a reader does, as "0X", and
+refused it; the typed tier read it where it stands, with the zero-width space ending a token, and found it. The code was
+the same as the release in force (865356b): Hypothesis had not drawn such a case before.
+
+The reverse direction is the defect that matters. With an invisible character inside a word of the contract the
+prefilter passes, and the typed tier found a quote that splits the word with a space: "the rapist" in "the​rapist",
+which displays as "therapist"; "un able" where a word joiner sits inside "unable". v6 refuses a space moved inside the
+letters, and v11 reads every default-ignorable character as absent at the other tiers; the typed tier was the one place
+left that did neither.
+
+Decision: from v12 the typed tier compares v11's tokens of the visible text, the characters normalisation deletes left
+out, each mapped back onto the original (`tokens.compared`), so the highlight still covers what matched. The evidence pack
+reads a v12 run the same way and a v11 run as v11 did. Rejected: changing the prefilter to read invisible characters as
+token breaks, which would make the prefilter agree by making both wrong.
+
+Replayed read-only under v11 and v12 over 32,731 recorded spans in 1,905 distinct stores (the QA stores and the owner's;
+the public store not opened), 283 span and section pairs holding such a character: none lost or gained. The reader's
+fingerprint moved only because it reaches `tokens.VERSION`, which every check it reaches reads as "11 or later"; it was
+replaced, not bumped. The same gate failed `test_data_audit.py` on the browser-flow count the frontend commit moved to 49.

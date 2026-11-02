@@ -169,6 +169,10 @@ RECORDED: dict[str, str] = {
     # bumped. Replayed over 17,603 recorded spans in 94 stores: none lost or gained; six typed spans now end on their own
     # quote's closing semicolon.
     "v11": "e0c252050f95ddaa",
+    # v12, 2026-11-01 (the release gate's prefilter property): the typed tier reads both texts as a reader sees them, every
+    # character normalisation deletes left out, so "the rapist" is not found in "the​rapist". v11 is on main, so
+    # this is a bump.
+    "v12": "fbe0d75864ef5f45",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
     # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.
@@ -189,7 +193,9 @@ RECORDED: dict[str, str] = {
     "input-v1": "f3535f0a6d1058e6",
     # reader v17, 2026-10-30: the first reader version held to its code (columns, fields, branches, cells, checkboxes and
     # text boxes read as Word displays them; the PDF page read by position).
-    "reader v17": "3a4543713ac44436",
+    # Replaced 2026-11-01: the reader reaches tokens.VERSION, which v12 moved; every check it reaches reads it as
+    # "11 or later", so no reading changes (verifier v12 changes only tokens.compared, outside the reader).
+    "reader v17": "0322077df4f338ea",
 }
 
 

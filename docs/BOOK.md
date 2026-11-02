@@ -1450,7 +1450,7 @@ Outside the slice, the pipeline leans on `ingest/sections.py` (`stated_clause_nu
 | Key in options | Value at 865356b | Declared at | Names |
 |---|---|---|---|
 | `policy_version` | `policy-v17` | `runs/status.py:155` `POLICY_VERSION` | how a status is decided |
-| `verifier_version` | `v11` | `verify/tokens.py:269` `VERSION`, as `spans.VERIFIER_VERSION = f"v{VERSION}"` | when a quote counts as found |
+| `verifier_version` | `v12` | `verify/tokens.py` `VERSION`, as `spans.VERIFIER_VERSION = f"v{VERSION}"` | when a quote counts as found |
 | `retrieval_version` | `retrieval-v3` | `retrieval/lexical.py:83` `RETRIEVAL_VERSION` | which sections are handed over |
 | `input_version` | `input-v1` | `analysis/service.py:40` `INPUT_VERSION` | what the model is handed and how its answer is read |
 
@@ -1538,7 +1538,7 @@ stress test's planted edits each fall inside some boundary; comments and layout 
 | 1 | The model never decides a code-owned status. A pass is always `model_hint`; code may lower it, never raise it. `confirmed_days` is never written. `missing` comes only from the model. | `runs/status.py`, `STATUSES_BY_SOURCE` | `test_pass_gate.py`, `test_pass_blockers_named.py`, `test_policy_rules.py` |
 | 2 | A finding with any unverified quote is `unresolved` / `no_evidence` and stays so through every later check. | `decide`, each `check_*` | `test_withheld_stays_withheld.py`, `test_verify_evidence.py` |
 | 3 | Checks read the contract's characters at a verified span (`located_text`), never the model's spelling. | `runs/service.py`, `runs/account.py` | `test_located_text.py` |
-| 4 | The verifier never says "found" when the text is not there: no similarity tier, bounded edges, window searched with edges read whole, offsets into the original. | `verify/` | `test_spans.py`, `test_spans_properties.py`, `test_tokens.py`, `test_verifier_v7.py`, `test_verifier_v8.py`, `test_verifier_v9.py`, `test_verifier_v11.py`, `test_locate_prefilter.py`, `test_invisible_characters.py` |
+| 4 | The verifier never says "found" when the text is not there: no similarity tier, bounded edges, window searched with edges read whole, offsets into the original. | `verify/` | `test_spans.py`, `test_spans_properties.py`, `test_tokens.py`, `test_verifier_v7.py`, `test_verifier_v8.py`, `test_verifier_v9.py`, `test_verifier_v11.py`, `test_verifier_v12.py`, `test_locate_prefilter.py`, `test_invisible_characters.py` |
 | 5 | A run executes from its own recorded options, never the process settings; a run under other versions or another alias table is not executed. | `FrozenOptions.of`, `bound_to` | `test_run_identity.py`, `test_version_order.py`, `test_section_window.py`, `test_replay_window.py` |
 | 6 | Identity carries every input and rule that shapes the answer; a decision change without a version decision fails the build. | `start_run.py`, `versions.py` | `test_semantic_versions.py`, `test_run_identity.py`, `test_run_dates.py`, `test_uniqueness.py` |
 | 7 | Status and source pairs stay inside `STATUSES_BY_SOURCE`. | `Decision.__post_init__`, store CHECK | `test_store_schema.py`, `test_pass_gate.py` |
@@ -4432,6 +4432,7 @@ regenerated files differ in bytes (python-docx stamps a time) but not in text.
 | `test_verifier_v8.py` | no span begins or ends inside a number; signs kept |
 | `test_verifier_v9.py` | a sign-inverted amount is never verified, in any currency or magnitude notation |
 | `test_verifier_v11.py` | four ways v10 found a quote the text does not say, each reproduced and closed |
+| `test_verifier_v12.py` | an invisible character inside a word no longer parts it at the typed tier, in the workbench and the pack; a property that invisible characters change nothing the typed tier decides |
 | `test_replay_window.py` | `reverify` searches the window each run was verified over |
 
 #### 9.3.5 Status policy and the finding account
@@ -4827,7 +4828,7 @@ money, changes DNS or access is the owner's. Its quotas follow the laptop's: 200
 
 | File | What it holds | Read it when |
 |---|---|---|
-| `docs/STATUS.md` | the "what works" record: measured claims with their measurement, what exists, every check command, release checklist table (one row per path: upload, verifier, pack, access, retrieval, flows, gate…), what is deliberately not built. Counts and versions held to the code by `test_docs_claims.py` | first, for what is true today and the versions in force (policy-v17, verifier v11, retrieval-v3, input-v1, reader v17) |
+| `docs/STATUS.md` | the "what works" record: measured claims with their measurement, what exists, every check command, release checklist table (one row per path: upload, verifier, pack, access, retrieval, flows, gate…), what is deliberately not built. Counts and versions held to the code by `test_docs_claims.py` | first, for what is true today and the versions in force (policy-v17, verifier v12, retrieval-v3, input-v1, reader v17) |
 | `docs/SYSTEM_MAP.md` | which files own each subsystem, front and back, plus tests and scripts. Not held by a test; read the owning file before relying on a row | locating code |
 | `docs/TROUBLESHOOTING.md` | the operator's first look, log files, symptom table | the live site misbehaves |
 | `docs/CASEBOOK.md` | six traced failures: silent API (WinError 64), log reader killed the supervisor, prompt cut silently, pool drained, queries growing per row, temperature 0 with two answers | before touching serving, supervision, the model call or reads |

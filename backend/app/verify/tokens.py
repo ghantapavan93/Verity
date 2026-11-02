@@ -43,6 +43,11 @@ punctuation, as a minus sign does. Digits joined by "/" or ":" are one number an
 "12/31/2026"), so "2/3" is not "2-3". And the typed tier no longer forgives a sentence's end (`sentence_ends`): it
 compared "terminate. Without cause" as "terminate without cause".
 
+Until v12 the typed tier read both texts where they stand, so a character normalisation deletes (spans._INVISIBLE) ended
+a word: "the​rapist" displays as "therapist", and the quote "the rapist" was found in it, though v6 refuses a space
+moved inside the letters (release gate, 2026-11-01). From v12 it compares v11's tokens of the text as a reader sees it,
+with those characters left out (`compared`), and maps their offsets back into the original.
+
 Every token keeps the offsets of its surface in the original text, so a match is reported as exact
 character offsets and the interface highlights what was found.
 """
@@ -266,7 +271,7 @@ _V11_ONE = (
 _WRITTEN_V9 = _written(_V9_ONE)
 _WRITTEN_V10 = _written_v10(_V9_ONE)
 _WRITTEN = _written_v11(_V11_ONE)
-VERSION = 11  # the verifier version these definitions are (spans.VERIFIER_VERSION)
+VERSION = 12  # the verifier version these definitions are (spans.VERIFIER_VERSION)
 
 
 def written_numbers(text: str, version: int = VERSION, invisible: frozenset[str] = frozenset()) -> list[tuple[int, int]]:
@@ -487,7 +492,13 @@ def compared(text: str, version: int = VERSION, invisible: frozenset[str] = froz
     """What the typed tier compares of ``text``: its significant tokens, each number with what is written against it
     (`signed`), and from v11 the end of each sentence, so that a quote cannot join the end of one sentence to the start
     of the next. A mark that ends a sentence is often no token at all (no token starts against a letter), so each end is
-    put among the tokens where it stands. From v11 a word is read whole (`whole_words`)."""
+    put among the tokens where it stands. From v11 a word is read whole (`whole_words`). From v12 the characters in
+    ``invisible`` are absent, as a reader sees the text: the tokens are those of the visible text, each mapped back onto
+    the original, so no such character ends a word or parts two tokens, and a token's offsets cover what it was read from."""
+    if version >= 12 and not invisible.isdisjoint(text):
+        where = [at for at, ch in enumerate(text) if ch not in invisible]
+        visible = "".join(text[at] for at in where)
+        return [Token(t.kind, t.canonical, where[t.start], where[t.end - 1] + 1) for t in compared(visible, version, invisible)]
     kept = significant(signed(text, tokenize(text), version, invisible))
     if version < 11:
         return kept

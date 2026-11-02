@@ -51,6 +51,9 @@ one number ("2/3" is not "2-3"); the typed check compares the end of each senten
 into the next; neither it nor the casefold check forgives the case of a clause's letter ("2(A)" is not "2(a)"); no
 edge splits a word at a combining mark or a joiner; and a quote with no letter or digit is never found. A v10 run is
 still checked as v10 read it.
+For a run verified under verifier v12 or later, the typed check reads both texts as a reader sees them, the characters
+normalisation deletes left out: an invisible character inside a word does not part it, so "the rapist" is not found
+in a "therapist" written with a zero-width space. A v11 run is still checked as v11 read it.
 Since the stress test of 2026-10-30 every field of findings.json, relations.json and run.json is either checked or
 printed UNCHECKED, with why. run.json carries the run's stage rows as the run wrote them (stages: what each stage read
 and produced, as hashes), and this file recomputes each one from the files here:
@@ -241,7 +244,15 @@ def typed_tokens(text, version=0):
     a run verified under v7 or later, its own pattern: no token ends inside a run of letters and digits, and a number
     keeps its written precision. Under v8 a number also carries its sign and parentheses, and starts and ends where it
     is written (verify/tokens.signed). Under v11 a number whose digits "/" or ":" join is one token, and the end of each
-    sentence is a token of kind "break" (verify/tokens.compared). For an earlier run, the pack's reading before v7."""
+    sentence is a token of kind "break" (verify/tokens.compared). Under v12 the tokens are v11's of the text as a reader
+    sees it, the characters normalisation deletes left out, each mapped back onto the original. For an earlier run, the
+    pack's reading before v7."""
+    if version >= 12:
+        hidden = deleted(version)
+        where = [at for at, ch in enumerate(text) if ch not in hidden]
+        if len(where) < len(text):
+            visible = "".join(text[at] for at in where)
+            return [[kind, canonical, where[start], where[end - 1] + 1] for kind, canonical, start, end in typed_tokens(visible, version)]
     v7, v8 = version >= 7, version >= 8
     tokens = []
     for match in (TOKEN_V7 if v7 else TOKEN).finditer(text):

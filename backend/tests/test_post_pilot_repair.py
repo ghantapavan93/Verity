@@ -108,7 +108,7 @@ def test_the_pack_refuses_the_sign_drops_for_a_v10_run_and_reads_a_v9_run_as_v9_
 
 
 def test_the_verifier_is_v10_or_later_and_v8_to_v10_read_as_they_did() -> None:
-    assert VERIFIER_VERSION in ("v10", "v11") and tokens.VERSION >= 10  # v11 keeps every v10 rule (test_verifier_v11.py)
+    assert VERIFIER_VERSION in ("v10", "v11", "v12") and tokens.VERSION >= 10  # v11 and v12 keep every v10 rule (test_verifier_v11.py)
     assert hashlib.sha256(tokens._WRITTEN_V8.pattern.encode()).hexdigest().startswith("cc4fe06d")
     # v9's pattern exactly as every v9 pack carries it (the legal pilot's packs among them).
     assert hashlib.sha256(tokens._WRITTEN_V9.pattern.encode()).hexdigest() == "204a64ef69f50410410ba5585dfc48fe4194dbb0263a82844125528e52b29a2d"

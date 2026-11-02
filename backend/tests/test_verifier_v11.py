@@ -33,7 +33,7 @@ ZWNJ = "\u200c"
 
 
 def test_this_is_verifier_v11() -> None:
-    assert VERIFIER_VERSION == "v11"
+    assert VERIFIER_VERSION in ("v11", "v12")  # v12 keeps every v11 rule (test_verifier_v12.py)
 
 
 @pytest.mark.parametrize(
