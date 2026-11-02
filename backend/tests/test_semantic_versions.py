@@ -178,6 +178,9 @@ RECORDED: dict[str, str] = {
     # Replaced, not bumped, 2026-11-02: v13 was not released; its review found the word read caselessly a token it took
     # ("2.1(a)" as "2.1(A)"), and each token it takes now keeps its own value (tokens._merged_value).
     "v13": "58d938c3496876e3",
+    # v14, 2026-11-02: a clause's letter is read as a reader sees it, invisible characters left out and marks composed
+    # (tokens.clause_letters); v13 is on main, so a bump.
+    "v14": "09e0bb97bec75ca1",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
     # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.
@@ -202,7 +205,8 @@ RECORDED: dict[str, str] = {
     # "11 or later", so no reading changes (verifier v12 changes only tokens.compared, outside the reader).
     # Replaced 2026-11-02 for the same reason: v13 moved tokens.VERSION again and changes only tokens.whole_words, which
     # the reader does not reach.
-    "reader v17": "16292d2c28f92734",
+    # Replaced again 2026-11-02 for v14, which changes only the casefold and typed tiers' clause letters.
+    "reader v17": "9e366030b6f592a8",
 }
 
 

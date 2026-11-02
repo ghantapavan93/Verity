@@ -154,7 +154,7 @@ def test_a_repeated_amount_counts_only_its_unsigned_places() -> None:
 
 
 def test_the_verifier_is_v9_or_later_and_v8_reads_as_it_did() -> None:
-    assert VERIFIER_VERSION in ("v9", "v10", "v11", "v12", "v13")  # v10 to v13 keep every v9 rule (test_post_pilot_repair.py, test_verifier_v11.py)
+    assert VERIFIER_VERSION in ("v9", "v10", "v11", "v12", "v13", "v14")  # v10 to v14 keep every v9 rule (test_post_pilot_repair.py, test_verifier_v11.py)
     # v8's pattern is the one its evidence packs carry, to the character (its sha256 as de1f6de2 shipped it).
     assert hashlib.sha256(tokens._WRITTEN_V8.pattern.encode()).hexdigest() == "cc4fe06d589f0f21c6c1fe5bc2a57cdf35698eaef68305251fecd5e03a019119"
     v8 = [t.canonical for t in tokens.significant(tokens.signed(SOURCE, tokens.tokenize(SOURCE), 8))]

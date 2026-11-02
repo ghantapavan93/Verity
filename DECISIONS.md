@@ -2008,3 +2008,21 @@ number keeps it, in the workbench and the pack (`tokens.signed`); the clause-let
 v12 and v13 over 32,731 recorded spans in 1,905 distinct stores (the public store not opened): no span was searched in
 a section holding a mark, and none of the 14 distinct recorded sections that hold one tokenizes differently. The
 reader's fingerprint moved only through `tokens.VERSION` again, and was replaced.
+
+## 2026-11-02 — Verifier v14: a clause's letter is read as a reader sees it
+
+The release review of b5dffaf found a false "found" older than v11's rule. The casefold tier forgives case everywhere
+but in a clause's letter, and it found those letters with a pattern over the characters as stored: an invisible
+character inside the parentheses ("4(C" with U+200E ")"), or a letter written with a combining mark ("(b" with U+0301
+")"), was no clause letter to it, so "x 4(C" U+200E ") y" was found in "x 4(c" U+200E ") y". The typed tier asked the same
+pattern and so forgave a marked letter's case as well.
+
+Invariant: a clause's letter is compared with its case wherever a reader sees one. Decision: from v14 the casefold
+tier, the typed tier and the evidence pack read clause letters through one function (`tokens.clause_letters`, the pack's
+`clause_letters`): the characters normalisation deletes left out, the marks composed, and a letter with marks Unicode
+has no composed form for still a letter. A v13 run's pack reads as v13 did.
+
+Tests (`test_verifier_v14.py`): the five hidden forms withheld, controls for the same letter found and for case outside
+the letter still forgiven, a property over every way the letter is hidden, and the pack both ways. None of 183,043
+distinct recorded section texts and quotes (the public store not opened) reads its clause letters differently, so no
+recorded decision changes. The reader's fingerprint moved only through `tokens.VERSION`, and was replaced.

@@ -195,6 +195,18 @@ _CLAUSE_LETTER = re.compile(r"\((?:[^\W\d_]|[ivxlcdm]+|[IVXLCDM]+)\)")
 _JOINERS = frozenset("\u200c\u200d")
 
 
+def clause_letters(text: str, invisible: frozenset[str]) -> list[str]:
+    """The clause letters in ``text``, "(a)", "(iv)", as a reader sees them (verifier v14): the characters in ``invisible``
+    left out and the marks composed, so "(C" with U+200E is "(C)" and "(a" with U+0301 is the letter "(\u00e1)". Until v14
+    the casefold and typed tiers read them as stored, and forgave the case of a letter they did not see. A letter keeps
+    the marks Unicode has no composed form for ("(b" with U+0301 stays a letter with its mark)."""
+    visible = unicodedata.normalize("NFC", "".join(ch for ch in text if ch not in invisible))
+    return [m[0] for m in _PARENTHESISED.finditer(visible) if _CLAUSE_LETTER.fullmatch(m[0]) or (m[1][0].isalpha() and all(map(marked, m[1][1:])))]
+
+
+_PARENTHESISED = re.compile(r"\(([^()\s]+)\)")
+
+
 def marked(ch: str) -> bool:
     """Whether ``ch`` is a combining mark or a joiner: part of the letters it is written between or after (v11)."""
     return ch in _JOINERS or unicodedata.category(ch)[0] == "M"
@@ -271,7 +283,7 @@ _V11_ONE = (
 _WRITTEN_V9 = _written(_V9_ONE)
 _WRITTEN_V10 = _written_v10(_V9_ONE)
 _WRITTEN = _written_v11(_V11_ONE)
-VERSION = 13  # the verifier version these definitions are (spans.VERIFIER_VERSION)
+VERSION = 14  # the verifier version these definitions are (spans.VERIFIER_VERSION)
 
 
 def written_numbers(text: str, version: int = VERSION, invisible: frozenset[str] = frozenset()) -> list[tuple[int, int]]:
@@ -553,10 +565,15 @@ def whole_words(text: str, tokens: list[Token], version: int = VERSION) -> list[
             if end == reached:
                 break
         surface = text[token.start : end]
-        if version >= 13 and end > token.end and not _CLAUSE_LETTER.fullmatch(text, token.start - 1, end + 1):
+        clause = text[token.start - 1 : token.start] == "(" and _CLAUSE_LETTER.fullmatch(text, token.start - 1, end + 1) is not None
+        if version >= 14 and not clause and text[token.start - 1 : token.start] == "(" and text[end : end + 1] == ")":
+            # v14: a letter written with a mark is a clause letter as the reader sees it ("(a" with U+0301 is "(\u00e1)")
+            clause = len(clause_letters(text[token.start - 1 : end + 1], frozenset())) == 1
+            surface = unicodedata.normalize("NFC", surface) if clause else surface
+        if version >= 13 and end > token.end and not clause:
             out.append(Token(Kind.WORD, _merged_value(text, token.start, end, taken), token.start, end))
         elif end > token.end or token.canonical == surface.casefold():
-            if text[token.start - 1 : token.start] == "(" and _CLAUSE_LETTER.fullmatch(text, token.start - 1, end + 1):
+            if clause:
                 out.append(Token(Kind.WORD, surface, token.start, end))
             else:
                 out.append(Token(Kind.WORD, caseless(surface), token.start, end))

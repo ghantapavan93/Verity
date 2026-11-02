@@ -395,16 +395,33 @@ def whole_words(text, tokens, version=0):
             if end == reached:
                 break
         surface = text[token[2]:end]
-        if version >= 13 and end > token[3] and not CLAUSE_LETTER.fullmatch(text, token[2] - 1, end + 1):
+        clause = text[token[2] - 1:token[2]] == "(" and CLAUSE_LETTER.fullmatch(text, token[2] - 1, end + 1) is not None
+        if version >= 14 and not clause and text[token[2] - 1:token[2]] == "(" and text[end:end + 1] == ")":
+            clause = len(clause_letters(text[token[2] - 1:end + 1], version)) == 1
+            surface = unicodedata.normalize("NFC", surface) if clause else surface
+        if version >= 13 and end > token[3] and not clause:
             out.append(["word", merged_value(text, token[2], end, taken), token[2], end])
         elif end > token[3] or token[1] == surface.casefold():
-            if text[token[2] - 1:token[2]] == "(" and CLAUSE_LETTER.fullmatch(text, token[2] - 1, end + 1):
+            if clause:
                 out.append(["word", surface, token[2], end])
             else:
                 out.append(["word", caseless(surface), token[2], end])
         else:
             out.append(token)
     return out
+
+
+def clause_letters(text, version):
+    """The clause letters in a text; from v14 as a reader sees them, the characters normalisation deletes left out and the
+    marks composed (verify/tokens.clause_letters)."""
+    if version < 14:
+        return CLAUSE_LETTER.findall(text)
+    hidden = deleted(version)
+    visible = unicodedata.normalize("NFC", "".join(ch for ch in text if ch not in hidden))
+    return [m[0] for m in PARENTHESISED.finditer(visible) if CLAUSE_LETTER.fullmatch(m[0]) or (m[1][0].isalpha() and all(map(marked, m[1][1:])))]
+
+
+PARENTHESISED = re.compile(r"\(([^()\s]+)\)")
 
 
 def merged_value(text, start, end, taken):
@@ -744,7 +761,7 @@ def same(found, quote, method, version=0, where=None, label=""):
         return normalize(found, version) == normalize(quote, version).strip()
     if base == "casefold":
         # v11: case is forgiven, never a clause's letter ("Section 2(A)" is not found at "Section 2(a)").
-        return normalize(found, version).casefold() == normalize(quote, version).strip().casefold() and (version < 11 or CLAUSE_LETTER.findall(found) == CLAUSE_LETTER.findall(quote))
+        return normalize(found, version).casefold() == normalize(quote, version).strip().casefold() and (version < 11 or clause_letters(found, version) == clause_letters(quote, version))
     if base == "alnum":
         return alnum(found) == alnum(quote)
     if base == "typed":

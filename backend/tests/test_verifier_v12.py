@@ -31,7 +31,7 @@ ZWSP, WORD_JOINER, SOFT_HYPHEN, BOM = "​", "⁠", "­", "﻿"
 
 
 def test_this_is_verifier_v12() -> None:
-    assert VERIFIER_VERSION in ("v12", "v13")  # v13 keeps every v12 rule (test_verifier_v13.py)
+    assert VERIFIER_VERSION in ("v12", "v13", "v14")  # v13 and v14 keep every v12 rule
 
 
 # A word the reader sees whole, and a quote that splits it with a space.

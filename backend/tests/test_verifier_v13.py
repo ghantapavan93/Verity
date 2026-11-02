@@ -31,7 +31,7 @@ ACUTE, DIAERESIS = "\u0301", "\u0308"
 
 
 def test_this_is_verifier_v13() -> None:
-    assert VERIFIER_VERSION == "v13"
+    assert VERIFIER_VERSION in ("v13", "v14")  # v14 keeps every v13 rule (test_verifier_v14.py)
 
 
 # A quote whose number differs from the text's, after a word with a decomposed accent glued to the number's first

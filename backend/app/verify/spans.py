@@ -68,12 +68,12 @@ from dataclasses import dataclass
 from typing import cast
 
 from .tokens import (
-    _CLAUSE_LETTER,
     SIGN_OPENERS_V11,
     VERSION,
     Kind,
     attaches,
     caseless,
+    clause_letters,
     joins_digits,
     locate_tokens,
     marked,
@@ -404,8 +404,10 @@ def _tiers(quote: str, text: str, whole: str | None = None) -> Located | None:
 
     folded_text, folded_map = fold_with_map(norm_text, norm_map)
     # Case forgives "SECTION 2(a)" for "Section 2(a)", never a clause's letter: "(A)" and "(a)" name two clauses (v11).
-    letters = _CLAUSE_LETTER.findall(quote)
-    found = _find_bounded(folded_text, norm_quote.casefold(), folded_map, whole, lambda start, end: _CLAUSE_LETTER.findall(whole[start:end]) == letters)
+    # From v14 the letters are read as a reader sees them, an invisible character or a mark inside the parentheses no reason
+    # to forgive the case (`tokens.clause_letters`).
+    letters = clause_letters(quote, _INVISIBLE)
+    found = _find_bounded(folded_text, norm_quote.casefold(), folded_map, whole, lambda start, end: clause_letters(whole[start:end], _INVISIBLE) == letters)
     if found is not None:
         return Located(found[0], found[1], "casefold", found[2])
 
