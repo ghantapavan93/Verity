@@ -4434,7 +4434,7 @@ regenerated files differ in bytes (python-docx stamps a time) but not in text.
 | `test_verifier_v11.py` | four ways v10 found a quote the text does not say, each reproduced and closed |
 | `test_verifier_v12.py` | an invisible character inside a word no longer parts it at the typed tier, in the workbench and the pack; a property that invisible characters change nothing the typed tier decides |
 | `test_verifier_v13.py` | a word read whole through a combining mark drops no part of the token it reaches, in the workbench and the pack; properties that reading words whole drops no character, that a changed digit and a clause letter of another case are never found, that the pack compares as the workbench does under v13, and that the prefilter never refuses what the tiers find |
-| `test_verifier_v14.py` | a clause's letter is read as a reader sees it at the casefold and typed tiers and in the pack, an invisible character or a mark inside the parentheses no reason to forgive its case; a property over every way it is hidden |
+| `test_verifier_v14.py` | a clause's letter is read as a reader sees it at the casefold and typed tiers and in the pack, an invisible character, a space or a mark inside the parentheses no reason to forgive its case; a circled or parenthesised letter compared, not dropped; properties for the pack and the prefilter |
 | `test_replay_window.py` | `reverify` searches the window each run was verified over |
 
 #### 9.3.5 Status policy and the finding account

@@ -2017,12 +2017,17 @@ character inside the parentheses ("4(C" with U+200E ")"), or a letter written wi
 ")"), was no clause letter to it, so "x 4(C" U+200E ") y" was found in "x 4(c" U+200E ") y". The typed tier asked the same
 pattern and so forgave a marked letter's case as well.
 
-Invariant: a clause's letter is compared with its case wherever a reader sees one. Decision: from v14 the casefold
-tier, the typed tier and the evidence pack read clause letters through one function (`tokens.clause_letters`, the pack's
-`clause_letters`): the characters normalisation deletes left out, the marks composed, and a letter with marks Unicode
-has no composed form for still a letter. A v13 run's pack reads as v13 did.
+Invariant: a clause's letter is compared with its case wherever a reader sees one, and a symbol that reads as a
+letter is compared at all. Decision: from v14 the casefold tier, the typed tier and the evidence pack read clause letters
+through one function (`tokens.clause_letters`, the pack's `clause_letters`): the characters normalisation deletes left
+out, the compatibility form read (full-width parentheses, a circled or parenthesised letter), spaces inside the
+parentheses no part of it, and a letter with its marks one letter wherever the marks stand ("( x )", "(" U+0301 "a)",
+"(i" U+0301 "v)"). The review of the first v14 (9eb23b5, not released) found those forms, and that the typed tier dropped
+a circled or parenthesised letter as punctuation, so a circled "a" was found where the text has a circled "b": from v14
+such a symbol (`tokens.enclosed`: circled, parenthesised, squared or numbered with a full stop; never "TRADE MARK SIGN" or
+"NUMERO SIGN") is a token compared as it reads, its case kept. A v13 run's pack reads as v13 did.
 
-Tests (`test_verifier_v14.py`): the five hidden forms withheld, controls for the same letter found and for case outside
-the letter still forgiven, a property over every way the letter is hidden, and the pack both ways. None of 183,043
-distinct recorded section texts and quotes (the public store not opened) reads its clause letters differently, so no
-recorded decision changes. The reader's fingerprint moved only through `tokens.VERSION`, and was replaced.
+Tests (`test_verifier_v14.py`): ten hidden forms withheld, enclosed letters compared, controls for the same letter found
+and for case outside the letter still forgiven, properties over every way the letter is hidden, the pack against the
+workbench at both tiers, and the prefilter against the tiers. Of 35,849 recorded span and section pairs (the public
+store not opened), 1,703 hold a spaced clause letter or a trade mark sign; replayed under b5dffaf and v14, none changes. The reader's fingerprint moved only through `tokens.VERSION`, and was replaced.

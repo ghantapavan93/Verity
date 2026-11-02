@@ -353,6 +353,8 @@ def typed_tokens(text, version=0):
             tokens = [t for t in tokens if t[0] != "punct"]
         tokens = whole_words(text, tokens, version)
         choices = [["symbol", ch, at, at + 1] for at, ch in enumerate(text) if ch in CHOICE_MARKS]
+        if version >= 14:  # a symbol that reads as a letter or digit (verify/tokens.compared)
+            choices += [["symbol", unicodedata.normalize("NFKC", ch), at, at + 1] for at, ch in enumerate(text) if enclosed(ch)]
         tokens = sorted(tokens + [["break", "", at, at + 1] for at in sentence_ends(text)] + choices, key=lambda t: t[2])
     return tokens
 
@@ -396,9 +398,8 @@ def whole_words(text, tokens, version=0):
                 break
         surface = text[token[2]:end]
         clause = text[token[2] - 1:token[2]] == "(" and CLAUSE_LETTER.fullmatch(text, token[2] - 1, end + 1) is not None
-        if version >= 14 and not clause and text[token[2] - 1:token[2]] == "(" and text[end:end + 1] == ")":
-            clause = len(clause_letters(text[token[2] - 1:end + 1], version)) == 1
-            surface = unicodedata.normalize("NFC", surface) if clause else surface
+        if version >= 14 and not clause and clause_word(text, token[2], end):
+            clause, surface = True, unicodedata.normalize("NFC", surface)
         if version >= 13 and end > token[3] and not clause:
             out.append(["word", merged_value(text, token[2], end, taken), token[2], end])
         elif end > token[3] or token[1] == surface.casefold():
@@ -411,17 +412,51 @@ def whole_words(text, tokens, version=0):
     return out
 
 
+def enclosed(ch):
+    """A symbol that reads as a letter or a digit (verify/tokens.enclosed, v14)."""
+    if unicodedata.category(ch) != "So" or not any(c.isalnum() for c in unicodedata.normalize("NFKC", ch)):
+        return False
+    return any(form in unicodedata.name(ch, "") for form in ("CIRCLED", "PARENTHESIZED", "FULL STOP", "SQUARED"))
+
+
 def clause_letters(text, version):
-    """The clause letters in a text; from v14 as a reader sees them, the characters normalisation deletes left out and the
-    marks composed (verify/tokens.clause_letters)."""
+    """The clause letters in a text; from v14 as a reader sees them: the characters normalisation deletes left out, the
+    compatibility form read, spaces inside the parentheses no part of it, a letter with its marks one letter
+    (verify/tokens.clause_letters)."""
     if version < 14:
         return CLAUSE_LETTER.findall(text)
     hidden = deleted(version)
-    visible = unicodedata.normalize("NFC", "".join(ch for ch in text if ch not in hidden))
-    return [m[0] for m in PARENTHESISED.finditer(visible) if CLAUSE_LETTER.fullmatch(m[0]) or (m[1][0].isalpha() and all(map(marked, m[1][1:])))]
+    pieces = []
+    for ch in text:
+        if ch in hidden:
+            continue
+        compat = unicodedata.normalize("NFKC", ch)
+        pieces.append(f"({compat})" if enclosed(ch) and compat.isalpha() else ch)
+    visible = unicodedata.normalize("NFKC", "".join(pieces))
+    letters = []
+    for match in PARENTHESISED.finditer(visible):
+        bare = "".join(ch for ch in unicodedata.normalize("NFD", match[1]) if not marked(ch))
+        if (len(bare) == 1 and bare.isalpha()) or ROMAN.fullmatch(bare):
+            letters.append("(" + unicodedata.normalize("NFC", match[1]) + ")")
+    return letters
 
 
-PARENTHESISED = re.compile(r"\(([^()\s]+)\)")
+PARENTHESISED = re.compile(r"\(\s*([^()\s]+)\s*\)")
+ROMAN = re.compile(r"[ivxlcdm]+|[IVXLCDM]+")
+
+
+def clause_word(text, start, end):
+    """A word that is a clause letter as a reader sees it (verify/tokens._clause_word, v14)."""
+    low, high = start, end
+    while low > 0 and (text[low - 1].isspace() or marked(text[low - 1])):
+        low -= 1
+    while high < len(text) and (text[high].isspace() or marked(text[high])):
+        high += 1
+    if low == 0 or high == len(text):
+        return False
+    if unicodedata.normalize("NFKC", text[low - 1]) != "(" or unicodedata.normalize("NFKC", text[high]) != ")":
+        return False
+    return len(clause_letters(text[low - 1:high + 1], 14)) == 1
 
 
 def merged_value(text, start, end, taken):

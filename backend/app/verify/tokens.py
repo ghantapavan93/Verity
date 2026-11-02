@@ -195,16 +195,56 @@ _CLAUSE_LETTER = re.compile(r"\((?:[^\W\d_]|[ivxlcdm]+|[IVXLCDM]+)\)")
 _JOINERS = frozenset("\u200c\u200d")
 
 
+def enclosed(ch: str) -> bool:
+    """Whether ``ch`` is a symbol that reads as a letter or a digit, "\u24d0", "\u249c", "\u24b6" (verifier v14): until v14 the
+    typed tier dropped it as punctuation, so a circled "a" was found where the text has a circled "b"."""
+    if unicodedata.category(ch) != "So" or not any(c.isalnum() for c in unicodedata.normalize("NFKC", ch)):
+        return False
+    return any(form in unicodedata.name(ch, "") for form in _ENCLOSURES)  # never "TRADE MARK SIGN", "NUMERO SIGN"
+
+
+_ENCLOSURES = ("CIRCLED", "PARENTHESIZED", "FULL STOP", "SQUARED")
+
+
 def clause_letters(text: str, invisible: frozenset[str]) -> list[str]:
     """The clause letters in ``text``, "(a)", "(iv)", as a reader sees them (verifier v14): the characters in ``invisible``
-    left out and the marks composed, so "(C" with U+200E is "(C)" and "(a" with U+0301 is the letter "(\u00e1)". Until v14
-    the casefold and typed tiers read them as stored, and forgave the case of a letter they did not see. A letter keeps
-    the marks Unicode has no composed form for ("(b" with U+0301 stays a letter with its mark)."""
-    visible = unicodedata.normalize("NFC", "".join(ch for ch in text if ch not in invisible))
-    return [m[0] for m in _PARENTHESISED.finditer(visible) if _CLAUSE_LETTER.fullmatch(m[0]) or (m[1][0].isalpha() and all(map(marked, m[1][1:])))]
+    left out, the text read in its compatibility form (full-width parentheses are parentheses, a circled or parenthesised
+    letter a letter in parentheses), spaces inside the parentheses no part of it, and a letter with its marks, wherever
+    they are written, still one letter: "(C" with U+200E, "( a )", "(" U+0301 "a)", "(i" U+0301 "v)" are each a clause
+    letter, compared with its case. Until v14 the casefold and typed tiers read them as stored, and forgave the case of a
+    letter they did not see."""
+    pieces = []
+    for ch in text:
+        if ch in invisible:
+            continue
+        compat = unicodedata.normalize("NFKC", ch)
+        pieces.append(f"({compat})" if enclosed(ch) and compat.isalpha() else ch)
+    visible = unicodedata.normalize("NFKC", "".join(pieces))
+    letters = []
+    for match in _PARENTHESISED.finditer(visible):
+        bare = "".join(ch for ch in unicodedata.normalize("NFD", match[1]) if not marked(ch))
+        if (len(bare) == 1 and bare.isalpha()) or _ROMAN.fullmatch(bare):
+            letters.append("(" + unicodedata.normalize("NFC", match[1]) + ")")
+    return letters
 
 
-_PARENTHESISED = re.compile(r"\(([^()\s]+)\)")
+_PARENTHESISED = re.compile(r"\(\s*([^()\s]+)\s*\)")
+_ROMAN = re.compile(r"[ivxlcdm]+|[IVXLCDM]+")
+
+
+def _clause_word(text: str, start: int, end: int) -> bool:
+    """Whether the word at ``start``-``end`` is a clause letter as a reader sees it (v14): parentheses around it, in any
+    form, past spaces and marks (`clause_letters`)."""
+    low, high = start, end
+    while low > 0 and (text[low - 1].isspace() or marked(text[low - 1])):
+        low -= 1
+    while high < len(text) and (text[high].isspace() or marked(text[high])):
+        high += 1
+    if low == 0 or high == len(text):
+        return False
+    if unicodedata.normalize("NFKC", text[low - 1]) != "(" or unicodedata.normalize("NFKC", text[high]) != ")":
+        return False
+    return len(clause_letters(text[low - 1 : high + 1], frozenset())) == 1
 
 
 def marked(ch: str) -> bool:
@@ -521,6 +561,8 @@ def compared(text: str, version: int = VERSION, invisible: frozenset[str] = froz
         return kept
     ends = [Token(Kind.BREAK, "", at, at + 1) for at in sentence_ends(text, invisible)]
     choices = [Token(Kind.SYMBOL, ch, at, at + 1) for at, ch in enumerate(text) if ch in _CHOICE_MARKS]
+    if version >= 14:  # a symbol that reads as a letter or digit is compared as it reads, its case kept (`enclosed`)
+        choices += [Token(Kind.SYMBOL, unicodedata.normalize("NFKC", ch), at, at + 1) for at, ch in enumerate(text) if enclosed(ch)]
     return sorted(whole_words(text, kept, version) + ends + choices, key=lambda t: t.start)
 
 
@@ -566,10 +608,8 @@ def whole_words(text: str, tokens: list[Token], version: int = VERSION) -> list[
                 break
         surface = text[token.start : end]
         clause = text[token.start - 1 : token.start] == "(" and _CLAUSE_LETTER.fullmatch(text, token.start - 1, end + 1) is not None
-        if version >= 14 and not clause and text[token.start - 1 : token.start] == "(" and text[end : end + 1] == ")":
-            # v14: a letter written with a mark is a clause letter as the reader sees it ("(a" with U+0301 is "(\u00e1)")
-            clause = len(clause_letters(text[token.start - 1 : end + 1], frozenset())) == 1
-            surface = unicodedata.normalize("NFC", surface) if clause else surface
+        if version >= 14 and not clause and _clause_word(text, token.start, end):
+            clause, surface = True, unicodedata.normalize("NFC", surface)  # v14: a clause letter as a reader sees it
         if version >= 13 and end > token.end and not clause:
             out.append(Token(Kind.WORD, _merged_value(text, token.start, end, taken), token.start, end))
         elif end > token.end or token.canonical == surface.casefold():
