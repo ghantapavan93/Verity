@@ -139,7 +139,7 @@ test.describe("state that must survive", () => {
     const rowIn = (tab: Page) =>
       tab
         .locator("li")
-        .filter({ hasText: `Asked: ${LIABILITY}` })
+        .filter({ has: tab.getByText(`Asked: ${LIABILITY}`, { exact: true }) })
         .first();
     // The data directory is shared across runs and the run is reused, so the finding may carry a decision already.
     const undo = rowIn(page).getByRole("button", { name: "Clear decision" });

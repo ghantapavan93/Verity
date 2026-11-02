@@ -6,7 +6,7 @@
   height: 100dvh;
   min-width: 0;
   overflow-y: auto;
-  padding: 36px 40px 96px;
+  padding: clamp(24px, 4vw, 48px) clamp(16px, 4vw, 48px) 96px;
   scrollbar-gutter: stable;
 }
 
@@ -71,7 +71,7 @@
   flex-wrap: wrap;
   gap: 4px 14px;
   font-family: var(--font-serif);
-  font-size: 30px;
+  font-size: clamp(30px, 3vw, 40px);
   font-weight: 500;
   line-height: 1.15;
   letter-spacing: -0.015em;
@@ -971,6 +971,15 @@ button.figureActive:hover {
 }
 
 @media (max-width: 720px) {
+  .skeletonRow {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .skeletonSide {
+    display: none;
+  }
+
   .tableHead {
     display: none;
   }
@@ -1036,8 +1045,19 @@ button.figureActive:hover {
   color: var(--text-3);
 }
 
+/* A failed action stays beside the record that was acted on, even deep in a long ledger. */
+.rowError {
+  margin: 0 10px 12px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--status-review-text);
+  background: var(--status-review-bg);
+  color: var(--status-review-text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .reviewButton {
-  height: 26px;
+  min-height: 36px;
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1066,7 +1086,7 @@ button.figureActive:hover {
 
 .reviewInput {
   min-width: 180px;
-  height: 26px;
+  min-height: 36px;
   padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1085,7 +1105,7 @@ button.figureActive:hover {
 @media (max-width: 720px) {
   .reviewButton,
   .reviewInput {
-    height: 40px;
+    min-height: 44px;
   }
 
   .reviewInput {

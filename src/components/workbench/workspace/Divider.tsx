@@ -23,14 +23,18 @@ export function Divider({
       aria-valuenow={Math.round(docWidth)}
       aria-valuemin={MIN_DOC_WIDTH}
       aria-valuemax={MAX_DOC_WIDTH}
+      aria-valuetext={`${Math.round(docWidth)} percent contract width`}
       tabIndex={0}
       title="Drag to resize · double-click to reset"
       onPointerDown={onPointerDown}
       onDoubleClick={() => setDocWidth(DEFAULT_DOC_WIDTH)}
       onKeyDown={(e) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+        e.preventDefault();
         if (e.key === "ArrowLeft") setDocWidth((w) => Math.max(MIN_DOC_WIDTH, w - 2));
         if (e.key === "ArrowRight") setDocWidth((w) => Math.min(MAX_DOC_WIDTH, w + 2));
-        if (e.key === "Home") setDocWidth(DEFAULT_DOC_WIDTH);
+        if (e.key === "Home") setDocWidth(MIN_DOC_WIDTH);
+        if (e.key === "End") setDocWidth(MAX_DOC_WIDTH);
       }}
     >
       <span className={styles.dividerHandle} />

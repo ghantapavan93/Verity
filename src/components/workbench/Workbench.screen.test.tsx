@@ -602,6 +602,25 @@ describe("one run at a time, whatever control asks", () => {
  * route ("R/evidence-pack?" built a pack in the reader's browser), then the page blamed the sign-in (stress test,
  * 2026-10-30). The API client refuses any value that is not a record id, so nothing is asked for it.
  */
+describe("question input methods", () => {
+  it("does not submit while Enter is accepting a composed character", async () => {
+    runs.get("runA")!.done = true;
+    await mount("?run=runA");
+    const input = screen.getByPlaceholderText("Ask a question about this contract");
+    fireEvent.change(input, { target: { value: "What is the term?" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    await settle();
+    expect(posts).toEqual([]);
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    await settle();
+    expect(posts).toEqual([]);
+    fireEvent.keyDown(input, { key: "Enter" });
+    await settle();
+    expect(posts).toEqual([{ documentId: "docX", question: "What is the term?" }]);
+  });
+});
+
 describe("a link that does not name a record", () => {
   for (const search of [
     "?run=runA%2Fevidence-pack%3F",

@@ -86,11 +86,12 @@
 
 .title {
   margin: 0;
-  max-width: 15ch;
+  max-width: 19ch;
   font-family: var(--font-serif);
-  font-size: clamp(36px, 4.6vw, 56px);
+  font-size: clamp(36px, 4.6vw, 60px);
   font-weight: 500;
-  line-height: 1.04;
+  line-height: 1.08;
+  text-wrap: balance;
   letter-spacing: -0.02em;
   color: var(--text);
   font-optical-sizing: auto;
@@ -135,7 +136,7 @@
   position: relative;
   margin-top: 34px;
   border-radius: var(--radius-l);
-  border: 1px dashed var(--border-strong);
+  border: 1px solid var(--border-strong);
   background: var(--composer-bg);
   padding: 16px 18px 16px;
   transition:
@@ -166,6 +167,8 @@
   color: var(--text);
   font: 400 16px/1.5 var(--font-sans);
   resize: none;
+  max-height: 160px;
+  overflow-y: auto;
   outline: none;
 }
 
@@ -222,6 +225,7 @@
 .dropHint {
   margin-top: 3px;
   font-size: 13px;
+  line-height: 1.55;
   color: var(--text-3);
 }
 
@@ -231,8 +235,8 @@
   align-items: center;
   gap: 8px;
   flex: none;
-  height: 36px;
-  padding: 0 14px;
+  min-height: 44px;
+  padding: 0 16px;
   border: 0;
   border-radius: 8px;
   background: var(--text);
@@ -263,7 +267,7 @@
   display: inline-flex;
   align-items: center;
   flex: none;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 14px;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
@@ -343,7 +347,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 50px;
+  min-height: 144px;
+  flex-wrap: wrap;
 }
 
 .fileName {
@@ -371,7 +376,7 @@
 }
 
 .releaseHint {
-  min-height: 50px;
+  min-height: 144px;
   display: grid;
   place-items: center;
   font-size: 15px;

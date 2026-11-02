@@ -113,7 +113,7 @@ function proposalFor(explanation: RunExplanationView | null, findingId: string) 
 const AROUND = 280; // characters (code points) of stored text shown on each side of a quote
 
 /**
- * On a phone, where the contract text is hidden: the stored text around a verified quote, read from its offsets, in a
+ * The stored text around a verified quote, read from its offsets, in a
  * native disclosure (keyboard and screen reader for free). Nothing when the offsets do not fit the text. The offsets
  * count code points, and so does every cut here (lib/text aroundCodePoints): sliced as UTF-16 units, the emphasis moved
  * one character off the located text for each astral character before it (stress test, 2026-10-30).
@@ -378,7 +378,7 @@ function EvidenceBody({
               {span.verified && !match && span.matchCount != null && span.matchCount > 1 && (
                 <div className={styles.drawerRefStatic}>This passage occurs {span.matchCount} times in the section; the first is highlighted.</div>
               )}
-              {narrow && section && span.verified && <QuoteContext text={section.text} start={span.start} end={span.end} />}
+              {section && span.verified && <QuoteContext text={section.text} start={span.start} end={span.end} />}
             </div>
           );
         })}

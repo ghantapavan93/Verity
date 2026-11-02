@@ -1912,3 +1912,34 @@ shared reading still reveals that the same bytes were uploaded before; reviews a
 apart from its number by a space is punctuation, as since v8; a setting read during a run that its options do not record
 would change answers without changing identity (none is known: the options carry every setting the executor reads);
 dependency versions are pinned by the lockfiles, not named in a run's identity.
+
+
+## 2026-11-01 — Refine the existing frontend around reading and inspection
+
+The owner requested Apple-level attention to typography, spacing, motion, mobile layouts, loading feedback, evidence
+inspection and keyboard access, while preserving identity and engineering integrity. Keep the existing graphite,
+ivory and brass tokens, real API workflow and backend ownership of truth. No new runtime dependency or product page.
+
+Browser inspection identified a concrete evidence-sheet failure: opening quote context could scroll its hidden-overflow
+ancestor, moving the header and Close above the screen. The assistant shell now clips instead of becoming a hidden
+scroll container; its body and evidence sheet retain their own scrolling. Context is available at every width and still
+uses only verified API offsets that fit the stored text. Question fields grow, shrink and reflow; input composition
+confirmation cannot submit a question or choose a command. Divider keys resize without scrolling and support Home/End
+bounds. Loading lists announce themselves and adapt their skeletons to phone rows.
+
+These are presentation decisions only: no model, verifier, retrieval, policy, persistence or API shape changes, so no
+semantic version bump. The design contract, audit and validation limits are in `docs/FRONTEND-POLISH.md`.
+
+### Desktop session states
+
+The owner prioritized desktop browsers and demanding review sessions. Reproduced failures earned two changes:
+review errors stay beside their finding, and an obsolete execution-record fetch cannot replace the latest selection.
+Opening a record starts at its heading; returning restores the list position and initiating keyboard control.
+Disconnected questions display their last reported stage and explicit recovery rather than a running spinner.
+An unsuccessful create request retains its question and offers retry; the backend's existing identity rules still own
+deduplication. Empty filters can return directly to all records, and empty questions disable Send.
+
+The new `npm run test:sessions` audit uses the production interface and real API with the existing explicit replay
+provider. Its fresh temporary store allows genuine empty-state checks without touching existing workspaces. Network
+failures are induced, not replaced with success fixtures. No backend or semantic-version change. The bounded state
+inventory, repeatable command, measured coverage and remaining limits are in `docs/SESSION-STATES.md`.

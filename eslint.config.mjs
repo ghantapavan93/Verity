@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     // The browser flows build here (playwright.config.ts); until this line, linting after the flows had run
     // linted their build output and failed.
     ".next-e2e/**",
+    // Browser audit reports and traces contain generated JavaScript, not application source.
+    "playwright-report/**",
+    "test-results/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

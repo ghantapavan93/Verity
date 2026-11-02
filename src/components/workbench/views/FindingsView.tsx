@@ -62,6 +62,7 @@ export function FindingsView({
 }) {
   const [records, setRecords] = useState<FindingRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<{ id: string; text: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pending, setPending] = useState<{ id: string; verdict: ReviewVerdict } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -103,13 +104,13 @@ export function FindingsView({
       return;
     }
     setBusyId(record.id);
-    setError(null);
+    setReviewError(null);
     try {
       // Decided against the review state this row shows; one recorded since, in another tab or by another person, refuses it.
       const out = await reviewFinding(record.id, { verdict, reviewer, note: null, basedOn: record.latestReviewId });
       setRecords((rows) => rows?.map((r) => (r.id === record.id ? { ...r, review: out.review ?? null, latestReviewId: out.latestReviewId } : r)) ?? rows);
     } catch (e) {
-      setError(errorMessage(e));
+      setReviewError({ id: record.id, text: errorMessage(e) });
       if (isConflict(e)) {
         // Show the decision that was recorded instead: the list is read again.
         setPending(null);
@@ -178,6 +179,9 @@ export function FindingsView({
         {records && records.length > 0 && groups.length === 0 && (
           <div className={styles.empty}>
             <p>Nothing matches this filter.</p>
+            <button type="button" className={wb.ghostButton} onClick={() => setFilter("all")}>
+              Show all findings
+            </button>
           </div>
         )}
 
@@ -243,7 +247,7 @@ export function FindingsView({
                       </ul>
                     </div>
                   )}
-                  <div className={styles.reviewBar}>
+                  <div className={styles.reviewBar} aria-busy={busyId === r.id}>
                     {r.shared ? (
                       <>
                         {r.review && (
@@ -325,6 +329,11 @@ export function FindingsView({
                       </>
                     )}
                   </div>
+                  {reviewError?.id === r.id && (
+                    <p className={styles.rowError} role="alert">
+                      {reviewError.text}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

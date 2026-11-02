@@ -11,6 +11,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "test": "vitest run",
     "e2e": "playwright test",
+    "test:sessions": "playwright test --config playwright.sessions.config.ts",
     "api:types": "openapi-typescript openapi.json -o src/lib/api.schema.ts"
   },
   "dependencies": {

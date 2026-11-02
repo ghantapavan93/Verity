@@ -3255,6 +3255,13 @@ query-count case to `tests/test_read_cost.py` for a list.
 
 ## 8. The interface
 
+**Frontend supplement, 2026-11-01:** [FRONTEND-POLISH.md](FRONTEND-POLISH.md) records the owner-requested refinement,
+its responsibilities, observed issues, and browser validation. The historical release counts above remain unchanged.
+
+**Desktop session supplement:** [SESSION-STATES.md](SESSION-STATES.md) inventories empty, populated, failed and
+interrupted states. `RunsView` guards the latest record selection and restores list scroll/focus; `FindingsView` keeps
+decision errors beside their row; `AssistantPanel` offers explicit recovery without showing stale progress as live.
+
 The interface is a Next.js 16.4.1 App Router application in `src/`, written in TypeScript with React 19.2.8 and
 framer-motion for motion. It renders what the API recorded and decides nothing: no evidence check, no status, no
 review rule lives here. This chapter covers every tracked file under `src/` and `e2e/`, and the frontend configuration
@@ -3386,7 +3393,7 @@ run: it is damaged, or it was not made by Verity." A 404 says the record "cannot
 The split is a CSS grid, `${docWidth}% 8px minmax(0, 1fr)` (`Workbench.tsx:715`). The document width defaults to
 62%, stays within 45 to 75%, and persists for the tab in `sessionStorage` key `workbench.docWidth`
 (`hooks/useDocWidth.ts`). The divider (`workspace/Divider.tsx`) drags with the pointer, moves 2% per Left/Right
-arrow, and resets on Home or double-click. At 640 px wide or less (`NARROW_QUERY`, `shell/constants.ts`, kept in
+arrow, moves to its bounds on Home/End, and resets on double-click. Resize keys do not scroll the page. At 640 px wide or less (`NARROW_QUERY`, `shell/constants.ts`, kept in
 step with `@media (max-width: 640px)` in `Workbench.module.css`) one pane shows at a time, chosen by an "Answer /
 Contract" toggle; the drawer becomes a sheet over the answer, and controls that would mark a passage in the hidden
 contract show the passage in the sheet instead.
@@ -3649,6 +3656,8 @@ Test files are listed in section 8.6. Paths below are relative to `src/` unless 
 | `eslint.config.mjs` | Lint | `eslint-config-next` core-web-vitals and typescript; ignores build dirs and `backend/**`; bans `fetch`, `EventSource` and `api.schema` imports in components and app (section 8 intro). |
 | `vitest.config.ts` | Unit tests | jsdom, `@` alias, includes `src/**/*.test.{ts,tsx}`. |
 | `playwright.config.ts` | Browser flows | Starts the API (port 8001, data dir `backend/data/e2e` or `e2e-record`, `WORKBENCH_PROVIDER` from `E2E_PROVIDER`, default `replay`) and a production build of the interface (port 3901, `.next-e2e`); one Chromium project at 1280x800; one worker; traces kept on failure. |
+| `playwright.sessions.config.ts` | Desktop state audit | Fresh temporary API store, explicitly selected replay provider, production build, Chromium/Firefox/WebKit; `npm run test:sessions`. Run sequentially with the normal browser suite. |
+| `e2e/sessions.audit.ts` | Review-session regressions | Empty and failed ledgers, failed reviews, repeated record navigation, late responses, interrupted connections and question-request recovery; captures and accessibility checks. |
 | `.prettierrc` | Formatting | `printWidth: 160`. |
 | `.prettierignore` | Formatting | Skips `src/lib/api.schema.ts` (generated) and `src/components/break/break-record.json` (exporter's bytes, re-checked by `backend/tests/test_break_record.py`). |
 
@@ -3692,6 +3701,7 @@ Test files are listed in section 8.6. Paths below are relative to `src/` unless 
 | `icons.tsx` | Inline SVG icons and the Verity mark | `IconSearch`, `IconDocuments`, `IconAssistant`, `IconFindings`, `IconRuns`, `IconPlus`, `IconArrowUp`, `IconClose`, `IconFile`, `IconCommand`, `IconCheck`, `IconArrowRight`, `VerityMark` | rail, panels, landing |
 | `samples.ts` | The two bundled samples and their questions | `SAMPLES`, `SampleKind`, `Sample`, `suggestionsFor` | `Workbench`, `AssistantPanel`, `DocumentPane`; read by `backend/tests/test_amended_sample.py` |
 | `shell/constants.ts` | Stage and View types, the motion curve and presets, `NARROW_QUERY` | `Stage`, `View`, `VIEWS`, `TERMINAL`, `EASE`, `transitions`, `NARROW_QUERY` | shell, hooks, panels |
+| `shell/QuestionInput.tsx` | Shared question field that grows, shrinks and reflows up to its CSS height cap | `QuestionInput` | landing and assistant |
 | `shell/primitives.tsx` | Status chip, progress shimmer, brand, the `Visible` text primitive | `StatusChip`, `Shimmer`, `Brand`, `Visible` | almost every surface |
 | `shell/Rail.tsx` | The left rail: mark (home), Search, Documents, Review, Findings, Runs | `Rail` | `Workbench` |
 | `shell/PackLink.tsx` | Evidence pack link with wait and refusal states | `PackLink` | `EvidenceDrawer`, `RunsView` |

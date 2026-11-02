@@ -14,6 +14,7 @@ import { modelPlace } from "@/lib/modelPlace";
 import { SOURCE, TopLinks } from "./TopLinks";
 import { AccessModeKnown, PublicDemo, Reader } from "../access/PublicDemo";
 import { INDEPENDENCE } from "@/lib/independence";
+import { QuestionInput } from "../shell/QuestionInput";
 import { locatedNote, runOutcome } from "@/lib/checks";
 import { decidedByCode, type CitationRecord, type DocumentSummary, type FindingView, type RunSummary } from "@/lib/types";
 
@@ -120,7 +121,7 @@ export function Landing({
   const rise = (delay: number) =>
     reduceMotion
       ? {}
-      : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] as const } };
+      : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.32, delay, ease: [0.16, 1, 0.3, 1] as const } };
 
   // What the API says the door is: off means every record made here is readable by whoever reaches the site, and
   // the first screen must say so rather than call it private. Until the API has said (or when it could not be asked),
@@ -179,7 +180,7 @@ export function Landing({
               className={styles.kickerRule}
               initial={reduceMotion ? false : { scaleX: 0 }}
               animate={{ scaleX: 1 }}
-              transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.32, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
             />
             Contract AI, under test
           </motion.p>
@@ -233,7 +234,7 @@ export function Landing({
               <div className={styles.releaseHint}>Release to add the contract</div>
             ) : (
               <>
-                <textarea
+                <QuestionInput
                   className={styles.dropInput}
                   aria-label="Your question, asked once the contract is added"
                   placeholder="Ask a question about the contract, then add it"
@@ -241,6 +242,7 @@ export function Landing({
                   value={composerText}
                   onChange={(e) => setComposerText(e.target.value)}
                   onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       onPickFile();

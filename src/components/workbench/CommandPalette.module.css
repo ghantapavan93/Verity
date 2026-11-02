@@ -41,7 +41,9 @@
   margin: 0;
   padding: 6px;
   max-height: 46vh;
+  max-height: min(46dvh, 400px);
   overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 
 .item {
@@ -49,7 +51,8 @@
   grid-template-columns: 72px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: baseline;
-  padding: 8px 10px;
+  min-height: 44px;
+  padding: 12px 10px;
   border-radius: 8px;
   cursor: pointer;
   color: var(--text-2);
@@ -76,9 +79,9 @@
 }
 
 .label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 
 .hint {
@@ -101,4 +104,24 @@
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-3);
+}
+
+@media (max-width: 640px) {
+  .scrim {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  .item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .hint {
+    white-space: normal;
+  }
+
+  .footer {
+    flex-wrap: wrap;
+    gap: 8px 16px;
+  }
 }

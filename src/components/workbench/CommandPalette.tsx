@@ -76,6 +76,7 @@ export function CommandPalette({ getCommands, onClose, reduceMotion }: { getComm
         <input
           ref={inputRef}
           className={styles.input}
+          aria-label="Search commands and clauses"
           placeholder="Type a command or a clause"
           value={query}
           onChange={(e) => {
@@ -83,6 +84,7 @@ export function CommandPalette({ getCommands, onClose, reduceMotion }: { getComm
             setIndex(0);
           }}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
             if (e.key === "ArrowDown") {
               e.preventDefault();
               setIndex((i) => Math.min(matches.length - 1, i + 1));

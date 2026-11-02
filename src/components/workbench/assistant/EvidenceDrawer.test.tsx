@@ -400,7 +400,7 @@ describe("one drawer, another finding", () => {
     }
   });
 
-  it("on a phone, shows the stored text around a verified quote, only where its offsets fit that text", () => {
+  it("shows stored quote context at every width, only where verified offsets fit", () => {
     const at = SECTION.text.indexOf(QUOTE);
     const base = finding(null);
     const located = { ...base, spans: [{ ...base.spans[0], start: at, end: at + QUOTE.length }] } as unknown as FindingView;
@@ -420,8 +420,8 @@ describe("one drawer, another finding", () => {
     try {
       // The text at the quote's offsets is what is emphasised, and it is called text Verity read, not the page.
       expect(around(located, true)).toEqual({ shown: QUOTE, labelled: true });
-      // A wide screen has the document beside it; offsets outside the stored text and an unverified quote show nothing.
-      expect(around(located, false).shown).toBeNull();
+      // Context is inspectable without losing the finding, even when the document is beside it.
+      expect(around(located, false)).toEqual({ shown: QUOTE, labelled: true });
       expect(around(base, true).shown).toBeNull();
       expect(around({ ...located, spans: [{ ...located.spans[0], verified: false }] } as unknown as FindingView, true).shown).toBeNull();
     } finally {

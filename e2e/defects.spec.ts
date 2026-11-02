@@ -71,7 +71,8 @@ test("a memo that arrives after the reader went back to an earlier answer is not
   await page.getByRole("button", { name: "Generate review memo" }).click();
   // While it is being written, the reader goes back to the first answer from Runs.
   await page.getByRole("button", { name: "Runs" }).click();
-  await page.getByRole("button").filter({ hasText: LIABILITY }).first().click();
+  // Delayed/fault-injected variants share the question's prefix. Open this exact recorded run.
+  await page.getByRole("button").filter({ hasText: first! }).click();
   await page.getByRole("button", { name: "Open in workspace" }).click();
   await expect(page).toHaveURL(new RegExp(`[?&]run=${first}(&|$)`));
   await page.waitForTimeout(4000); // the memo for the later answer has arrived by now

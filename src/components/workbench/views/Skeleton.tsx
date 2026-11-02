@@ -5,18 +5,23 @@ import styles from "./Views.module.css";
 /** Rows the shape of the list that is coming, so the page does not jump when the record arrives. Still, not shimmering. */
 export function ListSkeleton({ rows = 5, label }: { rows?: number; label: string }) {
   return (
-    <ul className={`${styles.list} ${styles.skeleton}`} aria-busy="true" aria-label={`${label}, loading`}>
-      {Array.from({ length: rows }, (_, i) => (
-        <li key={i} className={styles.skeletonRow} aria-hidden="true">
-          <span className={styles.skeletonIndex} />
-          <span className={styles.skeletonMain}>
-            <span className={styles.skeletonBar} style={{ width: `${44 + ((i * 17) % 36)}%` }} />
-            <span className={`${styles.skeletonBar} ${styles.skeletonBarQuiet}`} style={{ width: `${28 + ((i * 11) % 30)}%` }} />
-          </span>
-          <span className={styles.skeletonSide} />
-        </li>
-      ))}
-    </ul>
+    <>
+      <span className="visually-hidden" role="status">
+        Loading {label.toLowerCase()}…
+      </span>
+      <ul className={`${styles.list} ${styles.skeleton}`} aria-busy="true" aria-label={`${label}, loading`}>
+        {Array.from({ length: rows }, (_, i) => (
+          <li key={i} className={styles.skeletonRow} aria-hidden="true">
+            <span className={styles.skeletonIndex} />
+            <span className={styles.skeletonMain}>
+              <span className={styles.skeletonBar} style={{ width: `${44 + ((i * 17) % 36)}%` }} />
+              <span className={`${styles.skeletonBar} ${styles.skeletonBarQuiet}`} style={{ width: `${28 + ((i * 11) % 30)}%` }} />
+            </span>
+            <span className={styles.skeletonSide} />
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 

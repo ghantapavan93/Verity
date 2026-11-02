@@ -16,6 +16,7 @@ import { RevisionCheck, SAMPLE_REVISION } from "./RevisionCheck";
 import { suggestionsFor, type SampleKind } from "../samples";
 import { RunOutcome, WithheldList } from "./RunOutcome";
 import { StageList } from "./StageList";
+import { QuestionInput } from "../shell/QuestionInput";
 import { absolute } from "@/lib/api";
 import { locatedNote } from "@/lib/checks";
 import {
@@ -163,17 +164,24 @@ export function AssistantPanel({
         ) : (
           <div className={styles.thread}>
             <div className={styles.userTurn}>{question}</div>
-            {runs.state.phase === "disconnected" && (
-              <p className={styles.errorLine} role="alert">
-                {/* The page cannot see the server: it may still be running the question, or it may have stopped (journey audit, 2026-10-09). */}
-                {runs.state.error} If the server is still running, so is the question; reconnect to see where it stands.{" "}
-                <button type="button" className={styles.linkButton} onClick={runs.resume}>
-                  Reconnect
-                </button>
-              </p>
-            )}
             <AnimatePresence mode="wait" initial={false}>
-              {stageLabel ? (
+              {runs.state.phase === "disconnected" ? (
+                <motion.section
+                  key="disconnected"
+                  className={styles.recovery}
+                  role="alert"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={quick}
+                >
+                  <h3>Connection interrupted</h3>
+                  <p>{runs.state.error} The server may still be working. Reconnect to read the same run; this does not submit another question.</p>
+                  {stageLabel && <p className={styles.recoveryDetail}>Last reported stage: {stageLabel}.</p>}
+                  <button type="button" className={styles.actionButton} onClick={runs.resume}>
+                    Reconnect
+                  </button>
+                </motion.section>
+              ) : stageLabel ? (
                 <motion.div
                   key="thinking"
                   className={styles.stageList}
@@ -270,16 +278,28 @@ export function AssistantPanel({
                   {doc && <RevisionCheck key={run.id} runId={run.id} documentId={doc.id} run={run} prepared={sample === "standard" ? SAMPLE_REVISION : null} />}
                 </motion.div>
               ) : (
-                <motion.div key="unresolved" className={styles.unresolved} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={quick}>
+                <motion.div
+                  key="unresolved"
+                  className={run ? styles.unresolved : undefined}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={quick}
+                >
                   {run ? (
                     <>
                       <RunOutcome run={run} runError={runError} sectionsById={sectionsById} onRetry={onAsk} onEvidence={onOpenEvidence} />
                       {run.relations && run.relations.length > 0 && <UnclaimedRelations relations={run.relations} claimed={new Set()} onJump={onJump} />}
                     </>
                   ) : (
-                    <p className={styles.errorLine} role="alert">
-                      {runError}
-                    </p>
+                    <section className={styles.recovery} role="alert">
+                      <h3>Question request failed</h3>
+                      <p>{runError}</p>
+                      {pending && (
+                        <button type="button" className={styles.actionButton} onClick={() => onAsk(pending.question)}>
+                          Try question again
+                        </button>
+                      )}
+                    </section>
                   )}
                 </motion.div>
               )}
@@ -293,8 +313,9 @@ export function AssistantPanel({
         Each question is answered on its own, from this contract; earlier answers are not carried over.
       </p>
       <motion.div layoutId="composer" className={`${styles.composer} ${styles.assistantComposer}`} transition={morph} inert={covered}>
-        <textarea
+        <QuestionInput
           ref={inputRef}
+          aria-label="Question about this contract"
           aria-describedby="composer-note"
           className={styles.composerInput}
           placeholder="Ask a question about this contract"
@@ -303,6 +324,7 @@ export function AssistantPanel({
           value={composerText}
           onChange={(e) => setComposerText(e.target.value)}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               // The same rule as the Send button: one run at a time. Enter used to start another run and abandon
@@ -312,7 +334,7 @@ export function AssistantPanel({
             }
           }}
         />
-        <button type="button" className={styles.sendButton} aria-label="Send" onClick={() => onAsk(composerText)} disabled={live}>
+        <button type="button" className={styles.sendButton} aria-label="Send" onClick={() => onAsk(composerText)} disabled={live || !composerText.trim()}>
           <IconArrowUp />
         </button>
       </motion.div>

@@ -4,7 +4,7 @@
  * is refused by the API and the list reads the decision that stands.
  */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { listFindings, reviewFinding } from "@/lib/api";
 import type { FindingRecord } from "@/lib/types";
@@ -51,6 +51,7 @@ const OPEN = record("f1", "Termination for convenience", null, 0);
 const DECIDED = record("f2", "Governing law", CONFIRMED, 3);
 
 beforeEach(() => {
+  api.reviewFinding.mockReset();
   window.localStorage.setItem("workbench.reviewer", "B. Reviewer");
   api.listFindings.mockResolvedValue([OPEN, DECIDED]);
 });
@@ -61,6 +62,28 @@ afterEach(() => {
 });
 
 describe("FindingsView", () => {
+  it("offers a direct way back from an empty filter without re-reading records", async () => {
+    render(<FindingsView notice={null} onOpen={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Within guidance or answered/ }));
+    expect(screen.getByText("Nothing matches this filter.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show all findings" }));
+    expect(screen.getByText(OPEN.topic)).toBeTruthy();
+    expect(screen.getByText(DECIDED.topic)).toBeTruthy();
+    expect(api.listFindings).toHaveBeenCalledTimes(1);
+  });
+  it("keeps a failed decision beside its finding and allows retry without losing the row", async () => {
+    api.reviewFinding.mockRejectedValueOnce(new Error("The workbench API is not reachable."));
+    api.reviewFinding.mockResolvedValueOnce({ findingId: OPEN.id, review: CONFIRMED, latestReviewId: 4 });
+    render(<FindingsView notice={null} onOpen={vi.fn()} />);
+    const confirm = await screen.findByRole("button", { name: "Confirm: Termination for convenience" });
+    const row = confirm.closest("li")!;
+    fireEvent.click(confirm);
+    expect(await within(row).findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("not reachable"));
+    expect(within(row).queryByText("Confirmed")).toBeNull();
+    fireEvent.click(confirm);
+    expect(await within(row).findByText("Confirmed")).toBeTruthy();
+    expect(within(row).queryByRole("alert")).toBeNull();
+  });
   it("names the finding each decision button decides", async () => {
     render(<FindingsView notice={null} onOpen={vi.fn()} />);
     expect(await screen.findByRole("button", { name: "Confirm: Termination for convenience" })).toBeTruthy();

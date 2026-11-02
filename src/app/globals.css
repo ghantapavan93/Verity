@@ -115,6 +115,40 @@ button {
   color: inherit;
 }
 
+/* Shared reading and interaction finish, without changing the product's palette. */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+button,
+a,
+summary {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+textarea,
+input {
+  font-family: inherit;
+}
+
+/* A scrolled citation or keyboard stop clears sticky headers. */
+[id] {
+  scroll-margin-top: 96px;
+}
+
+@media (pointer: coarse) {
+  summary {
+    min-height: 44px;
+  }
+}
+
 ::selection {
   background: rgba(216, 180, 106, 0.32);
   color: inherit;
@@ -167,5 +201,6 @@ button {
     animation-duration: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }

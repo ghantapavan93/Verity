@@ -4,7 +4,7 @@
  * be loaded". An invited reader still sees them.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -60,6 +60,30 @@ describe("RunsView in a public demo", () => {
     render(<RunsView notice={null} onOpenRun={vi.fn()} />);
     expect(await screen.findByRole("link", { name: "Golden set" })).toBeTruthy();
     expect(api.getGoldens).toHaveBeenCalled();
+  });
+
+  it("keeps the latest record selection when an earlier read finishes after returning to the list", async () => {
+    const summary = (id: string) => ({ id, question: `Question ${id}`, stage: "complete", outcomes: {}, createdAt: "2026-10-30T10:00:00Z" });
+    const detail = (id: string) => ({ ...summary(id), stages: [], findings: [], candidates: [], options: {} });
+    api.listRuns.mockResolvedValue([summary("old"), summary("new")]);
+    let finishOld!: (value: ReturnType<typeof detail>) => void;
+    api.getRunDetail.mockImplementation((id: string) =>
+      id === "old"
+        ? new Promise((resolve) => {
+            finishOld = resolve;
+          })
+        : Promise.resolve(detail(id)),
+    );
+    render(<RunsView notice={null} onOpenRun={vi.fn()} />);
+    fireEvent.click((await screen.findByText("Question old")).closest("button")!);
+    fireEvent.click(screen.getByText("Question new").closest("button")!);
+    expect(await screen.findByRole("heading", { name: "Question new" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "All runs" }));
+    await act(async () => {
+      finishOld(detail("old"));
+    });
+    expect(screen.getByRole("heading", { name: /Every model run, as recorded/ })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Question old" })).toBeNull();
   });
 
   it("says the batch record could not be read, rather than that there is no batch", async () => {

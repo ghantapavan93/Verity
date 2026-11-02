@@ -151,6 +151,8 @@
   overflow-y: auto;
   padding: 28px 32px 72px;
   scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+  scroll-padding-top: 72px;
 }
 
 .docHeader {
@@ -241,7 +243,7 @@
 .docTitle {
   margin: 6px 0 0;
   font-family: var(--font-serif);
-  font-size: 22px;
+  font-size: clamp(22px, 2vw, 28px);
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1.25;
@@ -290,8 +292,8 @@
     var(--doc-shadow);
   padding: 64px 72px 80px;
   font-family: var(--font-serif);
-  font-size: 15.5px;
-  line-height: 1.66;
+  font-size: 16px;
+  line-height: 1.75;
   font-optical-sizing: auto;
 }
 
@@ -445,13 +447,15 @@
   /* One declared column, as .workspace and .split declare theirs: the implicit auto track grew to the widest row that
      does not scroll (a long document name in the header), and the hidden overflow clipped every row (2026-10-30). */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-width: 0;
   height: 100vh;
   height: 100dvh;
   background: var(--assistant-bg);
   border-left: 1px solid var(--hairline);
-  overflow: hidden;
+  /* Only the body and evidence sheet scroll. A hidden-overflow ancestor can still be scrolled by focus or scrollIntoView,
+     moving the entire sheet and its close button above the viewport. Clip keeps the shell fixed. */
+  overflow: clip;
 }
 
 .assistantHeader {
@@ -642,7 +646,7 @@
 }
 
 .primaryButton {
-  height: 30px;
+  min-height: 36px;
   padding: 0 12px;
   border: 0;
   border-radius: 7px;
@@ -662,7 +666,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  min-height: 36px;
   padding: 0 10px;
   border: 1px solid transparent;
   border-radius: 7px;
@@ -684,6 +688,9 @@
   overflow-y: auto;
   min-height: 0;
   padding: 4px 22px 20px;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scroll-padding-block: 16px;
 }
 
 .assistantIdle {
@@ -888,7 +895,7 @@
   margin: 0;
   overflow-wrap: anywhere;
   font-family: var(--font-serif);
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.005em;
@@ -983,15 +990,15 @@
   color: var(--text-3);
 }
 
-/* The stored text around a verified quote, on a phone (EvidenceDrawer QuoteContext). */
+/* Read the surrounding source without leaving the finding at any width. */
 .quoteContext {
   margin-top: 6px;
   font-size: 12.5px;
 }
 
 .quoteContext summary {
-  min-height: 32px;
-  padding: 6px 0;
+  min-height: 40px;
+  padding: 10px 0;
   color: var(--text-2);
   cursor: pointer;
 }
@@ -999,8 +1006,8 @@
 .quoteContextText {
   margin: 4px 0;
   font-family: var(--font-serif);
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.7;
   color: var(--text-2);
 }
 
@@ -1247,6 +1254,34 @@
   color: var(--status-review-text);
 }
 
+/* Recovery has one stable reading hierarchy. A disconnected run never keeps a live spinner. */
+.recovery {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--status-review-border);
+  border-radius: var(--radius-m);
+  background: var(--status-review-bg);
+}
+
+.recovery h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.recovery p {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+
+.recovery .recoveryDetail {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
 /* ---- the composer ---- */
 
 .composer {
@@ -1286,7 +1321,9 @@
   border: 0;
   outline: none;
   color: var(--text);
-  font: 400 14.5px/1.55 var(--font-sans);
+  font: 400 16px/1.55 var(--font-sans);
+  max-height: 160px;
+  overflow-y: auto;
   resize: none;
 }
 
@@ -1299,8 +1336,8 @@
 }
 
 .sendButton {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
   border: 0;
   background: var(--text);
@@ -1442,6 +1479,8 @@
   flex-direction: column;
   background: var(--glass-opaque);
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-padding-top: 88px;
   counter-reset: layer;
   /* The drawer covers the assistant panel, whose width follows the window and the divider, not the window alone. */
   container: drawer / inline-size;
@@ -1501,7 +1540,7 @@
 }
 
 .drawerTitle strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -1515,8 +1554,8 @@
 }
 
 .iconButton {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   flex: none;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -2253,6 +2292,10 @@
     font-size: 16px;
   }
 
+  .assistantComposer {
+    margin-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
   /* While the evidence sheet is open it is the reading surface, so it takes the whole width: the rail and the note about
      the hidden contract text step aside, and closing the sheet brings them back. Layout only; no state. */
   .workspace:has(.drawer) {
@@ -2373,5 +2416,21 @@
 
   .checkKey {
     margin-top: 6px;
+  }
+}
+
+/* Expand ordinary controls for touch, but keep dense document-spine marks separate:
+   increasing their height would make neighbouring citations intercept one another. */
+@media (pointer: coarse) {
+  .iconButton,
+  .sendButton,
+  .railButton,
+  .railMark,
+  .actionButton,
+  .primaryButton,
+  .ghostButton,
+  .memoButton,
+  .drawerRef {
+    min-height: 44px;
   }
 }

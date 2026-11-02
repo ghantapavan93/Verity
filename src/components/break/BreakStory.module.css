@@ -47,7 +47,7 @@
 
 .navLink {
   flex: none;
-  padding: 4px 0;
+  padding: 10px 0;
   font-size: 13px;
   color: var(--text-2);
   text-decoration: none;

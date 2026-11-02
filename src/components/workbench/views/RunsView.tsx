@@ -7,7 +7,7 @@
  * from the ivo-experiments results file rather than retyped.
  */
 
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PublicDemo } from "../access/PublicDemo";
 import { runOutcome } from "@/lib/checks";
 import wb from "../Workbench.module.css";
@@ -117,6 +117,29 @@ export function RunsView({
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [recordError, setRecordError] = useState<{ id: string; text: string } | null>(null);
+  const selection = useRef(0);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const listPosition = useRef({ top: 0, runId: "" });
+
+  useEffect(
+    () => () => {
+      selection.current += 1;
+    },
+    [],
+  );
+
+  useLayoutEffect(() => {
+    const pane = paneRef.current;
+    if (!pane) return;
+    if (selected) {
+      pane.scrollTop = 0;
+      pane.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
+    } else {
+      pane.scrollTop = listPosition.current.top;
+      [...pane.querySelectorAll<HTMLElement>("[data-run-id]")].find((row) => row.dataset.runId === listPosition.current.runId)?.focus({ preventScroll: true });
+    }
+  }, [selected]);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,29 +220,39 @@ export function RunsView({
   }, [attempt, demo]);
 
   const select = async (id: string) => {
+    const request = ++selection.current;
+    listPosition.current = { top: paneRef.current?.scrollTop ?? 0, runId: id };
     setLoadingId(id);
-    setError(null);
+    setRecordError(null);
     try {
-      setSelected(await getRunDetail(id));
+      const record = await getRunDetail(id);
+      if (request === selection.current) setSelected(record);
     } catch (e) {
-      setError(message(e));
+      if (request === selection.current) setRecordError({ id, text: message(e) });
     } finally {
-      setLoadingId(null);
+      if (request === selection.current) setLoadingId(null);
     }
   };
 
   if (selected) {
     return (
-      <div className={styles.pane}>
+      <div ref={paneRef} className={styles.pane} role="region" aria-label="Execution records">
         <div className={styles.inner}>
-          <RunRecord run={selected} onBack={() => setSelected(null)} onOpen={() => onOpenRun(selected.id)} />
+          <RunRecord
+            run={selected}
+            onBack={() => {
+              selection.current += 1;
+              setSelected(null);
+            }}
+            onOpen={() => onOpenRun(selected.id)}
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className={styles.pane}>
+    <div ref={paneRef} className={styles.pane} role="region" aria-label="Execution records">
       <div className={styles.inner}>
         <div className={styles.kicker}>Runs</div>
         <h1 className={styles.title}>
@@ -279,6 +312,11 @@ export function RunsView({
             {error}
           </p>
         )}
+        {recordError && !runs?.some((row) => row.id === recordError.id) && (
+          <p className={styles.notice} role="alert">
+            Could not open the selected run: {recordError.text}
+          </p>
+        )}
         {!runs && !error && <ListSkeleton rows={8} label="Runs" />}
 
         <nav className={styles.jump} aria-label="On this page">
@@ -301,7 +339,13 @@ export function RunsView({
           <ul className={styles.list}>
             {runs.map((r, i) => (
               <li key={r.id}>
-                <button type="button" className={`${styles.row} ${styles.indexed}`} onClick={() => void select(r.id)} aria-busy={loadingId === r.id}>
+                <button
+                  type="button"
+                  data-run-id={r.id}
+                  className={`${styles.row} ${styles.indexed}`}
+                  onClick={() => void select(r.id)}
+                  aria-busy={loadingId === r.id}
+                >
                   <span className={styles.rowIndex} aria-hidden="true">
                     {String(runs.length - i).padStart(3, "0")}
                   </span>
@@ -330,6 +374,11 @@ export function RunsView({
                     <span className={styles.mono}>{r.id}</span>
                   </div>
                 </button>
+                {recordError?.id === r.id && (
+                  <p className={styles.rowError} role="alert">
+                    {recordError.text}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
@@ -410,7 +459,9 @@ function RunRecord({ run, onBack, onOpen }: { run: RunDetailView; onBack: () => 
           <div className={styles.kicker}>
             Run <span className={styles.kickerId}>{run.id}</span>
           </div>
-          <h1 className={styles.recordTitle}>{run.question}</h1>
+          <h1 className={styles.recordTitle} tabIndex={-1}>
+            {run.question}
+          </h1>
         </div>
         <span className={`${wb.statusChip} ${outcomeTone(run.stage)}`}>{OUTCOME_LABELS[run.stage]}</span>
       </div>
