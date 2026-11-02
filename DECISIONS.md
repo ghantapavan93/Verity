@@ -2000,7 +2000,11 @@ no false "found", but the pack still read words among tokens that held punctuati
 before a leading decimal point after a mark ("cafe" with U+0301 and "USD .5") was two tokens to it and one word to the
 workbench; and the prefilter, now reading signed tokens, looked for "$10M" as written where the text says "$ 10M", which
 f46057b had found. The pack now drops punctuation before it reads words under v13, and the prefilter asks only for words
-of letters alone; a fifth property holds the prefilter to the tiers over amounts written apart. Replayed read-only under
+of letters alone; a fifth property holds the prefilter to the tiers over amounts written apart. A fourth review of
+0aba34a approved it, and found a false "found" older than v13: in a number written as three tokens or more with no
+joint ("5'2.1(A)'7", an apostrophe or a no-break space grouping it), `signed` kept the letters' case of the first and
+last token only, so the section between them read "(A)" as "(a)" under v11 and v12. From v13 every section of a written
+number keeps it, in the workbench and the pack (`tokens.signed`); the clause-letter property now draws such numbers. Replayed read-only under
 v12 and v13 over 32,731 recorded spans in 1,905 distinct stores (the public store not opened): no span was searched in
 a section holding a mark, and none of the 14 distinct recorded sections that hold one tokenizes differently. The
 reader's fingerprint moved only through `tokens.VERSION` again, and was replaced.

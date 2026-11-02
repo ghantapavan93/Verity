@@ -398,7 +398,8 @@ def signed(text: str, tokens: list[Token], version: int = VERSION, invisible: fr
     see, which neither part a sign from its number nor count as written ("-‎$5M" is "-$5M"). From v10 a word holding
     digits inside a number ("RM5M" of "(RM5M)") is part of its value, and a label before it is joined like a currency.
     From v11 a number whose digits "/" or ":" join is one token, its value read whole: "2/3" is not "2 3"; and a section
-    identifier keeps its letters' case, so "2(A)" is not "2(a)"."""
+    identifier keeps its letters' case, so "2(A)" is not "2(a)". Until v13 only the first and last token of a written
+    number kept it; from v13 every section in it does (the fourth review of v13)."""
     v9, v10, v11 = version >= 9, version >= 10, version >= 11
     out = list(tokens)
     starts = [t.start for t in out]
@@ -454,6 +455,10 @@ def signed(text: str, tokens: list[Token], version: int = VERSION, invisible: fr
         else:
             out[inside[0]] = Token(first.kind, before + head, low, first.end)
             out[inside[-1]] = Token(last.kind, tail + after, last.start, high)
+            if version >= 13:  # a section between them keeps its letters' case as well: "5'2.1(A)'7" is not "5'2.1(a)'7"
+                for j in inside[1:-1]:
+                    if out[j].kind is Kind.SECTION:
+                        out[j] = Token(Kind.SECTION, text[out[j].start : out[j].end], out[j].start, out[j].end)
     return out
 
 

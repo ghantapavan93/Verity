@@ -177,7 +177,7 @@ RECORDED: dict[str, str] = {
     # "cafe\u0301USD 900" no longer drops "900" (test_verifier_v13.py).
     # Replaced, not bumped, 2026-11-02: v13 was not released; its review found the word read caselessly a token it took
     # ("2.1(a)" as "2.1(A)"), and each token it takes now keeps its own value (tokens._merged_value).
-    "v13": "0b619be2c8a5970c",
+    "v13": "58d938c3496876e3",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
     # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.

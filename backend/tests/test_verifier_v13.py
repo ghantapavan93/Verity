@@ -113,7 +113,7 @@ def test_a_changed_digit_is_never_found(parts: list[str], data: st.DataObject) -
     assert locate(text, changed) is None, (ascii(text), ascii(changed))
 
 
-CLAUSES = st.sampled_from(["e", ACUTE, DIAERESIS, "2.1", "1.2.3(b)", "2.1(a)", "4(c)", " ", "(d)", "7", "USD"])
+CLAUSES = st.sampled_from(["e", ACUTE, DIAERESIS, "2.1", "1.2.3(b)", "2.1(a)", "4(c)", " ", "(d)", "7", "USD", "5", "'", "\u00a0"])
 
 
 @settings(max_examples=400 * FUZZ_SCALE, deadline=None)
@@ -250,3 +250,20 @@ def test_the_prefilter_never_refuses_what_the_tiers_find(quote: list[str], text:
     q, t = "".join(quote), "".join(text)
     if _tiers(q, t) is not None:
         assert not _cannot_hold(q, t), (ascii(q), ascii(t))
+
+
+# The fourth review of v13: in a number written as three tokens or more with no joint ("5'2.1(A)'7", a thousands
+# separator between them), only the first and the last kept their letters' case, so a section between them read "(A)" as
+# "(a)" (v11 and v12 too). From v13 every section of a written number keeps it.
+@pytest.mark.parametrize(
+    ("quote", "text"),
+    [
+        ("see 5'2.1(a)'7 now", "see 5'2.1(A)'7 now"),
+        ("see 5\u00a02.1(a)\u00a07 now", "see 5\u00a02.1(A)\u00a07 now"),
+        ("cafe\u03085'2.1(a)'7", "cafe\u03085'2.1(A)'7"),
+    ],
+)
+def test_a_section_inside_a_written_number_keeps_its_case(quote: str, text: str) -> None:
+    assert locate(quote, text) is None
+    assert locate_tokens(quote, text, INVISIBLE) is None
+    assert locate(text, text) is not None

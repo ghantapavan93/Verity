@@ -1447,7 +1447,7 @@ Outside the slice, the pipeline leans on `ingest/sections.py` (`stated_clause_nu
 
 #### The four semantic versions (`runs/versions.py:SEMANTIC_VERSIONS`, line 26)
 
-| Key in options | Value at 865356b | Declared at | Names |
+| Key in options | Value today | Declared at | Names |
 |---|---|---|---|
 | `policy_version` | `policy-v17` | `runs/status.py:155` `POLICY_VERSION` | how a status is decided |
 | `verifier_version` | `v13` | `verify/tokens.py` `VERSION`, as `spans.VERIFIER_VERSION = f"v{VERSION}"` | when a quote counts as found |
