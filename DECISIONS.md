@@ -1977,14 +1977,20 @@ decomposed "café" is one word. It then skipped every token that began inside th
 and end past it: the run is "caféUSD", the token "USD 900" began at "U", and "900" was never compared. The same
 dropped the rest of "1,500", "15%", "1.2.3" and "US$500" written straight after a mark.
 
-Invariant: the typed tier compares every character the tokens held; reading a word whole only merges tokens, never
-drops one. Decision: from v13 a word that reaches into a token takes that token whole, and runs on through any mark
-after it (`tokens.whole_words`, and the pack's copy). The evidence pack reads a v13 run that way and a v12 run as v12 did.
+Invariant: reading a word whole only merges tokens; each token the word takes is compared as it compares on its own.
+Decision: from v13 a word that reaches into a token takes that token whole, and runs on through any mark after it
+(`tokens.whole_words`, and the pack's copy); its value is its letters caseless with each taken number or section
+identifier kept apart as that token's value (`tokens._merged_value`), so the word is never looser than what it took:
+"1500" after a mark is still "1,500", and a clause letter keeps its case. The prefilter does not look for such a word
+as written (`tokens.holds_values`). The evidence pack reads a v13 run that way and a v12 run as v12 did.
 Rejected: stopping the word where a number begins, which reads "caféUSD 900" as "café" and "USD 900" and so
 forgives the space in "café USD 900", the class v6 closed.
 
-Tests (`test_verifier_v13.py`): the six members of the class withheld, controls found and highlighted whole, a property
-that reading words whole drops no character, and a property that a changed digit is never found (both run at the deep
-fuzz scale, 20). Replayed read-only under v12 and v13 over 32,731 recorded spans in 1,905 distinct stores (the public
-store not opened): no span was searched in a section holding a mark, and none of the 14 distinct recorded sections that
-hold one tokenizes differently. The reader's fingerprint moved only through `tokens.VERSION` again, and was replaced.
+Tests (`test_verifier_v13.py`): the six members of the class withheld, controls found and highlighted whole, and three
+properties at the deep fuzz scale (20): reading words whole drops no character, a changed digit is never found, and a
+clause letter of another case is never found. The last was added after the release review of 4a77d1b (not released)
+found that the first v13 read a taken section identifier caselessly: "2.1(a)" after two marks was found as "2.1(A)",
+and so was "1.2.3(b)" as "1.2.3(B)" since v11; v13 was rewritten, its fingerprint replaced. Replayed read-only under
+v12 and v13 over 32,731 recorded spans in 1,905 distinct stores (the public store not opened): no span was searched in
+a section holding a mark, and none of the 14 distinct recorded sections that hold one tokenizes differently. The
+reader's fingerprint moved only through `tokens.VERSION` again, and was replaced.

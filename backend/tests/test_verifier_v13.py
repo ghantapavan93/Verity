@@ -2,7 +2,7 @@
 
 The invariant is the verifier's own: it never says "found" when the text is not there, and the typed tier never forgives
 a changed digit. Since v11 a word runs on through a combining mark and the letters and digits after it (`whole_words`),
-so a decomposed "café" is one word. It then skipped every token that began inside that run, though a token could begin
+so a decomposed "caf\u00e9" is one word. It then skipped every token that began inside that run, though a token could begin
 there and end past it: in "cafe\u0301USD 900" the run is "cafe\u0301USD", and the token "USD 900" began at "U". The word took
 "USD" and the token was dropped, so "900" was never compared, and the quote "fee is cafe\u0301USD 500" was found in "The
 fee is cafe\u0301USD 900 per month." The same dropped the rest of "1,500", "15%", "1.2.3" and "US$500" after a mark.
@@ -44,7 +44,15 @@ SWALLOWED = [
 ]
 
 
-@pytest.mark.parametrize(("quote", "text", "matched"), SWALLOWED)
+# The token a word takes is compared as that token compares it, never more loosely (release review of 4a77d1b): a
+# section identifier keeps its clause letter's case, which the word's caseless reading dropped.
+LOOSENED = [
+    ("see e\u03012.1\u03012.1(a) now", "Then see e\u03012.1\u03012.1(A) now.", "see e\u03012.1\u03012.1(A) now"),  # the review's case
+    ("see e\u03011.2.3(b) now", "see e\u03011.2.3(B) now", "see e\u03011.2.3(B) now"),  # the first token taken (v11 to v13)
+]
+
+
+@pytest.mark.parametrize(("quote", "text", "matched"), SWALLOWED + LOOSENED)
 def test_a_word_read_through_a_mark_drops_no_part_of_a_token(quote: str, text: str, matched: str) -> None:
     assert matched in text
     assert locate(quote, text) is None
@@ -59,8 +67,11 @@ def test_a_word_read_through_a_mark_drops_no_part_of_a_token(quote: str, text: s
         ("cafe\u03011,500 units", "The cafe\u03011,500 units ship.", "cafe\u03011,500 units"),
         ("A cafe\u030115% fee", "A cafe\u030115% fee applies.", "A cafe\u030115% fee"),
         # v11's rule stands: a decomposed word is one word, and is the composed one.
-        ("the café menu", "See the cafe\u0301 menu.", "the cafe\u0301 menu"),
-        ("pays the naïve fee", "It pays the nai\u0308ve fee.", "pays the nai\u0308ve fee"),
+        ("the caf\u00e9 menu", "See the cafe\u0301 menu.", "the cafe\u0301 menu"),
+        ("pays the na\u00efve fee", "It pays the nai\u0308ve fee.", "pays the nai\u0308ve fee"),
+        # A number the word takes is compared by its value, as the typed tier compares numbers: "1500" is "1,500".
+        ("fee is cafe\u03011500 now", "The fee is cafe\u03011,500 now.", "fee is cafe\u03011,500 now"),
+        ("see e\u03011.2.3(B) now", "see e\u03011.2.3(B) now", "see e\u03011.2.3(B) now"),
     ],
 )
 def test_control_what_the_text_says_is_still_found(quote: str, text: str, matched: str) -> None:
@@ -97,10 +108,26 @@ def test_a_changed_digit_is_never_found(parts: list[str], data: st.DataObject) -
     assert locate(text, changed) is None, (ascii(text), ascii(changed))
 
 
+CLAUSES = st.sampled_from(["e", ACUTE, DIAERESIS, "2.1", "1.2.3(b)", "2.1(a)", "4(c)", " ", "(d)", "7", "USD"])
+
+
+@settings(max_examples=400 * FUZZ_SCALE, deadline=None)
+@given(parts=st.lists(CLAUSES, min_size=1, max_size=10), data=st.data())
+def test_a_clause_letter_of_another_case_is_never_found(parts: list[str], data: st.DataObject) -> None:
+    text = "".join(parts)
+    letters = [at for at in range(1, len(text) - 1) if text[at - 1] == "(" and text[at + 1] == ")" and text[at].isalpha()]
+    if not letters:
+        return
+    at = data.draw(st.sampled_from(letters))
+    changed = text[:at] + text[at].swapcase() + text[at + 1 :]
+    assert locate_tokens(text, changed, INVISIBLE) is None, (ascii(text), ascii(changed))
+    assert locate(text, changed) is None, (ascii(text), ascii(changed))
+
+
 def test_a_v12_run_compares_as_v12_did() -> None:
     text = "The fee is cafe\u0301USD 900 per month."
-    assert [t.canonical for t in compared(text, 12)][:4] == ["the", "fee", "is", "caféusd"]  # 900 dropped, as recorded
-    assert [t.canonical for t in compared(text, 13)][:4] == ["the", "fee", "is", "caféusd 900"]
+    assert [t.canonical for t in compared(text, 12)][3] == "caf\u00e9usd"  # 900 dropped, as recorded
+    assert "USD900" in [t.canonical for t in compared(text, 13)][3]  # the amount, compared as the amount
 
 
 @pytest.mark.parametrize(("quote", "text", "matched"), SWALLOWED)

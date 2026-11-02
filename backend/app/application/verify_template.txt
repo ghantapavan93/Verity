@@ -363,7 +363,8 @@ def marked(ch):
 
 def whole_words(text, tokens, version=0):
     """v11's words, read whole through their marks and joiners and compared caseless; a clause's letter alone in
-    parentheses keeps its case. Under v13 a word that reaches into a token takes the token whole (verify/tokens.whole_words)."""
+    parentheses keeps its case. Under v13 a word that reaches into a token takes the token whole, and compares each token
+    it takes as that token compares on its own (verify/tokens.whole_words, merged_value)."""
     out = []
     k = 0
     while k < len(tokens):
@@ -373,6 +374,7 @@ def whole_words(text, tokens, version=0):
             out.append(token)
             continue
         end = token[3]
+        taken = [token]
         while True:
             while end < len(text) and marked(text[end]):
                 end += 1
@@ -382,11 +384,14 @@ def whole_words(text, tokens, version=0):
             while k < len(tokens) and tokens[k][2] < end:
                 if version >= 13:
                     end = max(end, tokens[k][3])
+                    taken.append(tokens[k])
                 k += 1
             if end == reached:
                 break
         surface = text[token[2]:end]
-        if end > token[3] or token[1] == surface.casefold():
+        if version >= 13 and end > token[3] and not CLAUSE_LETTER.fullmatch(text, token[2] - 1, end + 1):
+            out.append(["word", merged_value(text, token[2], end, taken), token[2], end])
+        elif end > token[3] or token[1] == surface.casefold():
             if text[token[2] - 1:token[2]] == "(" and CLAUSE_LETTER.fullmatch(text, token[2] - 1, end + 1):
                 out.append(["word", surface, token[2], end])
             else:
@@ -394,6 +399,19 @@ def whole_words(text, tokens, version=0):
         else:
             out.append(token)
     return out
+
+
+def merged_value(text, start, end, taken):
+    """A word read whole through the tokens it took (v13): its letters caseless, each token that is not a plain word as
+    its kind and value, each part apart (verify/tokens._merged_value)."""
+    parts, at = [], start
+    for kind, canonical, low, high in taken:
+        if kind == "word" and canonical == text[low:high].casefold():
+            continue
+        parts += [caseless(text[at:low]), f"{kind}:{canonical}"]
+        at = high
+    parts.append(caseless(text[at:end]))
+    return "\x1f".join(parts)
 
 
 def typed(text, version=0):

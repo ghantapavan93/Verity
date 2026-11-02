@@ -521,7 +521,9 @@ def whole_words(text: str, tokens: list[Token], version: int = VERSION) -> list[
 
     From v13 a word that reaches into a token takes the token whole, and runs on through any mark after it: until then
     the token was dropped though it could end past the word, so in "cafe\u0301USD 900" the word took "USD" of "USD 900" and
-    "900" was never compared. Every character the tokens held stays compared."""
+    "900" was never compared. A token the word takes is compared as it compares on its own, its value in the word's
+    (`_merged_value`): a number by its value, a section identifier with its clause letter's case, so the word is never
+    looser than the tokens it took (the release review of 4a77d1b found "2.1(a)" read caselessly as "2.1(A)")."""
     out: list[Token] = []
     k = 0
     while k < len(tokens):
@@ -531,6 +533,7 @@ def whole_words(text: str, tokens: list[Token], version: int = VERSION) -> list[
             out.append(token)
             continue
         end = token.end
+        taken = [token]
         while True:
             while end < len(text) and marked(text[end]):
                 end += 1
@@ -540,11 +543,14 @@ def whole_words(text: str, tokens: list[Token], version: int = VERSION) -> list[
             while k < len(tokens) and tokens[k].start < end:
                 if version >= 13:
                     end = max(end, tokens[k].end)
+                    taken.append(tokens[k])
                 k += 1  # the letters after a mark, which `tokenize` read as a word of their own
             if end == reached:
                 break
         surface = text[token.start : end]
-        if end > token.end or token.canonical == surface.casefold():
+        if version >= 13 and end > token.end and not _CLAUSE_LETTER.fullmatch(text, token.start - 1, end + 1):
+            out.append(Token(Kind.WORD, _merged_value(text, token.start, end, taken), token.start, end))
+        elif end > token.end or token.canonical == surface.casefold():
             if text[token.start - 1 : token.start] == "(" and _CLAUSE_LETTER.fullmatch(text, token.start - 1, end + 1):
                 out.append(Token(Kind.WORD, surface, token.start, end))
             else:
@@ -552,6 +558,31 @@ def whole_words(text: str, tokens: list[Token], version: int = VERSION) -> list[
         else:
             out.append(token)
     return out
+
+
+_PART = "\x1f"  # between the parts of a merged word's value (v13); no letter, digit or mark
+
+
+def holds_values(token: Token) -> bool:
+    """Whether ``token`` is a word read whole that took a token with a value of its own, a number or a section identifier
+    (v13, `_merged_value`). Its value is then not its letters, so it cannot be looked for as it is written (spans._quote_words:
+    "cafe\u03011500" is found in "cafe\u03011,500")."""
+    return token.kind is Kind.WORD and _PART in token.canonical
+
+
+def _merged_value(text: str, start: int, end: int, taken: list[Token]) -> str:
+    """The value of a word read whole from ``start`` to ``end`` through the ``taken`` tokens (v13): its letters and marks
+    caseless (`caseless`), and each token that is not a plain word, a number, a section identifier, a word `signed` gave
+    a value, as that token's kind and value, each part apart. The word is equal to another only where every token it took
+    is equal to the other's."""
+    parts, at = [], start
+    for t in taken:
+        if t.kind is Kind.WORD and t.canonical == text[t.start : t.end].casefold():
+            continue
+        parts += [caseless(text[at : t.start]), f"{t.kind}:{t.canonical}"]
+        at = t.end
+    parts.append(caseless(text[at:end]))
+    return _PART.join(parts)
 
 
 @dataclass(frozen=True)

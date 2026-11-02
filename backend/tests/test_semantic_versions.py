@@ -175,7 +175,9 @@ RECORDED: dict[str, str] = {
     "v12": "fbe0d75864ef5f45",
     # v13, 2026-11-02: a word read whole through a mark takes every token it reaches whole (tokens.whole_words); a bump:
     # "cafe\u0301USD 900" no longer drops "900" (test_verifier_v13.py).
-    "v13": "4c8be9e9fb42eaad",
+    # Replaced, not bumped, 2026-11-02: v13 was not released; its review found the word read caselessly a token it took
+    # ("2.1(a)" as "2.1(A)"), and each token it takes now keeps its own value (tokens._merged_value).
+    "v13": "564e1bc0f4494312",
     "retrieval-v1": "28dbb5a6d6459640",  # 2026-10-09: credentials on the embed call, then its failure said in plain words; what retrieval decides is unchanged
     # retrieval-v2, 2026-10-14: after the ranking, the sections the top three depend on where the contract says which
     # (runs.links: a definition, an amendment, a cited clause), at most two, within k full windows.
