@@ -13,6 +13,7 @@ evidence pack reads a v13 run the same way and keeps v12's reading for a v12 run
 
 from __future__ import annotations
 
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -23,8 +24,9 @@ from app.verify.spans import _INVISIBLE as INVISIBLE
 from app.verify.spans import VERIFIER_VERSION, locate
 from app.verify.tokens import compared, locate_tokens, signed, significant, tokenize, whole_words
 from tests.support import FUZZ_SCALE
-from tests.test_pack_parity import _pack, _verdict
+from tests.test_pack_parity import _checker, _pack, _verdict
 
+CIRCUMFLEX, TILDE = "\u0302", "\u0303"
 ACUTE, DIAERESIS = "\u0301", "\u0308"
 
 
@@ -72,6 +74,9 @@ def test_a_word_read_through_a_mark_drops_no_part_of_a_token(quote: str, text: s
         # A number the word takes is compared by its value, as the typed tier compares numbers: "1500" is "1,500".
         ("fee is cafe\u03011500 now", "The fee is cafe\u03011,500 now.", "fee is cafe\u03011,500 now"),
         ("see e\u03011.2.3(B) now", "see e\u03011.2.3(B) now", "see e\u03011.2.3(B) now"),
+        # An amount word the word takes is compared as the typed tier compares it, written apart or not (the second
+        # review of v13: the prefilter looked for "USD10K" as written and refused it).
+        ("The cafe\u0301USD10K fee", "The cafe\u0301USD 10K fee.", "The cafe\u0301USD 10K fee"),
     ],
 )
 def test_control_what_the_text_says_is_still_found(quote: str, text: str, matched: str) -> None:
@@ -145,3 +150,56 @@ def test_control_a_v13_pack_passes_what_v13_finds(tmp_path: Path) -> None:
         assert located is not None, ascii(quote)
         folder = tmp_path / str(located.start)
         assert _verdict(_pack(folder, text, located.start, located.end, quote, located.method, "v13")), ascii(quote)
+
+
+# Stacked marks, as a decomposed Vietnamese name is written: the pack read the second mark as punctuation and kept it as
+# a value of the word (the second review of v13), so a span the workbench verified failed in the pack.
+STACKED = "Payment to Nguye\u0302\u0303n Van A is due."
+
+
+def test_control_a_v13_pack_passes_a_word_with_stacked_marks(tmp_path: Path) -> None:
+    quote = unicodedata.normalize("NFC", "Nguye\u0302\u0303n Van A")
+    located = locate(quote, STACKED)
+    assert located is not None
+    assert _verdict(_pack(tmp_path / "v13", STACKED, located.start, located.end, quote, located.method, "v13"))
+
+
+V13_PARTS = [
+    "e",
+    "a",
+    "A",
+    "\u00e9",
+    "\u00ea",
+    "\u1ec5",
+    ACUTE,
+    DIAERESIS,
+    CIRCUMFLEX,
+    TILDE,
+    "USD",
+    "10K",
+    "1,500",
+    "2.1(a)",
+    "(B)",
+    " ",
+    "-",
+    "(",
+    ")",
+    "%",
+    "7",
+    "/",
+]
+V13_TEXT = st.lists(st.sampled_from(V13_PARTS), min_size=1, max_size=10).map("".join)
+
+
+@settings(max_examples=400 * FUZZ_SCALE, deadline=None)
+@given(a=V13_TEXT, other=V13_TEXT, form=st.sampled_from(["NFC", "NFD", "other"]))
+def test_the_pack_compares_typed_tokens_as_the_workbench_does_under_v13(tmp_path_factory: pytest.TempPathFactory, a: str, other: str, form: str) -> None:
+    """Both ways, and against the same text in the other normal form, as a model's quote is often written."""
+    checker = _checker(tmp_path_factory.mktemp("typed-v13"))
+    b = other if form == "other" else unicodedata.normalize(form, a)
+
+    def runtime(text: str) -> list[tuple[str, str]]:
+        return [(str(t.kind), t.canonical) for t in compared(text, 13, INVISIBLE)]
+
+    expected = any(ch.isalnum() for ch in b) and bool(runtime(a)) and runtime(a) == runtime(b)
+    assert checker.same(a, b, "typed", 13) == expected, (ascii(a), ascii(b))

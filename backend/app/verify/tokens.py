@@ -563,13 +563,6 @@ def whole_words(text: str, tokens: list[Token], version: int = VERSION) -> list[
 _PART = "\x1f"  # between the parts of a merged word's value (v13); no letter, digit or mark
 
 
-def holds_values(token: Token) -> bool:
-    """Whether ``token`` is a word read whole that took a token with a value of its own, a number or a section identifier
-    (v13, `_merged_value`). Its value is then not its letters, so it cannot be looked for as it is written (spans._quote_words:
-    "cafe\u03011500" is found in "cafe\u03011,500")."""
-    return token.kind is Kind.WORD and _PART in token.canonical
-
-
 def _merged_value(text: str, start: int, end: int, taken: list[Token]) -> str:
     """The value of a word read whole from ``start`` to ``end`` through the ``taken`` tokens (v13): its letters and marks
     caseless (`caseless`), and each token that is not a plain word, a number, a section identifier, a word `signed` gave

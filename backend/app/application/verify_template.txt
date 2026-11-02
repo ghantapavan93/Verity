@@ -384,7 +384,8 @@ def whole_words(text, tokens, version=0):
             while k < len(tokens) and tokens[k][2] < end:
                 if version >= 13:
                     end = max(end, tokens[k][3])
-                    taken.append(tokens[k])
+                    if tokens[k][0] != "punct":  # the workbench reads words among the significant tokens only
+                        taken.append(tokens[k])
                 k += 1
             if end == reached:
                 break
