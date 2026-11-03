@@ -2038,3 +2038,20 @@ Tests (`test_verifier_v14.py`): ten hidden forms withheld, enclosed letters comp
 and for case outside the letter still forgiven, properties over every way the letter is hidden, the pack against the
 workbench at both tiers, and the prefilter against the tiers. Of 35,849 recorded span and section pairs (the public
 store not opened), 1,703 hold a spaced clause letter or a trade mark sign; replayed under b5dffaf and v14, none changes. The reader's fingerprint moved only through `tokens.VERSION`, and was replaced.
+
+## 2026-11-02 — The installer starts nothing while a server's port is held
+
+Deploying 88d9878, the interface hung on "Opening the workbench" for about three and a half minutes and the API kept
+serving the previous release, while the installer reported both servers answering. Windows had restarted at 17:30; the
+supervisors restarted at logon and started both servers. The installer re-registered the tasks, which ended those
+supervisors but not their servers; no record the stop step trusted named the servers, so they held ports 8000 and 3900.
+The new servers could not bind and exited; the old web server served the swapped build's HTML with its scripts missing;
+the installer's health check was answered by the old servers. Found by the public smoke check; fixed by stopping the
+two old processes by hand.
+
+Invariant: a release starts only on free ports, and is reported up only when the servers it started answer. Decision:
+`deploy/down.ps1` runs on every install and, after the recorded servers, stops whatever listens on 8000 or 3900 when its
+command line names this checkout and its server (`uvicorn app.main:app`, `next start`), naming anything else;
+`deploy/ports-free.ps1` then fails the install, before the swap, while a port is held; and the health check counts an
+answer only from the pid a new supervisor recorded or its child (the venv's python.exe is a launcher). Tests in
+`test_supervisor_records.py` hold a real listener of each kind, and one of another checkout, which is left alone.

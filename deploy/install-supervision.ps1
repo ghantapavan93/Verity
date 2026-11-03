@@ -69,15 +69,21 @@ New-Item -ItemType Directory -Force $logs | Out-Null
 
 # The release being installed is the one that serves: stop what runs now, and wait until each task's instance has
 # ended, or Start-ScheduledTask below is ignored (-MultipleInstances IgnoreNew) and the old processes keep serving.
+# The stop runs whatever the tasks' state: servers outlive their supervisors (2026-11-02), and it stops a port's holder
+# only when it is this checkout's own server.
 $running = @($tasks.Values | Where-Object { (Get-ScheduledTask -TaskName $_ -ErrorAction SilentlyContinue).State -eq "Running" })
+& (Join-Path $root "deploy\down.ps1")
 if ($running.Count -gt 0) {
-  & (Join-Path $root "deploy\down.ps1")
   # Waited on a Stopwatch, not Get-Date, which a DST change or a clock step moves (deploy/supervise.ps1, Watch-Server).
   $waited = [Diagnostics.Stopwatch]::StartNew()
   while ($waited.Elapsed.TotalSeconds -lt 60 -and @($running | Where-Object { (Get-ScheduledTask -TaskName $_).State -eq "Running" }).Count -gt 0) { Start-Sleep -Seconds 2 }
   $still = @($running | Where-Object { (Get-ScheduledTask -TaskName $_).State -eq "Running" })
   if ($still.Count -gt 0) { throw "still running after the stop: $($still -join ', '); nothing was restarted" }
 }
+# Nothing may listen on the servers' ports now, or the new servers cannot bind and the old ones serve on, answering
+# this script's own health check (2026-11-02). Checked before the swap, so a held port changes nothing that serves.
+& (Join-Path $root "deploy\ports-free.ps1")
+if ($LASTEXITCODE -ne 0) { throw "a server's port is still held (named above); the build was not swapped and nothing was started" }
 # Nothing serves now: the staged build becomes .next (deploy/swap-build.ps1). If the swap fails it has put the previous
 # build back, and the servers are still started below, on the release they had; the failure is raised after that.
 $swapFailure = $null
@@ -102,6 +108,18 @@ while ($waited.Elapsed.TotalSeconds -lt 90 -and -not ($api -and $web)) {
   Start-Sleep -Seconds 3
   try { $api = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 http://127.0.0.1:8000/api/health).StatusCode -eq 200 } catch { $api = $false }
   try { $web = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 http://127.0.0.1:3900/).StatusCode -eq 200 } catch { $web = $false }
+}
+# The answer must come from the server a new supervisor recorded (its pid file), or from that server's child (the
+# venv's python.exe is a launcher that runs the API in a child): any other holder is an older server answering.
+foreach ($served in @(@{ name = "api"; port = 8000 }, @{ name = "web"; port = 3900 })) {
+  $recorded = "$(Get-Content (Join-Path $logs "$($served.name).pid") -Raw -ErrorAction SilentlyContinue)".Trim() -split "\s+", 2
+  foreach ($listen in @(Get-NetTCPConnection -LocalPort $served.port -State Listen -ErrorAction SilentlyContinue)) {
+    $holder = Get-CimInstance Win32_Process -Filter "ProcessId=$($listen.OwningProcess)" -ErrorAction SilentlyContinue
+    if ($holder -and "$($holder.ProcessId)" -ne $recorded[0] -and "$($holder.ParentProcessId)" -ne $recorded[0]) {
+      Write-Host "port $($served.port) is answered by pid $($holder.ProcessId), not by the $($served.name) server this run started"
+      if ($served.name -eq "api") { $api = $false } else { $web = $false }
+    }
+  }
 }
 Write-Host ("API answering: {0}; interface answering: {1}; supervisor logs under {2}" -f $api, $web, $logs)
 if ($swapFailure) { throw "the new build was not put in place; the servers were restarted on what .next holds (see web.supervisor.log): $swapFailure" }

@@ -12,6 +12,12 @@ reader's. The API runs on a store of its own, never the owner's:
 powershell -ExecutionPolicy Bypass -File deploy\install-supervision.ps1 -Build -Origin https://ivo.pavankg.dev -PublicDataDir "C:\Verity\public-data"
 ```
 
+The installer stops what serves (`deploy\down.ps1`, which also stops this checkout's own server on port 8000 or 3900
+when no record names it), then refuses to swap the build or start anything while either port is still held
+(`deploy\ports-free.ps1` names the holder), and reports success only when the servers its supervisors recorded answer.
+On 2026-11-02 servers left by a Windows restart outlived the stop and served the previous release behind a passing
+health check; after any installer run, the smoke check is still the proof.
+
 When `package-lock.json` changed since the release that serves, stop the servers first (`deploy\down.ps1`) and run
 `npm ci` in the checkout before the command above: the build uses `node_modules` as it finds them, and `npm ci` under a
 running `next start` deletes files the server may still load. After `down.ps1`, wait until the scheduled tasks

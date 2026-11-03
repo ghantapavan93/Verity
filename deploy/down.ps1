@@ -5,8 +5,14 @@
 .DESCRIPTION
   Writes a stop file per supervisor (deploy/supervise.ps1 reads it and exits instead of restarting), stops the
   server each supervisor recorded in its pid file, and still honours the pids.json that deploy/up.ps1 writes for
-  the unsupervised local mode. deploy/install-supervision.ps1 removes the stop files when it starts the stack again.
+  the unsupervised local mode. Then whatever still listens on a server's port is stopped when it is this checkout's own
+  server (its command line names this checkout and `uvicorn app.main:app` or `next start`), and named and left alone
+  when it is anything else. deploy/install-supervision.ps1 removes the stop files when it starts the stack again.
 #>
+param(
+  [int]$ApiPort = 8000,
+  [int]$WebPort = 3900
+)
 $ErrorActionPreference = "Continue"
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $logs = Join-Path $root "backend\data\logs\deploy"
@@ -49,4 +55,23 @@ if (Test-Path $pidsFile) {
     if ($entry -is [System.Management.Automation.PSCustomObject]) { Stop-Recorded $name ([int]$entry.pid) "$($entry.started)" } else { Stop-Recorded $name ([int]$entry) "" }
   }
   Remove-Item $pidsFile -Force -Confirm:$false
+}
+
+# A server no record names: on 2026-11-02 Windows restarted, the supervisors restarted at logon, and the servers they
+# started outlived the stop (a supervisor ended by re-registering its task leaves its servers running), held both ports
+# through the next release, and served the previous one. A port's holder is stopped here only when it is this
+# checkout's own server; anything else is named, and deploy/ports-free.ps1 then stops the release.
+$serverCommand = 'uvicorn app\.main:app|next(\\|/)dist(\\|/)bin(\\|/)next"? start'
+foreach ($held in @(@{ name = "api"; port = $ApiPort }, @{ name = "web"; port = $WebPort })) {
+  foreach ($listen in @(Get-NetTCPConnection -LocalPort $held.port -State Listen -ErrorAction SilentlyContinue)) {
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($listen.OwningProcess)" -ErrorAction SilentlyContinue
+    if (-not $process) { continue }
+    $command = "$($process.CommandLine)"
+    if ($command.IndexOf($root, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and $command -match $serverCommand) {
+      & taskkill.exe /PID $process.ProcessId /T /F | Out-Null
+      Write-Host "stopped $($held.name) server holding port $($held.port) (pid $($process.ProcessId)), which no record named"
+    } else {
+      Write-Host "port $($held.port) is held by pid $($process.ProcessId) ($($process.Name)), not this checkout's server: it was not stopped"
+    }
+  }
 }

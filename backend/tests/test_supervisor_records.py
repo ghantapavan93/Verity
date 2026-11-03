@@ -428,3 +428,77 @@ def test_no_deploy_script_measures_a_duration_or_a_deadline_with_the_wall_clock(
         if any(re.search(pattern, line) for pattern in banned)
     ]
     assert not found, "measure elapsed time with [Diagnostics.Stopwatch]:\n" + "\n".join(found)
+
+
+# ---------------------------------------------------------------------------- a port no record names
+# On 2026-11-02 Windows restarted, the supervisors restarted at logon, and the servers they started outlived the next
+# release's stop: no record named them, they held both ports, the new servers could not bind, and the site served the
+# swapped interface's HTML with its scripts missing and the previous release's API, while the installer's health check,
+# answered by the old servers, said the release was up. down.ps1 now stops a port's holder when it is this checkout's own
+# server, and ports-free.ps1 stops the release when anything else holds a port.
+
+PORTS_FREE = SUPERVISE.with_name("ports-free.ps1")
+LISTEN = "import socket, sys, time\ns = socket.socket()\ns.bind(('127.0.0.1', int(sys.argv[-1])))\ns.listen()\ntime.sleep(60)\n"
+
+
+@contextmanager
+def a_listener(script: Path, *argv: str) -> Iterator[subprocess.Popen[bytes]]:
+    """A process listening on the port its last argument names, started from ``script`` (whose path is in its command line)."""
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text(LISTEN, encoding="utf-8")
+    # The base interpreter, not the venv's python.exe, which is a launcher that runs the script in a child process.
+    process = subprocess.Popen([getattr(sys, "_base_executable", sys.executable), str(script), *argv])
+    try:
+        port = int(argv[-1])
+        for _ in range(100):
+            with socket.socket() as probe:
+                if probe.connect_ex(("127.0.0.1", port)) == 0:
+                    break
+            time.sleep(0.1)
+        yield process
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait(10)
+
+
+def run_down_on(tmp_path: Path, api: int, web: int) -> subprocess.CompletedProcess[str]:
+    (tmp_path / "deploy").mkdir(exist_ok=True)
+    shutil.copy(DOWN, tmp_path / "deploy" / "down.ps1")
+    command = ["powershell", "-NoProfile", "-NonInteractive", "-File", str(tmp_path / "deploy" / "down.ps1"), "-ApiPort", str(api), "-WebPort", str(web)]
+    return subprocess.run(command, capture_output=True, text=True, timeout=60)
+
+
+@pytest.mark.parametrize("server", ["web", "api"])
+def test_this_checkouts_server_on_a_port_no_record_names_is_stopped(tmp_path: Path, server: str) -> None:
+    _logs(tmp_path)
+    api, web = free_port(), free_port()
+    port = web if server == "web" else api
+    script = tmp_path / ("node_modules/next/dist/bin/next" if server == "web" else "backend/serve.py")
+    argv = ("start", "-H", "127.0.0.1", "-p", str(port)) if server == "web" else ("-m", "uvicorn", "app.main:app", "--port", str(port))
+    with a_listener(script, *argv) as orphan:
+        result = run_down_on(tmp_path, api, web)
+        assert result.returncode == 0, result.stderr
+        assert orphan.wait(10) is not None, result.stdout
+        assert f"stopped {server} server holding port {port}" in result.stdout
+
+
+def test_control_a_port_held_by_anything_else_is_named_and_left_alone(tmp_path: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
+    _logs(tmp_path)
+    api, web = free_port(), free_port()
+    elsewhere = tmp_path_factory.mktemp("another-checkout") / "node_modules/next/dist/bin/next"
+    with a_listener(elsewhere, "start", "-p", str(web)) as other:
+        result = run_down_on(tmp_path, api, web)
+        assert result.returncode == 0, result.stderr
+        assert other.poll() is None, "a server of another checkout is not this one's to stop"
+        assert f"port {web} is held by pid {other.pid}" in result.stdout and "it was not stopped" in result.stdout
+
+
+def test_a_held_port_stops_the_release_and_names_its_holder(tmp_path: Path) -> None:
+    port = free_port()
+    command = ["powershell", "-NoProfile", "-NonInteractive", "-File", str(PORTS_FREE), "-Ports", str(port), "-Seconds", "2"]
+    with a_listener(tmp_path / "holder.py", str(port)) as holder:
+        held = subprocess.run(command, capture_output=True, text=True, timeout=60)
+        assert held.returncode == 1 and f"port {port} is held by pid {holder.pid}" in held.stdout, held.stdout + held.stderr
+    free = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    assert free.returncode == 0 and "are free" in free.stdout, free.stdout + free.stderr
